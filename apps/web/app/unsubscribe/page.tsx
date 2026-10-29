@@ -24,7 +24,7 @@ function Unsubscribe() {
         ) : (
           <>
             <h1>Unsubscribe</h1>
-            <p>Stop getting these emails from Biz Management Software?</p>
+            <p>Stop getting these emails from Crewdesk?</p>
             <ErrorBox error={!token ? "This link is missing its token." : error} />
             <button className="btn primary" disabled={!token || busy}
               onClick={() => run(async () => setDone(await api(`/public/unsubscribe?token=${encodeURIComponent(token!)}`, { method: "POST" })))}>

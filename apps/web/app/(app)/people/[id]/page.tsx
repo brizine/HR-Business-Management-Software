@@ -26,7 +26,7 @@ function EmployeeTaxForms({ employeeId }: { employeeId: string }) {
             <td className="row" style={{ textAlign: "right" }}><FormStatus form={f} /> <DownloadPdf form={f} /></td>
           </tr>
         ))}</tbody></table>
-      ) : <p className="muted" style={{ margin: 0 }}>None filled out in Biz Management Software yet.</p>}
+      ) : <p className="muted" style={{ margin: 0 }}>None filled out in Crewdesk yet.</p>}
     </div>
   );
 }
@@ -100,7 +100,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
       {can("admin") && e.id !== me?.user.id && e.hasLogin && (
         <div className="card row">
           <strong style={{ marginRight: 8 }}>Account</strong>
-          <button className="btn" onClick={() => confirm(`Sign ${e.firstName} out of Biz Management Software on every device?`)
+          <button className="btn" onClick={() => confirm(`Sign ${e.firstName} out of Crewdesk on every device?`)
             && api(`/employees/${id}/sign-out-everywhere`, { method: "POST" }).then(() => alert("Signed out everywhere."), (err) => alert(err.message))}>Sign out everywhere</button>
           {e.twoFactorEnabled && (
             <button className="btn" onClick={() => confirm(`Reset ${e.firstName}'s two-factor? Only do this if you've confirmed it's really them (e.g. in person). They'll be signed out and can set it up again.`)

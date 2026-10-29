@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Biz Management Software",
+    "name": "Crewdesk",
     "slug": "crewdesk",
     "scheme": "crewdesk",
     "version": "0.1.0",
@@ -11,7 +11,7 @@
       "bundleIdentifier": "com.crewdesk.app",
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Biz Management Software records your location when you clock in or out to verify job-site attendance."
+        "NSLocationWhenInUseUsageDescription": "Crewdesk records your location when you clock in or out to verify job-site attendance."
       }
     },
     "android": {
@@ -28,7 +28,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Biz Management Software records your location when you clock in or out to verify job-site attendance."
+          "locationWhenInUsePermission": "Crewdesk records your location when you clock in or out to verify job-site attendance."
         }
       ],
       [
@@ -40,15 +40,15 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Biz Management Software uses the camera to scan QR labels on vehicles and equipment.",
+          "cameraPermission": "Crewdesk uses the camera to scan QR labels on vehicles and equipment.",
           "recordAudioAndroid": false
         }
       ],
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Biz Management Software uses the camera to photograph documents for your onboarding, like your driver's license.",
-          "photosPermission": "Biz Management Software lets you pick a photo of a document to upload for your onboarding.",
+          "cameraPermission": "Crewdesk uses the camera to photograph documents for your onboarding, like your driver's license.",
+          "photosPermission": "Crewdesk lets you pick a photo of a document to upload for your onboarding.",
           "microphonePermission": false
         }
       ]

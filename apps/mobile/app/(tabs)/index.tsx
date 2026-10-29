@@ -63,7 +63,7 @@ export default function Clock() {
     try {
       const loc = await currentPosition(rule);
       if (needsLocation(rule) && loc.lat === undefined) {
-        locationOffAlert(`Your company needs your location to clock ${open ? "out" : "in"}. Allow location for Biz Management Software in Settings, then try again.`);
+        locationOffAlert(`Your company needs your location to clock ${open ? "out" : "in"}. Allow location for Crewdesk in Settings, then try again.`);
         return;
       }
       const row = await api(open ? "/time/clock-out" : "/time/clock-in", { body: loc });

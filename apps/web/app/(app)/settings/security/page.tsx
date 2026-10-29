@@ -113,9 +113,9 @@ function SessionsCard() {
   return (
     <div className="card">
       <h2>Signed-in devices</h2>
-      <p className="muted" style={{ marginTop: 0 }}>Lost a phone, or signed in on a shared computer? This signs you out of Biz Management Software everywhere, including here, and stops notifications to your phones until you sign in again.</p>
+      <p className="muted" style={{ marginTop: 0 }}>Lost a phone, or signed in on a shared computer? This signs you out of Crewdesk everywhere, including here, and stops notifications to your phones until you sign in again.</p>
       <ErrorBox error={error} />
-      <button className="btn danger" disabled={busy} onClick={() => confirm("Sign out of Biz Management Software on every device?") && run(async () => {
+      <button className="btn danger" disabled={busy} onClick={() => confirm("Sign out of Crewdesk on every device?") && run(async () => {
         await api("/auth/logout-all", { method: "POST" });
         await signOut();
         router.replace("/login");

@@ -57,7 +57,7 @@ export function TwoFactorSetup({ token, onDone }: { token?: string; onDone: (res
 
 export function RecoveryCodes({ codes, onSaved }: { codes: string[]; onSaved: () => void }) {
   const [saved, setSaved] = useState(false);
-  const text = `Biz Management Software backup codes (each works once)\n\n${codes.join("\n")}\n`;
+  const text = `Crewdesk backup codes (each works once)\n\n${codes.join("\n")}\n`;
   return (
     <div className="stack">
       <h2 style={{ margin: 0 }}>Save your backup codes</h2>

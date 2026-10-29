@@ -51,7 +51,7 @@ export default function Profile() {
       <Button title="Notification settings" kind="secondary" onPress={() => router.push("/notification-settings")} />
       <Button title="Sign out" kind="secondary" onPress={signOut} />
       <Button title="Sign out on all devices" kind="danger" onPress={() =>
-        Alert.alert("Sign out everywhere?", "Ends your Biz Management Software sessions on every phone and computer, including this one. Use this if a device was lost.", [
+        Alert.alert("Sign out everywhere?", "Ends your Crewdesk sessions on every phone and computer, including this one. Use this if a device was lost.", [
           { text: "Cancel", style: "cancel" },
           { text: "Sign out everywhere", style: "destructive", onPress: () => api("/auth/logout-all", { method: "POST" }).then(signOut, signOut) },
         ])} />

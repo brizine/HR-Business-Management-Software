@@ -38,7 +38,7 @@ function Welcome() {
           <>
             <h1>Welcome to {info.company}, {info.firstName}!</h1>
             <p className="muted">
-              Choose a password for Biz Management Software. You&apos;ll sign in as <strong>{info.email}</strong>.
+              Choose a password for Crewdesk. You&apos;ll sign in as <strong>{info.email}</strong>.
               {info.startDate && <> Your start date is {fmtDate(info.startDate)}.</>}
             </p>
             <form className="stack" onSubmit={(e) => {
@@ -56,7 +56,7 @@ function Welcome() {
               <ErrorBox error={error} />
               <button className="btn primary" disabled={busy}>Create my account</button>
             </form>
-            <p className="muted" style={{ fontSize: 13 }}>Next you&apos;ll see your onboarding checklist. On your phone, you can also install the Biz Management Software app and sign in with the same email and password.</p>
+            <p className="muted" style={{ fontSize: 13 }}>Next you&apos;ll see your onboarding checklist. On your phone, you can also install the Crewdesk app and sign in with the same email and password.</p>
           </>
         ) : (
           <>

@@ -34,7 +34,7 @@ const routes: FastifyPluginAsync = async (app) => {
           payrollProvider: z.enum(["csv", "check"]).optional(),
           payrollProviderCompanyId: z.string().nullable().optional(),
           weeklyOvertimeThreshold: z.number().positive().optional(),
-          /** Collect W-4, I-9 and direct deposit in Biz Management Software. */
+          /** Collect W-4, I-9 and direct deposit in Crewdesk. */
           taxFormsInCrewdesk: z.boolean().optional(),
         })
         .merge(companyPayrollInfoSchema),

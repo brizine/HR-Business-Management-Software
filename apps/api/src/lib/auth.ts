@@ -86,7 +86,7 @@ export async function verifyToken(req: FastifyRequest, allowed: TokenPurpose[]) 
   // Cookie-authenticated changes must come from the website itself, not a form on another site.
   const viaCookie = !req.headers.authorization;
   if (viaCookie && !["GET", "HEAD", "OPTIONS"].includes(req.method) && !isWebClient(req)) {
-    throw new HttpError(403, "Request blocked: missing the Biz Management Software client header");
+    throw new HttpError(403, "Request blocked: missing the Crewdesk client header");
   }
   const [row] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
   if (!row || row.status === "terminated" || row.tokenVersion !== (req.user.ver ?? 0)) {

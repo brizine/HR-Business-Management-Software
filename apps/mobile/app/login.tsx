@@ -53,7 +53,7 @@ export default function Login() {
       <Card title="Save your backup codes">
         <Txt muted>If you lose your phone, each code lets you sign in once. Keep them somewhere safe (not only on this phone). They won&apos;t be shown again.</Txt>
         <Txt style={{ fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace", fontSize: 16, lineHeight: 26 }}>{backup.codes.join("\n")}</Txt>
-        <Button title="Share / save codes" kind="secondary" onPress={() => Share.share({ message: `Biz Management Software backup codes (each works once)\n\n${backup.codes.join("\n")}` })} />
+        <Button title="Share / save codes" kind="secondary" onPress={() => Share.share({ message: `Crewdesk backup codes (each works once)\n\n${backup.codes.join("\n")}` })} />
         <Button title="I've saved them, continue" onPress={() => attempt(() => completeSignIn(backup.token))} busy={busy} />
       </Card>
     );
@@ -80,7 +80,7 @@ export default function Login() {
         <Input label="Code" value={code} onChangeText={setCode} autoCapitalize="none" textContentType="oneTimeCode" autoFocus onSubmitEditing={submitCode} />
         <ErrorText error={error} />
         <Button title="Verify" onPress={submitCode} busy={busy} disabled={code.trim().length < 6} />
-        <Txt muted style={{ fontSize: 12 }}>No phone and no backup codes? Ask your Biz Management Software admin to reset your two-factor.</Txt>
+        <Txt muted style={{ fontSize: 12 }}>No phone and no backup codes? Ask your Crewdesk admin to reset your two-factor.</Txt>
       </Card>
     );
   } else {
@@ -101,7 +101,7 @@ export default function Login() {
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: t.bg }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 20, gap: 16 }} keyboardShouldPersistTaps="handled">
         <View>
-          <Txt style={{ fontSize: 30, fontWeight: "800" }}>Biz Management Software</Txt>
+          <Txt style={{ fontSize: 30, fontWeight: "800" }}>Crewdesk</Txt>
           <Txt muted>Clock in, request time off, and inspect equipment.</Txt>
         </View>
         {body}

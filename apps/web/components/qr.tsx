@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 /**
  * The address a label points to. Phones' built-in cameras open it in the
- * browser; the Biz Management Software app's scanner reads the code from it. Set
+ * browser; the Crewdesk app's scanner reads the code from it. Set
  * NEXT_PUBLIC_WEB_URL if staff reach the site at a different address than
  * the one you print labels from.
  */

@@ -35,11 +35,11 @@ export async function sendInvite(employee: typeof employees.$inferSelect, invite
   if (emailTransport()) {
     emailed = await sendSystemEmail(
       employee.email,
-      `Welcome to ${company.name}: set up your Biz Management Software account`,
-      `Hi ${employee.firstName},\n\n${from ? from.trim() + " invited" : "You've been invited"} you to Biz Management Software, where ${company.name} handles schedules, time off and new-hire paperwork.${start}\n\nChoose your password here (the link works for ${INVITE_TTL_DAYS} days):\n${link}\n\nThen you'll see your onboarding checklist. You can also install the Biz Management Software app on your phone.`,
+      `Welcome to ${company.name}: set up your Crewdesk account`,
+      `Hi ${employee.firstName},\n\n${from ? from.trim() + " invited" : "You've been invited"} you to Crewdesk, where ${company.name} handles schedules, time off and new-hire paperwork.${start}\n\nChoose your password here (the link works for ${INVITE_TTL_DAYS} days):\n${link}\n\nThen you'll see your onboarding checklist. You can also install the Crewdesk app on your phone.`,
       `<div style="font-family:system-ui,sans-serif;max-width:520px;color:#1c2330">
 <p style="font-size:18px;font-weight:600">Welcome to ${escapeHtml(company.name)}, ${escapeHtml(employee.firstName)}!</p>
-<p>${from ? escapeHtml(from.trim()) + " invited" : "You've been invited"} you to Biz Management Software, where ${escapeHtml(company.name)} handles schedules, time off and new-hire paperwork.${escapeHtml(start)}</p>
+<p>${from ? escapeHtml(from.trim()) + " invited" : "You've been invited"} you to Crewdesk, where ${escapeHtml(company.name)} handles schedules, time off and new-hire paperwork.${escapeHtml(start)}</p>
 <p><a href="${link}" style="background:#1f6feb;color:#fff;padding:10px 16px;border-radius:7px;text-decoration:none">Set up my account</a></p>
 <p style="color:#667085;font-size:13px">The link works for ${INVITE_TTL_DAYS} days. Afterwards you'll see your onboarding checklist.</p></div>`,
     ).catch(() => false);

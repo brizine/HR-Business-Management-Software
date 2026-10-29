@@ -2,7 +2,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf
 import { ATTESTATIONS, W4_AMOUNTS, type DirectDeposit, type I9Section1, type I9Section2, type W4 } from "@crewdesk/shared";
 
 /**
- * Printable records of forms completed electronically in Biz Management Software. They
+ * Printable records of forms completed electronically in Crewdesk. They
  * contain the same information as the IRS/USCIS forms plus the e-signature
  * details (who, when, from where), so the employer can file or hand them over
  * on request. They aren't the official form layouts.
@@ -90,7 +90,7 @@ class Writer {
     this.field("Signed (typed name)", s.name);
     this.field("Date and time", s.at.toISOString().replace("T", " ").slice(0, 19) + " UTC");
     if (s.ip) this.field("Signed from IP address", s.ip);
-    this.text("Signed electronically in Biz Management Software.", { size: 8, color: 0.4 });
+    this.text("Signed electronically in Crewdesk.", { size: 8, color: 0.4 });
   }
 }
 
@@ -107,7 +107,7 @@ async function finish(doc: PDFDocument, label: string) {
 async function start(title: string, subtitle: string) {
   const doc = await PDFDocument.create();
   doc.setTitle(title);
-  doc.setProducer("Biz Management Software");
+  doc.setProducer("Crewdesk");
   const w = new Writer(doc, await doc.embedFont(StandardFonts.Helvetica), await doc.embedFont(StandardFonts.HelveticaBold));
   w.text(title, { size: 16, bold: true });
   w.text(subtitle, { size: 9, color: 0.35, gap: 6 });
@@ -125,7 +125,7 @@ const FILING: Record<W4["filingStatus"], string> = {
 export async function w4Pdf(f: W4, signed: Signed, employer: Employer, firstDay?: string | null) {
   const { doc, w } = await start(
     "Form W-4: Employee's Withholding Certificate",
-    `Completed electronically in Biz Management Software for ${employer.name}. Form year ${W4_AMOUNTS.year}. Same information as IRS Form W-4; see irs.gov/w4 for instructions.`,
+    `Completed electronically in Crewdesk for ${employer.name}. Form year ${W4_AMOUNTS.year}. Same information as IRS Form W-4; see irs.gov/w4 for instructions.`,
   );
   w.heading("Step 1: Personal information");
   w.field("Name", `${f.firstName} ${f.middleInitial ? f.middleInitial + ". " : ""}${f.lastName}`);
@@ -161,7 +161,7 @@ const STATUS: Record<I9Section1["citizenship"], string> = {
 export async function i9Pdf(f: I9Section1, signed: Signed, employer: Employer, s2?: { data: I9Section2; signed: Signed } | null) {
   const { doc, w } = await start(
     "Form I-9: Employment Eligibility Verification",
-    `Completed electronically in Biz Management Software for ${employer.name}. Same information as USCIS Form I-9; see uscis.gov/i-9 for instructions and the Lists of Acceptable Documents.`,
+    `Completed electronically in Crewdesk for ${employer.name}. Same information as USCIS Form I-9; see uscis.gov/i-9 for instructions and the Lists of Acceptable Documents.`,
   );
   w.heading("Section 1: Employee information and attestation");
   w.field("Last name", f.lastName);
@@ -212,7 +212,7 @@ export async function i9Pdf(f: I9Section1, signed: Signed, employer: Employer, s
 }
 
 export async function directDepositPdf(f: DirectDeposit, signed: Signed, employer: Employer, employeeName: string) {
-  const { doc, w } = await start("Direct Deposit Authorization", `Completed electronically in Biz Management Software for ${employer.name}.`);
+  const { doc, w } = await start("Direct Deposit Authorization", `Completed electronically in Crewdesk for ${employer.name}.`);
   w.field("Employee", employeeName);
   w.field("Bank", f.bankName);
   w.field("Routing number", f.routingNumber);

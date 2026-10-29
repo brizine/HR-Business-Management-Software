@@ -32,7 +32,7 @@ export function NotificationSettings({ employeeId }: { employeeId?: string }) {
         <div className="formgrid">
           <div>
             <div className="muted">Phone app</div>
-            {hasApp ? "Signed in on a phone" : <span>Not installed{self ? ": install the Biz Management Software app to get push alerts" : ""}</span>}
+            {hasApp ? "Signed in on a phone" : <span>Not installed{self ? ": install the Crewdesk app to get push alerts" : ""}</span>}
           </div>
           <div>
             <div className="muted">Email</div>
@@ -66,7 +66,7 @@ export function NotificationSettings({ employeeId }: { employeeId?: string }) {
               onChange={(e) => save({ smsOptIn: e.target.checked })}
             />
             {self
-              ? "Yes, text me Biz Management Software notifications. Message & data rates may apply; reply STOP to opt out."
+              ? "Yes, text me Crewdesk notifications. Message & data rates may apply; reply STOP to opt out."
               : `${employee.firstName} agreed to receive texts (only check this if they told you so)`}
           </label>
           {employee.smsOptIn && employee.smsOptInAt && <div className="muted" style={{ marginLeft: 22 }}>Opted in {new Date(employee.smsOptInAt).toLocaleDateString()}</div>}
@@ -110,7 +110,7 @@ export function NotificationSettings({ employeeId }: { employeeId?: string }) {
           </tbody>
         </table>
         <ErrorBox error={saveError} />
-        <p className="muted">&ldquo;Only if no app&rdquo; sends email or text when {self ? "you aren't" : "they aren't"} signed in to the Biz Management Software app on any phone. Changes save automatically.</p>
+        <p className="muted">&ldquo;Only if no app&rdquo; sends email or text when {self ? "you aren't" : "they aren't"} signed in to the Crewdesk app on any phone. Changes save automatically.</p>
       </div>
     </>
   );

@@ -35,7 +35,7 @@ describe("encrypted backups", () => {
     const out = join(dir, "restored.dump");
     await decryptFileToFile(result.location, out, keys.privateKeyPem, "correct horse");
     expect((await readFile(out)).subarray(0, 5).toString()).toBe("PGDMP");
-    // pg_restore can read it, and it contains Biz Management Software's tables.
+    // pg_restore can read it, and it contains Crewdesk's tables.
     const listing = execFileSync("pg_restore", ["--list", out]).toString();
     expect(listing).toContain("TABLE public employees");
   }, 30_000);
