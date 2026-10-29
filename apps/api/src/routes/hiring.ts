@@ -6,6 +6,7 @@ import { db } from "../db";
 import { applicants, companies, employees, jobs } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { notFound, parse } from "../lib/errors";
+import { notify, staffWithRole } from "../lib/notify";
 import { applyOnboardingTemplate } from "./onboarding";
 import { publicEmployee } from "./employees";
 
@@ -36,6 +37,12 @@ const routes: FastifyPluginAsync = async (app) => {
       .where(and(eq(jobs.id, req.params.jobId), eq(jobs.status, "open")));
     if (!job) notFound("Job");
     await db.insert(applicants).values({ ...body, jobId: job.id, companyId: job.companyId });
+    notify(job.companyId, await staffWithRole(job.companyId, "manager"), {
+      category: "hiring",
+      title: `New applicant: ${job.title}`,
+      body: `${body.firstName} ${body.lastName} applied.`,
+      link: { screen: "hiring" },
+    });
     return { ok: true };
   });
 

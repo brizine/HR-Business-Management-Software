@@ -45,9 +45,10 @@ function WorkOrderEditor({ wo, employees, canManage, onDone }: { wo: any; employ
 
 function WorkOrders() {
   const { me, can } = useAuth();
-  const highlight = useSearchParams().get("highlight");
+  const params = useSearchParams();
+  const highlight = params.get("highlight");
   const [status, setStatus] = useState("active");
-  const [mine, setMine] = useState(false);
+  const [mine, setMine] = useState(params.get("mine") === "true");
   const list = useApi<any[]>(`/work-orders?status=${status === "all" ? "" : status}${mine ? "&mine=true" : ""}`);
   const assets = useApi<any[]>("/assets");
   const employees = useApi<any[]>("/employees");

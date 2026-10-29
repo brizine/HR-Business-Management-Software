@@ -198,3 +198,8 @@ export const payrollExportSchema = z.object({
   periodStart: isoDate,
   periodEnd: isoDate,
 });
+
+export const deviceSchema = z.object({
+  token: z.string().regex(/^Expo(nent)?PushToken\[[^\]]+\]$/, "Not an Expo push token"),
+  platform: z.enum(["ios", "android", "web"]),
+});

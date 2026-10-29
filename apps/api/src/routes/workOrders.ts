@@ -6,6 +6,16 @@ import { assets, employees, maintenanceSchedules, workOrders } from "../db/schem
 import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { nextWorkOrderNumber, recordMeter } from "../lib/fleet";
+import { except, notify, staffWithRole } from "../lib/notify";
+
+function notifyAssigned(wo: typeof workOrders.$inferSelect, assetName: string, actorId: string) {
+  notify(wo.companyId, except([wo.assignedToId], actorId), {
+    category: "fleet",
+    title: `Work order #${wo.number} assigned to you`,
+    body: `${assetName}: ${wo.title}${wo.dueDate ? ` (due ${wo.dueDate})` : ""}`,
+    link: { screen: "tasks" },
+  });
+}
 
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
@@ -44,7 +54,7 @@ const routes: FastifyPluginAsync = async (app) => {
       body.assignedToId = null;
       body.scheduleId = null;
     }
-    return db.transaction(async (tx) => {
+    const created = await db.transaction(async (tx) => {
       const [row] = await tx
         .insert(workOrders)
         .values({
@@ -59,6 +69,19 @@ const routes: FastifyPluginAsync = async (app) => {
       }
       return row;
     });
+
+    const link = { screen: "work-order", id: created.id, assetId: asset.id } as const;
+    if (created.assignedToId) notifyAssigned(created, asset.name, req.user.sub);
+    // Field reports and urgent issues go to everyone who manages the fleet.
+    if (!isManager(req) || created.priority === "high" || created.priority === "critical") {
+      notify(req.user.companyId, except(await staffWithRole(req.user.companyId, "manager"), req.user.sub), {
+        category: "fleet",
+        title: `${created.priority === "critical" ? "CRITICAL: " : ""}${asset.name}: ${created.title}`,
+        body: created.priority === "critical" ? "Asset taken out of service." : `New ${created.priority}-priority work order #${created.number}.`,
+        link,
+      });
+    }
+    return created;
   });
 
   /**
@@ -80,7 +103,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const { completedOdometer, completedHours, ...fields } = body;
     const completing = fields.status === "completed" && wo.status !== "completed";
 
-    return db.transaction(async (tx) => {
+    const updated = await db.transaction(async (tx) => {
       const [row] = await tx
         .update(workOrders)
         .set({ ...fields, ...(completing ? { completedAt: new Date() } : {}) })
@@ -118,6 +141,18 @@ const routes: FastifyPluginAsync = async (app) => {
       }
       return row;
     });
+
+    const [asset] = await db.select({ name: assets.name }).from(assets).where(eq(assets.id, wo.assetId));
+    if (updated.assignedToId && updated.assignedToId !== wo.assignedToId) notifyAssigned(updated, asset.name, req.user.sub);
+    if (completing) {
+      notify(req.user.companyId, except([wo.reportedById], req.user.sub), {
+        category: "fleet",
+        title: `Work order #${wo.number} completed`,
+        body: `${asset.name}: ${wo.title}`,
+        link: { screen: "work-order", id: wo.id, assetId: wo.assetId },
+      });
+    }
+    return updated;
   });
 };
 

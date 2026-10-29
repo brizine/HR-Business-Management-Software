@@ -1,3 +1,4 @@
+import type { NotificationLink } from "@crewdesk/shared";
 import {
   boolean,
   date,
@@ -310,5 +311,48 @@ export const payrollRuns = pgTable("payroll_runs", {
   providerReference: text("provider_reference"),
   totals: jsonb("totals").$type<Record<string, number>>(),
   createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+  createdAt: createdAt(),
+});
+
+/** Expo push tokens, one row per device. A device moves with whoever last signed in on it. */
+export const pushTokens = pgTable(
+  "push_tokens",
+  {
+    id: id(),
+    companyId: companyId(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(),
+    platform: text("platform").notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("push_tokens_employee_idx").on(t.employeeId)],
+);
+
+/** In-app inbox. Every push is also stored here so web users see the same alerts. */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: id(),
+    companyId: companyId(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    link: jsonb("link").$type<NotificationLink>(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("notifications_employee_idx").on(t.employeeId, t.createdAt)],
+);
+
+/** Dedupe keys for scheduled alerts so "oil change overdue" is sent once, not every hour. */
+export const notificationLog = pgTable("notification_log", {
+  key: text("key").primaryKey(),
+  companyId: companyId(),
   createdAt: createdAt(),
 });

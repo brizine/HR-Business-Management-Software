@@ -28,6 +28,7 @@ packages/
 | **Preventive maintenance** | Schedules by miles, engine hours and/or days (whichever comes first), due-soon/overdue status, fleet-wide due list |
 | **Work orders** | Numbered work orders with priority, assignment, parts/labor cost, vendor; completing one resets its maintenance schedule; critical issues take the asset out of service |
 | **Inspections** | Pre-trip/pre-use checklists (DVIR-style) on mobile; any defect automatically opens a work order |
+| **Notifications** | Push to phones (Expo) plus an in-app inbox on web and mobile; tapping an alert opens the related screen. See [Notifications](#notifications) |
 | **Dashboard** | Headcount, on-the-clock, pending PTO, overdue maintenance, open work orders, expiring registrations |
 
 The mobile app covers what field staff need: clock in/out with GPS, weekly hours, time-off
@@ -68,6 +69,44 @@ pnpm typecheck
 
 Edit `apps/api/src/db/schema.ts`, then `pnpm --filter @crewdesk/api db:generate` and `pnpm db:migrate`.
 
+## Notifications
+
+Every alert is saved to the recipient's inbox (bell icon on web and mobile) and pushed to any
+phones they're signed in on. Nobody is notified about their own actions.
+
+| Event | Who gets it |
+| --- | --- |
+| Time-off request submitted | The employee's manager (or admins if no manager is set) |
+| Time-off approved / denied | The employee |
+| Work order assigned | The assigned technician |
+| Issue reported from the field, or any high/critical work order | Managers and above |
+| Inspection failed | Managers and above |
+| Work order completed | Whoever reported it |
+| Document needs signature | The employee |
+| Onboarding checklist assigned | The new hire |
+| New applicant on the careers page | Managers and above |
+| Maintenance due soon / overdue *(scheduled)* | Managers and the asset's assigned driver; once per service interval |
+| Registration / insurance expiring within 30 days *(scheduled)* | Managers and above |
+| Clocked in over 12 hours *(scheduled)* | The employee and their manager |
+
+Scheduled checks run every 15 minutes inside the API process and are deduplicated in the
+database, so running several API instances is safe. To use an external cron instead, set
+`DISABLE_SCHEDULER=true` and run `pnpm --filter @crewdesk/api jobs:run`.
+
+### Enabling push on phones
+
+Push goes through Expo's push service, which relays to Apple (APNs) and Google (FCM). One-time setup:
+
+1. `npm i -g eas-cli && cd apps/mobile && eas init`. This creates an Expo project and fills in
+   `extra.eas.projectId` in `app.json`.
+2. Build a development or production build with `eas build`. **Expo Go cannot receive push on
+   Android** (SDK 53+), so use a development build for testing. EAS creates the iOS push key for you;
+   for Android, add an FCM V1 service-account key with `eas credentials`.
+3. Push only works on physical devices, not simulators. Without a project ID the app still works and
+   the in-app inbox still fills; it just skips push registration.
+
+If you turn on "enhanced push security" for the Expo project, set `EXPO_ACCESS_TOKEN` in the API's `.env`.
+
 ## Payroll
 
 Admins pick a pay period on the Payroll page and either:
@@ -91,7 +130,7 @@ This is a working foundation, not a finished product. Before real customers use 
 - **File storage**: swap `LocalStorage` (`apps/api/src/lib/storage.ts`) for S3/R2/GCS.
 - **Auth hardening**: password reset and invite emails, refresh tokens, rate limiting on login, optional SSO/2FA.
 - **Sensitive data**: SSNs/bank details should live only with the payroll provider. If you must store them, encrypt at the field level.
-- **Notifications**: push notifications (Expo) and email for PTO decisions, maintenance due, assignments, expiring registrations.
+- **Notifications**: per-user preferences (mute categories), email/SMS delivery for people without the app, and Expo push receipt checking.
 - **Compliance**: I-9/W-4 form generation, state-specific overtime (e.g. California daily OT), meal/break rules, record retention. Consider a signature provider (Dropbox Sign, DocuSign) for legally stronger audit trails.
 - **Ops**: hosting (e.g. API on Fly/Render/AWS, web on Vercel, Postgres managed), backups, error monitoring, audit log, EAS builds and App Store / Play Store submission.
 - **Billing**: Stripe subscriptions per company if you sell this as SaaS.

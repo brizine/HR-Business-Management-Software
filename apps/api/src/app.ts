@@ -15,6 +15,7 @@ import workOrderRoutes from "./routes/workOrders";
 import inspectionRoutes from "./routes/inspections";
 import payrollRoutes from "./routes/payroll";
 import dashboardRoutes from "./routes/dashboard";
+import notificationRoutes from "./routes/notifications";
 
 export async function buildApp(opts: { logger?: boolean } = {}) {
   const app = Fastify({ logger: opts.logger ?? true });
@@ -44,6 +45,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   await app.register(inspectionRoutes, { prefix: "/inspections" });
   await app.register(payrollRoutes, { prefix: "/payroll" });
   await app.register(dashboardRoutes, { prefix: "/dashboard" });
+  await app.register(notificationRoutes, { prefix: "/notifications" });
 
   return app;
 }

@@ -6,6 +6,7 @@ import { assets, employees, inspections, workOrders } from "../db/schema";
 import { authenticate } from "../lib/auth";
 import { notFound, parse } from "../lib/errors";
 import { nextWorkOrderNumber, recordMeter } from "../lib/fleet";
+import { except, notify, staffWithRole } from "../lib/notify";
 
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
@@ -40,7 +41,7 @@ const routes: FastifyPluginAsync = async (app) => {
     if (!asset) notFound("Asset");
     const failed = body.items.filter((i) => !i.ok);
 
-    return db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       const [inspection] = await tx
         .insert(inspections)
         .values({
@@ -70,6 +71,16 @@ const routes: FastifyPluginAsync = async (app) => {
       }
       return { inspection, workOrder };
     });
+
+    if (result.workOrder) {
+      notify(req.user.companyId, except(await staffWithRole(req.user.companyId, "manager"), req.user.sub), {
+        category: "fleet",
+        title: `${asset.name} failed inspection`,
+        body: `${failed.map((f) => f.item).join(", ")}. Work order #${result.workOrder.number} opened.`,
+        link: { screen: "work-order", id: result.workOrder.id, assetId: asset.id },
+      });
+    }
+    return result;
   });
 };
 

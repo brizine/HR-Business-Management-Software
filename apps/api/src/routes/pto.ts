@@ -6,6 +6,7 @@ import { db } from "../db";
 import { employees, ptoLedger, ptoPolicies, ptoRequests } from "../db/schema";
 import { authenticate, isManager, requireRole } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
+import { approversFor, except, notify } from "../lib/notify";
 
 async function balances(companyId: string, employeeId: string) {
   const policies = await db.select().from(ptoPolicies).where(eq(ptoPolicies.companyId, companyId));
@@ -23,6 +24,7 @@ async function balances(companyId: string, employeeId: string) {
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
+const dateRange = (a: string, b: string) => (a === b ? a : `${a} to ${b}`);
 
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
@@ -97,12 +99,19 @@ const routes: FastifyPluginAsync = async (app) => {
       .insert(ptoRequests)
       .values({ ...body, companyId: req.user.companyId, employeeId: req.user.sub })
       .returning();
+    const [me] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
+    notify(req.user.companyId, except(await approversFor(req.user.companyId, req.user.sub), req.user.sub), {
+      category: "pto",
+      title: `Time-off request from ${me.firstName} ${me.lastName}`,
+      body: `${bal.name}: ${body.hours}h, ${dateRange(body.startDate, body.endDate)}`,
+      link: { screen: "pto" },
+    });
     return row;
   });
 
   app.post<{ Params: { id: string } }>("/requests/:id/decide", { preHandler: requireRole("manager") }, async (req) => {
     const body = parse(ptoDecisionSchema, req.body);
-    return db.transaction(async (tx) => {
+    const decided = await db.transaction(async (tx) => {
       const [existing] = await tx
         .select()
         .from(ptoRequests)
@@ -129,6 +138,13 @@ const routes: FastifyPluginAsync = async (app) => {
       }
       return row;
     });
+    notify(decided.companyId, except([decided.employeeId], req.user.sub), {
+      category: "pto",
+      title: `Time off ${decided.status}`,
+      body: `${dateRange(decided.startDate, decided.endDate)} (${decided.hours}h)${body.note ? `: ${body.note}` : ""}`,
+      link: { screen: "pto" },
+    });
+    return decided;
   });
 
   app.post<{ Params: { id: string } }>("/requests/:id/cancel", async (req) => {

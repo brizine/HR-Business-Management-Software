@@ -7,6 +7,7 @@ import { documents } from "../db/schema";
 import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { storage } from "../lib/storage";
+import { except, notify } from "../lib/notify";
 
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
@@ -58,6 +59,14 @@ const routes: FastifyPluginAsync = async (app) => {
         uploadedById: req.user.sub,
       })
       .returning();
+    if (row.requiresSignature && row.employeeId) {
+      notify(req.user.companyId, except([row.employeeId], req.user.sub), {
+        category: "documents",
+        title: "Document ready for your signature",
+        body: row.name,
+        link: { screen: "documents" },
+      });
+    }
     return row;
   });
 

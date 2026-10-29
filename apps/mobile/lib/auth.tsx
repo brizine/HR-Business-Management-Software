@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { hasRole, type Role } from "@crewdesk/shared";
 import { api, loadToken, saveToken } from "./api";
+import { registerForPush, unregisterForPush } from "./push";
 
 interface Me {
   user: { id: string; firstName: string; lastName: string; email: string; role: Role };
@@ -33,12 +34,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
+  // Register this device for push whenever someone is signed in.
+  useEffect(() => {
+    if (me) registerForPush().catch((e) => console.warn("Push registration failed", e));
+  }, [me?.user.id]);
+
   const signIn = async (email: string, password: string) => {
     const res = await api<Me & { token: string }>("/auth/login", { body: { email, password } });
     await saveToken(res.token);
     setMe({ user: res.user, company: res.company });
   };
   const signOut = async () => {
+    await unregisterForPush();
     await saveToken(null);
     setMe(null);
   };

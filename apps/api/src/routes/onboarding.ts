@@ -6,6 +6,7 @@ import { db } from "../db";
 import { employees, onboardingTasks, onboardingTemplates } from "../db/schema";
 import { authenticate, isManager, requireRole } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
+import { notify } from "../lib/notify";
 
 export async function applyOnboardingTemplate(
   companyId: string,
@@ -19,6 +20,15 @@ export async function applyOnboardingTemplate(
     .where(and(eq(onboardingTemplates.id, templateId), eq(onboardingTemplates.companyId, companyId)));
   if (!tpl) notFound("Onboarding template");
   const base = startDate ? Date.parse(startDate + "T00:00:00Z") : Date.now();
+  const mine = tpl.tasks.filter((t) => t.assignee === "employee").length;
+  if (mine) {
+    notify(companyId, [employeeId], {
+      category: "onboarding",
+      title: "Welcome aboard! You have onboarding tasks",
+      body: `${mine} task${mine > 1 ? "s" : ""} to finish before your first day.`,
+      link: { screen: "onboarding" },
+    });
+  }
   return db
     .insert(onboardingTasks)
     .values(

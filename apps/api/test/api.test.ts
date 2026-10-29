@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";
 import { pool } from "../src/db";
+import { flushNotifications, setPushTransport } from "../src/lib/notify";
 
 let app: FastifyInstance;
 let ownerToken: string;
@@ -24,6 +25,7 @@ async function call(method: string, url: string, token?: string, payload?: unkno
 }
 
 beforeAll(async () => {
+  setPushTransport({ send: async (m) => m.map(() => ({ status: "ok" as const, id: "x" })) });
   app = await buildApp({ logger: false });
   const signup = await call("POST", "/auth/signup", undefined, {
     companyName: "Test Co",
@@ -50,6 +52,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await app.close();
+  await flushNotifications();
   await pool.end();
 });
 

@@ -16,7 +16,11 @@
     },
     "android": {
       "package": "com.crewdesk.app",
-      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -26,7 +30,18 @@
         {
           "locationWhenInUsePermission": "Crewdesk records your location when you clock in and out so your manager can verify job-site attendance."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#1f6feb"
+        }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    }
   }
 }
