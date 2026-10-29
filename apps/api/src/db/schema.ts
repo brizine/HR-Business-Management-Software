@@ -45,6 +45,8 @@ export const companies = pgTable("companies", {
   address: text("address"),
   /** Collect W-4, I-9 and direct deposit in Crewdesk (off when a payroll provider collects them). */
   taxFormsInCrewdesk: boolean("tax_forms_in_crewdesk").notNull().default(true),
+  /** Lowest role that can create wiki pages ("employee" = everyone). */
+  wikiCreateMin: text("wiki_create_min").notNull().default("admin"),
   createdAt: createdAt(),
 });
 
@@ -552,3 +554,45 @@ export const sensitiveAccessLog = pgTable("sensitive_access_log", {
   ip: text("ip"),
   createdAt: createdAt(),
 });
+
+/**
+ * Company wiki. viewMin/editMin are the lowest role that can see/edit the
+ * page ("employee" = everyone). Deleted pages are kept (deletedAt) so they
+ * can be recovered.
+ */
+export const wikiPages = pgTable(
+  "wiki_pages",
+  {
+    id: id(),
+    companyId: companyId(),
+    parentId: uuid("parent_id"),
+    title: text("title").notNull(),
+    body: text("body").notNull().default(""),
+    viewMin: text("view_min").notNull().default("employee"),
+    editMin: text("edit_min").notNull().default("admin"),
+    pinned: boolean("pinned").notNull().default(false),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("wiki_pages_company_idx").on(t.companyId, t.parentId)],
+);
+
+/** Every saved version of a wiki page. */
+export const wikiRevisions = pgTable(
+  "wiki_revisions",
+  {
+    id: id(),
+    pageId: uuid("page_id")
+      .notNull()
+      .references(() => wikiPages.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    note: text("note"),
+    editedById: uuid("edited_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("wiki_revisions_page_idx").on(t.pageId, t.createdAt)],
+);

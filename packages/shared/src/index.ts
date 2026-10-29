@@ -6,3 +6,4 @@ export * from "./notifications";
 export * from "./availability";
 export * from "./qr";
 export * from "./taxForms";
+export * from "./wiki";

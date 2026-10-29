@@ -32,6 +32,7 @@ packages/
 | **QR labels** | Printable QR label per asset; scanning with any phone camera opens a phone-friendly page to inspect, log a reading or report an issue, no app needed. The app has a built-in scanner. See [QR labels](#qr-labels) |
 | **Inspections** | Pre-trip/pre-use checklists (DVIR-style) on mobile; any defect automatically opens a work order |
 | **Notifications** | Push to phones (Expo), in-app inbox, **email** and **text messages**, with per-person, per-category settings (mute anything, email/text only when someone doesn't have the app). See [Notifications](#notifications) |
+| **Company wiki** | Pages and sub-pages with per-page "who can see" and "who can edit" levels (everyone / managers / admins), a company setting for who can create pages, search, pinning, version history with restore, and optional notifications. Read on the phone, edit on the web. See [Company wiki](#company-wiki) |
 | **Dashboard** | Headcount, on-the-clock, pending PTO, overdue maintenance, open work orders, expiring registrations |
 
 The mobile app covers what field staff need: clock in/out with GPS, weekly hours, time-off
@@ -89,6 +90,29 @@ pnpm typecheck
 ### Changing the database
 
 Edit `apps/api/src/db/schema.ts`, then `pnpm --filter @crewdesk/api db:generate` and `pnpm db:migrate`.
+
+## Company wiki
+
+**Company wiki** (top of the sidebar; **Me → Company wiki** in the app) holds policies, how-tos,
+the payroll calendar, safety rules and so on.
+
+- **Per-page access:** each page has a **Who can see it** level and a **Who can edit it** level:
+  *Everyone*, *Managers and admins*, or *Admins only*. Editors must be able to see the page, and only
+  admins can change a page's levels, pin it or move it. People can't see, search or find out about
+  pages above their level (they get "not found").
+- **Who can create pages:** admins choose under **Wiki settings**: admins only (the default),
+  managers and above, or everyone. Nobody can create a page they couldn't see themselves.
+- **Writing:** simple formatting (headings, lists, **bold**, links, tables) with Write/Preview tabs.
+  Raw HTML is shown as text and unsafe links are removed, so a page can't run scripts.
+- **History:** every save is kept with who made it and an optional note; editors can view and
+  restore old versions. If two people edit at once, the second save is stopped instead of
+  overwriting the first.
+- **Notify:** tick "Notify everyone who can see this page" for important updates (e.g. a new safety
+  rule). People can mute these under notification settings.
+- **Deleting** (admins) keeps the page so it can be restored from Wiki settings; its sub-pages move
+  up a level.
+- **Accessibility:** proper headings, labelled controls, keyboard-friendly navigation with visible
+  focus, and screen-reader labels for pinned and restricted pages.
 
 ## Account security
 

@@ -11,14 +11,16 @@
   },
   "dependencies": {
     "@crewdesk/shared": "workspace:*",
+    "@types/node": "^22.18.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "~19.1.10",
+    "@types/react-dom": "~19.1.7",
     "next": "15.5.28",
     "qrcode": "^1.5.4",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "typescript": "^5.9.3",
-    "@types/node": "^22.18.0",
-    "@types/react": "~19.1.10",
-    "@types/react-dom": "~19.1.7",
-    "@types/qrcode": "^1.5.6"
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "typescript": "^5.9.3"
   }
 }

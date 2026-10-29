@@ -7,7 +7,7 @@ import type { Role } from "@crewdesk/shared";
 import { useAuth } from "@/lib/auth";
 
 const NAV: { section: string; items: { href: string; label: string; min?: Role }[] }[] = [
-  { section: "", items: [{ href: "/dashboard", label: "Dashboard", min: "manager" }] },
+  { section: "", items: [{ href: "/dashboard", label: "Dashboard", min: "manager" }, { href: "/wiki", label: "Company wiki" }] },
   {
     section: "People",
     items: [

@@ -134,5 +134,31 @@ for (let d = 0; d < 5; d++) {
 }
 await db.insert(s.shifts).values({ companyId, startsAt: at(5, 14), endsAt: at(5, 20), position: "Mower operator", location: "Riverside HOA", assetId: mower.id, status: "published" });
 
+// Company wiki: a few pages at different access levels.
+const page = async (v: Partial<typeof s.wikiPages.$inferInsert> & { title: string; body: string }) => {
+  const [p] = await db.insert(s.wikiPages).values({ companyId, createdById: owner.id, updatedById: owner.id, ...v }).returning();
+  await db.insert(s.wikiRevisions).values({ pageId: p.id, title: p.title, body: p.body, note: "Created", editedById: owner.id });
+  return p;
+};
+await page({
+  title: "Welcome to Demo Landscaping & Haul",
+  pinned: true,
+  body: "Glad you're here! Start with these:\n\n- **Safety rules** — read before your first shift\n- **Payroll calendar** — when you get paid\n- Questions? Ask your crew lead or message Olivia.\n",
+});
+const safety = await page({
+  title: "Safety rules",
+  pinned: true,
+  editMin: "manager",
+  body: "## Every job site\n\n1. Wear PPE: boots, gloves, eye and hearing protection.\n2. Do a **pre-trip inspection** before driving any truck (scan the QR label).\n3. Never work alone on a mower slope over 15°.\n\n## If someone is hurt\n\nCall 911 first, then your crew lead.\n",
+});
+await page({ title: "Ladder safety", parentId: safety.id, editMin: "manager", body: "Keep **three points of contact**. Set extension ladders at a 4:1 angle.\n" });
+await page({
+  title: "Payroll calendar",
+  body: "We pay **every other Friday** by direct deposit.\n\n| Pay period ends | Payday |\n| --- | --- |\n| Nov 8 | Nov 14 |\n| Nov 22 | Nov 26 (Wed, holiday week) |\n| Dec 6 | Dec 12 |\n",
+});
+await page({ title: "Crew tips & tricks", editMin: "employee", body: "Anyone can add to this page.\n\n- Freeze a water jug overnight for hot days.\n" });
+await page({ title: "Manager handbook", viewMin: "manager", editMin: "manager", body: "## Approving time\n\nApprove timesheets by **Monday noon** so payroll can run.\n" });
+await page({ title: "Vendor accounts", viewMin: "admin", editMin: "admin", body: "Fuel card and parts-supplier account details. Admins only.\n" });
+
 console.log("Seeded demo company. Sign in as owner@demo.test / password123");
 await pool.end();
