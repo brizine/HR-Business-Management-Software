@@ -75,6 +75,7 @@ export async function applyOnboardingTemplate(companyId: string, employeeId: str
         assignee: t.assignee,
         action,
         documentId,
+        formType: action === "form" ? (t.formType ?? null) : null,
         requiresDocument: action === "upload",
         dueDate: new Date(base + t.dueInDays * 86_400_000).toISOString().slice(0, 10),
       })
@@ -294,6 +295,7 @@ const routes: FastifyPluginAsync = async (app) => {
     if (!ownTask && !isManager(req)) throw new HttpError(403, "This task is assigned to someone else");
     if (!isManager(req) && task.action === "upload") throw new HttpError(400, "Upload the document to finish this task");
     if (!isManager(req) && task.action === "sign") throw new HttpError(400, "Sign the document to finish this task");
+    if (!isManager(req) && task.action === "form") throw new HttpError(400, "Fill out and sign the form to finish this task");
     if (task.assignee === "admin" && !hasRole(req.user.role as Role, "admin")) throw new HttpError(403, "This task is for an admin");
     return completeTask(task, req.user.sub);
   });

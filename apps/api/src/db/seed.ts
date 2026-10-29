@@ -18,7 +18,10 @@ if (existing.length) {
 
 const hash = await bcrypt.hash("password123", 10);
 // Two-factor is optional in the demo so you can click straight in; real companies default to requiring it for owners and admins.
-const [company] = await db.insert(s.companies).values({ name: "Demo Landscaping & Haul", twoFactorRequiredFor: "none" }).returning();
+const [company] = await db
+  .insert(s.companies)
+  .values({ name: "Demo Landscaping & Haul", twoFactorRequiredFor: "none", legalName: "Demo Landscaping & Haul LLC", ein: "12-3456789", address: "100 Congress Ave, Austin, TX 78701" })
+  .returning();
 const companyId = company.id;
 
 const [owner] = await db
@@ -82,11 +85,12 @@ await db.insert(s.onboardingTemplates).values({
   companyId,
   name: "Field crew onboarding",
   tasks: [
-    { title: "Fill out your W-4 and direct deposit with payroll", assignee: "employee", dueInDays: 0, action: "none" },
+    { title: "Fill out your W-4", assignee: "employee", dueInDays: 0, action: "form", formType: "w4" },
+    { title: "Fill out Form I-9 (Section 1)", assignee: "employee", dueInDays: 0, action: "form", formType: "i9" },
+    { title: "Set up direct deposit", assignee: "employee", dueInDays: 1, action: "form", formType: "direct_deposit" },
     { title: "Upload a photo of your driver's license", assignee: "employee", dueInDays: 1, action: "upload" },
     { title: "Sign the employee handbook", assignee: "employee", dueInDays: 1, action: "sign", documentId: handbook.id },
-    { title: "Complete Form I-9 (Section 1)", assignee: "employee", dueInDays: 0, action: "upload" },
-    { title: "Verify I-9 documents (Section 2)", assignee: "admin", dueInDays: 3, action: "none" },
+    { title: "Verify I-9 documents (Section 2)", assignee: "admin", dueInDays: 3, action: "form", formType: "i9_section2" },
     { title: "Equipment safety walkthrough", assignee: "manager", dueInDays: 5, action: "none" },
   ],
 });

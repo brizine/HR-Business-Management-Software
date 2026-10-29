@@ -24,7 +24,8 @@ packages/
 | **Time off** | Multiple policies, accrual per hour worked with caps, grants/adjustments ledger, request → approve/deny, balance checks |
 | **Hiring** | Job postings, public careers page (`/careers/<companyId>`), applicant pipeline board, one-click hire → employee |
 | **Onboarding** | Hire form (start date, pay, manager, checklist) → invite email → new hire sets their password and works through a checklist of check-off, **upload** (phone camera works) and **sign** tasks; managers and admins see what's waiting on them; reminders and milestone notifications; the hire becomes active when everything is done. See [Onboarding](#onboarding) |
-| **Payroll** | Hours + estimated gross preview, **CSV export** for any payroll system, **or** push to an embedded payroll provider (Check adapter included) |
+| **Payroll** | Optional provider: export each pay period as CSV (regular, overtime and approved time-off hours, estimated gross; approved-time-only option) and run payroll anywhere, **or** send hours to Check. See [Payroll](#payroll) |
+| **Pay & tax forms** | Optional: employees fill out **W-4**, **I-9** Section 1 and **direct deposit** online (admins complete I-9 Section 2); encrypted, access-logged, PDF records; an "enter in payroll" queue for admins. See [Pay & tax forms](#pay--tax-forms) |
 | **Fleet & equipment** | Asset registry (vehicles, trailers, heavy/small equipment, tools), odometer + engine-hour meters, registration/insurance expiry |
 | **Preventive maintenance** | Schedules by miles, engine hours and/or days (whichever comes first), due-soon/overdue status, fleet-wide due list |
 | **Work orders** | Numbered work orders with priority, assignment, parts/labor cost, vendor; completing one resets its maintenance schedule; critical issues take the asset out of service |
@@ -272,19 +273,61 @@ If you turn on "enhanced push security" for the Expo project, set `EXPO_ACCESS_T
 
 ## Payroll
 
-Admins pick a pay period on the Payroll page and either:
+A payroll provider is **optional**. Under **Payroll → Payroll settings** the owner chooses:
 
-1. **Export CSV**: regular/overtime hours, rate and estimated gross per employee, ready to import into
-   any payroll service (QuickBooks, ADP, Gusto, a bookkeeper).
-2. **Send to payroll provider**: creates a draft payroll with the provider for review and approval.
-   The `PayrollProvider` interface in `apps/api/src/lib/payroll` has a Check
-   (checkhq.com) implementation; Gusto Embedded or others can be added the same way. To enable:
-   set `CHECK_API_KEY`, choose "Check" in payroll settings, enter the Check company ID, and store each
-   employee's Check ID in `payroll_provider_employee_id`. Verify the request format against the
-   provider's current API docs and test in their sandbox before going live.
+- **No payroll provider** (default): pick the pay period and **Export CSV**. One row per employee with
+  pay type and rate, regular hours, overtime hours (1.5× after the weekly threshold), approved
+  **time-off hours** (split by day when a request crosses pay periods) and estimated gross. Key it
+  into QuickBooks, ADP, Gusto or Paychex, or send it to your accountant. Unapproved time entries are
+  flagged, and **Approved time only** leaves them out.
+- **Check** (embedded payroll): **Send to Check** creates a draft payroll there for you to approve.
+  Set `CHECK_API_KEY`, enter the Check company ID, and store each employee's Check ID. Verify the
+  request format against Check's docs and test in their sandbox first.
 
-Both options are always available. Tax calculation, filings and money movement stay with the
-provider, which avoids building payroll tax compliance in-house.
+Tax calculation, filings and paying employees stay with your payroll system or accountant.
+
+## Pay & tax forms
+
+With **Collect W-4, I-9 and direct deposit forms in Crewdesk** on (Payroll settings), employees fill
+these out online under **Pay & tax forms**, or from onboarding tasks of the kind "Fill out a form":
+
+| Form | Who | What happens |
+| --- | --- | --- |
+| **W-4** (federal withholding) | Employee | All W-4 steps, including a Step 3 calculator. Updating it supersedes the old one. |
+| **I-9 Section 1** | Employee, by their first day | Citizenship/immigration status with the right follow-up fields. Locked once verified. |
+| **I-9 Section 2** | Admin, within 3 business days | Record the List A, or List B + C, documents examined. Nobody can verify their own I-9. |
+| **Direct deposit** | Employee | Routing-number checksum and a typed-twice account number. |
+
+Each form is signed with the form's exact statement ("Under penalties of perjury…"), a typed name and
+an "I agree" box, and Crewdesk records the time, IP address and browser. **Download PDF** produces a
+record copy with every answer and the signature details. Enter your legal name, EIN and address in
+Payroll settings so they print on the forms.
+
+**Privacy.** Answers, including Social Security and bank numbers, are encrypted with their own key.
+Lists only show the last 4 digits. Only the employee and admins can open a form (managers can't), and
+every view or download is logged and shown to admins on the form.
+
+**Manual payroll workflow.** When someone submits or updates a W-4 or direct deposit form, admins are
+notified ("Payroll & tax forms") and it appears under **Waiting on you**. Enter it in your payroll
+system, then click **Mark entered in payroll**.
+
+**Things to know**
+- These are electronic versions of the forms, not the official IRS/USCIS PDFs; the official ones
+  couldn't be downloaded when this was built. The IRS allows electronic W-4 systems, and USCIS allows
+  electronic I-9s, if they meet certain requirements (electronic signature with the attestation, an
+  audit trail, and printable copies on request). Have your accountant or employment attorney confirm
+  this setup works for you. `W4_AMOUNTS` (in `packages/shared/src/taxForms.ts`) holds the Step 3
+  per-dependent amounts; check them against each January's W-4.
+- **State withholding** forms vary by state. Add a state form as an "Upload a document" task, with a
+  link to your state's form in the description.
+- **I-9 Supplement A** (preparer/translator) and **Supplement B** (reverification) are done on paper.
+  Crewdesk flags when a preparer was used.
+- **E-Verify**, if you use it, is still done on the E-Verify site.
+- **Keep records:** W-4s for at least 4 years. I-9s for 3 years after the hire date or 1 year after
+  employment ends, whichever is later. Crewdesk keeps every version, including after someone is
+  marked terminated (there's no way to delete employees).
+- If you switch to a provider that collects these itself, turn the setting off; forms already on
+  file stay available.
 
 ## Before production
 

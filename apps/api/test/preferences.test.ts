@@ -95,7 +95,7 @@ describe("defaults", () => {
     const res = await call("GET", "/notifications/preferences", "noapp");
     expect(res.body.hasApp).toBe(false);
     expect(res.body.channels).toEqual({ email: true, sms: false });
-    expect(res.body.preferences).toHaveLength(7);
+    expect(res.body.preferences).toHaveLength(8);
     expect(res.body.preferences[0]).toEqual({ category: "pto", app: true, email: "no_app", sms: "never" });
   });
 });

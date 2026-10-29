@@ -10,10 +10,11 @@ export type NotificationLink =
   | { screen: "documents" }
   | { screen: "onboarding" }
   | { screen: "hiring" }
+  | { screen: "tax-forms" }
   | { screen: "asset"; id: string }
   | { screen: "work-order"; id: string; assetId: string };
 
-export const NOTIFICATION_CATEGORIES = ["pto", "time", "schedule", "fleet", "documents", "onboarding", "hiring"] as const;
+export const NOTIFICATION_CATEGORIES = ["pto", "time", "schedule", "fleet", "documents", "onboarding", "hiring", "payroll"] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
 /** Expo push tokens look like ExponentPushToken[xxxx] or ExpoPushToken[xxxx]. */
@@ -27,6 +28,7 @@ export const NOTIFICATION_CATEGORY_INFO: Record<NotificationCategory, { label: s
   documents: { label: "Documents", description: "Documents waiting for your signature" },
   onboarding: { label: "Onboarding", description: "Your new-hire checklist" },
   hiring: { label: "Hiring", description: "New job applicants" },
+  payroll: { label: "Payroll & tax forms", description: "New or updated W-4s and direct deposit details to enter in payroll (admins)" },
 };
 
 /**
@@ -59,6 +61,7 @@ export function webPathFor(link: NotificationLink | null | undefined): string | 
     case "documents": return "/documents";
     case "onboarding": return "/onboarding";
     case "hiring": return "/hiring";
+    case "tax-forms": return "/tax-forms";
     case "asset": return `/fleet/${link.id}`;
     case "work-order": return `/work-orders?highlight=${link.id}`;
     default: return null;

@@ -8,8 +8,28 @@ import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { DocumentList } from "@/components/documents";
 import { InviteResult } from "@/components/invite-result";
 import { OnboardingTask } from "@/components/onboarding-task";
+import { DownloadPdf, FormStatus, signedLine } from "@/components/tax-form-bits";
 import { AvailabilityEditor } from "@/components/availability-editor";
 import { EmployeeFields, employeeBody } from "@/components/employee-form";
+
+/** Admins: the person's W-4, I-9 and direct deposit on file (current and earlier versions). */
+function EmployeeTaxForms({ employeeId }: { employeeId: string }) {
+  const { data } = useApi<any[]>(`/tax-forms?employeeId=${employeeId}`);
+  if (!data) return null;
+  return (
+    <div className="card">
+      <h2>Pay & tax forms</h2>
+      {data.length ? (
+        <table><tbody>{data.map((f) => (
+          <tr key={f.id} style={{ opacity: f.supersededAt ? 0.6 : 1 }}>
+            <td><Link href={`/tax-forms/${f.id}`}>{f.label}</Link>{f.supersededAt && <span className="muted"> (earlier version)</span>}<div className="muted">{f.summary} · {signedLine(f)}</div></td>
+            <td className="row" style={{ textAlign: "right" }}><FormStatus form={f} /> <DownloadPdf form={f} /></td>
+          </tr>
+        ))}</tbody></table>
+      ) : <p className="muted" style={{ margin: 0 }}>None filled out in Crewdesk yet.</p>}
+    </div>
+  );
+}
 
 export default function Person({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -131,6 +151,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
           <AvailabilityEditor employeeId={id} />
         </div>
       )}
+      {can("admin") && <EmployeeTaxForms employeeId={id} />}
       <DocumentList employeeId={id} />
     </>
   );

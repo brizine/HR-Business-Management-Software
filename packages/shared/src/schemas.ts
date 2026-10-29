@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DELIVERY_MODES, NOTIFICATION_CATEGORIES } from "./notifications";
+import { ONBOARDING_FORM_TYPES } from "./taxForms";
 import { ROLES } from "./roles";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
@@ -101,7 +102,7 @@ export const applicantStageSchema = z.object({ stage: z.enum(APPLICANT_STAGES) }
  * (e.g. a photo of a driver's license), or signing a company document (e.g.
  * the handbook). Upload and sign tasks complete themselves when that happens.
  */
-export const TASK_ACTIONS = ["none", "upload", "sign"] as const;
+export const TASK_ACTIONS = ["none", "upload", "sign", "form"] as const;
 export type TaskAction = (typeof TASK_ACTIONS)[number];
 
 export const onboardingTaskTemplateSchema = z
@@ -113,12 +114,17 @@ export const onboardingTaskTemplateSchema = z
     action: z.enum(TASK_ACTIONS).default("none"),
     /** For "sign" tasks: the company-wide document each new hire signs. */
     documentId: z.string().uuid().nullable().optional(),
+    /** For "form" tasks: which form finishes it ("i9_section2" is the employer's part, for admins). */
+    formType: z.enum(ONBOARDING_FORM_TYPES).nullable().optional(),
   })
   .refine((t) => t.action !== "sign" || t.documentId, { message: "Choose the document to sign", path: ["documentId"] })
-  .refine((t) => t.action === "none" || t.assignee === "employee", {
-    message: "Only the new hire's own tasks can require an upload or signature",
-    path: ["action"],
-  });
+  .refine((t) => t.action !== "form" || t.formType, { message: "Choose the form", path: ["formType"] })
+  .refine(
+    (t) =>
+      t.action === "none" ||
+      (t.action === "form" && t.formType === "i9_section2" ? t.assignee === "admin" : t.assignee === "employee"),
+    { message: "Only the new hire's own tasks can require an upload, signature or form (I-9 Section 2 is for admins)", path: ["action"] },
+  );
 
 export const onboardingTemplateSchema = z.object({
   name: z.string().min(1),
@@ -225,10 +231,14 @@ export const DEFAULT_INSPECTION_ITEMS = [
   "Safety equipment",
 ];
 
-export const payrollExportSchema = z.object({
-  periodStart: isoDate,
-  periodEnd: isoDate,
-});
+export const payrollExportSchema = z
+  .object({
+    periodStart: isoDate,
+    periodEnd: isoDate,
+    /** Count only manager-approved time entries ("true" in a query string). */
+    approvedOnly: z.union([z.boolean(), z.enum(["true", "false"]).transform((v) => v === "true")]).optional(),
+  })
+  .refine((p) => p.periodEnd >= p.periodStart, { message: "The period must end on or after it starts", path: ["periodEnd"] });
 
 export const deviceSchema = z.object({
   token: z.string().regex(/^Expo(nent)?PushToken\[[^\]]+\]$/, "Not an Expo push token"),

@@ -16,6 +16,7 @@ const NAV: { section: string; items: { href: string; label: string; min?: Role }
       { href: "/time", label: "Time clock" },
       { href: "/time-off", label: "Time off" },
       { href: "/documents", label: "Documents" },
+      { href: "/tax-forms", label: "Pay & tax forms" },
       { href: "/onboarding", label: "Onboarding" },
       { href: "/hiring", label: "Hiring", min: "manager" },
       { href: "/payroll", label: "Payroll", min: "admin" },

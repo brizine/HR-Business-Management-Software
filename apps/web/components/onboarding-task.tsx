@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useRef } from "react";
 import { API_URL, api, download, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -8,7 +9,10 @@ import { Badge, ErrorBox } from "./ui";
 const ACTION_HINT: Record<string, string> = {
   upload: "Upload a photo or PDF",
   sign: "Read and sign",
+  form: "Fill out and sign online",
 };
+
+const FORM_PATHS: Record<string, string> = { w4: "/tax-forms/w4", i9: "/tax-forms/i9", direct_deposit: "/tax-forms/direct-deposit" };
 
 /** Opens a document in a new tab through a short-lived view link (works for images and PDFs). */
 export async function viewDocument(documentId: string) {
@@ -44,6 +48,8 @@ export function OnboardingTask({ task, mode, onChange }: { task: any; mode: "sel
             <button className="btn sm primary" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? "Uploading…" : "Upload"}</button>
           </>
         );
+      } else if (task.action === "form" && FORM_PATHS[task.formType]) {
+        actions = <Link className="btn sm primary" href={FORM_PATHS[task.formType]}>Fill out</Link>;
       } else if (task.action === "sign" && task.document) {
         actions = (
           <>
@@ -59,6 +65,13 @@ export function OnboardingTask({ task, mode, onChange }: { task: any; mode: "sel
       }
     } else if (mode === "self") {
       actions = <span className="muted">Waiting on your {task.assignee}</span>;
+    } else if (task.formType === "i9_section2") {
+      actions = (
+        <>
+          <Link className="btn sm primary" href="/tax-forms">Complete Section 2</Link>{" "}
+          <button className="btn sm" disabled={busy} onClick={complete} title="If you completed a paper I-9">Paper I-9 done</button>
+        </>
+      );
     } else {
       actions = (
         <button className="btn sm" disabled={busy} onClick={complete} title={task.action !== "none" ? "Use this if you received a paper copy" : ""}>

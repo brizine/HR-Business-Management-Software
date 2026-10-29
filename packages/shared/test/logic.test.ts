@@ -111,3 +111,44 @@ describe("codeFromScan", () => {
     expect(codeFromScan("WIFI:S:guest;T:WPA;P:hunter2;;")).toBeNull();
   });
 });
+
+import { directDepositSchema, i9Section1Schema, isValidRoutingNumber, maskAccount, maskSsn, ssnSchema, w4Schema } from "../src";
+
+describe("tax form validation", () => {
+  it("normalizes SSNs and rejects ones the SSA never issues", () => {
+    expect(ssnSchema.parse("123456789")).toBe("123-45-6789");
+    for (const bad of ["000-12-3456", "666-12-3456", "900-12-3456", "123-00-4567", "123-45-0000", "12-345-6789"]) {
+      expect(ssnSchema.safeParse(bad).success).toBe(false);
+    }
+    expect(maskSsn("123-45-6789")).toBe("***-**-6789");
+  });
+
+  it("checks routing number checksums", () => {
+    expect(isValidRoutingNumber("021000021")).toBe(true); // JPMorgan Chase, NY
+    expect(isValidRoutingNumber("011000015")).toBe(true); // Federal Reserve Bank of Boston
+    expect(isValidRoutingNumber("021000022")).toBe(false);
+    expect(isValidRoutingNumber("12345")).toBe(false);
+    expect(maskAccount("000123456789")).toBe("••••6789");
+  });
+
+  it("requires matching account numbers", () => {
+    const base = { bankName: "Chase", routingNumber: "021000021", accountNumber: "123456789", accountType: "checking", signedName: "Pat Doe" };
+    expect(directDepositSchema.safeParse({ ...base, accountNumberConfirm: "123456789" }).success).toBe(true);
+    expect(directDepositSchema.safeParse({ ...base, accountNumberConfirm: "123456780" }).success).toBe(false);
+  });
+
+  it("W-4: exemption excludes extra withholding", () => {
+    const base = { firstName: "Pat", lastName: "Doe", address: "1 Main St", city: "Austin", state: "TX", zip: "78701", ssn: "123-45-6789", filingStatus: "single", signedName: "Pat Doe" };
+    expect(w4Schema.safeParse(base).success).toBe(true);
+    expect(w4Schema.safeParse({ ...base, exempt: true, extraWithholding: 20 }).success).toBe(false);
+  });
+
+  it("I-9: status-specific numbers are required", () => {
+    const base = { lastName: "Doe", firstName: "Pat", address: "1 Main St", city: "Austin", state: "TX", zip: "78701", dateOfBirth: "1990-04-01", signedName: "Pat Doe" };
+    expect(i9Section1Schema.safeParse({ ...base, citizenship: "citizen" }).success).toBe(true);
+    expect(i9Section1Schema.safeParse({ ...base, citizenship: "permanent_resident" }).success).toBe(false);
+    expect(i9Section1Schema.safeParse({ ...base, citizenship: "permanent_resident", uscisNumber: "A123456789" }).success).toBe(true);
+    expect(i9Section1Schema.safeParse({ ...base, citizenship: "authorized_alien", i94Number: "12345678901" }).success).toBe(false);
+    expect(i9Section1Schema.safeParse({ ...base, citizenship: "authorized_alien", i94Number: "12345678901", workAuthExpires: "2028-01-01" }).success).toBe(true);
+  });
+});

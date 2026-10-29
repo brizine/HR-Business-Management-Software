@@ -14,17 +14,21 @@ function key(purpose = "secrets-at-rest-v1", salt: Buffer | string = "crewdesk")
   return Buffer.from(hkdfSync("sha256", masterKey(), salt, purpose, 32));
 }
 
-export function encrypt(plain: string) {
+/**
+ * `purpose` gives each kind of data its own derived key (two-factor secrets
+ * use the default; tax forms use "tax-forms-v1").
+ */
+export function encrypt(plain: string, purpose?: string) {
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key(), iv);
+  const cipher = createCipheriv("aes-256-gcm", key(purpose), iv);
   const data = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
   return ["v1", iv.toString("base64url"), cipher.getAuthTag().toString("base64url"), data.toString("base64url")].join(".");
 }
 
-export function decrypt(stored: string) {
+export function decrypt(stored: string, purpose?: string) {
   const [version, iv, tag, data] = stored.split(".");
   if (version !== "v1") throw new Error("Unknown encryption format");
-  const decipher = createDecipheriv("aes-256-gcm", key(), Buffer.from(iv, "base64url"));
+  const decipher = createDecipheriv("aes-256-gcm", key(purpose), Buffer.from(iv, "base64url"));
   decipher.setAuthTag(Buffer.from(tag, "base64url"));
   return Buffer.concat([decipher.update(Buffer.from(data, "base64url")), decipher.final()]).toString("utf8");
 }

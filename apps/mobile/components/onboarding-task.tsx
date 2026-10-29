@@ -2,7 +2,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import { Alert, Linking, View } from "react-native";
-import { API_URL, api, fmtDate } from "@/lib/api";
+import { API_URL, WEB_URL, api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Divider, Row, Txt } from "./ui";
 
@@ -91,6 +91,10 @@ export function OnboardingTaskItem({ task, mode, onChange }: { task: any; mode: 
           ])} /></View>
       </Row>
     );
+  } else if (task.action === "form") {
+    // Tax forms are filled out on the website (sign in there with the same email and password).
+    const path = { w4: "/tax-forms/w4", i9: "/tax-forms/i9", direct_deposit: "/tax-forms/direct-deposit" }[task.formType as string] ?? "/tax-forms";
+    actions = <Button title="Fill out (opens website)" onPress={() => Linking.openURL(WEB_URL + path)} />;
   } else if (task.action === "sign" && task.document) {
     actions = (
       <Row>

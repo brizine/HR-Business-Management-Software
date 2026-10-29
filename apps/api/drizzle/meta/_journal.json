@@ -57,6 +57,13 @@
       "when": 1793289758297,
       "tag": "0007_onboarding_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793302372625,
+      "tag": "0008_tax_forms",
+      "breakpoints": true
     }
   ]
 }

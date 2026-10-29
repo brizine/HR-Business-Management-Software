@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { desc, eq } from "drizzle-orm";
-import { payrollExportSchema } from "@crewdesk/shared";
+import { companyPayrollInfoSchema, payrollExportSchema } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
 import { companies, payrollRuns } from "../db/schema";
@@ -19,20 +19,37 @@ const routes: FastifyPluginAsync = async (app) => {
       payrollProviderCompanyId: c.payrollProviderCompanyId,
       weeklyOvertimeThreshold: c.weeklyOvertimeThreshold,
       availableProviders: ["csv", "check"],
+      legalName: c.legalName,
+      ein: c.ein,
+      address: c.address,
+      taxFormsInCrewdesk: c.taxFormsInCrewdesk,
     };
   });
 
   app.put("/settings", { preHandler: requireRole("owner") }, async (req) => {
     const body = parse(
-      z.object({
-        payrollProvider: z.enum(["csv", "check"]),
-        payrollProviderCompanyId: z.string().nullable().optional(),
-        weeklyOvertimeThreshold: z.number().positive().optional(),
-      }),
+      z
+        .object({
+          /** "csv" = no provider: export and run payroll manually. */
+          payrollProvider: z.enum(["csv", "check"]).optional(),
+          payrollProviderCompanyId: z.string().nullable().optional(),
+          weeklyOvertimeThreshold: z.number().positive().optional(),
+          /** Collect W-4, I-9 and direct deposit in Crewdesk. */
+          taxFormsInCrewdesk: z.boolean().optional(),
+        })
+        .merge(companyPayrollInfoSchema),
       req.body,
     );
     const [c] = await db.update(companies).set(body).where(eq(companies.id, req.user.companyId)).returning();
-    return c;
+    return {
+      payrollProvider: c.payrollProvider,
+      payrollProviderCompanyId: c.payrollProviderCompanyId,
+      weeklyOvertimeThreshold: c.weeklyOvertimeThreshold,
+      legalName: c.legalName,
+      ein: c.ein,
+      address: c.address,
+      taxFormsInCrewdesk: c.taxFormsInCrewdesk,
+    };
   });
 
   /** Hours and estimated gross per employee for the period. */
@@ -47,7 +64,8 @@ const routes: FastifyPluginAsync = async (app) => {
     const lines = await buildPayrollLines(db, req.user.companyId, period);
     await db.insert(payrollRuns).values({
       companyId: req.user.companyId,
-      ...period,
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
       provider: "csv",
       status: "exported",
       totals: totals(lines),
@@ -76,7 +94,8 @@ const routes: FastifyPluginAsync = async (app) => {
       .insert(payrollRuns)
       .values({
         companyId: company.id,
-        ...period,
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
         provider: provider.name,
         status: result.status,
         providerReference: result.providerReference,
@@ -99,9 +118,10 @@ const routes: FastifyPluginAsync = async (app) => {
 
 function totals(lines: Awaited<ReturnType<typeof buildPayrollLines>>) {
   return {
-    employees: lines.filter((l) => l.totalHours > 0).length,
+    employees: lines.filter((l) => l.totalHours > 0 || l.ptoHours > 0).length,
     regularHours: lines.reduce((s, l) => s + l.regularHours, 0),
     overtimeHours: lines.reduce((s, l) => s + l.overtimeHours, 0),
+    ptoHours: lines.reduce((s, l) => s + l.ptoHours, 0),
     estimatedGrossCents: lines.reduce((s, l) => s + (l.estimatedGrossCents ?? 0), 0),
   };
 }

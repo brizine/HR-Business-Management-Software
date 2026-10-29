@@ -23,6 +23,7 @@ import shiftRoutes from "./routes/shifts";
 import unsubscribeRoutes from "./routes/unsubscribe";
 import availabilityRoutes from "./routes/availability";
 import jobRoutes from "./routes/jobs";
+import taxFormRoutes from "./routes/taxForms";
 
 export interface AppOptions {
   logger?: boolean;
@@ -81,4 +82,5 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(unsubscribeRoutes, { prefix: "/public/unsubscribe" });
   await app.register(availabilityRoutes, { prefix: "/availability" });
   await app.register(jobRoutes, { prefix: "/jobs" });
+  await app.register(taxFormRoutes, { prefix: "/tax-forms" });
 }

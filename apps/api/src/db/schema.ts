@@ -39,6 +39,12 @@ export const companies = pgTable("companies", {
   smsEnabled: boolean("sms_enabled").notNull().default(false),
   /** Lowest role that must use two-factor sign-in ("owner", "admin", "manager", "employee"), or "none". */
   twoFactorRequiredFor: text("two_factor_required_for").notNull().default("admin"),
+  /** Employer details printed on tax forms. */
+  legalName: text("legal_name"),
+  ein: text("ein"),
+  address: text("address"),
+  /** Collect W-4, I-9 and direct deposit in Crewdesk (off when a payroll provider collects them). */
+  taxFormsInCrewdesk: boolean("tax_forms_in_crewdesk").notNull().default(true),
   createdAt: createdAt(),
 });
 
@@ -204,9 +210,11 @@ export interface OnboardingTaskTemplate {
   assignee: "employee" | "manager" | "admin";
   dueInDays: number;
   /** "none" | "upload" | "sign". Templates saved before this existed use requiresDocument. */
-  action?: "none" | "upload" | "sign";
+  action?: "none" | "upload" | "sign" | "form";
   /** For "sign": the company document to sign. */
   documentId?: string | null;
+  /** For "form": "w4" | "i9" | "direct_deposit" | "i9_section2" */
+  formType?: string | null;
   requiresDocument?: boolean;
 }
 
@@ -232,6 +240,8 @@ export const onboardingTasks = pgTable("onboarding_tasks", {
   action: text("action").notNull().default("none"),
   /** The uploaded file, or the document to sign. */
   documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
+  /** For "form" tasks: which tax form finishes it. */
+  formType: text("form_type"),
   dueDate: date("due_date"),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   completedById: uuid("completed_by_id").references(() => employees.id, { onDelete: "set null" }),
@@ -488,5 +498,57 @@ export const passwordResets = pgTable("password_resets", {
   tokenHash: text("token_hash").notNull().unique(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: createdAt(),
+});
+
+/**
+ * W-4, I-9 and direct deposit forms filled out in Crewdesk. The answers (which
+ * include Social Security and bank account numbers) are encrypted; only the
+ * employee and admins can open them, and every view is logged.
+ * A newer form of the same type supersedes the old one; old ones are kept for
+ * record retention (W-4: 4 years; I-9: 3 years after hire or 1 year after
+ * leaving, whichever is later).
+ */
+export const taxForms = pgTable(
+  "tax_forms",
+  {
+    id: id(),
+    companyId: companyId(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    /** "submitted"; an I-9 becomes "completed" once an admin finishes Section 2. */
+    status: text("status").notNull().default("submitted"),
+    data: text("data").notNull(),
+    /** Last 4 of SSN / account, for lists without decrypting. */
+    summary: text("summary"),
+    signedName: text("signed_name").notNull(),
+    signedAt: timestamp("signed_at", { withTimezone: true }).notNull(),
+    signedIp: text("signed_ip"),
+    signedUserAgent: text("signed_user_agent"),
+    /** I-9 Section 2 (employer), encrypted. */
+    employerData: text("employer_data"),
+    employerSignedName: text("employer_signed_name"),
+    employerSignedAt: timestamp("employer_signed_at", { withTimezone: true }),
+    employerSignedById: uuid("employer_signed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    /** When an admin entered it into payroll (for manual payroll). */
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    processedById: uuid("processed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    supersededAt: timestamp("superseded_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("tax_forms_employee_idx").on(t.employeeId, t.type)],
+);
+
+/** Who opened which sensitive record, and when. */
+export const sensitiveAccessLog = pgTable("sensitive_access_log", {
+  id: id(),
+  companyId: companyId(),
+  viewerId: uuid("viewer_id").references(() => employees.id, { onDelete: "set null" }),
+  employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "cascade" }),
+  taxFormId: uuid("tax_form_id").references(() => taxForms.id, { onDelete: "cascade" }),
+  action: text("action").notNull(),
+  ip: text("ip"),
   createdAt: createdAt(),
 });

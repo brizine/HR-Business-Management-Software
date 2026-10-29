@@ -48,14 +48,18 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
   return (type.includes("json") ? res.json() : res.text()) as Promise<T>;
 }
 
-/** Downloads an authenticated file (CSV export, document) via a blob URL. */
-export async function download(path: string, filename: string) {
+/**
+ * Downloads an authenticated file (CSV export, document) via a blob URL.
+ * Without a filename, uses the one the server suggests.
+ */
+export async function download(path: string, filename?: string) {
   const res = await fetch(API_URL + path, { credentials: "include", headers: CLIENT_HEADER });
   if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => ({}))).error ?? res.statusText);
+  const suggested = res.headers.get("content-disposition")?.match(/filename="([^"]+)"/)?.[1];
   const url = URL.createObjectURL(await res.blob());
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename;
+  a.download = filename ?? suggested ?? "download";
   a.click();
   URL.revokeObjectURL(url);
 }

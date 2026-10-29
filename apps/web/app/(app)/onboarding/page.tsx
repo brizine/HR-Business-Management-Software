@@ -8,7 +8,8 @@ import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { OnboardingTask } from "@/components/onboarding-task";
 
-const ACTION_LABELS: Record<TaskAction, string> = { none: "Check off", upload: "Upload a document", sign: "Sign a document" };
+const ACTION_LABELS: Record<TaskAction, string> = { none: "Check off", upload: "Upload a document", sign: "Sign a document", form: "Fill out a form" };
+const FORM_LABELS: Record<string, string> = { w4: "Form W-4", i9: "Form I-9 (Section 1)", direct_deposit: "Direct deposit", i9_section2: "Form I-9 Section 2 (employer)" };
 
 function MyTasks() {
   const { data, reload } = useApi<any[]>("/onboarding/tasks");
@@ -38,8 +39,8 @@ function WaitingOnMe() {
   );
 }
 
-type TaskDraft = { title: string; assignee: string; dueInDays: number; action: TaskAction; documentId: string };
-const blank = (): TaskDraft => ({ title: "", assignee: "employee", dueInDays: 0, action: "none", documentId: "" });
+type TaskDraft = { title: string; assignee: string; dueInDays: number; action: TaskAction; documentId: string; formType: string };
+const blank = (): TaskDraft => ({ title: "", assignee: "employee", dueInDays: 0, action: "none", documentId: "", formType: "w4" });
 
 function TemplateBuilder({ onSaved }: { onSaved: () => void }) {
   const companyDocs = useApi<any[]>("/documents");
@@ -58,15 +59,25 @@ function TemplateBuilder({ onSaved }: { onSaved: () => void }) {
           <div className="formgrid" key={i} style={{ borderTop: i ? "1px solid var(--border)" : undefined, paddingTop: i ? 10 : 0 }}>
             <label>Task<input value={t.title} onChange={(e) => set(i, { title: e.target.value })} placeholder="e.g. Upload driver's license" /></label>
             <label>Who does it
-              <select value={t.assignee} onChange={(e) => set(i, { assignee: e.target.value, ...(e.target.value !== "employee" ? { action: "none" as const } : {}) })}>
+              <select value={t.assignee} onChange={(e) => {
+                const assignee = e.target.value;
+                set(i, assignee === "employee" ? { assignee, formType: "w4" } : { assignee, action: "none", formType: assignee === "admin" ? "i9_section2" : "" });
+              }}>
                 <option value="employee">New hire</option><option value="manager">Their manager</option><option value="admin">An admin</option>
               </select>
             </label>
             <label>To finish it
-              <select value={t.action} disabled={t.assignee !== "employee"} onChange={(e) => set(i, { action: e.target.value as TaskAction })}>
-                {TASK_ACTIONS.map((a) => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
+              <select value={t.action} disabled={t.assignee === "manager"} onChange={(e) => set(i, { action: e.target.value as TaskAction })}>
+                {TASK_ACTIONS.filter((a) => t.assignee === "employee" || a === "none" || a === "form").map((a) => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}
               </select>
             </label>
+            {t.action === "form" && (
+              <label>Form
+                <select value={t.formType} onChange={(e) => set(i, { formType: e.target.value })}>
+                  {(t.assignee === "admin" ? ["i9_section2"] : ["w4", "i9", "direct_deposit"]).map((f) => <option key={f} value={f}>{FORM_LABELS[f]}</option>)}
+                </select>
+              </label>
+            )}
             {t.action === "sign" && (
               <label>Document to sign
                 <select value={t.documentId} onChange={(e) => set(i, { documentId: e.target.value })}>
@@ -88,7 +99,11 @@ function TemplateBuilder({ onSaved }: { onSaved: () => void }) {
           <button className="btn primary" disabled={busy || !name} onClick={() => run(async () => {
             await api("/onboarding/templates", { body: {
               name,
-              tasks: tasks.filter((t) => t.title).map((t) => ({ ...t, documentId: t.action === "sign" ? t.documentId || null : null })),
+              tasks: tasks.filter((t) => t.title).map((t) => ({
+                ...t,
+                documentId: t.action === "sign" ? t.documentId || null : null,
+                formType: t.action === "form" ? t.formType : null,
+              })),
             } });
             setName(""); setTasks([blank()]); onSaved();
           })}>Save template</button>
@@ -135,7 +150,7 @@ export default function Onboarding() {
               <details key={t.id} style={{ padding: "6px 0" }}>
                 <summary><strong>{t.name}</strong> <span className="muted">({t.tasks.length} tasks)</span></summary>
                 <ul>{t.tasks.map((x: any, i: number) => (
-                  <li key={i}>{x.title} <span className="muted">· {x.assignee === "employee" ? "new hire" : x.assignee} · day {x.dueInDays}{x.action && x.action !== "none" ? ` · ${ACTION_LABELS[x.action as TaskAction].toLowerCase()}` : ""}</span></li>
+                  <li key={i}>{x.title} <span className="muted">· {x.assignee === "employee" ? "new hire" : x.assignee} · day {x.dueInDays}{x.action === "form" ? ` · ${FORM_LABELS[x.formType]}` : x.action && x.action !== "none" ? ` · ${ACTION_LABELS[x.action as TaskAction].toLowerCase()}` : ""}</span></li>
                 ))}</ul>
                 {can("admin") && <button className="btn sm danger" onClick={() => confirm(`Delete "${t.name}"? Checklists already started aren't affected.`) && api(`/onboarding/templates/${t.id}`, { method: "DELETE" }).then(templates.reload)}>Delete template</button>}
               </details>
