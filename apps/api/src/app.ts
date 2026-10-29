@@ -26,6 +26,7 @@ import jobRoutes from "./routes/jobs";
 import taxFormRoutes from "./routes/taxForms";
 import wikiRoutes from "./routes/wiki";
 import jobSiteRoutes from "./routes/jobSites";
+import sprayMixRoutes from "./routes/sprayMix";
 
 export interface AppOptions {
   logger?: boolean;
@@ -87,4 +88,5 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(taxFormRoutes, { prefix: "/tax-forms" });
   await app.register(wikiRoutes, { prefix: "/wiki" });
   await app.register(jobSiteRoutes, { prefix: "/job-sites" });
+  await app.register(sprayMixRoutes, { prefix: "/spray-mixes" });
 }

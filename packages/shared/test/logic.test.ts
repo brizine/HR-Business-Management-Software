@@ -188,3 +188,49 @@ describe("geofencing", () => {
     expect(parseCoordinates("123 Main St")).toBeNull();
   });
 });
+
+import { SPRAY_MIX_TEMPLATE, computeMix, formatAmount } from "../src";
+
+describe("spray tank mix", () => {
+  const truck = SPRAY_MIX_TEMPLATE[0];
+  const z = SPRAY_MIX_TEMPLATE[1];
+  const row = (sheet: typeof truck, tank: number, name: string) => computeMix(sheet, tank).rows.find((r) => r.product.name === name)!;
+
+  it("matches the spreadsheet's Truck Mix (75 gal)", () => {
+    // Spreadsheet: C = rate/43.56, F = C/2*75
+    expect(row(truck, 75, "Aquacap").ratePer1000).toBeCloseTo(47.9 / 43.56, 10);
+    expect(row(truck, 75, "Aquacap").needed).toBeCloseTo((47.9 / 43.56 / 2) * 75, 10);
+    expect(row(truck, 75, "46-0-0").needed).toBeCloseTo(81.784, 3);
+    expect(computeMix(truck, 75).acres).toBeCloseTo(0.8609, 4);
+    expect(computeMix(truck, 75).gallonsPer1000).toBeCloseTo(2, 10);
+  });
+
+  it("matches the spreadsheet's Z spray Mix (12 gal)", () => {
+    // Spreadsheet: F = rate/11.1*12
+    expect(row(z, 12, "Specticle Flo").needed).toBeCloseTo((6 / 11.1) * 12, 10);
+    expect(row(z, 12, "Acid Blue 9 Dye").needed).toBeCloseTo(86.486, 3);
+    // The spreadsheet's F36 used the truck formula for 90/10 Surfactant (3.86 oz); the consistent formula gives 30.27 oz.
+    expect(row(z, 12, "90/10 Surfactant").needed).toBeCloseTo(30.27, 2);
+  });
+
+  it("matches every value Excel saved in the original file (except the one known formula slip)", () => {
+    // Column F as cached by Excel in Spray_Tank_Fill_Spreadsheet.xlsx (tank 75 gal / 12 gal).
+    const truckExcel = [12.91322314, 4.304407713, 41.2362259, 16.35674931, 20.66115702, 41.32231405, 24.1046832, 31.85261708,
+      55.09641873, 7.498278237, 0.2152203857, 4.218319559, 3.185261708, 0.2152203857, 81.78374656, 5.165289256];
+    const zExcel = [16.21621622, 6.486486486, 12.97297297, 20.54054054, 10.81081081, 40, 3.856749311, 13.2972973,
+      69.18918919, 86.48648649, 0.572972973, 5.297297297, 4, 0.3567567568];
+    computeMix(truck, 75).rows.forEach((r, i) => expect(r.needed).toBeCloseTo(truckExcel[i], 6));
+    computeMix(z, 12).rows.forEach((r, i) => {
+      if (r.product.name === "90/10 Surfactant") expect(zExcel[i]).toBeCloseTo(3.857, 3); // spreadsheet's F36
+      else expect(r.needed).toBeCloseTo(zExcel[i], 6);
+    });
+  });
+
+  it("handles empty or bad tank sizes without blowing up", () => {
+    expect(computeMix(truck, 0).rows[0].needed).toBe(0);
+    expect(computeMix(truck, NaN).rows[0].needed).toBe(0);
+    expect(formatAmount(0.2525)).toBe("0.253");
+    expect(formatAmount(7.4)).toBe("7.40");
+    expect(formatAmount(81.783)).toBe("81.8");
+  });
+});

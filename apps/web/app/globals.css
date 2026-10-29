@@ -221,3 +221,17 @@ tr.openrow td { background: var(--bg); }
   .wiki { grid-template-columns: 1fr; }
   .wiki-nav { position: static; max-height: none; }
 }
+
+/* Spray tank mix */
+.mix-table th[scope="row"] { text-align: left; }
+.mix-table td:last-child { white-space: nowrap; }
+.mix-cards { display: none; list-style: none; padding: 0; margin: 0; }
+.mix-cards .card { margin-bottom: 8px; padding: 12px; }
+@media (max-width: 700px) {
+  .mix-table-wrap { display: none; }
+  .mix-cards { display: block; }
+}
+@media print {
+  .noprint { display: none !important; }
+  .mix-table { font-size: 12px; }
+}

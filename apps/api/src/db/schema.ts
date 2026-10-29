@@ -622,3 +622,54 @@ export const jobSites = pgTable("job_sites", {
   active: boolean("active").notNull().default(true),
   createdAt: createdAt(),
 });
+
+/** Spray tank mix sheets (e.g. "Truck Mix" at 87.12 gal/acre). See computeMix in @crewdesk/shared. */
+export const mixSheets = pgTable("mix_sheets", {
+  id: id(),
+  companyId: companyId(),
+  name: text("name").notNull(),
+  gallonsPerAcre: doublePrecision("gallons_per_acre").notNull(),
+  defaultTankGallons: doublePrecision("default_tank_gallons").notNull(),
+  notes: text("notes"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: createdAt(),
+});
+
+export const mixProducts = pgTable("mix_products", {
+  id: id(),
+  sheetId: uuid("sheet_id")
+    .notNull()
+    .references(() => mixSheets.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  ratePerAcre: doublePrecision("rate_per_acre").notNull(),
+  unit: text("unit").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+/** Employees chosen by an admin to edit mix sheets (admins can always edit). */
+export const mixEditors = pgTable(
+  "mix_editors",
+  {
+    companyId: companyId(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.companyId, t.employeeId] })],
+);
+
+/** Who changed what on a mix sheet: rates are doses, so every change is kept. */
+export const mixChanges = pgTable(
+  "mix_changes",
+  {
+    id: id(),
+    companyId: companyId(),
+    sheetId: uuid("sheet_id"),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    summary: text("summary").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("mix_changes_sheet_idx").on(t.sheetId, t.createdAt)],
+);

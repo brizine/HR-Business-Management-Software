@@ -30,6 +30,7 @@ packages/
 | **Preventive maintenance** | Schedules by miles, engine hours and/or days (whichever comes first), due-soon/overdue status, fleet-wide due list |
 | **Work orders** | Numbered work orders with priority, assignment, parts/labor cost, vendor; completing one resets its maintenance schedule; critical issues take the asset out of service |
 | **QR labels** | Printable QR label per asset; scanning with any phone camera opens a phone-friendly page to inspect, log a reading or report an issue, no app needed. The app has a built-in scanner. See [QR labels](#qr-labels) |
+| **Spray tank mix** | The Spray Tank Fill spreadsheet as a calculator: everyone enters tank gallons and taps **Update total**; admins choose which employees can edit products, rates and mixes; every change is logged. Web and app. See [Spray tank mix](#spray-tank-mix) |
 | **Inspections** | Pre-trip/pre-use checklists (DVIR-style) on mobile; any defect automatically opens a work order |
 | **Notifications** | Push to phones (Expo), in-app inbox, **email** and **text messages**, with per-person, per-category settings (mute anything, email/text only when someone doesn't have the app). See [Notifications](#notifications) |
 | **Company wiki** | Pages and sub-pages with per-page "who can see" and "who can edit" levels (everyone / managers / admins), a company setting for who can create pages, search, pinning, version history with restore, and optional notifications. Read on the phone, edit on the web. See [Company wiki](#company-wiki) |
@@ -119,6 +120,29 @@ start the clock from home but can still clock out on the drive back.
 - **Can't punch?** Managers can always add or fix time on the timesheet.
 - **Legal:** some states require written notice (or consent) before recording employee location.
   Tell employees before turning on a required rule.
+
+## Spray tank mix
+
+**Fleet & equipment → Spray tank mix** on the web, and **Fleet → Spray tank mix** in the app. It's
+the "Spray Tank Fill" spreadsheet as a shared calculator.
+
+- **Everyone** picks a mix (e.g. *Truck Mix*, *Z spray Mix*), enters **Tank mix in desired
+  gallons** and taps **Update total**. They see each product's amount, plus how many acres and
+  square feet the tank covers. Each person's tank size is their own (remembered on their device),
+  so one crew's fill doesn't change anyone else's screen.
+- **Editing** products, rates, measurements, a mix's gallons per acre and default tank size, and
+  adding or removing products and mixes, is limited to **admins plus the employees an admin
+  checks** under **Who can edit**.
+- **Every change is logged** with who made it and the old and new values (e.g. "Aquacap: rate
+  47.9 → 50 per acre"), shown under **Change history**.
+- **Math:** rate per 1,000 ft² = rate per acre ÷ 43.56; product needed = rate per acre × tank
+  gallons ÷ the mix's gallons per acre. It matches the original spreadsheet to six decimal places
+  on every row but one: the spreadsheet's Z-spray **90/10 Surfactant** cell (F36) used the
+  truck-mix formula and gave 3.86 oz for 12 gal; the consistent formula gives 30.27 oz. Check that
+  rate against the product label.
+- **Starting point:** with no mixes yet, an editor can click **Start with the Truck Mix and Z spray
+  Mix** to load both sheets exactly as they were in the spreadsheet.
+- **Print** gives a clean copy for a clipboard in the truck.
 
 ## Company wiki
 

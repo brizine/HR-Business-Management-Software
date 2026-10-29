@@ -78,6 +78,13 @@
       "when": 1793308501375,
       "tag": "0010_geofencing",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793312109178,
+      "tag": "0011_spray_mix",
+      "breakpoints": true
     }
   ]
 }

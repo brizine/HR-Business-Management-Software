@@ -8,6 +8,7 @@ import { eq } from "drizzle-orm";
 import { db, pool } from "./index";
 import * as s from "./schema";
 import { storage } from "../lib/storage";
+import { SPRAY_MIX_TEMPLATE } from "@crewdesk/shared";
 
 const existing = await db.select().from(s.employees).where(eq(s.employees.email, "owner@demo.test"));
 if (existing.length) {
@@ -139,6 +140,16 @@ await db.insert(s.jobSites).values([
   { companyId, name: "North yard", address: "100 Yard Rd, Austin, TX", lat: 30.2672, lng: -97.7431, radiusMeters: 150 },
   { companyId, name: "Riverside HOA", address: "Riverside Dr, Austin, TX", lat: 30.2501, lng: -97.7302, radiusMeters: 300 },
 ]);
+
+// Spray tank mixes from the original spreadsheet; the crew lead (Marcus) can edit them.
+for (const [i, t] of SPRAY_MIX_TEMPLATE.entries()) {
+  const [sheet] = await db
+    .insert(s.mixSheets)
+    .values({ companyId, name: t.name, gallonsPerAcre: t.gallonsPerAcre, defaultTankGallons: t.defaultTankGallons, notes: t.notes, sortOrder: i, updatedById: owner.id })
+    .returning();
+  await db.insert(s.mixProducts).values(t.products.map((p, j) => ({ sheetId: sheet.id, name: p.name, ratePerAcre: p.ratePerAcre, unit: p.unit, sortOrder: j })));
+}
+await db.insert(s.mixEditors).values({ companyId, employeeId: mgr.id });
 
 // Company wiki: a few pages at different access levels.
 const page = async (v: Partial<typeof s.wikiPages.$inferInsert> & { title: string; body: string }) => {

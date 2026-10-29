@@ -16,6 +16,7 @@ export default function Fleet() {
   return (
     <Screen refreshing={loading} onRefresh={reload}>
       <Button title="📷  Scan equipment QR" onPress={() => router.push("/scan")} />
+      <Button title="🧪  Spray tank mix" kind="secondary" onPress={() => router.push("/spray-mix")} />
       {mine.length > 0 && (
         <Row style={{ justifyContent: "flex-start" }}>
           {[["Assigned to me", true], ["All", false]].map(([label, v]) => (

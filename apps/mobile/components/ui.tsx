@@ -10,6 +10,7 @@ import {
   View,
   useColorScheme,
   type TextInputProps,
+  type TextProps,
 } from "react-native";
 
 const light = { bg: "#f6f7f9", surface: "#fff", border: "#e3e6eb", text: "#1c2330", muted: "#667085", primary: "#1f6feb", ok: "#0f7b4b", okBg: "#e3f6ec", warn: "#9a6100", warnBg: "#fff3d6", bad: "#b42318", badBg: "#fde7e5" };
@@ -48,9 +49,9 @@ export function Card({ title, children, right }: { title?: string; children: Rea
   );
 }
 
-export function Txt({ children, muted, style }: { children: ReactNode; muted?: boolean; style?: object }) {
+export function Txt({ children, muted, style, ...rest }: { children: ReactNode; muted?: boolean; style?: object } & Omit<TextProps, "style" | "children">) {
   const t = useTheme();
-  return <Text style={[{ color: muted ? t.muted : t.text, fontSize: 15 }, style]}>{children}</Text>;
+  return <Text {...rest} style={[{ color: muted ? t.muted : t.text, fontSize: 15 }, style]}>{children}</Text>;
 }
 
 export function Button({ title, onPress, kind = "primary", disabled, busy }: { title: string; onPress: () => void; kind?: "primary" | "secondary" | "danger"; disabled?: boolean; busy?: boolean }) {
