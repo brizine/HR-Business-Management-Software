@@ -12,3 +12,19 @@ export function fmtShift(start: Date, end: Date, timeZone: string) {
   const day = start.toLocaleDateString("en-US", { timeZone, weekday: "short", month: "short", day: "numeric" });
   return `${day}, ${fmtTime(start, timeZone)} – ${fmtTime(end, timeZone)}`;
 }
+
+/** Local calendar date, weekday (0 = Sunday) and minutes past midnight of an instant. */
+export function localParts(d: Date, timeZone: string) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone, year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    })
+      .formatToParts(d)
+      .map((p) => [p.type, p.value]),
+  );
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    weekday: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(parts.weekday),
+    minutes: Number(parts.hour) * 60 + Number(parts.minute),
+  };
+}

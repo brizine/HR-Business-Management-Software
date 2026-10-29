@@ -245,3 +245,34 @@ export const notificationPreferencesSchema = z.object({
   /** Consent to receive texts, required before any SMS is sent. */
   smsOptIn: z.boolean().optional(),
 });
+
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected HH:MM");
+
+export const availabilitySchema = z.object({
+  rules: z
+    .array(
+      z
+        .object({
+          weekday: z.number().int().min(0).max(6),
+          startTime: hhmm.nullable().optional(),
+          endTime: hhmm.nullable().optional(),
+          note: z.string().max(200).nullable().optional(),
+        })
+        .refine((r) => !r.startTime || !r.endTime || r.endTime > r.startTime, {
+          message: "End time must be after start time",
+          path: ["endTime"],
+        }),
+    )
+    .max(50),
+});
+
+export const shiftTemplateSchema = z.object({
+  name: z.string().min(1).max(80),
+  /** Local start/end; an end at or before the start runs past midnight. */
+  startTime: hhmm,
+  endTime: hhmm,
+  position: z.string().optional(),
+  location: z.string().optional(),
+  assetId: z.string().uuid().nullable().optional(),
+  notes: z.string().optional(),
+});

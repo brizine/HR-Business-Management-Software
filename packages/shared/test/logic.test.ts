@@ -72,3 +72,26 @@ describe("webPathFor", () => {
     expect(webPathFor(null)).toBeNull();
   });
 });
+
+import { availabilityConflicts, describeRule, shiftSegments } from "../src";
+
+describe("availability", () => {
+  const tuesdayAllDay = { weekday: 2 };
+  const fridayMorning = { weekday: 5, endTime: "14:00" };
+
+  it("describes rules", () => {
+    expect(describeRule(tuesdayAllDay)).toBe("All day");
+    expect(describeRule(fridayMorning)).toBe("Before 2pm");
+    expect(describeRule({ weekday: 1, startTime: "17:30" })).toBe("After 5:30pm");
+  });
+
+  it("finds overlaps, including overnight shifts", () => {
+    const fri = (from: number, to: number) => [{ weekday: 5, from, to }];
+    expect(availabilityConflicts([fridayMorning], fri(13 * 60, 18 * 60))).toHaveLength(1);
+    expect(availabilityConflicts([fridayMorning], fri(14 * 60, 18 * 60))).toHaveLength(0); // starts right when free
+    // Monday 10pm → Tuesday 6am runs into Tuesday.
+    const segs = shiftSegments({ weekday: 1, minutes: 22 * 60, date: "2030-01-07" }, { weekday: 2, minutes: 6 * 60, date: "2030-01-08" });
+    expect(segs).toEqual([{ weekday: 1, from: 1320, to: 1440 }, { weekday: 2, from: 0, to: 360 }]);
+    expect(availabilityConflicts([tuesdayAllDay], segs)).toHaveLength(1);
+  });
+});

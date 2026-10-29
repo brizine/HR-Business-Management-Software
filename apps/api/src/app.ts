@@ -18,6 +18,7 @@ import dashboardRoutes from "./routes/dashboard";
 import notificationRoutes from "./routes/notifications";
 import shiftRoutes from "./routes/shifts";
 import unsubscribeRoutes from "./routes/unsubscribe";
+import availabilityRoutes from "./routes/availability";
 
 export async function buildApp(opts: { logger?: boolean } = {}) {
   const app = Fastify({ logger: opts.logger ?? true });
@@ -52,6 +53,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   await app.register(notificationRoutes, { prefix: "/notifications" });
   await app.register(shiftRoutes, { prefix: "/shifts" });
   await app.register(unsubscribeRoutes, { prefix: "/public/unsubscribe" });
+  await app.register(availabilityRoutes, { prefix: "/availability" });
 
   return app;
 }

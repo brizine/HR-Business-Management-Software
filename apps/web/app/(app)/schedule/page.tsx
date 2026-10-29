@@ -1,9 +1,11 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { availabilityConflicts, describeRule } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
-import { Badge, ErrorBox, PageHead } from "@/components/ui";
+import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
+import { AvailabilityEditor } from "@/components/availability-editor";
 
 const DAY = 86_400_000;
 
@@ -24,8 +26,40 @@ const hm = (iso: string) => { const d = new Date(iso); return `${String(d.getHou
 
 type Draft = { id?: string; employeeId: string; date: string; start: string; end: string; position?: string; location?: string; assetId?: string; notes?: string; status?: string };
 
-function ShiftEditor({ draft, employees, assets, onClose, onSaved }: { draft: Draft; employees: any[]; assets: any[]; onClose: () => void; onSaved: (warnings: string[]) => void }) {
+function ShiftEditor({ draft, employees, assets, templates, onClose, onSaved, onTemplatesChanged }: {
+  draft: Draft; employees: any[]; assets: any[]; templates: any[];
+  onClose: () => void; onSaved: (warnings: string[]) => void; onTemplatesChanged: () => void;
+}) {
   const { busy, error, run } = useAction();
+  const formRef = useRef<HTMLFormElement>(null);
+
+  /** Fills the form from a saved template, keeping the chosen person and date. */
+  const applyTemplate = (id: string) => {
+    const t = templates.find((x) => x.id === id);
+    const form = formRef.current;
+    if (!t || !form) return;
+    const field = (name: string, value: string) => ((form.elements.namedItem(name) as HTMLInputElement).value = value);
+    field("start", t.startTime);
+    field("end", t.endTime);
+    field("position", t.position ?? "");
+    field("location", t.location ?? "");
+    field("assetId", t.assetId ?? "");
+    field("notes", t.notes ?? "");
+  };
+
+  const saveAsTemplate = () => {
+    const f = new FormData(formRef.current!);
+    const name = prompt("Template name", (f.get("position") as string) || "");
+    if (!name) return;
+    const str = (k: string) => (f.get(k) as string) || undefined;
+    run(async () => {
+      await api("/shifts/templates", { body: {
+        name, startTime: f.get("start"), endTime: f.get("end"),
+        position: str("position"), location: str("location"), assetId: str("assetId") ?? null, notes: str("notes"),
+      } });
+      onTemplatesChanged();
+    });
+  };
   const save = (form: HTMLFormElement) => {
     const f = new FormData(form);
     const date = f.get("date") as string;
@@ -55,7 +89,15 @@ function ShiftEditor({ draft, employees, assets, onClose, onSaved }: { draft: Dr
         <h2 style={{ margin: 0 }}>{draft.id ? "Edit shift" : "New shift"} {draft.status && <Badge value={draft.status} />}</h2>
         <button className="btn sm" onClick={onClose}>Close</button>
       </div>
-      <form className="stack" onSubmit={(e) => { e.preventDefault(); save(e.currentTarget); }}>
+      <form ref={formRef} className="stack" onSubmit={(e) => { e.preventDefault(); save(e.currentTarget); }}>
+        {templates.length > 0 && (
+          <label style={{ maxWidth: 320 }}>Start from a template
+            <select defaultValue="" onChange={(e) => applyTemplate(e.target.value)}>
+              <option value="">Choose…</option>
+              {templates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.startTime}–{t.endTime})</option>)}
+            </select>
+          </label>
+        )}
         <div className="formgrid">
           <label>Who
             <select name="employeeId" defaultValue={draft.employeeId}>
@@ -84,6 +126,7 @@ function ShiftEditor({ draft, employees, assets, onClose, onSaved }: { draft: Dr
               Delete
             </button>
           )}
+          <button type="button" className="btn" disabled={busy} onClick={saveAsTemplate}>Save as template</button>
           {draft.status === "published" && <span className="muted">The employee will be notified of changes.</span>}
         </div>
       </form>
@@ -102,6 +145,10 @@ export default function Schedule() {
   const employees = useApi<any[]>("/employees");
   const assets = useApi<any[]>("/assets");
   const drops = useApi<any[]>(manager ? "/shifts/drop-requests" : null);
+  const templates = useApi<any[]>(manager ? "/shifts/templates" : null);
+  const unavailable = useApi<any[]>("/availability");
+  const [showAvailability, setShowAvailability] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [editing, setEditing] = useState<Draft | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const action = useAction();
@@ -143,14 +190,22 @@ export default function Schedule() {
     );
   };
 
-  const cell = (employeeId: string | null, day: Date) => (
-    <td key={day.toISOString()} className="shiftcell">
+  /** The employee's "can't work" rules that touch this day, for shading the cell. */
+  const blockedOn = (employeeId: string | null, day: Date) =>
+    employeeId ? availabilityConflicts((unavailable.data ?? []).filter((r) => r.employeeId === employeeId), [{ weekday: day.getDay(), from: 0, to: 1440 }]) : [];
+
+  const cell = (employeeId: string | null, day: Date) => {
+    const blocked = blockedOn(employeeId, day);
+    return (
+    <td key={day.toISOString()} className={`shiftcell ${blocked.length ? "unavail" : ""}`}>
+      {blocked.map((r, i) => <div key={i} className="unavail-label" title={r.note ?? ""}>Can&apos;t work {describeRule(r).toLowerCase()}</div>)}
       {shifts.filter((s) => (s.employeeId ?? null) === employeeId && sameDay(new Date(s.startsAt), day)).map((s) => <Chip key={s.id} s={s} />)}
       {manager && (
         <button className="addshift" title="Add shift" onClick={() => setEditing({ employeeId: employeeId ?? "", date: ymd(day), start: "08:00", end: "16:30" })}>+</button>
       )}
     </td>
-  );
+    );
+  };
 
   const rows = manager ? staff : [...staff.filter((e) => e.id === me?.user.id), ...staff.filter((e) => e.id !== me?.user.id && shifts.some((s) => s.employeeId === e.id))];
 
@@ -160,6 +215,8 @@ export default function Schedule() {
         <button className="btn sm" onClick={() => setOffset(offset - 1)}>← Prev</button>
         <button className="btn sm" onClick={() => setOffset(0)}>This week</button>
         <button className="btn sm" onClick={() => setOffset(offset + 1)}>Next →</button>
+        <button className="btn" onClick={() => setShowAvailability(!showAvailability)}>My availability</button>
+        {manager && <button className="btn" onClick={() => setShowTemplates(!showTemplates)}>Templates{templates.data?.length ? ` (${templates.data.length})` : ""}</button>}
         {manager && (
           <>
             <button className="btn" disabled={action.busy} onClick={() => confirm("Copy last week's shifts into this week as drafts?") && action.run(async () => {
@@ -178,8 +235,31 @@ export default function Schedule() {
       <ErrorBox error={action.error || list.error} />
       {notice && <div className="card row" style={{ justifyContent: "space-between" }}><span>{notice}</span><button className="btn sm" onClick={() => setNotice(null)}>×</button></div>}
       {editing && (
-        <ShiftEditor key={editing.id ?? `${editing.employeeId}-${editing.date}`} draft={editing} employees={staff} assets={assets.data ?? []} onClose={() => setEditing(null)}
+        <ShiftEditor key={editing.id ?? `${editing.employeeId}-${editing.date}`} draft={editing} employees={staff} assets={assets.data ?? []}
+          templates={templates.data ?? []} onTemplatesChanged={() => { templates.reload(); setNotice("Template saved."); }} onClose={() => setEditing(null)}
           onSaved={(w) => { setEditing(null); setNotice(w.length ? `Saved with warnings: ${w.join("; ")}` : null); reload(); }} />
+      )}
+      {showAvailability && (
+        <div className="card">
+          <h2>When I can&apos;t work</h2>
+          <p className="muted" style={{ marginTop: 0 }}>Recurring times you&apos;re unavailable. For specific days off, request time off instead.</p>
+          <AvailabilityEditor onSaved={unavailable.reload} />
+        </div>
+      )}
+      {showTemplates && manager && (
+        <div className="card">
+          <h2>Shift templates</h2>
+          {templates.data?.length ? (
+            <table><tbody>{templates.data.map((t) => (
+              <tr key={t.id}>
+                <td><strong>{t.name}</strong></td>
+                <td>{t.startTime}–{t.endTime}{t.endTime <= t.startTime ? " (overnight)" : ""}</td>
+                <td className="muted">{[t.position, t.location, assets.data?.find((a) => a.id === t.assetId)?.name].filter(Boolean).join(" · ")}</td>
+                <td className="row"><button className="btn sm danger" onClick={() => confirm(`Delete template "${t.name}"?`) && api(`/shifts/templates/${t.id}`, { method: "DELETE" }).then(templates.reload)}>Delete</button></td>
+              </tr>
+            ))}</tbody></table>
+          ) : <Empty>No templates yet. Open any shift and click &ldquo;Save as template&rdquo;.</Empty>}
+        </div>
       )}
       {manager && !!drops.data?.length && (
         <div className="card">
@@ -232,7 +312,7 @@ export default function Schedule() {
       </div>
       <p className="muted">
         {manager
-          ? "Dashed shifts are drafts only you can see. Publish to share them and notify your team."
+          ? "Dashed shifts are drafts only you can see. Publish to share them and notify your team. Striped cells are times someone can't work."
           : "Click one of your shifts to ask to drop it, or an open shift to pick it up."}
       </p>
     </>

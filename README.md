@@ -19,7 +19,7 @@ packages/
 | --- | --- |
 | **People** | Employee directory and profiles, roles (owner / admin / manager / employee), pay info hidden from non-managers |
 | **Documents** | Upload per employee, per asset or company-wide; typed-name e-signature with timestamp + IP |
-| **Scheduling** | Weekly schedule grid, draft → publish, copy last week, open shifts employees can pick up, drop requests with manager approval, vehicle/equipment assigned per shift, double-booking prevention, time-off and overtime warnings, reminders an hour before each shift, scheduled vs. worked hours on timesheets. See [Scheduling](#scheduling) |
+| **Scheduling** | Weekly schedule grid, draft → publish, copy last week, saved shift templates, employee availability ("can't work Tuesdays"), open shifts employees can pick up, drop requests with manager approval, vehicle/equipment assigned per shift, double-booking prevention, time-off and overtime warnings, reminders an hour before each shift, scheduled vs. worked hours on timesheets. See [Scheduling](#scheduling) |
 | **Time clock** | Clock in/out from phone or web with GPS, live "who's on the clock", weekly timesheets with FLSA overtime, manager punch edits and approvals |
 | **Time off** | Multiple policies, accrual per hour worked with caps, grants/adjustments ledger, request → approve/deny, balance checks |
 | **Hiring** | Job postings, public careers page (`/careers/<companyId>`), applicant pipeline board, one-click hire → employee |
@@ -77,8 +77,15 @@ time earlier than the start means it runs past midnight), or **Copy last week** 
 previous schedule. New shifts are **drafts** that only managers can see (dashed outline) until
 **Publish**, which notifies everyone with shifts that week.
 
-- **Conflicts:** double-booking someone is blocked. Scheduling over approved time off, or assigning
-  a vehicle that's in the shop, saves but shows a warning. Weekly totals over 40 hours are flagged.
+- **Templates:** open any shift and click **Save as template** (e.g. "Morning crew 7:00–15:30,
+  Driver, Truck 12"). New shifts can start from a template; manage them under **Templates**.
+- **Availability:** employees set recurring times they can't work, either a whole day or part of
+  one ("Tuesdays", "Fridays before 2pm"), under **My availability** on web or in the app's Schedule
+  tab. Managers can edit it from an employee's profile. Their manager is notified of changes, those
+  cells are striped on the grid, and scheduling into them shows a warning (not a block, since you may
+  have agreed to it). One-off days off still go through time-off requests.
+- **Conflicts:** double-booking someone is blocked. Scheduling over approved time off or availability,
+  or assigning a vehicle that's in the shop, saves but shows a warning. Weekly totals over 40 hours are flagged.
 - **Open shifts:** leave "Who" empty and anyone can pick it up from the web or the app's Schedule
   tab. The first person to claim it gets it.
 - **Dropping a shift:** employees ask to drop a published shift; if a manager approves, it becomes
@@ -154,6 +161,7 @@ If these aren't set, the channel is simply skipped and the settings pages say so
 | Open shift picked up / drop requested | The employee's manager |
 | Drop request approved / denied | The employee |
 | Shift starting within the hour *(scheduled)* | The employee |
+| Availability changed | The employee's manager |
 
 Scheduled checks run every 15 minutes inside the API process and are deduplicated in the
 database, so running several API instances is safe. To use an external cron instead, set
@@ -203,6 +211,6 @@ This is a working foundation, not a finished product. Before real customers use 
 
 ## Roadmap ideas
 
-Shift templates and availability, geofenced clock-in, performance reviews, benefits enrollment, parts
+Shift swaps between employees, geofenced clock-in, performance reviews, benefits enrollment, parts
 inventory, fuel logs and cost-per-mile, telematics/GPS integrations (Samsara, Geotab) to auto-update
 odometers, QR codes on equipment to open its page in the app, and reports/exports.

@@ -1,13 +1,23 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, type SQL } from "drizzle-orm";
-import { shiftBaseSchema, shiftRangeSchema, shiftSchema, type ShiftInput } from "@crewdesk/shared";
+import {
+  WEEKDAYS,
+  availabilityConflicts,
+  describeRule,
+  shiftBaseSchema,
+  shiftRangeSchema,
+  shiftSchema,
+  shiftSegments,
+  shiftTemplateSchema,
+  type ShiftInput,
+} from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
-import { assets, companies, employees, ptoRequests, shifts } from "../db/schema";
+import { assets, availability, companies, employees, ptoRequests, shiftTemplates, shifts } from "../db/schema";
 import { authenticate, isManager, requireRole } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { approversFor, except, notify, staffWithRole } from "../lib/notify";
-import { fmtShift, localDate } from "../lib/tz";
+import { fmtShift, localDate, localParts } from "../lib/tz";
 
 type ShiftRow = typeof shifts.$inferSelect;
 const WEEK_MS = 7 * 86_400_000;
@@ -76,6 +86,11 @@ async function check(companyId: string, s: ShiftInput, ignoreId?: string) {
     )
     .limit(1);
   if (pto) warnings.push(`${emp.firstName} has approved time off ${pto.startDate} to ${pto.endDate}`);
+
+  const rules = await db.select().from(availability).where(eq(availability.employeeId, emp.id));
+  for (const r of availabilityConflicts(rules, shiftSegments(localParts(start, tz), localParts(end, tz)))) {
+    warnings.push(`${emp.firstName} can't work ${WEEKDAYS[r.weekday]}s ${describeRule(r).toLowerCase()}${r.note ? ` (${r.note})` : ""}`);
+  }
   return warnings;
 }
 
@@ -150,6 +165,46 @@ const routes: FastifyPluginAsync = async (app) => {
         .where(and(base, isNull(shifts.employeeId), gt(shifts.startsAt, now))).orderBy(asc(shifts.startsAt)),
     ]);
     return { mine, open };
+  });
+
+  // ---- Templates ----
+
+  app.get("/templates", { preHandler: requireRole("manager") }, async (req) =>
+    db.select().from(shiftTemplates).where(eq(shiftTemplates.companyId, req.user.companyId)).orderBy(asc(shiftTemplates.startTime)),
+  );
+
+  async function checkTemplateAsset(companyId: string, assetId?: string | null) {
+    if (!assetId) return;
+    const [a] = await db.select().from(assets).where(and(eq(assets.id, assetId), eq(assets.companyId, companyId)));
+    if (!a) notFound("Asset");
+  }
+
+  app.post("/templates", { preHandler: requireRole("manager") }, async (req) => {
+    const body = parse(shiftTemplateSchema, req.body);
+    await checkTemplateAsset(req.user.companyId, body.assetId);
+    const [row] = await db.insert(shiftTemplates).values({ ...body, companyId: req.user.companyId }).returning();
+    return row;
+  });
+
+  app.patch<{ Params: { id: string } }>("/templates/:id", { preHandler: requireRole("manager") }, async (req) => {
+    const body = parse(shiftTemplateSchema.partial(), req.body);
+    await checkTemplateAsset(req.user.companyId, body.assetId);
+    const [row] = await db
+      .update(shiftTemplates)
+      .set(body)
+      .where(and(eq(shiftTemplates.id, req.params.id), eq(shiftTemplates.companyId, req.user.companyId)))
+      .returning();
+    if (!row) notFound("Template");
+    return row;
+  });
+
+  app.delete<{ Params: { id: string } }>("/templates/:id", { preHandler: requireRole("manager") }, async (req) => {
+    const [row] = await db
+      .delete(shiftTemplates)
+      .where(and(eq(shiftTemplates.id, req.params.id), eq(shiftTemplates.companyId, req.user.companyId)))
+      .returning();
+    if (!row) notFound("Template");
+    return { ok: true };
   });
 
   /** Shifts whose employee asked to give them up, awaiting a manager. */

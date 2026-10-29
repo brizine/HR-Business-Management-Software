@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { useState } from "react";
 import { Alert, View } from "react-native";
 import { api } from "@/lib/api";
@@ -58,6 +59,7 @@ export default function Schedule() {
           </View>
         )) : <Txt muted>No shifts in the next two weeks.</Txt>}
       </Card>
+      <Button title="My availability" kind="secondary" onPress={() => router.push("/availability")} />
       <Card title="Open shifts">
         {data?.open.length ? data.open.map(({ shift, assetName }) => (
           <View key={shift.id} style={{ gap: 8 }}>

@@ -400,3 +400,36 @@ export const notificationPreferences = pgTable(
   },
   (t) => [primaryKey({ columns: [t.employeeId, t.category] })],
 );
+
+/** Recurring times someone can't work (see AvailabilityRule in @crewdesk/shared). */
+export const availability = pgTable(
+  "availability",
+  {
+    id: id(),
+    companyId: companyId(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    /** 0 = Sunday … 6 = Saturday */
+    weekday: integer("weekday").notNull(),
+    startTime: text("start_time"),
+    endTime: text("end_time"),
+    note: text("note"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("availability_employee_idx").on(t.employeeId)],
+);
+
+/** Saved shift presets, e.g. "Morning crew 7:00–15:30, Driver, Truck 12". */
+export const shiftTemplates = pgTable("shift_templates", {
+  id: id(),
+  companyId: companyId(),
+  name: text("name").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  position: text("position"),
+  location: text("location"),
+  assetId: uuid("asset_id").references(() => assets.id, { onDelete: "set null" }),
+  notes: text("notes"),
+  createdAt: createdAt(),
+});

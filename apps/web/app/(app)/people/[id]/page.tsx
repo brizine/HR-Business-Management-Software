@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { DocumentList } from "@/components/documents";
+import { AvailabilityEditor } from "@/components/availability-editor";
 import { EmployeeFields, employeeBody } from "@/components/employee-form";
 
 export default function Person({ params }: { params: Promise<{ id: string }> }) {
@@ -99,6 +100,13 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
           </div>
         )}
       </div>
+      {can("manager") && (
+        <div className="card">
+          <h2>Availability</h2>
+          <p className="muted" style={{ marginTop: 0 }}>Recurring times {e.firstName} can&apos;t work. These show on the schedule and warn you when scheduling.</p>
+          <AvailabilityEditor employeeId={id} />
+        </div>
+      )}
       <DocumentList employeeId={id} />
     </>
   );
