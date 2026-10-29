@@ -43,11 +43,15 @@ export const employeeSchema = z.object({
 });
 export type EmployeeInput = z.infer<typeof employeeSchema>;
 
-export const clockInSchema = z.object({
-  lat: z.number().optional(),
-  lng: z.number().optional(),
-  note: z.string().optional(),
-});
+export const clockInSchema = z
+  .object({
+    lat: z.number().min(-90).max(90).optional(),
+    lng: z.number().min(-180).max(180).optional(),
+    /** The phone's reported accuracy radius in meters. */
+    accuracy: z.number().min(0).max(100_000).optional(),
+    note: z.string().optional(),
+  })
+  .refine((b) => (b.lat === undefined) === (b.lng === undefined), { message: "Send both latitude and longitude", path: ["lat"] });
 
 export const timeEntryEditSchema = z.object({
   clockIn: z.string().datetime(),

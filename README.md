@@ -20,7 +20,7 @@ packages/
 | **People** | Employee directory and profiles, roles (owner / admin / manager / employee), pay info hidden from non-managers |
 | **Documents** | Upload per employee, per asset or company-wide; typed-name e-signature with timestamp + IP |
 | **Scheduling** | Weekly schedule grid, draft → publish, copy last week, saved shift templates, employee availability ("can't work Tuesdays"), open shifts employees can pick up, drop requests with manager approval, vehicle/equipment assigned per shift, double-booking prevention, time-off and overtime warnings, reminders an hour before each shift, scheduled vs. worked hours on timesheets. See [Scheduling](#scheduling) |
-| **Time clock** | Clock in/out from phone or web with GPS, live "who's on the clock", weekly timesheets with FLSA overtime, manager punch edits and approvals |
+| **Time clock** | Clock in/out from phone or web with GPS, live "who's on the clock", weekly timesheets with FLSA overtime, manager punch edits and approvals; optional **location rules and job-site geofencing**, set separately for clock-in and clock-out. See [Location rules](#location-rules--job-sites) |
 | **Time off** | Multiple policies, accrual per hour worked with caps, grants/adjustments ledger, request → approve/deny, balance checks |
 | **Hiring** | Job postings, public careers page (`/careers/<companyId>`), applicant pipeline board, one-click hire → employee |
 | **Onboarding** | Hire form (start date, pay, manager, checklist) → invite email → new hire sets their password and works through a checklist of check-off, **upload** (phone camera works) and **sign** tasks; managers and admins see what's waiting on them; reminders and milestone notifications; the hire becomes active when everything is done. See [Onboarding](#onboarding) |
@@ -90,6 +90,35 @@ pnpm typecheck
 ### Changing the database
 
 Edit `apps/api/src/db/schema.ts`, then `pnpm --filter @crewdesk/api db:generate` and `pnpm db:migrate`.
+
+## Location rules & job sites
+
+**Time clock → Job sites & location rules** (managers; rules are set by admins). Clocking in and
+clocking out each get their own rule:
+
+| Rule | What happens |
+| --- | --- |
+| **Optional** (default) | Location is recorded if the phone shares it. Nobody is blocked. |
+| **Required** | Location must be on; anywhere is fine. |
+| **Required; flag if away from a job site** | The punch goes through, but if it's outside every job site it's flagged ⚠ on the timesheet and the person's manager is notified. |
+| **Required at a job site** | The punch is refused outside every job site, with how far away the nearest one is. |
+
+A common setup is **clock-in: required at a job site**, **clock-out: flag if away**, so crews can't
+start the clock from home but can still clock out on the drive back.
+
+- **Job sites** have a name, a location and a radius (50 m–2 km, default 150 m). Add one by pasting a
+  Google/Apple Maps link, typing `latitude, longitude`, or tapping "Use my current location" while
+  standing there. Deactivate seasonal client sites instead of deleting them.
+- **GPS accuracy:** a punch counts as on site within the radius plus the phone's reported accuracy,
+  allowing up to 100 m, so a weak fix at the edge of a property isn't refused.
+- **No sites yet?** Job-site rules act like "Required" until at least one active site exists, so
+  nobody is locked out during setup.
+- **Privacy:** location is captured once per punch, never tracked in between. The rules are checked
+  on the server, so they can't be bypassed by changing the app. GPS can still be faked with special
+  apps; the flags and map links help spot oddities.
+- **Can't punch?** Managers can always add or fix time on the timesheet.
+- **Legal:** some states require written notice (or consent) before recording employee location.
+  Tell employees before turning on a required rule.
 
 ## Company wiki
 

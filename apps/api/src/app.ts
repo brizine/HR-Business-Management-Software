@@ -25,6 +25,7 @@ import availabilityRoutes from "./routes/availability";
 import jobRoutes from "./routes/jobs";
 import taxFormRoutes from "./routes/taxForms";
 import wikiRoutes from "./routes/wiki";
+import jobSiteRoutes from "./routes/jobSites";
 
 export interface AppOptions {
   logger?: boolean;
@@ -85,4 +86,5 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(jobRoutes, { prefix: "/jobs" });
   await app.register(taxFormRoutes, { prefix: "/tax-forms" });
   await app.register(wikiRoutes, { prefix: "/wiki" });
+  await app.register(jobSiteRoutes, { prefix: "/job-sites" });
 }

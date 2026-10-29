@@ -1,6 +1,7 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { entryHours } from "@crewdesk/shared";
+import { entryHours, formatDistance, needsLocation, usesGeofence, type LocationPolicy } from "@crewdesk/shared";
 import { api, fmtDateTime } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -13,6 +14,14 @@ function weekStart(offset = 0) {
   return d;
 }
 
+/** Where a punch happened: the job site, a flagged distance, or just a map link. */
+function PunchPlace({ site, flag, distance, lat, lng }: { site: string | null; flag: string | null; distance: number | null; lat: number | null; lng: number | null }) {
+  const map = lat != null && lng != null ? <a href={`https://maps.google.com/?q=${lat},${lng}`} target="_blank" rel="noreferrer">map</a> : null;
+  if (flag) return <div><span className="badge warn">⚠ {distance != null ? `${formatDistance(distance)} from a job site` : "away from a job site"}</span> {map}</div>;
+  if (site) return <div className="muted">📍 {site} {map && <>· {map}</>}</div>;
+  return map ? <div className="muted">{map}</div> : null;
+}
+
 function ClockCard() {
   const status = useApi("/time/status");
   const { busy, error, run } = useAction();
@@ -22,13 +31,26 @@ function ClockCard() {
     return () => clearInterval(t);
   }, []);
   const open = status.data?.openEntry;
+  const rule: LocationPolicy = (open ? status.data?.locationPolicy?.clockOut : status.data?.locationPolicy?.clockIn) ?? "optional";
+  const [result, setResult] = useState<string | null>(null);
 
   const punch = (kind: "clock-in" | "clock-out") =>
     run(async () => {
+      setResult(null);
+      const strict = needsLocation(rule);
       const pos = await new Promise<GeolocationPosition | null>((res) =>
-        navigator.geolocation ? navigator.geolocation.getCurrentPosition(res, () => res(null), { timeout: 5000 }) : res(null),
+        navigator.geolocation
+          ? navigator.geolocation.getCurrentPosition(res, () => res(null), { timeout: strict ? 15000 : 5000, enableHighAccuracy: usesGeofence(rule) })
+          : res(null),
       );
-      await api(`/time/${kind}`, { body: pos ? { lat: pos.coords.latitude, lng: pos.coords.longitude } : {} });
+      if (strict && !pos) {
+        throw new Error("Your company requires your location to clock in or out. Allow location for this site in your browser (the icon left of the address bar), then try again.");
+      }
+      const row = await api(`/time/${kind}`, {
+        body: pos ? { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy } : {},
+      });
+      const at = row.siteName ? ` at ${row.siteName}` : "";
+      setResult(`${kind === "clock-in" ? "Clocked in" : "Clocked out"}${at}.${row.clockInFlag || row.clockOutFlag ? " This punch was away from a job site, so it's flagged for your manager." : ""}`);
       status.reload();
     });
 
@@ -38,6 +60,12 @@ function ClockCard() {
       {open ? (
         <p>On the clock since <strong>{fmtDateTime(open.clockIn)}</strong> ({entryHours(open).toFixed(2)}h)</p>
       ) : <p className="muted">You are clocked out.</p>}
+      {rule !== "optional" && (
+        <p className="muted" style={{ marginTop: 0 }}>
+          📍 {usesGeofence(rule) ? `Clock ${open ? "out" : "in"} at a job site${rule === "geofence_flag" ? " (punches elsewhere are flagged)" : ""}.` : `Location is required to clock ${open ? "out" : "in"}.`}
+        </p>
+      )}
+      {result && <p role="status">{result}</p>}
       <ErrorBox error={error} />
       <button className="btn primary" disabled={busy || status.loading} onClick={() => punch(open ? "clock-out" : "clock-in")}>
         {open ? "Clock out" : "Clock in"}
@@ -67,6 +95,7 @@ function ManagerView() {
           <div className="row">{who.data.map((w) => (
             <span key={w.entryId} className="badge ok">
               {w.firstName} {w.lastName} · since {new Date(w.clockIn).toLocaleTimeString([], { timeStyle: "short" })}
+              {w.site ? ` · ${w.site}` : w.flag ? ` · ⚠ ${formatDistance(w.distance)} from a job site` : ""}
               {w.lat != null && <> · <a href={`https://maps.google.com/?q=${w.lat},${w.lng}`} target="_blank">map</a></>}
             </span>
           ))}</div>
@@ -83,7 +112,7 @@ function ManagerView() {
         </div>
         {sheets.data?.length ? (
           <div className="tablewrap"><table>
-            <thead><tr><th>Employee</th><th>Scheduled</th><th>Regular</th><th>Overtime</th><th>Total</th><th>Unapproved</th><th /></tr></thead>
+            <thead><tr><th>Employee</th><th>Scheduled</th><th>Regular</th><th>Overtime</th><th>Total</th><th>Unapproved</th><th>Flagged</th><th /></tr></thead>
             <tbody>{sheets.data.map((s) => (
               <tr key={s.employeeId}>
                 <td>{s.name} {s.clockedIn && <Badge value="active" />}</td>
@@ -92,6 +121,7 @@ function ManagerView() {
                 <td style={{ color: s.overtimeHours ? "var(--warn)" : undefined }}>{s.overtimeHours.toFixed(2)}</td>
                 <td><strong>{s.totalHours.toFixed(2)}</strong></td>
                 <td>{s.unapproved || "—"}</td>
+                <td>{s.flagged ? <span className="badge warn" title="Punches away from a job site">{s.flagged}</span> : "—"}</td>
                 <td><button className="btn sm" onClick={() => setSelected(selected === s.employeeId ? null : s.employeeId)}>{selected === s.employeeId ? "Hide" : "Entries"}</button></td>
               </tr>
             ))}</tbody>
@@ -130,8 +160,8 @@ function ManagerView() {
               </td></tr>
             ) : (
               <tr key={e.id}>
-                <td>{fmtDateTime(e.clockIn)}</td>
-                <td>{e.clockOut ? fmtDateTime(e.clockOut) : <Badge value="active" />}</td>
+                <td>{fmtDateTime(e.clockIn)}<PunchPlace site={e.clockInSite} flag={e.clockInFlag} distance={e.clockInDistance} lat={e.clockInLat} lng={e.clockInLng} /></td>
+                <td>{e.clockOut ? fmtDateTime(e.clockOut) : <Badge value="active" />}{e.clockOut && <PunchPlace site={e.clockOutSite} flag={e.clockOutFlag} distance={e.clockOutDistance} lat={e.clockOutLat} lng={e.clockOutLng} />}</td>
                 <td>{entryHours(e).toFixed(2)}</td>
                 <td>{e.approvedAt ? <Badge value="approved" /> : <Badge value="pending" />}</td>
                 <td><button className="btn sm" onClick={() => setEditing(e.id)}>Edit</button></td>
@@ -171,7 +201,9 @@ export default function Time() {
   const { can } = useAuth();
   return (
     <>
-      <PageHead title="Time clock" sub="Clock in and out, review timesheets, fix missed punches" />
+      <PageHead title="Time clock" sub="Clock in and out, review timesheets, fix missed punches">
+        {can("manager") && <Link className="btn" href="/job-sites">Job sites & location rules</Link>}
+      </PageHead>
       <ClockCard />
       {can("manager") ? <ManagerView /> : <MyEntries />}
     </>

@@ -152,3 +152,39 @@ describe("tax form validation", () => {
     expect(i9Section1Schema.safeParse({ ...base, citizenship: "authorized_alien", i94Number: "12345678901", workAuthExpires: "2028-01-01" }).success).toBe(true);
   });
 });
+
+import { distanceMeters, formatDistance, nearestSite, parseCoordinates } from "../src";
+
+describe("geofencing", () => {
+  const yard = { id: "yard", name: "North yard", lat: 30.2672, lng: -97.7431, radiusMeters: 150 };
+  const hoa = { id: "hoa", name: "Riverside HOA", lat: 30.25, lng: -97.75, radiusMeters: 300 };
+
+  it("measures distance", () => {
+    // Austin → Dallas is about 293 km as the crow flies.
+    expect(distanceMeters({ lat: 30.2672, lng: -97.7431 }, { lat: 32.7767, lng: -96.797 }) / 1000).toBeCloseTo(293, -1);
+    expect(formatDistance(120.4)).toBe("120 m");
+    expect(formatDistance(2345)).toBe("2.3 km");
+  });
+
+  it("finds the site you're at, forgiving reported GPS inaccuracy (capped)", () => {
+    const at = nearestSite({ lat: 30.2675, lng: -97.7433 }, [yard, hoa])!;
+    expect(at.site.id).toBe("yard");
+    expect(at.onSite).toBe(true);
+    // ~200 m north of the yard: outside its 150 m radius…
+    const edge = { lat: 30.2690, lng: -97.7431 };
+    expect(nearestSite(edge, [yard])!.onSite).toBe(false);
+    // …but inside once a 60 m GPS uncertainty is allowed for.
+    expect(nearestSite({ ...edge, accuracy: 60 }, [yard])!.onSite).toBe(true);
+    // A terrible fix (2 km) doesn't put you on site from far away.
+    expect(nearestSite({ lat: 30.29, lng: -97.7431, accuracy: 2000 }, [yard])!.onSite).toBe(false);
+    expect(nearestSite({ lat: 0, lng: 0 }, [])).toBeNull();
+  });
+
+  it("reads coordinates from map links", () => {
+    expect(parseCoordinates("https://www.google.com/maps/place/Yard/@30.2672,-97.7431,17z")).toEqual({ lat: 30.2672, lng: -97.7431 });
+    expect(parseCoordinates("https://maps.apple.com/?ll=30.2672,-97.7431&q=Yard")).toEqual({ lat: 30.2672, lng: -97.7431 });
+    expect(parseCoordinates("30.2672, -97.7431")).toEqual({ lat: 30.2672, lng: -97.7431 });
+    expect(parseCoordinates("https://www.google.com/maps/place/x/data=!3d30.2672!4d-97.7431")).toEqual({ lat: 30.2672, lng: -97.7431 });
+    expect(parseCoordinates("123 Main St")).toBeNull();
+  });
+});

@@ -134,6 +134,12 @@ for (let d = 0; d < 5; d++) {
 }
 await db.insert(s.shifts).values({ companyId, startsAt: at(5, 14), endsAt: at(5, 20), position: "Mower operator", location: "Riverside HOA", assetId: mower.id, status: "published" });
 
+// Job sites for geofenced clock-in (rules stay "optional" until an admin turns them on).
+await db.insert(s.jobSites).values([
+  { companyId, name: "North yard", address: "100 Yard Rd, Austin, TX", lat: 30.2672, lng: -97.7431, radiusMeters: 150 },
+  { companyId, name: "Riverside HOA", address: "Riverside Dr, Austin, TX", lat: 30.2501, lng: -97.7302, radiusMeters: 300 },
+]);
+
 // Company wiki: a few pages at different access levels.
 const page = async (v: Partial<typeof s.wikiPages.$inferInsert> & { title: string; body: string }) => {
   const [p] = await db.insert(s.wikiPages).values({ companyId, createdById: owner.id, updatedById: owner.id, ...v }).returning();

@@ -2,9 +2,11 @@ import type { FastifyError, FastifyInstance } from "fastify";
 import { ZodError, type ZodType, type z } from "zod";
 
 export class HttpError extends Error {
+  /** `code` lets clients react to specific errors (e.g. "location_required" → offer to open settings). */
   constructor(
     public statusCode: number,
     message: string,
+    public code?: string,
   ) {
     super(message);
   }
@@ -29,6 +31,7 @@ export function registerErrorHandler(app: FastifyInstance) {
     if ((err as { code?: string }).code === "23505") {
       return reply.status(409).send({ error: "A record with that value already exists" });
     }
-    return reply.status(status).send({ error: status >= 500 ? "Internal server error" : err.message });
+    const code = err instanceof HttpError ? err.code : undefined;
+    return reply.status(status).send({ error: status >= 500 ? "Internal server error" : err.message, ...(code ? { code } : {}) });
   });
 }

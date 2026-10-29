@@ -7,3 +7,4 @@ export * from "./availability";
 export * from "./qr";
 export * from "./taxForms";
 export * from "./wiki";
+export * from "./location";

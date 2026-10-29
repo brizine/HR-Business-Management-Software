@@ -47,6 +47,9 @@ export const companies = pgTable("companies", {
   taxFormsInCrewdesk: boolean("tax_forms_in_crewdesk").notNull().default(true),
   /** Lowest role that can create wiki pages ("employee" = everyone). */
   wikiCreateMin: text("wiki_create_min").notNull().default("admin"),
+  /** Location rule for clocking in / out: optional | required | geofence_flag | geofence_block */
+  clockInLocation: text("clock_in_location").notNull().default("optional"),
+  clockOutLocation: text("clock_out_location").notNull().default("optional"),
   createdAt: createdAt(),
 });
 
@@ -124,6 +127,16 @@ export const timeEntries = pgTable(
     clockInLng: doublePrecision("clock_in_lng"),
     clockOutLat: doublePrecision("clock_out_lat"),
     clockOutLng: doublePrecision("clock_out_lng"),
+    /** Reported GPS accuracy (m), the nearest job site, its distance (m), and a flag if the punch broke the rules. */
+    clockInAccuracy: doublePrecision("clock_in_accuracy"),
+    clockOutAccuracy: doublePrecision("clock_out_accuracy"),
+    clockInSiteId: uuid("clock_in_site_id"),
+    clockOutSiteId: uuid("clock_out_site_id"),
+    clockInDistance: doublePrecision("clock_in_distance"),
+    clockOutDistance: doublePrecision("clock_out_distance"),
+    /** "off_site" when a geofence_flag punch was away from every job site. */
+    clockInFlag: text("clock_in_flag"),
+    clockOutFlag: text("clock_out_flag"),
     note: text("note"),
     approvedById: uuid("approved_by_id").references(() => employees.id, { onDelete: "set null" }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
@@ -596,3 +609,16 @@ export const wikiRevisions = pgTable(
   },
   (t) => [index("wiki_revisions_page_idx").on(t.pageId, t.createdAt)],
 );
+
+/** Places people may clock in/out: the yard, the shop, client properties. */
+export const jobSites = pgTable("job_sites", {
+  id: id(),
+  companyId: companyId(),
+  name: text("name").notNull(),
+  address: text("address"),
+  lat: doublePrecision("lat").notNull(),
+  lng: doublePrecision("lng").notNull(),
+  radiusMeters: integer("radius_meters").notNull().default(150),
+  active: boolean("active").notNull().default(true),
+  createdAt: createdAt(),
+});

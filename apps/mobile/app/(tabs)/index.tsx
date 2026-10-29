@@ -1,8 +1,8 @@
 import * as Location from "expo-location";
 import { useEffect, useState } from "react";
-import { View } from "react-native";
-import { entryHours, summarizeHours } from "@crewdesk/shared";
-import { api, fmtDate, fmtTime } from "@/lib/api";
+import { Alert, Linking, View } from "react-native";
+import { entryHours, needsLocation, summarizeHours, usesGeofence, type LocationPolicy } from "@crewdesk/shared";
+import { ApiError, api, fmtDate, fmtTime } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
 import { Badge, Button, Card, Divider, ErrorText, Row, Screen, Txt } from "@/components/ui";
@@ -15,17 +15,27 @@ function weekStartIso() {
   return d.toISOString();
 }
 
-/** Best-effort GPS fix; clocking in still works if permission is denied. */
-async function currentPosition() {
+/**
+ * One GPS fix for this punch (never tracked in between). Uses high accuracy
+ * when the company checks job sites. Returns {} if location is off or denied;
+ * the server decides whether that's allowed.
+ */
+async function currentPosition(rule: LocationPolicy) {
   try {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") return {};
-    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-    return { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    const pos = await Location.getCurrentPositionAsync({ accuracy: usesGeofence(rule) ? Location.Accuracy.High : Location.Accuracy.Balanced });
+    return { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? undefined };
   } catch {
     return {};
   }
 }
+
+const locationOffAlert = (message: string) =>
+  Alert.alert("Location needed", message, [
+    { text: "Not now", style: "cancel" },
+    { text: "Open Settings", onPress: () => Linking.openSettings() },
+  ]);
 
 export default function Clock() {
   const { me } = useAuth();
@@ -43,15 +53,28 @@ export default function Clock() {
 
   const open = status.data?.openEntry;
   const totals = summarizeHours(week.data ?? []);
+  const rule: LocationPolicy = (open ? status.data?.locationPolicy?.clockOut : status.data?.locationPolicy?.clockIn) ?? "optional";
+  const [result, setResult] = useState<string | null>(null);
 
   const punch = async () => {
     setBusy(true);
     setError(null);
+    setResult(null);
     try {
-      await api(open ? "/time/clock-out" : "/time/clock-in", { body: await currentPosition() });
+      const loc = await currentPosition(rule);
+      if (needsLocation(rule) && loc.lat === undefined) {
+        locationOffAlert(`Your company needs your location to clock ${open ? "out" : "in"}. Allow location for Crewdesk in Settings, then try again.`);
+        return;
+      }
+      const row = await api(open ? "/time/clock-out" : "/time/clock-in", { body: loc });
+      setResult(
+        `${open ? "Clocked out" : "Clocked in"}${row.siteName ? ` at ${row.siteName}` : ""}.` +
+          (row.clockInFlag || row.clockOutFlag ? " You're away from a job site, so this punch is flagged for your manager." : ""),
+      );
       await Promise.all([status.reload(), week.reload()]);
     } catch (e) {
-      setError((e as Error).message);
+      if (e instanceof ApiError && e.code === "location_required") locationOffAlert(e.message);
+      else setError((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -71,10 +94,17 @@ export default function Clock() {
           ) : (
             <>
               <Txt style={{ fontSize: 22, fontWeight: "700" }}>You're clocked out</Txt>
-              <Txt muted>Your location is recorded when you clock in and out.</Txt>
             </>
           )}
+          <Txt muted style={{ textAlign: "center" }}>
+            {rule === "optional"
+              ? "Your location is recorded when you clock in and out, if location is on."
+              : usesGeofence(rule)
+                ? `📍 Clock ${open ? "out" : "in"} at a job site${rule === "geofence_flag" ? " (punches elsewhere are flagged)" : ""}. Location is only checked at this moment.`
+                : `📍 Location is required to clock ${open ? "out" : "in"}. It's only checked at this moment.`}
+          </Txt>
         </View>
+        {result && <Txt style={{ textAlign: "center" }}>{result}</Txt>}
         <ErrorText error={error} />
         {next && !open && (
           <Txt muted style={{ textAlign: "center" }}>

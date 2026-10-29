@@ -17,6 +17,13 @@ export async function saveToken(t: string | null) {
   else await SecureStore.deleteItemAsync(TOKEN_KEY);
 }
 
+/** `code` identifies specific problems the screen can help with (e.g. "location_required"). */
+export class ApiError extends Error {
+  constructor(message: string, public code?: string) {
+    super(message);
+  }
+}
+
 let onSessionEnded: (() => void) | null = null;
 
 /** Called when the API says the stored session is no longer valid (e.g. signed out everywhere). */
@@ -39,7 +46,7 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     if (res.status === 401 && !init.token && token && !path.startsWith("/auth/login")) onSessionEnded?.();
-    throw new Error(data.error ?? `Request failed (${res.status})`);
+    throw new ApiError(data.error ?? `Request failed (${res.status})`, data.code);
   }
   return res.json();
 }
