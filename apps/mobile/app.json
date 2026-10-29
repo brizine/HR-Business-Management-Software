@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Crewdesk",
+    "slug": "crewdesk",
+    "scheme": "crewdesk",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "com.crewdesk.app",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Crewdesk records your location when you clock in and out so your manager can verify job-site attendance."
+      }
+    },
+    "android": {
+      "package": "com.crewdesk.app",
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Crewdesk records your location when you clock in and out so your manager can verify job-site attendance."
+        }
+      ]
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "crewdesk",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev:api": "pnpm --filter @crewdesk/api dev",
+    "dev:web": "pnpm --filter @crewdesk/web dev",
+    "dev:mobile": "pnpm --filter @crewdesk/mobile start",
+    "db:migrate": "pnpm --filter @crewdesk/api db:migrate",
+    "db:seed": "pnpm --filter @crewdesk/api db:seed",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  }
+}
