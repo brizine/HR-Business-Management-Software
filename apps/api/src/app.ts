@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import multipart from "@fastify/multipart";
@@ -19,9 +19,23 @@ import notificationRoutes from "./routes/notifications";
 import shiftRoutes from "./routes/shifts";
 import unsubscribeRoutes from "./routes/unsubscribe";
 import availabilityRoutes from "./routes/availability";
+import jobRoutes from "./routes/jobs";
 
-export async function buildApp(opts: { logger?: boolean } = {}) {
-  const app = Fastify({ logger: opts.logger ?? true });
+export interface AppOptions {
+  logger?: boolean;
+  /**
+   * Mount point for the API. Development and tests serve it at the root of
+   * its own port; production serves it under "/api" next to the website.
+   */
+  prefix?: string;
+}
+
+export async function buildApp(opts: AppOptions = {}) {
+  const app = Fastify({
+    logger: opts.logger ?? true,
+    // Behind the host's proxy, so req.ip (recorded with e-signatures) is the real client.
+    trustProxy: process.env.NODE_ENV === "production",
+  });
 
   const secret = process.env.JWT_SECRET;
   if (!secret && process.env.NODE_ENV === "production") throw new Error("JWT_SECRET must be set in production");
@@ -35,7 +49,11 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   await app.register(jwt, { secret: secret ?? "dev-only-secret", sign: { expiresIn: "7d" } });
   await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024 } });
   registerErrorHandler(app);
+  await app.register(apiRoutes, { prefix: opts.prefix ?? "" });
+  return app;
+}
 
+async function apiRoutes(app: FastifyInstance) {
   app.get("/health", async () => ({ ok: true }));
 
   await app.register(authRoutes, { prefix: "/auth" });
@@ -54,6 +72,5 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   await app.register(shiftRoutes, { prefix: "/shifts" });
   await app.register(unsubscribeRoutes, { prefix: "/public/unsubscribe" });
   await app.register(availabilityRoutes, { prefix: "/availability" });
-
-  return app;
+  await app.register(jobRoutes, { prefix: "/jobs" });
 }

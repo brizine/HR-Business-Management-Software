@@ -8,8 +8,12 @@
     "dev:mobile": "pnpm --filter @crewdesk/mobile start",
     "db:migrate": "pnpm --filter @crewdesk/api db:migrate",
     "db:seed": "pnpm --filter @crewdesk/api db:seed",
-    "build": "pnpm -r build",
+    "build": "pnpm --filter @crewdesk/web build:prod && pnpm --filter @crewdesk/api build",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "start": "NODE_ENV=production node --env-file-if-exists=apps/api/.env apps/api/dist/main.js"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

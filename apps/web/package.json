@@ -6,20 +6,19 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:prod": "NEXT_PUBLIC_API_URL=/api next build"
   },
   "dependencies": {
     "@crewdesk/shared": "workspace:*",
     "next": "15.5.28",
     "qrcode": "^1.5.4",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
-  },
-  "devDependencies": {
+    "react-dom": "19.1.0",
+    "typescript": "^5.9.3",
     "@types/node": "^22.18.0",
-    "@types/qrcode": "^1.5.6",
     "@types/react": "~19.1.10",
     "@types/react-dom": "~19.1.7",
-    "typescript": "^5.9.3"
+    "@types/qrcode": "^1.5.6"
   }
 }

@@ -59,6 +59,25 @@ afterAll(async () => {
   await pool.end();
 });
 
+describe("mounting", () => {
+  it("serves the API under a prefix in production", async () => {
+    const prefixed = await buildApp({ logger: false, prefix: "/api" });
+    expect((await prefixed.inject({ url: "/api/health" })).json()).toEqual({ ok: true });
+    expect((await prefixed.inject({ url: "/health" })).statusCode).toBe(404);
+    await prefixed.close();
+  });
+
+  it("only runs scheduled jobs for callers with the secret", async () => {
+    process.env.JOBS_SECRET = "s3cret-for-tests";
+    expect((await app.inject({ method: "POST", url: "/jobs/run" })).statusCode).toBe(404);
+    expect((await app.inject({ method: "POST", url: "/jobs/run", headers: { "x-jobs-secret": "wrong-secret-xyz" } })).statusCode).toBe(404);
+    const ok = await app.inject({ method: "POST", url: "/jobs/run", headers: { "x-jobs-secret": "s3cret-for-tests" } });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toHaveProperty("sent");
+    delete process.env.JOBS_SECRET;
+  });
+});
+
 describe("CORS", () => {
   it("lets the web app send every method it uses", async () => {
     for (const method of ["PUT", "PATCH", "DELETE"]) {
@@ -74,6 +93,15 @@ describe("CORS", () => {
 });
 
 describe("auth & permissions", () => {
+  it("closes sign-up once a company exists unless ALLOW_SIGNUP is set", async () => {
+    process.env.ALLOW_SIGNUP = "false";
+    const res = await call("POST", "/auth/signup", undefined, {
+      companyName: "Squatter", firstName: "S", lastName: "Q", email: `squat-${suffix}@test.dev`, password: "password123",
+    });
+    expect(res.status).toBe(403);
+    process.env.ALLOW_SIGNUP = "true";
+  });
+
   it("rejects bad passwords and unauthenticated calls", async () => {
     expect((await call("POST", "/auth/login", undefined, { email: `eve-${suffix}@test.dev`, password: "nope" })).status).toBe(401);
     expect((await call("GET", "/employees")).status).toBe(401);

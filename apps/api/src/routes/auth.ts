@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { loginSchema, signupSchema } from "@crewdesk/shared";
 import { db } from "../db";
 import { companies, employees } from "../db/schema";
@@ -9,9 +9,17 @@ import { HttpError, parse } from "../lib/errors";
 import { publicEmployee } from "./employees";
 
 const routes: FastifyPluginAsync = async (app) => {
-  /** Creates a company and its owner account. */
+  /**
+   * Creates a company and its owner account. A self-hosted install serves one
+   * business, so after the first company exists sign-up closes unless
+   * ALLOW_SIGNUP=true (e.g. if you run Crewdesk for several companies).
+   */
   app.post("/signup", async (req) => {
     const body = parse(signupSchema, req.body);
+    if (process.env.ALLOW_SIGNUP !== "true") {
+      const [{ n }] = await db.select({ n: count() }).from(companies);
+      if (n > 0) throw new HttpError(403, "Sign-ups are closed. Ask your company's Crewdesk admin to add you.");
+    }
     const passwordHash = await bcrypt.hash(body.password, 10);
     const { company, owner } = await db.transaction(async (tx) => {
       const [company] = await tx.insert(companies).values({ name: body.companyName }).returning();

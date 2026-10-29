@@ -1,0 +1,49 @@
+# Runs the test suite on every push and pull request. When main passes, it
+# fast-forwards the `production` branch, which SiteGround deploys from, so a
+# broken commit never reaches the live site.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: crewdesk
+          POSTGRES_PASSWORD: crewdesk
+          POSTGRES_DB: crewdesk
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://crewdesk:crewdesk@localhost:5432/crewdesk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:migrate
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  promote:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fast-forward production to this commit
+        run: git push origin HEAD:refs/heads/production

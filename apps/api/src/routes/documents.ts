@@ -42,7 +42,7 @@ const routes: FastifyPluginAsync = async (app) => {
 
     const buf = await file.toBuffer();
     const key = `${req.user.companyId}/${randomUUID()}-${file.filename.replace(/[^\w.-]/g, "_")}`;
-    await storage.put(key, buf);
+    await storage.put(key, buf, file.mimetype);
 
     const [row] = await db
       .insert(documents)
@@ -84,7 +84,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const doc = await loadVisible(req, req.params.id);
     reply.header("Content-Type", doc.mimeType);
     reply.header("Content-Disposition", `attachment; filename="${doc.name.replace(/"/g, "")}"`);
-    return reply.send(storage.get(doc.storageKey));
+    return reply.send(await storage.get(doc.storageKey));
   });
 
   /**

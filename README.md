@@ -37,6 +37,19 @@ The mobile app covers what field staff need: clock in/out with GPS, weekly hours
 requests (and approvals for managers), assigned assets, meter readings, inspections, issue
 reports, assigned work orders, onboarding tasks and document signing.
 
+## Hosting
+
+Production runs as a single Node.js process (website + API under `/api`) with PostgreSQL:
+
+```bash
+pnpm install
+pnpm build      # builds the website and the API
+pnpm start      # migrates the database, then serves everything on $PORT
+```
+
+**SiteGround:** step-by-step guide in [docs/deploy-siteground.md](docs/deploy-siteground.md).
+The same two commands work on most Node.js hosts (Render, Railway, Fly.io).
+
 ## Running locally
 
 Requires Node 22+, pnpm 10+, and PostgreSQL 16 (or Docker).
@@ -224,12 +237,12 @@ provider, which avoids building payroll tax compliance in-house.
 
 This is a working foundation, not a finished product. Before real customers use it:
 
-- **File storage**: swap `LocalStorage` (`apps/api/src/lib/storage.ts`) for S3/R2/GCS.
+- **File storage**: set `UPLOAD_DIR` outside the deployed code, or use an S3/R2 bucket (`S3_*` settings).
 - **Auth hardening**: password reset and invite emails, refresh tokens, rate limiting on login, optional SSO/2FA.
 - **Sensitive data**: SSNs/bank details should live only with the payroll provider. If you must store them, encrypt at the field level.
 - **Notifications**: delivery history/audit log, email digests instead of one email per event, an inbound Twilio webhook for START/HELP, and Expo push receipt checking.
 - **Compliance**: I-9/W-4 form generation, state-specific overtime (e.g. California daily OT), meal/break rules, record retention. Consider a signature provider (Dropbox Sign, DocuSign) for legally stronger audit trails.
-- **Ops**: hosting (e.g. API on Fly/Render/AWS, web on Vercel, Postgres managed), backups, error monitoring, audit log, EAS builds and App Store / Play Store submission.
+- **Ops**: error monitoring, an audit log, uptime alerts on `/api/health`, and App Store / Play Store submission (see the deploy guide).
 - **Billing**: Stripe subscriptions per company if you sell this as SaaS.
 
 ## Roadmap ideas
