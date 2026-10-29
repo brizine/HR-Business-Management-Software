@@ -123,7 +123,7 @@ start the clock from home but can still clock out on the drive back.
 
 ## Spray Mix Calculator
 
-**Fleet & equipment → Spray Mix Calculator** on the web, and **Fleet → Spray Mix Calculator** in the app. It's
+**Spray Mix Calculator** at the top of the sidebar on the web, and its own **Spray Mix** tab in the app. It's
 the "Spray Tank Fill" spreadsheet as a shared calculator.
 
 - **Everyone** picks a mix (e.g. *Truck Mix*, *Z spray Mix*), enters **Tank mix in desired

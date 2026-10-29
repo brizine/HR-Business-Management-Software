@@ -7,7 +7,7 @@ import type { Role } from "@crewdesk/shared";
 import { useAuth } from "@/lib/auth";
 
 const NAV: { section: string; items: { href: string; label: string; min?: Role }[] }[] = [
-  { section: "", items: [{ href: "/dashboard", label: "Dashboard", min: "manager" }, { href: "/wiki", label: "Company wiki" }] },
+  { section: "", items: [{ href: "/dashboard", label: "Dashboard", min: "manager" }, { href: "/wiki", label: "Company wiki" }, { href: "/spray-mix", label: "Spray Mix Calculator" }] },
   {
     section: "People",
     items: [
@@ -26,7 +26,6 @@ const NAV: { section: string; items: { href: string; label: string; min?: Role }
     section: "Fleet & equipment",
     items: [
       { href: "/fleet", label: "Assets" },
-      { href: "/spray-mix", label: "Spray Mix Calculator" },
       { href: "/work-orders", label: "Work orders" },
       { href: "/inspections", label: "Inspections" },
     ],
