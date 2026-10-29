@@ -8,7 +8,7 @@ import { registerErrorHandler } from "./lib/errors";
 import { SESSION_COOKIE } from "./lib/auth";
 import authRoutes from "./routes/auth";
 import employeeRoutes from "./routes/employees";
-import documentRoutes from "./routes/documents";
+import documentRoutes, { documentViewRoutes } from "./routes/documents";
 import timeRoutes from "./routes/time";
 import ptoRoutes from "./routes/pto";
 import hiringRoutes from "./routes/hiring";
@@ -66,6 +66,7 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(authRoutes, { prefix: "/auth" });
   await app.register(employeeRoutes, { prefix: "/employees" });
   await app.register(documentRoutes, { prefix: "/documents" });
+  await app.register(documentViewRoutes, { prefix: "/documents/view" });
   await app.register(timeRoutes, { prefix: "/time" });
   await app.register(ptoRoutes, { prefix: "/pto" });
   await app.register(hiringRoutes);

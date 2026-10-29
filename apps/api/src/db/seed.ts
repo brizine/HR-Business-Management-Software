@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db, pool } from "./index";
 import * as s from "./schema";
+import { storage } from "../lib/storage";
 
 const existing = await db.select().from(s.employees).where(eq(s.employees.email, "owner@demo.test"));
 if (existing.length) {
@@ -68,16 +69,25 @@ await db.insert(s.applicants).values([
   { companyId, jobId: job.id, firstName: "Jordan", lastName: "Lee", email: "jordan@example.com", stage: "interview" },
 ]);
 
+// A company handbook (stored encrypted, like any upload) that every new hire signs.
+const handbookKey = `${companyId}/demo-employee-handbook.txt`;
+const handbookText = "Demo Landscaping & Haul — Employee Handbook\n\n1. Safety first: wear PPE on every job site.\n2. Clock in when you arrive, out when you leave.\n3. Report equipment problems right away with the QR label on the machine.\n";
+await storage.put(handbookKey, Buffer.from(handbookText));
+const [handbook] = await db
+  .insert(s.documents)
+  .values({ companyId, name: "Employee handbook", category: "policy", storageKey: handbookKey, mimeType: "text/plain", sizeBytes: Buffer.byteLength(handbookText), uploadedById: owner.id })
+  .returning();
+
 await db.insert(s.onboardingTemplates).values({
   companyId,
   name: "Field crew onboarding",
   tasks: [
-    { title: "Complete Form W-4", assignee: "employee", dueInDays: 0, requiresDocument: true },
-    { title: "Complete Form I-9 (Section 1)", assignee: "employee", dueInDays: 0, requiresDocument: true },
-    { title: "Verify I-9 documents (Section 2)", assignee: "admin", dueInDays: 3, requiresDocument: false },
-    { title: "Upload driver's license", assignee: "employee", dueInDays: 1, requiresDocument: true },
-    { title: "Sign employee handbook", assignee: "employee", dueInDays: 1, requiresDocument: true },
-    { title: "Equipment safety walkthrough", assignee: "manager", dueInDays: 5, requiresDocument: false },
+    { title: "Fill out your W-4 and direct deposit with payroll", assignee: "employee", dueInDays: 0, action: "none" },
+    { title: "Upload a photo of your driver's license", assignee: "employee", dueInDays: 1, action: "upload" },
+    { title: "Sign the employee handbook", assignee: "employee", dueInDays: 1, action: "sign", documentId: handbook.id },
+    { title: "Complete Form I-9 (Section 1)", assignee: "employee", dueInDays: 0, action: "upload" },
+    { title: "Verify I-9 documents (Section 2)", assignee: "admin", dueInDays: 3, action: "none" },
+    { title: "Equipment safety walkthrough", assignee: "manager", dueInDays: 5, action: "none" },
   ],
 });
 

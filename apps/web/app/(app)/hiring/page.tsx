@@ -1,11 +1,65 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
-import { APPLICANT_STAGES } from "@crewdesk/shared";
+import { APPLICANT_STAGES, EMPLOYMENT_TYPES, PAY_TYPES } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
+import { InviteResult } from "@/components/invite-result";
+
+/** Details for a new hire: start date, pay, manager, checklist and invite. */
+function HireForm({ applicant, job, templates, staff, onCancel, onHired }: {
+  applicant: any; job: any; templates: any[]; staff: any[]; onCancel: () => void; onHired: (res: any) => void;
+}) {
+  const { me } = useAuth();
+  const { busy, error, run } = useAction();
+  const managers = staff.filter((e) => ["manager", "admin", "owner"].includes(e.role) && e.status !== "terminated");
+  return (
+    <div className="card">
+      <h2>Hire {applicant.firstName} {applicant.lastName}</h2>
+      <form className="stack" onSubmit={(e) => {
+        e.preventDefault();
+        const { payRate, onboardingTemplateId, managerId, sendInvite, ...v } = formValues(e.currentTarget);
+        run(async () => onHired(await api(`/applicants/${applicant.id}/hire`, { body: {
+          ...v,
+          payRateCents: Math.round((payRate ?? 0) * 100),
+          onboardingTemplateId: onboardingTemplateId ?? null,
+          managerId: managerId ?? null,
+          sendInvite: !!sendInvite,
+        } })));
+      }}>
+        <div className="formgrid">
+          <label>Start date<input name="startDate" type="date" required /></label>
+          <label>Job title<input name="title" defaultValue={job?.title ?? ""} /></label>
+          <label>Department<input name="department" defaultValue={job?.department ?? ""} /></label>
+          <label>Manager
+            <select name="managerId" defaultValue={managers.find((m) => m.id === me?.user.id) ? me?.user.id : ""}>
+              <option value="">—</option>
+              {managers.map((m) => <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>)}
+            </select>
+          </label>
+          <label>Employment<select name="employmentType" defaultValue="full_time">{EMPLOYMENT_TYPES.map((t) => <option key={t} value={t}>{t.replace("_", " ")}</option>)}</select></label>
+          <label>Pay type<select name="payType" defaultValue="hourly">{PAY_TYPES.map((t) => <option key={t}>{t}</option>)}</select></label>
+          <label>Pay rate ($/hr or $/yr)<input name="payRate" type="number" step="0.01" min="0" required /></label>
+          <label>Role in Crewdesk<select name="role" defaultValue="employee"><option value="employee">employee</option><option value="manager">manager</option></select></label>
+          <label>Onboarding checklist
+            <select name="onboardingTemplateId" defaultValue={templates[0]?.id ?? ""}>
+              <option value="">None</option>
+              {templates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.tasks.length} tasks)</option>)}
+            </select>
+          </label>
+        </div>
+        <label className="check"><input type="checkbox" name="sendInvite" defaultChecked /> Email {applicant.firstName} an invite to set up their account ({applicant.email})</label>
+        <ErrorBox error={error} />
+        <div className="row">
+          <button className="btn primary" disabled={busy}>Hire {applicant.firstName}</button>
+          <button type="button" className="btn" onClick={onCancel}>Cancel</button>
+        </div>
+      </form>
+    </div>
+  );
+}
 
 export default function Hiring() {
   const { me, can } = useAuth();
@@ -19,12 +73,9 @@ export default function Hiring() {
   const appAction = useAction();
   const job = jobs.data?.find((j) => j.id === jobId);
 
-  const hire = (a: any) => {
-    const tpl = templates.data?.[0];
-    const msg = tpl ? `Hire ${a.firstName} ${a.lastName} and start the "${tpl.name}" checklist?` : `Hire ${a.firstName} ${a.lastName}?`;
-    if (!confirm(msg)) return;
-    api(`/applicants/${a.id}/hire`, { body: { onboardingTemplateId: tpl?.id } }).then(applicants.reload, (e) => alert(e.message));
-  };
+  const [hiring, setHiring] = useState<any>(null);
+  const [hired, setHired] = useState<any>(null);
+  const staff = useApi<any[]>(can("admin") ? "/employees" : null);
 
   return (
     <>
@@ -70,6 +121,21 @@ export default function Hiring() {
           </table>
         ) : <Empty>No jobs yet.</Empty>}
       </div>
+      {hiring && (
+        <HireForm applicant={hiring} job={job} templates={templates.data ?? []} staff={staff.data ?? []}
+          onCancel={() => setHiring(null)}
+          onHired={(res) => { setHiring(null); setHired(res); applicants.reload(); }} />
+      )}
+      {hired && (
+        <div className="card">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <h2 style={{ margin: 0 }}>{hired.firstName} {hired.lastName} is hired 🎉</h2>
+            <button className="btn sm" onClick={() => setHired(null)}>Close</button>
+          </div>
+          <p className="muted">{hired.tasks ? `Their ${hired.tasks}-task onboarding checklist has started.` : "No checklist was started."} <Link href={`/people/${hired.id}`}>Open their profile</Link></p>
+          <InviteResult invite={hired.invite} name={hired.firstName} email={hired.email} />
+        </div>
+      )}
       {job && (
         <>
           <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
@@ -111,7 +177,7 @@ export default function Hiring() {
                           {APPLICANT_STAGES.filter((s) => s !== "hired").map((s) => <option key={s}>{s}</option>)}
                         </select>
                       )}
-                      {stage === "offer" && can("admin") && <button className="btn sm primary" onClick={() => hire(a)}>Hire</button>}
+                      {stage === "offer" && can("admin") && <button className="btn sm primary" onClick={() => { setHired(null); setHiring(a); }}>Hire</button>}
                     </div>
                   </div>
                 ))}

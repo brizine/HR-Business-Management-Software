@@ -19,7 +19,9 @@ export interface AuthUser {
   role: Role;
   /** employees.token_version when issued; bumping it signs the person out everywhere. */
   ver?: number;
-  purpose?: TokenPurpose;
+  purpose?: TokenPurpose | "view";
+  /** For "view" tokens: the one document it opens. */
+  doc?: string;
 }
 
 declare module "@fastify/jwt" {
@@ -79,7 +81,8 @@ export async function verifyToken(req: FastifyRequest, allowed: TokenPurpose[]) 
   } catch {
     throw new HttpError(401, "Not signed in");
   }
-  if (!allowed.includes(req.user.purpose ?? "session")) throw new HttpError(401, "Not signed in");
+  // View links ("view") are never accepted here; they only open one document.
+  if (!allowed.includes((req.user.purpose ?? "session") as TokenPurpose)) throw new HttpError(401, "Not signed in");
   // Cookie-authenticated changes must come from the website itself, not a form on another site.
   const viaCookie = !req.headers.authorization;
   if (viaCookie && !["GET", "HEAD", "OPTIONS"].includes(req.method) && !isWebClient(req)) {

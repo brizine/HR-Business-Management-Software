@@ -1,13 +1,17 @@
-import { and, eq, gt, isNotNull, isNull, lt, lte } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, lt, lte, ne } from "drizzle-orm";
 import { computeDue } from "@crewdesk/shared";
 import { db } from "../db";
-import { assets, companies, employees, maintenanceSchedules, notificationLog, shifts, timeEntries } from "../db/schema";
-import { fmtTime } from "./tz";
+import { assets, companies, employees, maintenanceSchedules, notificationLog, onboardingTasks, shifts, timeEntries } from "../db/schema";
+import { taskOwners } from "../routes/onboarding";
+import { fmtTime, localParts } from "./tz";
 import { notify, staffWithRole } from "./notify";
 
 /** Hours on the clock after which we assume someone forgot to clock out. */
 export const FORGOT_CLOCK_OUT_HOURS = 12;
 const EXPIRY_WARNING_DAYS = 30;
+/** Onboarding reminders go out from this local hour, so nobody is pinged at midnight. */
+export const REMINDER_HOUR = 7;
+
 /** How far ahead of a shift the reminder goes out. */
 export const SHIFT_REMINDER_MINUTES = 60;
 
@@ -110,6 +114,39 @@ export async function runScheduledChecks(now = new Date()) {
       title: `Your shift starts at ${fmtTime(shift.startsAt, tz)}`,
       body: [shift.position, shift.location].filter(Boolean).join(" · ") || "Don't forget to clock in.",
       link: { screen: "time" },
+    });
+    sent++;
+  }
+
+  // Onboarding tasks due today or overdue: one message per person listing theirs.
+  const open = await db
+    .select({ task: onboardingTasks, employee: employees, tz: companies.timezone })
+    .from(onboardingTasks)
+    .innerJoin(employees, eq(employees.id, onboardingTasks.employeeId))
+    .innerJoin(companies, eq(companies.id, onboardingTasks.companyId))
+    .where(and(isNull(onboardingTasks.completedAt), isNotNull(onboardingTasks.dueDate), ne(employees.status, "terminated")));
+  const digests = new Map<string, { companyId: string; due: string[]; overdue: string[] }>();
+  for (const { task, employee, tz } of open) {
+    const local = localParts(now, tz);
+    if (task.dueDate! > local.date || local.minutes < REMINDER_HOUR * 60) continue;
+    const state = task.dueDate === local.date ? "due" : "overdue";
+    if (!(await firstTime(task.companyId, `onboarding:${task.id}:${state}:${task.dueDate}`))) continue;
+    const label = task.assignee === "employee" ? task.title : `${task.title} (${employee.firstName} ${employee.lastName})`;
+    for (const owner of await taskOwners(task, employee)) {
+      const d = digests.get(owner) ?? { companyId: task.companyId, due: [], overdue: [] };
+      d[state].push(label);
+      digests.set(owner, d);
+    }
+  }
+  for (const [personId, d] of digests) {
+    const count = d.due.length + d.overdue.length;
+    notify(d.companyId, [personId], {
+      category: "onboarding",
+      title: d.overdue.length
+        ? `${count} onboarding task${count > 1 ? "s" : ""} need${count > 1 ? "" : "s"} attention`
+        : `Onboarding task${count > 1 ? "s" : ""} due today`,
+      body: [...d.overdue.map((t) => `Overdue: ${t}`), ...d.due.map((t) => `Due today: ${t}`)].join("\n"),
+      link: { screen: "onboarding" },
     });
     sent++;
   }

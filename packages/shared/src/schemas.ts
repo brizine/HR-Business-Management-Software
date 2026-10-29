@@ -37,6 +37,8 @@ export const employeeSchema = z.object({
   status: z.enum(["active", "onboarding", "terminated"]).default("active"),
   /** Optional initial password so the employee can sign in to the app. */
   password: z.string().min(8).optional(),
+  /** Email them a link to choose their own password (when no password is given). */
+  sendInvite: z.boolean().optional(),
 });
 export type EmployeeInput = z.infer<typeof employeeSchema>;
 
@@ -94,19 +96,47 @@ export const applicantSchema = z.object({
 
 export const applicantStageSchema = z.object({ stage: z.enum(APPLICANT_STAGES) });
 
+/**
+ * What finishing a task takes: just checking it off, uploading a document
+ * (e.g. a photo of a driver's license), or signing a company document (e.g.
+ * the handbook). Upload and sign tasks complete themselves when that happens.
+ */
+export const TASK_ACTIONS = ["none", "upload", "sign"] as const;
+export type TaskAction = (typeof TASK_ACTIONS)[number];
+
+export const onboardingTaskTemplateSchema = z
+  .object({
+    title: z.string().min(1),
+    description: z.string().optional(),
+    assignee: z.enum(["employee", "manager", "admin"]).default("employee"),
+    dueInDays: z.number().int().nonnegative().default(0),
+    action: z.enum(TASK_ACTIONS).default("none"),
+    /** For "sign" tasks: the company-wide document each new hire signs. */
+    documentId: z.string().uuid().nullable().optional(),
+  })
+  .refine((t) => t.action !== "sign" || t.documentId, { message: "Choose the document to sign", path: ["documentId"] })
+  .refine((t) => t.action === "none" || t.assignee === "employee", {
+    message: "Only the new hire's own tasks can require an upload or signature",
+    path: ["action"],
+  });
+
 export const onboardingTemplateSchema = z.object({
   name: z.string().min(1),
-  tasks: z
-    .array(
-      z.object({
-        title: z.string().min(1),
-        description: z.string().optional(),
-        assignee: z.enum(["employee", "manager", "admin"]).default("employee"),
-        dueInDays: z.number().int().nonnegative().default(0),
-        requiresDocument: z.boolean().default(false),
-      }),
-    )
-    .min(1),
+  tasks: z.array(onboardingTaskTemplateSchema).min(1),
+});
+
+/** Details asked for when hiring an applicant. */
+export const hireSchema = z.object({
+  startDate: isoDate.optional(),
+  title: z.string().optional(),
+  department: z.string().optional(),
+  role: z.enum(["employee", "manager", "admin"]).default("employee"),
+  managerId: z.string().uuid().nullable().optional(),
+  payType: z.enum(PAY_TYPES).default("hourly"),
+  payRateCents: z.number().int().nonnegative().default(0),
+  employmentType: z.enum(EMPLOYMENT_TYPES).default("full_time"),
+  onboardingTemplateId: z.string().uuid().nullable().optional(),
+  sendInvite: z.boolean().default(true),
 });
 
 export const ASSET_TYPES = ["vehicle", "trailer", "heavy_equipment", "small_equipment", "tool", "other"] as const;

@@ -6,6 +6,12 @@ import { z } from "zod";
 import { db } from "../db";
 import { employees, recoveryCodes } from "../db/schema";
 import { authenticate, canManageAccount, requireRole, signOutEverywhere } from "../lib/auth";
+import { sendInvite } from "../lib/invites";
+
+async function actorName(id: string) {
+  const [e] = await db.select({ f: employees.firstName, l: employees.lastName }).from(employees).where(eq(employees.id, id));
+  return e ? `${e.f} ${e.l}` : undefined;
+}
 import { HttpError, notFound, parse } from "../lib/errors";
 
 type EmployeeRow = typeof employees.$inferSelect;
@@ -52,7 +58,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.post("/", { preHandler: requireRole("admin") }, async (req) => {
     const body = parse(employeeSchema, req.body);
     if (!canManageAccount(req.user.role, body.role)) throw new HttpError(403, "Only the owner can add admins and owners");
-    const { password, ...rest } = body;
+    const { password, sendInvite: wantsInvite, ...rest } = body;
     const [row] = await db
       .insert(employees)
       .values({
@@ -62,7 +68,20 @@ const routes: FastifyPluginAsync = async (app) => {
         passwordHash: password ? await bcrypt.hash(password, 10) : null,
       })
       .returning();
-    return publicEmployee(row);
+    // No password given: by default, email them a link to choose one.
+    const invite = !password && (wantsInvite ?? true) ? await sendInvite(row, await actorName(req.user.sub)) : null;
+    return { ...publicEmployee(invite ? { ...row, invitedAt: new Date() } : row), invite };
+  });
+
+  /**
+   * (Re)sends the "set up your account" email. The response includes the link
+   * so an admin can text it if email isn't set up or didn't arrive.
+   */
+  app.post<{ Params: { id: string } }>("/:id/invite", { preHandler: requireRole("admin") }, async (req) => {
+    const target = await manageable(req, req.params.id, false);
+    if (target.passwordHash) throw new HttpError(409, `${target.firstName} already has a login. They can use "Forgot your password?" if needed.`);
+    if (target.status === "terminated") throw new HttpError(409, "This person is no longer employed");
+    return sendInvite(target, await actorName(req.user.sub));
   });
 
   /** Loads someone in the caller's company that the caller is allowed to manage. */

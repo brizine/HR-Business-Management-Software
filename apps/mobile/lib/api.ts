@@ -27,13 +27,14 @@ export function setSessionEndedHandler(fn: (() => void) | null) {
 /** `token` overrides the stored session (for the short-lived two-factor sign-in tokens). */
 export async function api<T = any>(path: string, init: { method?: string; body?: unknown; token?: string } = {}): Promise<T> {
   const auth = init.token ?? token;
+  const isForm = init.body instanceof FormData;
   const res = await fetch(API_URL + path, {
     method: init.method ?? (init.body ? "POST" : "GET"),
     headers: {
       ...(auth ? { Authorization: `Bearer ${auth}` } : {}),
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
+      ...(init.body && !isForm ? { "Content-Type": "application/json" } : {}),
     },
-    body: init.body ? JSON.stringify(init.body) : undefined,
+    body: isForm ? (init.body as FormData) : init.body ? JSON.stringify(init.body) : undefined,
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));

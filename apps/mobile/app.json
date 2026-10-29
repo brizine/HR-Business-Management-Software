@@ -43,6 +43,14 @@
           "cameraPermission": "Crewdesk uses the camera to scan QR labels on vehicles and equipment.",
           "recordAudioAndroid": false
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Crewdesk uses the camera to photograph documents for your onboarding, like your driver's license.",
+          "photosPermission": "Crewdesk lets you pick a photo of a document to upload for your onboarding.",
+          "microphonePermission": false
+        }
       ]
     ],
     "extra": {

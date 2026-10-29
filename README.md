@@ -23,7 +23,7 @@ packages/
 | **Time clock** | Clock in/out from phone or web with GPS, live "who's on the clock", weekly timesheets with FLSA overtime, manager punch edits and approvals |
 | **Time off** | Multiple policies, accrual per hour worked with caps, grants/adjustments ledger, request → approve/deny, balance checks |
 | **Hiring** | Job postings, public careers page (`/careers/<companyId>`), applicant pipeline board, one-click hire → employee |
-| **Onboarding** | Checklist templates (employee / manager / admin tasks with due dates), progress tracking, employee auto-activates when done |
+| **Onboarding** | Hire form (start date, pay, manager, checklist) → invite email → new hire sets their password and works through a checklist of check-off, **upload** (phone camera works) and **sign** tasks; managers and admins see what's waiting on them; reminders and milestone notifications; the hire becomes active when everything is done. See [Onboarding](#onboarding) |
 | **Payroll** | Hours + estimated gross preview, **CSV export** for any payroll system, **or** push to an embedded payroll provider (Check adapter included) |
 | **Fleet & equipment** | Asset registry (vehicles, trailers, heavy/small equipment, tools), odometer + engine-hour meters, registration/insurance expiry |
 | **Preventive maintenance** | Schedules by miles, engine hours and/or days (whichever comes first), due-soon/overdue status, fleet-wide due list |
@@ -115,6 +115,27 @@ Edit `apps/api/src/db/schema.ts`, then `pnpm --filter @crewdesk/api db:generate`
 - **Admin limits:** admins can't change the owner's or another admin's account or create admins; only
   the owner can. If someone loses their phone *and* backup codes, an admin (or the owner, for admins)
   can reset their two-factor from their profile; verify it's really them first.
+
+## Onboarding
+
+1. **Hire** an applicant at the Offer stage (or **Team → Add employee**). The form sets their start
+   date, pay, manager and role, picks a checklist, and by default **emails an invite**.
+2. The invite link (valid 7 days) opens a **Welcome** page where they choose a password (and set up
+   two-factor if their role requires it), then land on their checklist. If email isn't set up, the
+   admin is shown the link to text them. Admins can resend it from the person's profile.
+3. Checklist tasks are one of:
+   - **Check off**: e.g. "Fill out your W-4 with payroll".
+   - **Upload**: finishes when they upload a photo or PDF. On a phone they can use the camera.
+   - **Sign**: they read and e-sign their own copy of a company document, such as the handbook. Upload
+     it on the Documents page as a company-wide document, then choose it in the template.
+
+   New hires can't check off upload/sign tasks without doing them. Managers and admins can mark any
+   task done, e.g. after receiving a paper copy.
+4. **Managers** see "Waiting on you" on the Onboarding page and in the app's Tasks tab. They're told
+   about their tasks when someone's hired, when the new hire finishes their paperwork, and when the
+   whole checklist is done (the employee then becomes **active**).
+5. **Reminders**: from 7 AM local time, anyone with tasks due today or overdue gets one combined
+   message (each task is announced once as due and once as overdue).
 
 ## QR labels
 

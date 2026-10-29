@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, isNull, or } from "drizzle-orm";
 import { z } from "zod";
@@ -8,6 +8,10 @@ import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { storage } from "../lib/storage";
 import { except, notify } from "../lib/notify";
+import { completeSignTaskFor } from "./onboarding";
+
+/** Text files are served as UTF-8 so characters like "—" display correctly. */
+const contentType = (mime: string) => (mime.startsWith("text/") && !mime.includes("charset") ? `${mime}; charset=utf-8` : mime);
 
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
@@ -80,11 +84,26 @@ const routes: FastifyPluginAsync = async (app) => {
     return doc;
   }
 
+  async function sendFile(reply: FastifyReply, doc: typeof documents.$inferSelect) {
+    reply.header("Content-Type", contentType(doc.mimeType));
+    reply.header("Content-Disposition", `attachment; filename="${doc.name.replace(/["\\]/g, "")}"`);
+    reply.header("Cache-Control", "private, no-store");
+    return reply.send(await storage.get(doc.storageKey));
+  }
+
   app.get<{ Params: { id: string } }>("/:id/download", async (req, reply) => {
     const doc = await loadVisible(req, req.params.id);
-    reply.header("Content-Type", doc.mimeType);
-    reply.header("Content-Disposition", `attachment; filename="${doc.name.replace(/"/g, "")}"`);
-    return reply.send(await storage.get(doc.storageKey));
+    return sendFile(reply, doc);
+  });
+
+  /**
+   * A 5-minute link that opens one document in a browser or viewer without
+   * the session (the phone app uses it so people can read before signing).
+   */
+  app.post<{ Params: { id: string } }>("/:id/link", async (req) => {
+    const doc = await loadVisible(req, req.params.id);
+    const token = app.jwt.sign({ sub: req.user.sub, companyId: req.user.companyId, role: req.user.role, purpose: "view", doc: doc.id }, { expiresIn: "5m" });
+    return { path: `/documents/view?t=${token}` };
   });
 
   /**
@@ -102,6 +121,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .set({ signedAt: new Date(), signedName, signedIp: req.ip })
       .where(eq(documents.id, doc.id))
       .returning();
+    await completeSignTaskFor(doc.id, req.user.sub);
     return row;
   });
 
@@ -117,3 +137,25 @@ const routes: FastifyPluginAsync = async (app) => {
 };
 
 export default routes;
+
+/** Opens a document from a short-lived view link (no session needed). */
+export const documentViewRoutes: FastifyPluginAsync = async (app) => {
+  app.get<{ Querystring: { t?: string } }>("/", async (req, reply) => {
+    let claims: { doc?: string; purpose?: string; companyId: string };
+    try {
+      claims = app.jwt.verify(req.query.t ?? "");
+    } catch {
+      throw new HttpError(404, "This link has expired. Open the document again from Crewdesk.");
+    }
+    if (claims.purpose !== "view" || !claims.doc) throw new HttpError(404, "Not found");
+    const [doc] = await db
+      .select()
+      .from(documents)
+      .where(and(eq(documents.id, claims.doc), eq(documents.companyId, claims.companyId)));
+    if (!doc) notFound("Document");
+    reply.header("Content-Type", contentType(doc.mimeType));
+    reply.header("Content-Disposition", `inline; filename="${doc.name.replace(/["\\]/g, "")}"`);
+    reply.header("Cache-Control", "private, no-store");
+    return reply.send(await storage.get(doc.storageKey));
+  });
+};

@@ -149,12 +149,61 @@ const routes: FastifyPluginAsync = async (app) => {
       throw new HttpError(401, "Invalid email or password");
     }
 
+    return afterPassword(req, reply, user);
+  });
+
+  /** Once the password checks out: ask for the second factor, require setting it up, or start the session. */
+  const afterPassword = async (req: FastifyRequest, reply: FastifyReply, user: EmployeeRow) => {
     if (user.totpSecret) return { mfaRequired: true, mfaToken: issueToken(app, user, "mfa") };
     await clearFailures(user);
     if (twoFactorRequired(await companyPolicy(user.companyId), user.role as Role)) {
       return { mfaSetupRequired: true, setupToken: issueToken(app, user, "mfa-setup") };
     }
     return session(req, reply, user);
+  };
+
+  async function findInvite(token: string) {
+    const [row] = await db
+      .select({ invite: passwordResets, employee: employees, company: companies })
+      .from(passwordResets)
+      .innerJoin(employees, eq(employees.id, passwordResets.employeeId))
+      .innerJoin(companies, eq(companies.id, employees.companyId))
+      .where(
+        and(
+          eq(passwordResets.tokenHash, sha256(token)),
+          eq(passwordResets.purpose, "invite"),
+          isNull(passwordResets.usedAt),
+          gt(passwordResets.expiresAt, new Date()),
+        ),
+      );
+    if (!row || row.employee.status === "terminated") {
+      throw new HttpError(400, "This invite has expired or was already used. Ask your manager to send a new one.");
+    }
+    return row;
+  }
+
+  /** What the welcome page shows before the new hire picks a password. */
+  app.get<{ Querystring: { token?: string } }>("/invite", limited, async (req) => {
+    const { employee, company } = await findInvite(req.query.token ?? "");
+    return { firstName: employee.firstName, email: employee.email, company: company.name, startDate: employee.startDate };
+  });
+
+  /** New hire chooses a password from their invite, then continues like a normal sign-in. */
+  app.post("/accept-invite", limited, async (req, reply) => {
+    const body = parse(z.object({ token: z.string().min(10), password: passwordSchema }), req.body);
+    const { invite, employee } = await findInvite(body.token);
+    const [used] = await db
+      .update(passwordResets)
+      .set({ usedAt: new Date() })
+      .where(and(eq(passwordResets.id, invite.id), isNull(passwordResets.usedAt)))
+      .returning();
+    if (!used) throw new HttpError(400, "This invite was already used");
+    const [user] = await db
+      .update(employees)
+      .set({ passwordHash: await bcrypt.hash(body.password, 10), failedLoginCount: 0, lockedUntil: null })
+      .where(eq(employees.id, employee.id))
+      .returning();
+    return afterPassword(req, reply, user);
   });
 
   /** Step 2: the authenticator (or backup) code. */
@@ -307,7 +356,14 @@ const routes: FastifyPluginAsync = async (app) => {
     const [reset] = await db
       .update(passwordResets)
       .set({ usedAt: new Date() })
-      .where(and(eq(passwordResets.tokenHash, sha256(body.token)), isNull(passwordResets.usedAt), gt(passwordResets.expiresAt, new Date())))
+      .where(
+        and(
+          eq(passwordResets.tokenHash, sha256(body.token)),
+          eq(passwordResets.purpose, "reset"),
+          isNull(passwordResets.usedAt),
+          gt(passwordResets.expiresAt, new Date()),
+        ),
+      )
       .returning();
     if (!reset) throw new HttpError(400, "This reset link has expired or was already used. Ask for a new one.");
     await db

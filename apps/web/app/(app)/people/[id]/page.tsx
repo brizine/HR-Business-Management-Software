@@ -6,6 +6,8 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { DocumentList } from "@/components/documents";
+import { InviteResult } from "@/components/invite-result";
+import { OnboardingTask } from "@/components/onboarding-task";
 import { AvailabilityEditor } from "@/components/availability-editor";
 import { EmployeeFields, employeeBody } from "@/components/employee-form";
 
@@ -18,6 +20,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
   const tasks = useApi<any[]>(can("manager") ? `/onboarding/tasks?employeeId=${id}` : null);
   const templates = useApi<any[]>(can("admin") ? "/onboarding/templates" : null);
   const [editing, setEditing] = useState(false);
+  const [invite, setInvite] = useState<{ emailed: boolean; link: string } | null>(null);
   const { busy, error, run } = useAction();
   const e = emp.data;
   if (!e) return <ErrorBox error={emp.error} />;
@@ -62,6 +65,18 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
           </div>
         </div>
       )}
+      {can("admin") && !e.hasLogin && e.status !== "terminated" && (
+        <div className="card stack">
+          <div className="row">
+            <strong style={{ marginRight: 8 }}>Account</strong>
+            <span className="muted">{e.invitedAt ? `Invited ${fmtDate(e.invitedAt)}, hasn't set up their login yet.` : "No login yet."}</span>
+            <button className="btn" onClick={() => api(`/employees/${id}/invite`, { method: "POST" }).then((inv) => { setInvite(inv); emp.reload(); }, (err) => alert(err.message))}>
+              {e.invitedAt ? "Resend invite" : "Send invite"}
+            </button>
+          </div>
+          {invite && <InviteResult invite={invite} name={e.firstName} email={e.email} />}
+        </div>
+      )}
       {can("admin") && e.id !== me?.user.id && e.hasLogin && (
         <div className="card row">
           <strong style={{ marginRight: 8 }}>Account</strong>
@@ -90,12 +105,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
             <h2>Onboarding</h2>
             {tasks.data.length ? (
               <table><tbody>
-                {tasks.data.map((t) => (
-                  <tr key={t.id}>
-                    <td>{t.title}<div className="muted">{t.assignee} · due {fmtDate(t.dueDate)}</div></td>
-                    <td>{t.completedAt ? <Badge value="completed" /> : <button className="btn sm" onClick={() => api(`/onboarding/tasks/${t.id}/complete`, { method: "POST" }).then(tasks.reload)}>Mark done</button>}</td>
-                  </tr>
-                ))}
+                {tasks.data.map((t) => <OnboardingTask key={t.id} task={t} mode="manager" onChange={tasks.reload} />)}
               </tbody></table>
             ) : (
               <>

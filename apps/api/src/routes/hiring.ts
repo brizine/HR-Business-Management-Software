@@ -1,11 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 import { and, desc, eq } from "drizzle-orm";
-import { applicantSchema, applicantStageSchema, jobSchema } from "@crewdesk/shared";
-import { z } from "zod";
+import { applicantSchema, applicantStageSchema, hireSchema, jobSchema } from "@crewdesk/shared";
 import { db } from "../db";
 import { applicants, companies, employees, jobs } from "../db/schema";
-import { authenticate, requireRole } from "../lib/auth";
-import { notFound, parse } from "../lib/errors";
+import { authenticate, canManageAccount, requireRole } from "../lib/auth";
+import { sendInvite } from "../lib/invites";
+import { HttpError, notFound, parse } from "../lib/errors";
 import { notify, staffWithRole } from "../lib/notify";
 import { applyOnboardingTemplate } from "./onboarding";
 import { publicEmployee } from "./employees";
@@ -110,22 +110,27 @@ const routes: FastifyPluginAsync = async (app) => {
       return row;
     });
 
-    /** Converts an applicant into an onboarding employee, optionally applying a checklist template. */
+    /**
+     * Hires an applicant: creates their employee record (status "onboarding"),
+     * starts the chosen checklist, and emails them an invite to set up their
+     * login. The response includes the invite link in case email isn't set up.
+     */
     priv.post<{ Params: { id: string } }>("/applicants/:id/hire", { preHandler: requireRole("admin") }, async (req) => {
-      const body = parse(
-        z.object({
-          startDate: z.string().optional(),
-          title: z.string().optional(),
-          payRateCents: z.number().int().nonnegative().default(0),
-          onboardingTemplateId: z.string().uuid().optional(),
-        }),
-        req.body ?? {},
-      );
+      const body = parse(hireSchema, req.body ?? {});
+      if (!canManageAccount(req.user.role, body.role)) throw new HttpError(403, "Only the owner can hire someone as an admin");
       const [applicant] = await db
         .select()
         .from(applicants)
         .where(and(eq(applicants.id, req.params.id), eq(applicants.companyId, req.user.companyId)));
       if (!applicant) notFound("Applicant");
+      if (applicant.hiredEmployeeId) throw new HttpError(409, "This applicant was already hired");
+      if (body.managerId) {
+        const [mgr] = await db
+          .select()
+          .from(employees)
+          .where(and(eq(employees.id, body.managerId), eq(employees.companyId, req.user.companyId)));
+        if (!mgr) notFound("Manager");
+      }
       const [job] = await db.select().from(jobs).where(eq(jobs.id, applicant.jobId));
 
       const employee = await db.transaction(async (tx) => {
@@ -138,8 +143,12 @@ const routes: FastifyPluginAsync = async (app) => {
             email: applicant.email.toLowerCase(),
             phone: applicant.phone,
             title: body.title ?? job?.title,
-            department: job?.department,
+            department: body.department ?? job?.department,
+            role: body.role,
+            managerId: body.managerId ?? null,
+            payType: body.payType,
             payRateCents: body.payRateCents,
+            employmentType: body.employmentType,
             startDate: body.startDate,
             status: "onboarding",
           })
@@ -151,10 +160,12 @@ const routes: FastifyPluginAsync = async (app) => {
         return emp;
       });
 
-      if (body.onboardingTemplateId) {
-        await applyOnboardingTemplate(req.user.companyId, employee.id, body.onboardingTemplateId, body.startDate);
-      }
-      return publicEmployee(employee);
+      const tasks = body.onboardingTemplateId
+        ? await applyOnboardingTemplate(req.user.companyId, employee.id, body.onboardingTemplateId, req.user.sub)
+        : [];
+      const [me] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
+      const invite = body.sendInvite ? await sendInvite(employee, `${me.firstName} ${me.lastName}`) : null;
+      return { ...publicEmployee(employee), tasks: tasks.length, invite };
     });
   });
 };

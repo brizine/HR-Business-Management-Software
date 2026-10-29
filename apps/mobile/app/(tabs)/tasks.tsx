@@ -1,12 +1,16 @@
 import { Alert, View } from "react-native";
 import { api, fmtDate } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
+import { useAuth } from "@/lib/auth";
+import { OnboardingTaskItem } from "@/components/onboarding-task";
 import { Badge, Button, Card, Divider, Row, Screen, Txt } from "@/components/ui";
 
 export default function Tasks() {
   const onboarding = useApi<any[]>("/onboarding/tasks?open=true");
   const workOrders = useApi<any[]>("/work-orders?status=active&mine=true");
-  const reload = () => { onboarding.reload(); workOrders.reload(); };
+  const { can } = useAuth();
+  const waiting = useApi<any[]>(can("manager") ? "/onboarding/assigned" : null);
+  const reload = () => { onboarding.reload(); workOrders.reload(); waiting.reload(); };
 
   const setStatus = (id: string, status: string) =>
     api(`/work-orders/${id}`, { method: "PATCH", body: { status } }).then(reload, (e) => Alert.alert("Error", e.message));
@@ -14,16 +18,15 @@ export default function Tasks() {
   return (
     <Screen refreshing={onboarding.loading || workOrders.loading} onRefresh={reload}>
       {!!onboarding.data?.length && (
-        <Card title="Onboarding">
-          {onboarding.data.map((t) => (
-            <View key={t.id} style={{ gap: 6 }}>
-              <Divider />
-              <Txt style={{ fontWeight: "600" }}>{t.title}</Txt>
-              <Txt muted>Due {fmtDate(t.dueDate)}{t.requiresDocument ? " · upload document on the web" : ""}</Txt>
-              {t.assignee === "employee"
-                ? <Button title="Mark done" kind="secondary" onPress={() => api(`/onboarding/tasks/${t.id}/complete`, { method: "POST" }).then(reload)} />
-                : <Txt muted>Waiting on your {t.assignee}</Txt>}
-            </View>
+        <Card title="My onboarding checklist">
+          {onboarding.data.map((t) => <OnboardingTaskItem key={t.id} task={t} mode="self" onChange={reload} />)}
+        </Card>
+      )}
+      {!!waiting.data?.length && (
+        <Card title="Onboarding: waiting on you">
+          {waiting.data.map((t) => (
+            <OnboardingTaskItem key={t.id} mode="manager" onChange={reload}
+              task={{ ...t, title: t.title, subtitle: `${t.employee.name} · due ${fmtDate(t.dueDate)}` }} />
           ))}
         </Card>
       )}

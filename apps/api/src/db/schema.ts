@@ -64,6 +64,8 @@ export const employees = pgTable(
     payrollProviderEmployeeId: text("payroll_provider_employee_id"),
     /** When the person agreed to receive texts; null means no texts. */
     smsOptInAt: timestamp("sms_opt_in_at", { withTimezone: true }),
+    /** When the latest invite email was sent; null if they were never invited. */
+    invitedAt: timestamp("invited_at", { withTimezone: true }),
     /** Bumped to sign the person out of every device; sessions carry the version they were issued with. */
     tokenVersion: integer("token_version").notNull().default(0),
     failedLoginCount: integer("failed_login_count").notNull().default(0),
@@ -201,7 +203,11 @@ export interface OnboardingTaskTemplate {
   description?: string;
   assignee: "employee" | "manager" | "admin";
   dueInDays: number;
-  requiresDocument: boolean;
+  /** "none" | "upload" | "sign". Templates saved before this existed use requiresDocument. */
+  action?: "none" | "upload" | "sign";
+  /** For "sign": the company document to sign. */
+  documentId?: string | null;
+  requiresDocument?: boolean;
 }
 
 export const onboardingTemplates = pgTable("onboarding_templates", {
@@ -222,6 +228,10 @@ export const onboardingTasks = pgTable("onboarding_tasks", {
   description: text("description"),
   assignee: text("assignee").notNull().default("employee"),
   requiresDocument: boolean("requires_document").notNull().default(false),
+  /** "none" (check off), "upload" (done when they upload), "sign" (done when they sign documentId). */
+  action: text("action").notNull().default("none"),
+  /** The uploaded file, or the document to sign. */
+  documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
   dueDate: date("due_date"),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   completedById: uuid("completed_by_id").references(() => employees.id, { onDelete: "set null" }),
@@ -467,9 +477,11 @@ export const recoveryCodes = pgTable("recovery_codes", {
   createdAt: createdAt(),
 });
 
-/** Emailed password-reset links. Only a hash of the token is stored. */
+/** Emailed one-time links: password resets and new-hire invites. Only a hash of the token is stored. */
 export const passwordResets = pgTable("password_resets", {
   id: id(),
+  /** "reset" or "invite" */
+  purpose: text("purpose").notNull().default("reset"),
   employeeId: uuid("employee_id")
     .notNull()
     .references(() => employees.id, { onDelete: "cascade" }),
