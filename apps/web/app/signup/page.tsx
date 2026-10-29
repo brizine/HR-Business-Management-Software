@@ -21,8 +21,8 @@ export default function Signup() {
             e.preventDefault();
             const body = formValues(e.currentTarget);
             run(async () => {
-              const { token } = await api("/auth/signup", { body });
-              await signIn(token);
+              await api("/auth/signup", { body });
+              await signIn();
               router.replace("/");
             });
           }}

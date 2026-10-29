@@ -1,20 +1,16 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
-const TOKEN_KEY = "crewdesk.token";
+/**
+ * The website's session is an HttpOnly cookie set by the API: page scripts
+ * can't read it, so an injected script can't steal it. Every request sends
+ * this header; the API refuses cookie-authenticated changes without it, which
+ * stops other sites from making changes through a signed-in browser.
+ */
+const CLIENT_HEADER = { "x-crewdesk-client": "web" };
 
-export function getToken() {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function setToken(token: string | null) {
-  try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
-  } catch {}
-}
+// Sessions used to be kept in localStorage; clear any left over.
+try {
+  localStorage.removeItem("crewdesk.token");
+} catch {}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -23,15 +19,17 @@ export class ApiError extends Error {
 }
 
 /**
- * Calls the API. `token` overrides the stored session (used for the
- * short-lived tokens in the two-factor sign-in steps).
+ * Calls the API with the session cookie. `token` adds a bearer token instead
+ * (the short-lived tokens used during two-factor sign-in).
  */
 export async function api<T = any>(path: string, init: { method?: string; body?: unknown; token?: string } = {}): Promise<T> {
-  const token = init.token ?? getToken();
+  const token = init.token;
   const isForm = typeof FormData !== "undefined" && init.body instanceof FormData;
   const res = await fetch(API_URL + path, {
     method: init.method ?? (init.body ? "POST" : "GET"),
+    credentials: "include",
     headers: {
+      ...CLIENT_HEADER,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init.body && !isForm ? { "Content-Type": "application/json" } : {}),
     },
@@ -40,8 +38,7 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     // The session ended (signed out everywhere, password changed, account disabled): back to sign-in.
-    if (res.status === 401 && !init.token && token && typeof window !== "undefined" && !path.startsWith("/auth/login")) {
-      setToken(null);
+    if (res.status === 401 && !init.token && typeof window !== "undefined" && !path.startsWith("/auth/")) {
       window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
     }
     const detail = data.issues?.map((i: { path: string[]; message: string }) => `${i.path.join(".")}: ${i.message}`).join("; ");
@@ -53,7 +50,7 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
 
 /** Downloads an authenticated file (CSV export, document) via a blob URL. */
 export async function download(path: string, filename: string) {
-  const res = await fetch(API_URL + path, { headers: { Authorization: `Bearer ${getToken()}` } });
+  const res = await fetch(API_URL + path, { credentials: "include", headers: CLIENT_HEADER });
   if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => ({}))).error ?? res.statusText);
   const url = URL.createObjectURL(await res.blob());
   const a = document.createElement("a");

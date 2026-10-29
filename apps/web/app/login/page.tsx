@@ -20,8 +20,9 @@ function Login() {
   const [useBackup, setUseBackup] = useState(false);
   const { busy, error, run, setError } = useAction();
 
-  const finish = async (token: string) => {
-    await signIn(token);
+  /** The API has set the session cookie by now. */
+  const finish = async () => {
+    await signIn();
     router.replace(target);
   };
 
@@ -39,7 +40,7 @@ function Login() {
                 const res = await api("/auth/login", { body });
                 if (res.mfaRequired) setStep({ kind: "code", mfaToken: res.mfaToken });
                 else if (res.mfaSetupRequired) setStep({ kind: "setup", setupToken: res.setupToken });
-                else await finish(res.token);
+                else await finish();
               });
             }}>
               <label>Email<input name="email" type="email" required autoComplete="email" /></label>
@@ -62,7 +63,7 @@ function Login() {
               run(async () => {
                 const res = await api("/auth/login/mfa", { body: { code: String(code) }, token: step.mfaToken });
                 if (res.recoveryCodesLeft <= 2) alert(`You have ${res.recoveryCodesLeft} backup codes left. Make new ones under Settings → Security.`);
-                await finish(res.token);
+                await finish();
               }).then((ok) => {
                 if (!ok) (e.target as HTMLFormElement).reset();
               });
@@ -86,7 +87,7 @@ function Login() {
           <>
             <h1>Set up two-factor sign-in</h1>
             <p className="muted">Your company requires a code from your phone, in addition to your password, for your role. This takes about a minute.</p>
-            <TwoFactorSetup token={step.setupToken} onDone={({ token }) => token && finish(token)} />
+            <TwoFactorSetup token={step.setupToken} onDone={() => finish()} />
           </>
         )}
       </div>

@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync, FastifyRequest } from "fastify";
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import bcrypt from "bcryptjs";
 import { randomInt } from "node:crypto";
 import { and, count, eq, gt, isNull } from "drizzle-orm";
@@ -8,6 +8,8 @@ import { db } from "../db";
 import { companies, employees, passwordResets, recoveryCodes } from "../db/schema";
 import {
   TWO_FACTOR_POLICIES,
+  clearSessionCookie,
+  deliverSession,
   signOutEverywhere,
   authenticate,
   companyPolicy,
@@ -91,9 +93,9 @@ async function newRecoveryCodes(employeeId: string) {
 }
 
 const routes: FastifyPluginAsync = async (app) => {
-  const session = async (user: EmployeeRow) => {
+  const session = async (req: FastifyRequest, reply: FastifyReply, user: EmployeeRow) => {
     const [company] = await db.select().from(companies).where(eq(companies.id, user.companyId));
-    return { token: issueToken(app, user), user: publicEmployee(user), company };
+    return { ...deliverSession(req, reply, issueToken(app, user)), user: publicEmployee(user), company };
   };
 
   /**
@@ -101,7 +103,7 @@ const routes: FastifyPluginAsync = async (app) => {
    * business, so after the first company exists sign-up closes unless
    * ALLOW_SIGNUP=true (e.g. if you run Crewdesk for several companies).
    */
-  app.post("/signup", limited, async (req) => {
+  app.post("/signup", limited, async (req, reply) => {
     const body = parse(signupSchema, req.body);
     if (process.env.ALLOW_SIGNUP !== "true") {
       const [{ n }] = await db.select({ n: count() }).from(companies);
@@ -126,7 +128,7 @@ const routes: FastifyPluginAsync = async (app) => {
     });
     // The owner is asked to set up two-factor from the Security page; requiring it
     // here would make the very first sign-in a two-step setup.
-    return session(owner);
+    return session(req, reply, owner);
   });
 
   /**
@@ -134,7 +136,7 @@ const routes: FastifyPluginAsync = async (app) => {
    * short-lived token to submit the code with, or (if it's required but not
    * set up yet) a token that can only be used to set it up.
    */
-  app.post("/login", limited, async (req) => {
+  app.post("/login", limited, async (req, reply) => {
     const body = parse(loginSchema, req.body);
     const [user] = await db.select().from(employees).where(eq(employees.email, body.email.toLowerCase()));
     if (!user?.passwordHash || user.status === "terminated") {
@@ -152,11 +154,11 @@ const routes: FastifyPluginAsync = async (app) => {
     if (twoFactorRequired(await companyPolicy(user.companyId), user.role as Role)) {
       return { mfaSetupRequired: true, setupToken: issueToken(app, user, "mfa-setup") };
     }
-    return session(user);
+    return session(req, reply, user);
   });
 
   /** Step 2: the authenticator (or backup) code. */
-  app.post("/login/mfa", limited, async (req) => {
+  app.post("/login/mfa", limited, async (req, reply) => {
     const { code } = parse(z.object({ code: z.string().min(6).max(20) }), req.body);
     const user = await verifyToken(req, ["mfa"]);
     assertNotLocked(user);
@@ -170,7 +172,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .select({ n: count() })
       .from(recoveryCodes)
       .where(and(eq(recoveryCodes.employeeId, user.id), isNull(recoveryCodes.usedAt)));
-    return { ...(await session(fresh)), recoveryCodesLeft: remaining[0].n };
+    return { ...(await session(req, reply, fresh)), recoveryCodesLeft: remaining[0].n };
   });
 
   app.get("/me", { preHandler: authenticate }, async (req) => {
@@ -208,7 +210,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Confirms setup with a first code; returns backup codes (shown once) and, in the setup-required flow, a session. */
-  app.post("/mfa/enable", async (req) => {
+  app.post("/mfa/enable", async (req, reply) => {
     const { code } = parse(z.object({ code: z.string() }), req.body);
     const user = await verifyToken(req, ["session", "mfa-setup"]);
     if (!user.totpPendingSecret) throw new HttpError(400, "Start two-factor setup first");
@@ -220,7 +222,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .where(eq(employees.id, user.id))
       .returning();
     const codes = await newRecoveryCodes(user.id);
-    return { recoveryCodes: codes, ...(req.user.purpose === "mfa-setup" ? await session(updated) : {}) };
+    return { recoveryCodes: codes, ...(req.user.purpose === "mfa-setup" ? await session(req, reply, updated) : {}) };
   });
 
   /** Turns two-factor off (needs password and a current code), unless the company requires it. */
@@ -251,7 +253,7 @@ const routes: FastifyPluginAsync = async (app) => {
   // ---- Passwords and sessions ----
 
   /** Changes your own password. Other devices are signed out; this one gets a fresh session. */
-  app.post("/password", { preHandler: authenticate }, async (req) => {
+  app.post("/password", { preHandler: authenticate }, async (req, reply) => {
     const body = parse(z.object({ currentPassword: z.string(), newPassword: passwordSchema }), req.body);
     const [user] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
     if (user.passwordHash && !(await bcrypt.compare(body.currentPassword, user.passwordHash))) {
@@ -259,11 +261,18 @@ const routes: FastifyPluginAsync = async (app) => {
     }
     await db.update(employees).set({ passwordHash: await bcrypt.hash(body.newPassword, 10) }).where(eq(employees.id, user.id));
     const fresh = await signOutEverywhere(user.id);
-    return { token: issueToken(app, fresh) };
+    return deliverSession(req, reply, issueToken(app, fresh));
   });
 
-  app.post("/logout-all", { preHandler: authenticate }, async (req) => {
+  app.post("/logout-all", { preHandler: authenticate }, async (req, reply) => {
     await signOutEverywhere(req.user.sub);
+    clearSessionCookie(reply);
+    return { ok: true };
+  });
+
+  /** Signs out this browser (clears the session cookie). */
+  app.post("/logout", async (_req, reply) => {
+    clearSessionCookie(reply);
     return { ok: true };
   });
 

@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { hasRole, type Role } from "@crewdesk/shared";
-import { api, getToken, setToken } from "./api";
+import { api } from "./api";
 
 export interface Me {
   user: { id: string; firstName: string; lastName: string; email: string; role: Role };
@@ -11,8 +11,8 @@ export interface Me {
 interface AuthCtx {
   me: Me | null;
   ready: boolean;
-  signIn: (token: string) => Promise<void>;
-  signOut: () => void;
+  signIn: () => Promise<void>;
+  signOut: () => Promise<void>;
   can: (min: Role) => boolean;
 }
 
@@ -23,11 +23,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   const load = useCallback(async () => {
-    if (!getToken()) return setReady(true);
     try {
       setMe(await api<Me>("/auth/me"));
     } catch {
-      setToken(null);
+      setMe(null);
     } finally {
       setReady(true);
     }
@@ -37,12 +36,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     load();
   }, [load]);
 
-  const signIn = async (token: string) => {
-    setToken(token);
+  /** The API has just set the session cookie; load who's signed in. */
+  const signIn = async () => {
     await load();
   };
-  const signOut = () => {
-    setToken(null);
+  const signOut = async () => {
+    await api("/auth/logout", { method: "POST" }).catch(() => {});
     setMe(null);
   };
   const can = (min: Role) => !!me && hasRole(me.user.role, min);

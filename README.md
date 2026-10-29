@@ -50,6 +50,11 @@ pnpm start      # migrates the database, then serves everything on $PORT
 **SiteGround:** step-by-step guide in [docs/deploy-siteground.md](docs/deploy-siteground.md).
 The same two commands work on most Node.js hosts (Render, Railway, Fly.io).
 
+### Upgrading an existing install to encrypted documents
+
+Documents uploaded before encryption still open. To encrypt them in place, run once:
+`pnpm --filter @crewdesk/api encrypt-uploads` (with the same environment as the server).
+
 ## Running locally
 
 Requires Node 22+, pnpm 10+, and PostgreSQL 16 (or Docker).
@@ -98,6 +103,15 @@ Edit `apps/api/src/db/schema.ts`, then `pnpm --filter @crewdesk/api db:generate`
   profile. It also stops push notifications to that person's phones. Changing a password, email or
   role, or terminating someone, signs them out everywhere automatically.
 - **Immediate effect:** every request re-checks the account, so terminations and role changes apply at once.
+- **Encryption:** all traffic is HTTPS. Uploaded documents are encrypted with AES-256-GCM (a separate
+  key per file, from `ENCRYPTION_KEY`) before they're written to disk or a bucket. Passwords are
+  bcrypt-hashed and two-factor secrets are encrypted. Database backups are encrypted with a public key
+  whose private half stays offline (`pnpm backup:keygen`, or `openssl` as in the deploy guide).
+  Other database fields rely on the host's disk encryption.
+- **Website sessions** live in an `HttpOnly`, `SameSite` (and in production `Secure`) cookie that page
+  scripts can't read. Cookie-authenticated changes must carry the `X-Crewdesk-Client` header, which
+  other sites can't send, so forged cross-site requests are rejected. The phone app keeps its token in
+  the iOS Keychain / Android Keystore.
 - **Admin limits:** admins can't change the owner's or another admin's account or create admins; only
   the owner can. If someone loses their phone *and* backup codes, an admin (or the owner, for admins)
   can reset their two-factor from their profile; verify it's really them first.

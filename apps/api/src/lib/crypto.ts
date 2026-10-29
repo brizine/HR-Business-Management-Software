@@ -1,14 +1,17 @@
 import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes } from "node:crypto";
 
 /**
- * Encrypts small secrets at rest (authenticator-app secrets) with AES-256-GCM.
- * The key comes from ENCRYPTION_KEY, or JWT_SECRET if that isn't set. Set
- * ENCRYPTION_KEY separately in production: changing the key makes stored
- * secrets unreadable, so everyone would have to set up two-factor again.
+ * Encryption at rest with AES-256-GCM. Keys are derived from ENCRYPTION_KEY
+ * (or JWT_SECRET if that isn't set). Set ENCRYPTION_KEY separately in
+ * production and never change it: data encrypted with the old key, such as
+ * two-factor secrets and uploaded documents, can't be read with a new one.
  */
-function key() {
-  const material = process.env.ENCRYPTION_KEY ?? process.env.JWT_SECRET ?? "dev-only-secret";
-  return Buffer.from(hkdfSync("sha256", material, "crewdesk", "secrets-at-rest-v1", 32));
+function masterKey() {
+  return process.env.ENCRYPTION_KEY ?? process.env.JWT_SECRET ?? "dev-only-secret";
+}
+
+function key(purpose = "secrets-at-rest-v1", salt: Buffer | string = "crewdesk") {
+  return Buffer.from(hkdfSync("sha256", masterKey(), salt, purpose, 32));
 }
 
 export function encrypt(plain: string) {
@@ -30,3 +33,37 @@ export function decrypt(stored: string) {
 export const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 
 export const randomToken = (bytes = 32) => randomBytes(bytes).toString("base64url");
+
+// ---- Files ----
+
+/** Marks an encrypted file; files without it are from before encryption and are read as-is. */
+const FILE_MAGIC = Buffer.from("CDENC1");
+
+export const isEncryptedFile = (buf: Buffer) => buf.subarray(0, FILE_MAGIC.length).equals(FILE_MAGIC);
+
+/**
+ * Encrypts a file with its own key (derived from the master key and a random
+ * salt). `bindTo` (the storage key) is authenticated, so an encrypted file
+ * can't be swapped in for another document's.
+ * Layout: magic(6) | salt(16) | iv(12) | tag(16) | ciphertext
+ */
+export function encryptFile(plain: Buffer, bindTo: string) {
+  const salt = randomBytes(16);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key("documents-v1", salt), iv);
+  cipher.setAAD(Buffer.from(bindTo));
+  const data = Buffer.concat([cipher.update(plain), cipher.final()]);
+  return Buffer.concat([FILE_MAGIC, salt, iv, cipher.getAuthTag(), data]);
+}
+
+export function decryptFile(stored: Buffer, bindTo: string) {
+  if (!isEncryptedFile(stored)) return stored;
+  let o = FILE_MAGIC.length;
+  const salt = stored.subarray(o, (o += 16));
+  const iv = stored.subarray(o, (o += 12));
+  const tag = stored.subarray(o, (o += 16));
+  const decipher = createDecipheriv("aes-256-gcm", key("documents-v1", salt), iv);
+  decipher.setAAD(Buffer.from(bindTo));
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(stored.subarray(o)), decipher.final()]);
+}

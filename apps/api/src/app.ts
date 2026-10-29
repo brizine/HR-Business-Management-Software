@@ -1,9 +1,11 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
+import cookie from "@fastify/cookie";
 import jwt from "@fastify/jwt";
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import { registerErrorHandler } from "./lib/errors";
+import { SESSION_COOKIE } from "./lib/auth";
 import authRoutes from "./routes/auth";
 import employeeRoutes from "./routes/employees";
 import documentRoutes from "./routes/documents";
@@ -47,7 +49,9 @@ export async function buildApp(opts: AppOptions = {}) {
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
     credentials: true,
   });
-  await app.register(jwt, { secret: secret ?? "dev-only-secret", sign: { expiresIn: "7d" } });
+  await app.register(cookie);
+  // The website's session lives in an HttpOnly cookie; the phone app sends a bearer token.
+  await app.register(jwt, { secret: secret ?? "dev-only-secret", sign: { expiresIn: "7d" }, cookie: { cookieName: SESSION_COOKIE, signed: false } });
   await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024 } });
   // Opt-in per route (sign-in endpoints set config.rateLimit).
   await app.register(rateLimit, { global: false });

@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { api, fmtDate, setToken } from "@/lib/api";
+import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead } from "@/components/ui";
@@ -85,8 +85,8 @@ function PasswordCard() {
         const f = new FormData(form);
         if (f.get("newPassword") !== f.get("confirm")) return setError("The new passwords don't match");
         run(async () => {
-          const res = await api("/auth/password", { body: { currentPassword: f.get("currentPassword"), newPassword: f.get("newPassword") } });
-          setToken(res.token);
+          // The API sends this browser a fresh session cookie; other devices are signed out.
+          await api("/auth/password", { body: { currentPassword: f.get("currentPassword"), newPassword: f.get("newPassword") } });
           form.reset();
           setDone(true);
         });
@@ -117,7 +117,7 @@ function SessionsCard() {
       <ErrorBox error={error} />
       <button className="btn danger" disabled={busy} onClick={() => confirm("Sign out of Crewdesk on every device?") && run(async () => {
         await api("/auth/logout-all", { method: "POST" });
-        signOut();
+        await signOut();
         router.replace("/login");
       })}>Sign out everywhere</button>
     </div>

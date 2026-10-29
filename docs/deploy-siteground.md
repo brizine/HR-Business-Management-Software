@@ -89,12 +89,13 @@ replaced on redeploy.
 | --- | --- |
 | `DATABASE_URL` | From step 2 |
 | `JWT_SECRET` | A long random string (e.g. 64 random letters/numbers). Keep it secret. |
-| `ENCRYPTION_KEY` | Another long random string. Encrypts two-factor secrets; never change it after launch |
+| `ENCRYPTION_KEY` | Another long random string. Encrypts uploaded documents and two-factor secrets. **Never change it after launch, and keep a copy offline** (see step 9): without it, uploaded documents can't be opened |
 | `JOBS_SECRET` | Another long random string (used by the cron job in step 7) |
 | `WEB_URL` | `https://app.prospray.biz` |
 | `PUBLIC_API_URL` | `https://app.prospray.biz/api` |
 | `CORS_ORIGINS` | `https://app.prospray.biz` |
 | `UPLOAD_DIR` *or* `S3_*` | From step 4 |
+| `BACKUP_PUBLIC_KEY`, `BACKUP_DIR` | From step 9 |
 | `SMTP_URL`, `EMAIL_FROM` | From step 3 |
 | `TWILIO_*` | Optional, for text messages (see README) |
 
@@ -141,16 +142,52 @@ Push notifications and the camera scanner need the Crewdesk app built for your s
 Everything except push and the in-app scanner also works in the phone's browser at your Crewdesk
 address. QR labels open in the browser without the app.
 
-## 9. Backups
+## 9. Encrypted backups
 
-- SiteGround's daily backups cover your files. Ask SiteGround support whether they include
-  PostgreSQL databases on your plan; if not, add a nightly cron job (adjust names and paths):
+Crewdesk makes a nightly, encrypted copy of the database. Backups are locked with a **public key**;
+only the matching **private key**, which never goes on the server, can open them. So a leaked backup,
+or even a broken-into server, doesn't expose old backups.
 
-  ```
-  PGPASSWORD='DB_PASSWORD' pg_dump -h localhost -U USER DATABASE | gzip > /home/customer/backups/crewdesk-$(date +\%F).sql.gz
-  ```
+**a. Make the key pair on your own computer** (Mac: Terminal; Windows: Git Bash). Choose a strong
+passphrase when asked:
 
-- If uploads are in `UPLOAD_DIR`, make sure that folder is backed up too (R2 is durable on its own).
+```
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -aes256 -out crewdesk-backup-private-key.pem
+openssl pkey -in crewdesk-backup-private-key.pem -pubout -outform DER | base64 | tr -d '\n'; echo
+```
+
+The second command prints one long line: that's the **public key**.
+
+**b. Store the private key and its passphrase offline**, e.g. in your password manager plus a printed
+copy in the office safe. Store `ENCRYPTION_KEY` the same way: you'd need it to open uploaded
+documents after a full restore. Nobody, including SiteGround, can recover these for you.
+
+**c. Add to the Node.js project's environment variables:**
+
+| Name | Value |
+| --- | --- |
+| `BACKUP_PUBLIC_KEY` | The long line from step a |
+| `BACKUP_DIR` | A folder outside the app's code, e.g. `/home/customer/crewdesk-backups` (or use the R2 bucket from step 4; backups then go under `backups/`) |
+
+**d. Add a nightly cron job** (Devs → Cron Jobs, e.g. 2:15 AM):
+
+```
+curl -s -X POST -H "X-Jobs-Secret: YOUR_JOBS_SECRET" https://app.prospray.biz/api/jobs/backup > /dev/null
+```
+
+The newest 30 backups are kept (`BACKUP_KEEP` changes that). Run it once by hand and check that a
+`crewdesk-….dump.enc` file appears. If it says `pg_dump` isn't found, ask SiteGround support for its
+path and set `PG_DUMP_PATH`.
+
+**Restoring** (on a computer with Node 22 and this repo, after `pnpm install && pnpm build`):
+
+```
+pnpm backup:decrypt crewdesk-2026-11-02T07-15-00.dump.enc crewdesk-backup-private-key.pem
+pg_restore --no-owner -d "postgres://USER:PASSWORD@HOST:5432/NEW_DATABASE" crewdesk-2026-11-02T07-15-00.dump
+```
+
+Uploaded documents are already encrypted, so the upload folder (or bucket) can be backed up as-is,
+e.g. by SiteGround's own backups. Restoring them needs the same `ENCRYPTION_KEY`.
 
 ## Troubleshooting
 

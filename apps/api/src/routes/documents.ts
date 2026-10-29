@@ -42,7 +42,7 @@ const routes: FastifyPluginAsync = async (app) => {
 
     const buf = await file.toBuffer();
     const key = `${req.user.companyId}/${randomUUID()}-${file.filename.replace(/[^\w.-]/g, "_")}`;
-    await storage.put(key, buf, file.mimetype);
+    await storage.put(key, buf);
 
     const [row] = await db
       .insert(documents)

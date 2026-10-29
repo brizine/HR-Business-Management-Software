@@ -12,11 +12,13 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts",
     "db:seed": "tsx --env-file-if-exists=.env src/db/seed.ts",
-    "jobs:run": "tsx --env-file-if-exists=.env src/jobs.ts"
+    "jobs:run": "tsx --env-file-if-exists=.env src/jobs.ts",
+    "encrypt-uploads": "tsx --env-file-if-exists=.env src/encrypt-uploads.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1159.0",
     "@crewdesk/shared": "workspace:*",
+    "@fastify/cookie": "^11.1.5",
     "@fastify/cors": "^11.1.0",
     "@fastify/jwt": "^10.0.0",
     "@fastify/multipart": "^9.2.1",

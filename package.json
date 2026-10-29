@@ -11,7 +11,10 @@
     "build": "pnpm --filter @crewdesk/web build:prod && pnpm --filter @crewdesk/api build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "start": "NODE_ENV=production node --env-file-if-exists=apps/api/.env apps/api/dist/main.js"
+    "start": "NODE_ENV=production node --env-file-if-exists=apps/api/.env apps/api/dist/main.js",
+    "backup:keygen": "node apps/api/dist/backup-cli.js keygen",
+    "backup:run": "node --env-file-if-exists=apps/api/.env apps/api/dist/backup-cli.js run",
+    "backup:decrypt": "node apps/api/dist/backup-cli.js decrypt"
   },
   "engines": {
     "node": ">=22"

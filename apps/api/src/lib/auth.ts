@@ -32,6 +32,34 @@ declare module "@fastify/jwt" {
 type EmployeeRow = typeof employees.$inferSelect;
 
 export const SESSION_TTL = "7d";
+const SESSION_TTL_SECONDS = 7 * 24 * 3600;
+
+export const SESSION_COOKIE = "crewdesk_session";
+/** The website sends this on every request; other sites can't (CORS blocks custom headers from them). */
+export const WEB_CLIENT_HEADER = "x-crewdesk-client";
+
+const isWebClient = (req: FastifyRequest) => req.headers[WEB_CLIENT_HEADER] === "web";
+
+/**
+ * Hands a new session to the client. The website gets an HttpOnly cookie
+ * that page scripts can't read (so a script injected into a page can't steal
+ * it); the phone app gets the token in the body to keep in its secure storage.
+ */
+export function deliverSession(req: FastifyRequest, reply: FastifyReply, token: string) {
+  if (!isWebClient(req)) return { token };
+  reply.setCookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_TTL_SECONDS,
+  });
+  return {};
+}
+
+export function clearSessionCookie(reply: FastifyReply) {
+  reply.clearCookie(SESSION_COOKIE, { path: "/" });
+}
 
 export function issueToken(app: FastifyInstance, e: EmployeeRow, purpose: TokenPurpose = "session") {
   return app.jwt.sign(
@@ -52,6 +80,11 @@ export async function verifyToken(req: FastifyRequest, allowed: TokenPurpose[]) 
     throw new HttpError(401, "Not signed in");
   }
   if (!allowed.includes(req.user.purpose ?? "session")) throw new HttpError(401, "Not signed in");
+  // Cookie-authenticated changes must come from the website itself, not a form on another site.
+  const viaCookie = !req.headers.authorization;
+  if (viaCookie && !["GET", "HEAD", "OPTIONS"].includes(req.method) && !isWebClient(req)) {
+    throw new HttpError(403, "Request blocked: missing the Crewdesk client header");
+  }
   const [row] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
   if (!row || row.status === "terminated" || row.tokenVersion !== (req.user.ver ?? 0)) {
     throw new HttpError(401, "Your session has ended. Please sign in again.");
