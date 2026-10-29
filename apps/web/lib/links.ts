@@ -5,6 +5,7 @@ export function hrefFor(link: NotificationLink | null | undefined): string | nul
   switch (link?.screen) {
     case "pto": return "/time-off";
     case "time": return "/time";
+    case "schedule": return "/schedule";
     case "tasks": return "/work-orders?mine=true";
     case "documents": return "/documents";
     case "onboarding": return "/onboarding";

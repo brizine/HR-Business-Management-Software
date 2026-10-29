@@ -6,6 +6,7 @@ import { api, fmtDate, fmtTime } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
 import { Badge, Button, Card, Divider, ErrorText, Row, Screen, Txt } from "@/components/ui";
+import { shiftDay, shiftTimes } from "@/lib/shifts";
 
 function weekStartIso() {
   const d = new Date();
@@ -30,6 +31,8 @@ export default function Clock() {
   const { me } = useAuth();
   const status = useApi("/time/status");
   const week = useApi<any[]>(`/time/entries?from=${encodeURIComponent(weekStartIso())}`);
+  const shifts = useApi<{ mine: any[] }>("/shifts/mine");
+  const next = shifts.data?.mine[0];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, tick] = useState(0);
@@ -55,7 +58,7 @@ export default function Clock() {
   };
 
   return (
-    <Screen refreshing={status.loading} onRefresh={() => { status.reload(); week.reload(); }}>
+    <Screen refreshing={status.loading} onRefresh={() => { status.reload(); week.reload(); shifts.reload(); }}>
       <Txt style={{ fontSize: 22, fontWeight: "700" }}>Hi, {me?.user.firstName}</Txt>
       <Card>
         <View style={{ alignItems: "center", gap: 6, paddingVertical: 10 }}>
@@ -73,6 +76,11 @@ export default function Clock() {
           )}
         </View>
         <ErrorText error={error} />
+        {next && !open && (
+          <Txt muted style={{ textAlign: "center" }}>
+            Next shift: {shiftDay(next.shift.startsAt)}, {shiftTimes(next.shift)}{next.assetName ? ` · ${next.assetName}` : ""}
+          </Txt>
+        )}
         <Button title={open ? "Clock out" : "Clock in"} kind={open ? "danger" : "primary"} onPress={punch} busy={busy} />
       </Card>
       <Card title="This week">

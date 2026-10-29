@@ -105,5 +105,19 @@ const [oil] = await db
 
 await db.insert(s.workOrders).values({ companyId, number: 1001, assetId: truck.id, scheduleId: oil.id, title: "Oil & filter change", priority: "medium", assignedToId: tech.id, reportedById: mgr.id });
 
+// This week's published schedule, plus one open shift up for grabs.
+const thisMonday = new Date();
+thisMonday.setUTCHours(0, 0, 0, 0);
+thisMonday.setUTCDate(thisMonday.getUTCDate() - ((thisMonday.getUTCDay() + 6) % 7));
+const at = (day: number, hourUtc: number) => new Date(thisMonday.getTime() + day * 86_400_000 + hourUtc * 3_600_000);
+for (let d = 0; d < 5; d++) {
+  await db.insert(s.shifts).values([
+    { companyId, employeeId: crew.id, startsAt: at(d, 13), endsAt: at(d, 21), position: "Driver", location: "North yard", assetId: truck.id, status: "published" },
+    { companyId, employeeId: tech.id, startsAt: at(d, 14), endsAt: at(d, 22), position: "Mechanic", location: "Shop", status: "published" },
+    { companyId, employeeId: mgr.id, startsAt: at(d, 12), endsAt: at(d, 20), position: "Crew lead", status: "published" },
+  ]);
+}
+await db.insert(s.shifts).values({ companyId, startsAt: at(5, 14), endsAt: at(5, 20), position: "Mower operator", location: "Riverside HOA", assetId: mower.id, status: "published" });
+
 console.log("Seeded demo company. Sign in as owner@demo.test / password123");
 await pool.end();

@@ -124,3 +124,26 @@ label.check input { width: auto; }
 /* Action cells keep table layout; space their buttons inline instead of flexing the cell. */
 td.row { display: table-cell; white-space: nowrap; }
 td.row > * + * { margin-left: 6px; }
+
+/* Schedule grid */
+table.schedule { min-width: 960px; table-layout: fixed; }
+table.schedule th:first-child, table.schedule td:first-child { width: 150px; padding-left: 14px; }
+table.schedule th:last-child, table.schedule td:last-child { width: 64px; text-align: right; padding-right: 14px; }
+table.schedule th.today { color: var(--primary); }
+table.schedule td { border-left: 1px solid var(--border); }
+table.schedule td:first-child { border-left: 0; }
+tr.openrow td { background: var(--bg); }
+.shiftcell { padding: 6px; position: relative; min-height: 48px; }
+.shift {
+  font-size: 12px; line-height: 1.35; padding: 5px 7px; margin-bottom: 5px; border-radius: 6px;
+  background: var(--info-bg); border: 1px solid transparent; overflow: hidden; text-overflow: ellipsis;
+}
+.shift.mine { border-color: var(--primary); }
+.shift.open { background: var(--warn-bg); }
+.shift.draft { background: transparent; border: 1px dashed var(--muted); }
+.addshift {
+  width: 100%; border: 1px dashed var(--border); background: none; color: var(--muted); border-radius: 6px;
+  cursor: pointer; opacity: 0; font: inherit; padding: 2px;
+}
+.shiftcell:hover .addshift { opacity: 1; }
+@media (hover: none) { .addshift { opacity: 1; } }

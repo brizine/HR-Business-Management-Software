@@ -1,12 +1,15 @@
-import { and, eq, isNull, lt } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, lt, lte } from "drizzle-orm";
 import { computeDue } from "@crewdesk/shared";
 import { db } from "../db";
-import { assets, employees, maintenanceSchedules, notificationLog, timeEntries } from "../db/schema";
+import { assets, companies, employees, maintenanceSchedules, notificationLog, shifts, timeEntries } from "../db/schema";
+import { fmtTime } from "./tz";
 import { notify, staffWithRole } from "./notify";
 
 /** Hours on the clock after which we assume someone forgot to clock out. */
 export const FORGOT_CLOCK_OUT_HOURS = 12;
 const EXPIRY_WARNING_DAYS = 30;
+/** How far ahead of a shift the reminder goes out. */
+export const SHIFT_REMINDER_MINUTES = 60;
 
 /** Records `key` and returns true the first time only; safe across multiple API instances. */
 async function firstTime(companyId: string, key: string) {
@@ -82,6 +85,30 @@ export async function runScheduledChecks(now = new Date()) {
       category: "time",
       title: `${employee.firstName} ${employee.lastName} may have forgotten to clock out`,
       body: `Clocked in for over ${FORGOT_CLOCK_OUT_HOURS} hours.`,
+      link: { screen: "time" },
+    });
+    sent++;
+  }
+
+  // Shift reminders. Keyed on the start time so a rescheduled shift gets a fresh reminder.
+  const upcoming = await db
+    .select({ shift: shifts, tz: companies.timezone })
+    .from(shifts)
+    .innerJoin(companies, eq(companies.id, shifts.companyId))
+    .where(
+      and(
+        eq(shifts.status, "published"),
+        isNotNull(shifts.employeeId),
+        gt(shifts.startsAt, now),
+        lte(shifts.startsAt, new Date(now.getTime() + SHIFT_REMINDER_MINUTES * 60_000)),
+      ),
+    );
+  for (const { shift, tz } of upcoming) {
+    if (!(await firstTime(shift.companyId, `shift:${shift.id}:${shift.employeeId}:${shift.startsAt.toISOString()}`))) continue;
+    notify(shift.companyId, [shift.employeeId], {
+      category: "schedule",
+      title: `Your shift starts at ${fmtTime(shift.startsAt, tz)}`,
+      body: [shift.position, shift.location].filter(Boolean).join(" · ") || "Don't forget to clock in.",
       link: { screen: "time" },
     });
     sent++;

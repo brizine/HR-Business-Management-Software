@@ -3,7 +3,7 @@ import { and, desc, eq, gte, inArray, isNull, lt } from "drizzle-orm";
 import { clockInSchema, entryHours, summarizeHours, timeEntryEditSchema } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
-import { employees, ptoLedger, ptoPolicies, timeEntries } from "../db/schema";
+import { employees, ptoLedger, ptoPolicies, shifts, timeEntries } from "../db/schema";
 import { authenticate, isManager, requireRole } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 
@@ -107,9 +107,14 @@ const routes: FastifyPluginAsync = async (app) => {
       .from(timeEntries)
       .where(and(...filters));
     const staff = await db.select().from(employees).where(eq(employees.companyId, req.user.companyId));
+    const shiftFilters = [eq(shifts.companyId, req.user.companyId), eq(shifts.status, "published")];
+    if (q.from) shiftFilters.push(gte(shifts.startsAt, new Date(q.from)));
+    if (q.to) shiftFilters.push(lt(shifts.startsAt, new Date(q.to)));
+    const scheduled = await db.select().from(shifts).where(and(...shiftFilters));
     return staff
       .map((e) => {
         const mine = entries.filter((t) => t.employeeId === e.id);
+        const myShifts = scheduled.filter((s) => s.employeeId === e.id);
         return {
           employeeId: e.id,
           name: `${e.firstName} ${e.lastName}`,
@@ -117,9 +122,10 @@ const routes: FastifyPluginAsync = async (app) => {
           unapproved: mine.filter((t) => !t.approvedAt).length,
           clockedIn: mine.some((t) => !t.clockOut),
           ...summarizeHours(mine),
+          scheduledHours: Math.round(myShifts.reduce((h, s) => h + entryHours({ clockIn: s.startsAt, clockOut: s.endsAt }), 0) * 100) / 100,
         };
       })
-      .filter((r) => r.entries > 0);
+      .filter((r) => r.entries > 0 || r.scheduledHours > 0);
   });
 
   /** Managers correct missed punches. Editing clears prior approval. */

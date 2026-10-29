@@ -12,6 +12,7 @@ const NAV: { section: string; items: { href: string; label: string; min?: Role }
     section: "People",
     items: [
       { href: "/people", label: "Team" },
+      { href: "/schedule", label: "Schedule" },
       { href: "/time", label: "Time clock" },
       { href: "/time-off", label: "Time off" },
       { href: "/documents", label: "Documents" },

@@ -83,10 +83,11 @@ function ManagerView() {
         </div>
         {sheets.data?.length ? (
           <div className="tablewrap"><table>
-            <thead><tr><th>Employee</th><th>Regular</th><th>Overtime</th><th>Total</th><th>Unapproved</th><th /></tr></thead>
+            <thead><tr><th>Employee</th><th>Scheduled</th><th>Regular</th><th>Overtime</th><th>Total</th><th>Unapproved</th><th /></tr></thead>
             <tbody>{sheets.data.map((s) => (
               <tr key={s.employeeId}>
                 <td>{s.name} {s.clockedIn && <Badge value="active" />}</td>
+                <td className="muted">{s.scheduledHours ? s.scheduledHours.toFixed(2) : "—"}</td>
                 <td>{s.regularHours.toFixed(2)}</td>
                 <td style={{ color: s.overtimeHours ? "var(--warn)" : undefined }}>{s.overtimeHours.toFixed(2)}</td>
                 <td><strong>{s.totalHours.toFixed(2)}</strong></td>

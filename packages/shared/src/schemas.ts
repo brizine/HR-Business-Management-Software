@@ -203,3 +203,29 @@ export const deviceSchema = z.object({
   token: z.string().regex(/^Expo(nent)?PushToken\[[^\]]+\]$/, "Not an Expo push token"),
   platform: z.enum(["ios", "android", "web"]),
 });
+
+const MAX_SHIFT_HOURS = 24;
+
+export const shiftBaseSchema = z.object({
+  employeeId: z.string().uuid().nullable().optional(),
+  startsAt: z.string().datetime({ offset: true }),
+  endsAt: z.string().datetime({ offset: true }),
+  position: z.string().optional(),
+  location: z.string().optional(),
+  assetId: z.string().uuid().nullable().optional(),
+  notes: z.string().optional(),
+});
+
+export const shiftSchema = shiftBaseSchema
+  .refine((s) => Date.parse(s.endsAt) > Date.parse(s.startsAt), { message: "Shift must end after it starts", path: ["endsAt"] })
+  .refine((s) => Date.parse(s.endsAt) - Date.parse(s.startsAt) <= MAX_SHIFT_HOURS * 3_600_000, {
+    message: `Shifts can be at most ${MAX_SHIFT_HOURS} hours`,
+    path: ["endsAt"],
+  });
+export type ShiftInput = z.infer<typeof shiftSchema>;
+
+/** A date range [from, to) used for week views, publishing and copying. */
+export const shiftRangeSchema = z.object({
+  from: z.string().datetime({ offset: true }),
+  to: z.string().datetime({ offset: true }),
+});

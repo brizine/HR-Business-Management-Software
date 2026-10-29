@@ -59,6 +59,7 @@ export function routeFor(link: NotificationLink | null | undefined): string | nu
   switch (link?.screen) {
     case "pto": return "/time-off";
     case "time": return "/";
+    case "schedule": return "/schedule";
     case "tasks":
     case "onboarding": return "/tasks";
     case "documents": return "/profile";

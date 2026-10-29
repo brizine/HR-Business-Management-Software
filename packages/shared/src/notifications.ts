@@ -5,6 +5,7 @@
 export type NotificationLink =
   | { screen: "pto" }
   | { screen: "time" }
+  | { screen: "schedule" }
   | { screen: "tasks" }
   | { screen: "documents" }
   | { screen: "onboarding" }
@@ -12,7 +13,7 @@ export type NotificationLink =
   | { screen: "asset"; id: string }
   | { screen: "work-order"; id: string; assetId: string };
 
-export const NOTIFICATION_CATEGORIES = ["pto", "time", "fleet", "documents", "onboarding", "hiring"] as const;
+export const NOTIFICATION_CATEGORIES = ["pto", "time", "schedule", "fleet", "documents", "onboarding", "hiring"] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
 /** Expo push tokens look like ExponentPushToken[xxxx] or ExpoPushToken[xxxx]. */

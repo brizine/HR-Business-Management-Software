@@ -356,3 +356,26 @@ export const notificationLog = pgTable("notification_log", {
   companyId: companyId(),
   createdAt: createdAt(),
 });
+
+export const shifts = pgTable(
+  "shifts",
+  {
+    id: id(),
+    companyId: companyId(),
+    /** Null means an open shift any employee can claim. */
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    position: text("position"),
+    location: text("location"),
+    /** Vehicle or equipment the employee takes on this shift. */
+    assetId: uuid("asset_id").references(() => assets.id, { onDelete: "set null" }),
+    notes: text("notes"),
+    /** Drafts are visible to managers only until the week is published. */
+    status: text("status").notNull().default("draft"),
+    dropRequestedAt: timestamp("drop_requested_at", { withTimezone: true }),
+    dropReason: text("drop_reason"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("shifts_company_time_idx").on(t.companyId, t.startsAt), index("shifts_employee_idx").on(t.employeeId, t.startsAt)],
+);

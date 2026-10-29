@@ -19,6 +19,7 @@ packages/
 | --- | --- |
 | **People** | Employee directory and profiles, roles (owner / admin / manager / employee), pay info hidden from non-managers |
 | **Documents** | Upload per employee, per asset or company-wide; typed-name e-signature with timestamp + IP |
+| **Scheduling** | Weekly schedule grid, draft → publish, copy last week, open shifts employees can pick up, drop requests with manager approval, vehicle/equipment assigned per shift, double-booking prevention, time-off and overtime warnings, reminders an hour before each shift, scheduled vs. worked hours on timesheets. See [Scheduling](#scheduling) |
 | **Time clock** | Clock in/out from phone or web with GPS, live "who's on the clock", weekly timesheets with FLSA overtime, manager punch edits and approvals |
 | **Time off** | Multiple policies, accrual per hour worked with caps, grants/adjustments ledger, request → approve/deny, balance checks |
 | **Hiring** | Job postings, public careers page (`/careers/<companyId>`), applicant pipeline board, one-click hire → employee |
@@ -69,6 +70,25 @@ pnpm typecheck
 
 Edit `apps/api/src/db/schema.ts`, then `pnpm --filter @crewdesk/api db:generate` and `pnpm db:migrate`.
 
+## Scheduling
+
+Managers build the week on the **Schedule** page: click **+** in any cell to add a shift (an end
+time earlier than the start means it runs past midnight), or **Copy last week** to start from the
+previous schedule. New shifts are **drafts** that only managers can see (dashed outline) until
+**Publish**, which notifies everyone with shifts that week.
+
+- **Conflicts:** double-booking someone is blocked. Scheduling over approved time off, or assigning
+  a vehicle that's in the shop, saves but shows a warning. Weekly totals over 40 hours are flagged.
+- **Open shifts:** leave "Who" empty and anyone can pick it up from the web or the app's Schedule
+  tab. The first person to claim it gets it.
+- **Dropping a shift:** employees ask to drop a published shift; if a manager approves, it becomes
+  an open shift and the team is notified.
+- **Time clock:** the app shows your next shift on the Clock tab, and timesheets show scheduled
+  next to worked hours.
+
+Shift times are stored as exact instants and shown in each viewer's local time. Copying a week
+moves shifts by exactly 7 days, so a copy across a daylight-saving change shifts by an hour.
+
 ## Notifications
 
 Every alert is saved to the recipient's inbox (bell icon on web and mobile) and pushed to any
@@ -88,6 +108,12 @@ phones they're signed in on. Nobody is notified about their own actions.
 | Maintenance due soon / overdue *(scheduled)* | Managers and the asset's assigned driver; once per service interval |
 | Registration / insurance expiring within 30 days *(scheduled)* | Managers and above |
 | Clocked in over 12 hours *(scheduled)* | The employee and their manager |
+| Schedule published | Each person with shifts that week (one alert each) |
+| Published shift changed, reassigned or removed | The people affected |
+| Open shifts posted, or a dropped shift reopened | All employees |
+| Open shift picked up / drop requested | The employee's manager |
+| Drop request approved / denied | The employee |
+| Shift starting within the hour *(scheduled)* | The employee |
 
 Scheduled checks run every 15 minutes inside the API process and are deduplicated in the
 database, so running several API instances is safe. To use an external cron instead, set
@@ -137,6 +163,6 @@ This is a working foundation, not a finished product. Before real customers use 
 
 ## Roadmap ideas
 
-Scheduling/shift planning, geofenced clock-in, performance reviews, benefits enrollment, parts
+Shift templates and availability, geofenced clock-in, performance reviews, benefits enrollment, parts
 inventory, fuel logs and cost-per-mile, telematics/GPS integrations (Samsara, Geotab) to auto-update
 odometers, QR codes on equipment to open its page in the app, and reports/exports.
