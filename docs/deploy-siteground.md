@@ -5,23 +5,22 @@ Crewdesk runs on SiteGround as **one Node.js app** that serves both the website 
 automatically.
 
 ```
-https://crewdesk.yourcompany.com          → website (staff, managers, QR scan pages, careers page)
-https://crewdesk.yourcompany.com/api/...  → API (used by the website and the phone app)
+https://app.prospray.biz          → website (staff, managers, QR scan pages, careers page)
+https://app.prospray.biz/api/...  → API (used by the website and the phone app)
 ```
 
 Plan for about 30–45 minutes the first time.
 
 ## 0. What you need
 
-- A SiteGround **GrowBig, GoGeek or Cloud** plan. StartUp can't run Node.js apps. Crewdesk uses one
-  Node.js project slot.
-- A domain or subdomain for it, e.g. `crewdesk.yourcompany.com`. Decide this **before printing QR
-  labels**, because labels point to it.
+- ProSpray's **GoGeek** plan (up to 10 Node.js projects; Crewdesk uses one).
+- The address **`app.prospray.biz`**. The main website at `prospray.biz` is untouched. QR labels
+  point to this address, so print them after it's live.
 - Admin access to the GitHub repo `brizine/HR-Business-Management-Software`.
 
 ## 1. Add the domain
 
-In **Site Tools → Domain → Subdomains** create `crewdesk` (or add a new site for a separate domain),
+In **Site Tools → Domain → Subdomains** (for the prospray.biz site) create the subdomain `app`,
 and make sure **Security → SSL Manager** has a Let's Encrypt certificate for it. Crewdesk must be
 served over HTTPS: phones and camera scanning need it.
 
@@ -46,12 +45,12 @@ import.
 
 ## 3. Create a mailbox for sending email
 
-**Site Tools → Email → Accounts**: create `no-reply@yourcompany.com`. Open its **Mail Configuration**
+**Site Tools → Email → Accounts**: create `no-reply@prospray.biz`. Open its **Mail Configuration**
 to see the outgoing (SMTP) server and port. Then:
 
 ```
-SMTP_URL=smtps://no-reply%40yourcompany.com:MAILBOX_PASSWORD@SMTP_SERVER:465
-EMAIL_FROM="Crewdesk <no-reply@yourcompany.com>"
+SMTP_URL=smtps://no-reply%40prospray.biz:MAILBOX_PASSWORD@SMTP_SERVER:465
+EMAIL_FROM="Crewdesk <no-reply@prospray.biz>"
 ```
 
 Use the server name and port SiteGround shows. With port 587, use `smtp://` instead of `smtps://`.
@@ -91,9 +90,9 @@ replaced on redeploy.
 | `DATABASE_URL` | From step 2 |
 | `JWT_SECRET` | A long random string (e.g. 64 random letters/numbers). Keep it secret. |
 | `JOBS_SECRET` | Another long random string (used by the cron job in step 7) |
-| `WEB_URL` | `https://crewdesk.yourcompany.com` |
-| `PUBLIC_API_URL` | `https://crewdesk.yourcompany.com/api` |
-| `CORS_ORIGINS` | `https://crewdesk.yourcompany.com` |
+| `WEB_URL` | `https://app.prospray.biz` |
+| `PUBLIC_API_URL` | `https://app.prospray.biz/api` |
+| `CORS_ORIGINS` | `https://app.prospray.biz` |
 | `UPLOAD_DIR` *or* `S3_*` | From step 4 |
 | `SMTP_URL`, `EMAIL_FROM` | From step 3 |
 | `TWILIO_*` | Optional, for text messages (see README) |
@@ -108,8 +107,8 @@ push any commit to `main`, or deploy from `main` at first and switch later.
 
 ## 6. Check it and create your account
 
-1. Open `https://crewdesk.yourcompany.com/api/health`. It should say `{"ok":true}`.
-2. Open `https://crewdesk.yourcompany.com/signup` and create your company and owner login.
+1. Open `https://app.prospray.biz/api/health`. It should say `{"ok":true}`.
+2. Open `https://app.prospray.biz/signup` and create your company and owner login.
 3. **Sign-up then closes automatically.** Add everyone else from **Team → Add employee** (give them
    a password, or let them use email/text notifications only).
 
@@ -120,7 +119,7 @@ clock-outs and upcoming shifts. It does this inside the app, but in case SiteGro
 pauses the app, also add **Site Tools → Devs → Cron Jobs**, every 15 minutes:
 
 ```
-curl -s -X POST -H "X-Jobs-Secret: YOUR_JOBS_SECRET" https://crewdesk.yourcompany.com/api/jobs/run > /dev/null
+curl -s -X POST -H "X-Jobs-Secret: YOUR_JOBS_SECRET" https://app.prospray.biz/api/jobs/run > /dev/null
 ```
 
 Running it twice is harmless; each alert is only sent once.
@@ -129,7 +128,7 @@ Running it twice is harmless; each alert is only sent once.
 
 Push notifications and the camera scanner need the Crewdesk app built for your server:
 
-1. In `apps/mobile/eas.json`, replace `https://crewdesk.yourcompany.com/api` with your address.
+1. `apps/mobile/eas.json` already points the app at `https://app.prospray.biz/api`.
 2. Follow **Enabling push on phones** in the README (`eas init`, `eas build`).
 3. To put it in the App Store and Google Play you need an Apple Developer account ($99/year) and a
    Google Play developer account ($25 once). `eas submit` uploads the builds.
