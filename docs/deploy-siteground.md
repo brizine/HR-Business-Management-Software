@@ -1,6 +1,6 @@
-# Deploying Crewdesk on SiteGround
+# Deploying Biz Management Software on SiteGround
 
-Crewdesk runs on SiteGround as **one Node.js app** that serves both the website and the API (under
+Biz Management Software runs on SiteGround as **one Node.js app** that serves both the website and the API (under
 `/api`) on one domain, plus a **PostgreSQL** database. SiteGround builds it from GitHub and redeploys
 automatically.
 
@@ -13,7 +13,7 @@ Plan for about 30–45 minutes the first time.
 
 ## 0. What you need
 
-- ProSpray's **GoGeek** plan (up to 10 Node.js projects; Crewdesk uses one).
+- ProSpray's **GoGeek** plan (up to 10 Node.js projects; Biz Management Software uses one).
 - The address **`app.prospray.biz`**. The main website at `prospray.biz` is untouched. QR labels
   point to this address, so print them after it's live.
 - Admin access to the GitHub repo `brizine/HR-Business-Management-Software`.
@@ -21,7 +21,7 @@ Plan for about 30–45 minutes the first time.
 ## 1. Add the domain
 
 In **Site Tools → Domain → Subdomains** (for the prospray.biz site) create the subdomain `app`,
-and make sure **Security → SSL Manager** has a Let's Encrypt certificate for it. Crewdesk must be
+and make sure **Security → SSL Manager** has a Let's Encrypt certificate for it. Biz Management Software must be
 served over HTTPS: phones and camera scanning need it.
 
 ## 2. Create the database
@@ -40,7 +40,7 @@ postgres://USER:PASSWORD@localhost:5432/DATABASE
 
 If the password contains characters like `@`, `:` or `/`, URL-encode them (`@` → `%40`).
 
-Crewdesk creates and updates its tables automatically every time it starts, so there's nothing to
+Biz Management Software creates and updates its tables automatically every time it starts, so there's nothing to
 import.
 
 ## 3. Create a mailbox for sending email
@@ -50,7 +50,7 @@ to see the outgoing (SMTP) server and port. Then:
 
 ```
 SMTP_URL=smtps://no-reply%40prospray.biz:MAILBOX_PASSWORD@SMTP_SERVER:465
-EMAIL_FROM="Crewdesk <no-reply@prospray.biz>"
+EMAIL_FROM="Biz Management Software <no-reply@prospray.biz>"
 ```
 
 Use the server name and port SiteGround shows. With port 587, use `smtp://` instead of `smtps://`.
@@ -71,7 +71,7 @@ replaced on redeploy.
 
 ## 5. Create the Node.js project
 
-**Site Tools → Node.js** (it may be under **Devs**) → create a project for your Crewdesk domain:
+**Site Tools → Node.js** (it may be under **Devs**) → create a project for your Biz Management Software domain:
 
 | Setting | Value |
 | --- | --- |
@@ -120,7 +120,7 @@ push any commit to `main`, or deploy from `main` at first and switch later.
 
 ## 7. Add the scheduled-checks cron job
 
-Crewdesk checks every 15 minutes for maintenance coming due, expiring registrations, forgotten
+Biz Management Software checks every 15 minutes for maintenance coming due, expiring registrations, forgotten
 clock-outs and upcoming shifts. It does this inside the app, but in case SiteGround restarts or
 pauses the app, also add **Site Tools → Devs → Cron Jobs**, every 15 minutes:
 
@@ -132,19 +132,19 @@ Running it twice is harmless; each alert is only sent once.
 
 ## 8. Phone app
 
-Push notifications and the camera scanner need the Crewdesk app built for your server:
+Push notifications and the camera scanner need the Biz Management Software app built for your server:
 
 1. `apps/mobile/eas.json` already points the app at `https://app.prospray.biz/api`.
 2. Follow **Enabling push on phones** in the README (`eas init`, `eas build`).
 3. To put it in the App Store and Google Play you need an Apple Developer account ($99/year) and a
    Google Play developer account ($25 once). `eas submit` uploads the builds.
 
-Everything except push and the in-app scanner also works in the phone's browser at your Crewdesk
+Everything except push and the in-app scanner also works in the phone's browser at your Biz Management Software
 address. QR labels open in the browser without the app.
 
 ## 9. Encrypted backups
 
-Crewdesk makes a nightly, encrypted copy of the database. Backups are locked with a **public key**;
+Biz Management Software makes a nightly, encrypted copy of the database. Backups are locked with a **public key**;
 only the matching **private key**, which never goes on the server, can open them. So a leaked backup,
 or even a broken-into server, doesn't expose old backups.
 

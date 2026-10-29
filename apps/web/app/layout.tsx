@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { AuthProvider } from "@/lib/auth";
 import "./globals.css";
 
-export const metadata: Metadata = { title: "Crewdesk", description: "HR and fleet maintenance for small businesses" };
+export const metadata: Metadata = { title: "Biz Management Software", description: "HR and fleet maintenance for small businesses" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

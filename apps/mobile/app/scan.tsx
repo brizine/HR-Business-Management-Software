@@ -33,7 +33,7 @@ export default function Scan() {
     return (
       <Screen>
         <Card title="Camera access">
-          <Txt>Crewdesk uses the camera only to read QR labels on vehicles and equipment.</Txt>
+          <Txt>Biz Management Software uses the camera only to read QR labels on vehicles and equipment.</Txt>
           <Button title="Allow camera" onPress={requestPermission} />
         </Card>
         <ManualEntry value={manual} onChange={setManual} onSubmit={() => open(manual)} />

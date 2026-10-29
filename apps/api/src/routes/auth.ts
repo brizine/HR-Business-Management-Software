@@ -101,13 +101,13 @@ const routes: FastifyPluginAsync = async (app) => {
   /**
    * Creates a company and its owner account. A self-hosted install serves one
    * business, so after the first company exists sign-up closes unless
-   * ALLOW_SIGNUP=true (e.g. if you run Crewdesk for several companies).
+   * ALLOW_SIGNUP=true (e.g. if you run Biz Management Software for several companies).
    */
   app.post("/signup", limited, async (req, reply) => {
     const body = parse(signupSchema, req.body);
     if (process.env.ALLOW_SIGNUP !== "true") {
       const [{ n }] = await db.select({ n: count() }).from(companies);
-      if (n > 0) throw new HttpError(403, "Sign-ups are closed. Ask your company's Crewdesk admin to add you.");
+      if (n > 0) throw new HttpError(403, "Sign-ups are closed. Ask your company's Biz Management Software admin to add you.");
     }
     const passwordHash = await bcrypt.hash(body.password, 10);
     const owner = await db.transaction(async (tx) => {
@@ -255,7 +255,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const secret = newTotpSecret();
     await db.update(employees).set({ totpPendingSecret: encrypt(secret) }).where(eq(employees.id, user.id));
     const [company] = await db.select().from(companies).where(eq(companies.id, user.companyId));
-    return { secret, otpauthUri: otpauthUri(secret, user.email, `Crewdesk (${company.name})`) };
+    return { secret, otpauthUri: otpauthUri(secret, user.email, `Biz Management Software (${company.name})`) };
   });
 
   /** Confirms setup with a first code; returns backup codes (shown once) and, in the setup-required flow, a session. */
@@ -339,7 +339,7 @@ const routes: FastifyPluginAsync = async (app) => {
       const link = `${WEB_URL}/reset-password?token=${token}`;
       await sendSystemEmail(
         user.email,
-        "Reset your Crewdesk password",
+        "Reset your Biz Management Software password",
         `Someone asked to reset the password for ${user.email}.\n\nReset it here (the link works once, for ${RESET_TTL_MINUTES} minutes):\n${link}\n\nIf this wasn't you, ignore this email; your password hasn't changed.`,
         `<div style="font-family:system-ui,sans-serif;max-width:520px;color:#1c2330">
 <p>Someone asked to reset the password for <strong>${user.email}</strong>.</p>

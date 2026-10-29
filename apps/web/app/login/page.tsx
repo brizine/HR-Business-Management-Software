@@ -31,7 +31,7 @@ function Login() {
       <div className="card authcard" style={step.kind === "setup" ? { maxWidth: 520 } : undefined}>
         {step.kind === "password" && (
           <>
-            <h1>Sign in to Crewdesk</h1>
+            <h1>Sign in to Biz Management Software</h1>
             <p className="muted">HR, time, and fleet maintenance in one place.</p>
             <form className="stack" onSubmit={(e) => {
               e.preventDefault();
@@ -79,7 +79,7 @@ function Login() {
                 {useBackup ? "Use my authenticator app instead" : "Lost your phone? Use a backup code"}
               </a>
             </p>
-            <p className="muted" style={{ fontSize: 12 }}>No phone and no backup codes? Ask your Crewdesk admin to reset your two-factor.</p>
+            <p className="muted" style={{ fontSize: 12 }}>No phone and no backup codes? Ask your Biz Management Software admin to reset your two-factor.</p>
           </>
         )}
 

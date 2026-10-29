@@ -44,7 +44,7 @@ export async function checkPunch(companyId: string, policy: LocationPolicy, loc:
   if (needsLocation(policy) && !hasLocation) {
     throw new HttpError(
       400,
-      `Your company requires location to clock ${action}. Turn on location for Crewdesk in your phone's settings and try again.`,
+      `Your company requires location to clock ${action}. Turn on location for Biz Management Software in your phone's settings and try again.`,
       "location_required",
     );
   }

@@ -14,8 +14,8 @@ export default function ForgotPassword() {
         <h1>Reset your password</h1>
         {sent ? (
           <>
-            <p>If <strong>{sent}</strong> has a Crewdesk account, we&apos;ve emailed it a link to choose a new password. The link works for an hour.</p>
-            <p className="muted">Nothing arrived? Check spam, or ask your Crewdesk admin to set a new password for you.</p>
+            <p>If <strong>{sent}</strong> has a Biz Management Software account, we&apos;ve emailed it a link to choose a new password. The link works for an hour.</p>
+            <p className="muted">Nothing arrived? Check spam, or ask your Biz Management Software admin to set a new password for you.</p>
           </>
         ) : (
           <form className="stack" onSubmit={(e) => {

@@ -163,12 +163,12 @@ async function sendEmail(p: Person, companyName: string, n: NotificationInput) {
   await emailTransport()!.send({
     to: p.email,
     subject: n.title,
-    text: `${n.body}\n\nOpen: ${url}\n\n--\n${companyName} via Crewdesk. Stop ${label.toLowerCase()} emails: ${unsubscribe}\nAll notification settings: ${settings}\n`,
+    text: `${n.body}\n\nOpen: ${url}\n\n--\n${companyName} via Biz Management Software. Stop ${label.toLowerCase()} emails: ${unsubscribe}\nAll notification settings: ${settings}\n`,
     html: `<div style="font-family:system-ui,sans-serif;max-width:520px;color:#1c2330">
 <p style="font-size:16px;font-weight:600;margin:0 0 8px">${escapeHtml(n.title)}</p>
 <p style="margin:0 0 16px">${escapeHtml(n.body)}</p>
-<p><a href="${url}" style="background:#1f6feb;color:#fff;padding:9px 14px;border-radius:7px;text-decoration:none">Open in Crewdesk</a></p>
-<p style="color:#667085;font-size:12px;margin-top:24px">${escapeHtml(companyName)} via Crewdesk ·
+<p><a href="${url}" style="background:#1f6feb;color:#fff;padding:9px 14px;border-radius:7px;text-decoration:none">Open in Biz Management Software</a></p>
+<p style="color:#667085;font-size:12px;margin-top:24px">${escapeHtml(companyName)} via Biz Management Software ·
 <a href="${unsubscribe}" style="color:#667085">Stop ${escapeHtml(label.toLowerCase())} emails</a> ·
 <a href="${settings}" style="color:#667085">Notification settings</a></p></div>`,
     headers: {

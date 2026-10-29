@@ -60,7 +60,7 @@ export default function NotificationSettings() {
           }} />
         )}
         <Row>
-          <Txt style={{ flex: 1 }}>Text me Crewdesk notifications</Txt>
+          <Txt style={{ flex: 1 }}>Text me Biz Management Software notifications</Txt>
           <Switch value={data.employee.smsOptIn} disabled={busy || !data.employee.phoneTextable} onValueChange={(v) => save({ smsOptIn: v })} />
         </Row>
         <Txt muted style={{ fontSize: 12 }}>Message & data rates may apply. Reply STOP to any text to opt out.</Txt>

@@ -185,7 +185,7 @@ const routes: FastifyPluginAsync = async (app) => {
         body:
           type === "i9"
             ? "Examine their documents and complete Section 2 within 3 business days of their first day."
-            : "Enter it in payroll, then mark it entered in Crewdesk.",
+            : "Enter it in payroll, then mark it entered in Biz Management Software.",
         link: { screen: "tax-forms" },
       });
       return listItem(form);

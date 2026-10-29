@@ -239,7 +239,7 @@ describe("password reset", () => {
     emails = [];
     expect((await call("POST", "/auth/forgot-password", undefined, { email: email("forgetful") })).status).toBe(200);
     expect(emails).toHaveLength(1);
-    expect(emails[0].subject).toBe("Reset your Crewdesk password");
+    expect(emails[0].subject).toBe("Reset your Biz Management Software password");
     const token = emails[0].text.match(/reset-password\?token=([\w-]+)/)![1];
 
     expect((await call("POST", "/auth/reset-password", undefined, { token, password: "short" })).status).toBe(400);

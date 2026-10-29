@@ -83,7 +83,7 @@ export async function decryptFileToFile(inPath: string, outPath: string, private
   try {
     const head = Buffer.alloc(MAGIC.length + 2);
     await fh.read(head, 0, head.length, 0);
-    if (!head.subarray(0, MAGIC.length).equals(MAGIC)) throw new Error("Not a Crewdesk backup file");
+    if (!head.subarray(0, MAGIC.length).equals(MAGIC)) throw new Error("Not a Biz Management Software backup file");
     const wrappedLen = head.readUInt16BE(MAGIC.length);
     const rest = Buffer.alloc(wrappedLen + 12);
     await fh.read(rest, 0, rest.length, head.length);

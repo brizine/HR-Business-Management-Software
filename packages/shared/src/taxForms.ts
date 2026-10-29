@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Electronic tax and employment forms collected in Crewdesk when a company
+ * Electronic tax and employment forms collected in Biz Management Software when a company
  * runs payroll manually (or wants records in one place): federal Form W-4,
  * Form I-9, and a direct deposit authorization.
  *

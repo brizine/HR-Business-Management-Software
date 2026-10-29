@@ -43,7 +43,7 @@ export const companies = pgTable("companies", {
   legalName: text("legal_name"),
   ein: text("ein"),
   address: text("address"),
-  /** Collect W-4, I-9 and direct deposit in Crewdesk (off when a payroll provider collects them). */
+  /** Collect W-4, I-9 and direct deposit in Biz Management Software (off when a payroll provider collects them). */
   taxFormsInCrewdesk: boolean("tax_forms_in_crewdesk").notNull().default(true),
   /** Lowest role that can create wiki pages ("employee" = everyone). */
   wikiCreateMin: text("wiki_create_min").notNull().default("admin"),
@@ -517,7 +517,7 @@ export const passwordResets = pgTable("password_resets", {
 });
 
 /**
- * W-4, I-9 and direct deposit forms filled out in Crewdesk. The answers (which
+ * W-4, I-9 and direct deposit forms filled out in Biz Management Software. The answers (which
  * include Social Security and bank account numbers) are encrypted; only the
  * employee and admins can open them, and every view is logged.
  * A newer form of the same type supersedes the old one; old ones are kept for

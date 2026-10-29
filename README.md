@@ -1,4 +1,4 @@
-# Crewdesk
+# Biz Management Software
 
 HR and fleet/equipment maintenance for small and local businesses: hiring, onboarding,
 time tracking, PTO, documents and payroll export, plus vehicle and equipment
@@ -201,7 +201,7 @@ links to `https://<your site>/q/<code>`.
   labels outdoors.
 - **Scanning:** any phone camera opens the scan page: big buttons for a pre-trip inspection,
   logging the odometer/hours, and reporting an issue, plus open work orders and maintenance due.
-  People who aren't signed in log in and land right back on it. In the Crewdesk app, the Fleet tab
+  People who aren't signed in log in and land right back on it. In the Biz Management Software app, the Fleet tab
   has a **Scan equipment QR** button.
 - **Damaged label:** the code is printed under the QR and can be typed into the app's scanner screen.
 - **Lost or stolen label:** a manager clicks **New code** on the asset; the old label stops working.
@@ -256,7 +256,7 @@ hiring) in **Settings → Notification settings** on web or **Me → Notificatio
 | Email | Off · Only if no app · Always | Only if no app |
 | Text | Off · Only if no app · Always | Off |
 
-"Only if no app" means the person isn't signed in to the Crewdesk app on any phone, so employees who
+"Only if no app" means the person isn't signed in to the Biz Management Software app on any phone, so employees who
 never install the app still hear about their schedule, time off and so on by email (or text).
 Admins can open the same settings for any employee from their profile, which helps for staff who
 never log in.
@@ -264,7 +264,7 @@ never log in.
 **Texts** need three things: the owner turns on "Allow text messages" for the company (texts cost
 money), the employee has a valid mobile number, and the employee opts in. Opt-in is recorded with a
 timestamp; an admin may record it on someone's behalf only with their consent. If someone replies
-STOP, Twilio blocks further texts and Crewdesk turns their opt-in off automatically.
+STOP, Twilio blocks further texts and Biz Management Software turns their opt-in off automatically.
 
 **Emails** include a one-click unsubscribe link for that category (and the `List-Unsubscribe`
 headers Gmail and Yahoo look for), plus a link to the full settings page.
@@ -341,7 +341,7 @@ Tax calculation, filings and paying employees stay with your payroll system or a
 
 ## Pay & tax forms
 
-With **Collect W-4, I-9 and direct deposit forms in Crewdesk** on (Payroll settings), employees fill
+With **Collect W-4, I-9 and direct deposit forms in Biz Management Software** on (Payroll settings), employees fill
 these out online under **Pay & tax forms**, or from onboarding tasks of the kind "Fill out a form":
 
 | Form | Who | What happens |
@@ -352,7 +352,7 @@ these out online under **Pay & tax forms**, or from onboarding tasks of the kind
 | **Direct deposit** | Employee | Routing-number checksum and a typed-twice account number. |
 
 Each form is signed with the form's exact statement ("Under penalties of perjury…"), a typed name and
-an "I agree" box, and Crewdesk records the time, IP address and browser. **Download PDF** produces a
+an "I agree" box, and Biz Management Software records the time, IP address and browser. **Download PDF** produces a
 record copy with every answer and the signature details. Enter your legal name, EIN and address in
 Payroll settings so they print on the forms.
 
@@ -374,10 +374,10 @@ system, then click **Mark entered in payroll**.
 - **State withholding** forms vary by state. Add a state form as an "Upload a document" task, with a
   link to your state's form in the description.
 - **I-9 Supplement A** (preparer/translator) and **Supplement B** (reverification) are done on paper.
-  Crewdesk flags when a preparer was used.
+  Biz Management Software flags when a preparer was used.
 - **E-Verify**, if you use it, is still done on the E-Verify site.
 - **Keep records:** W-4s for at least 4 years. I-9s for 3 years after the hire date or 1 year after
-  employment ends, whichever is later. Crewdesk keeps every version, including after someone is
+  employment ends, whichever is later. Biz Management Software keeps every version, including after someone is
   marked terminated (there's no way to delete employees).
 - If you switch to a provider that collects these itself, turn the setting off; forms already on
   file stay available.

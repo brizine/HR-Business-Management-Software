@@ -42,7 +42,7 @@ function HireForm({ applicant, job, templates, staff, onCancel, onHired }: {
           <label>Employment<select name="employmentType" defaultValue="full_time">{EMPLOYMENT_TYPES.map((t) => <option key={t} value={t}>{t.replace("_", " ")}</option>)}</select></label>
           <label>Pay type<select name="payType" defaultValue="hourly">{PAY_TYPES.map((t) => <option key={t}>{t}</option>)}</select></label>
           <label>Pay rate ($/hr or $/yr)<input name="payRate" type="number" step="0.01" min="0" required /></label>
-          <label>Role in Crewdesk<select name="role" defaultValue="employee"><option value="employee">employee</option><option value="manager">manager</option></select></label>
+          <label>Role in Biz Management Software<select name="role" defaultValue="employee"><option value="employee">employee</option><option value="manager">manager</option></select></label>
           <label>Onboarding checklist
             <select name="onboardingTemplateId" defaultValue={templates[0]?.id ?? ""}>
               <option value="">None</option>

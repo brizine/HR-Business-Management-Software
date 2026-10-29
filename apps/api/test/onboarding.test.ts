@@ -123,8 +123,8 @@ describe("hire → invite → onboarding", () => {
     // Just the invite: no separate "welcome" notification pointing at a page they can't open yet.
     expect(emails.filter((m) => m.to === email("nia"))).toHaveLength(1);
     const invite = emails.find((m) => m.to === email("nia"))!;
-    expect(invite.subject).toBe("Welcome to Onboard Co: set up your Crewdesk account");
-    expect(invite.text).toContain("Olive Owner has invited you to Crewdesk");
+    expect(invite.subject).toBe("Welcome to Onboard Co: set up your Biz Management Software account");
+    expect(invite.text).toContain("Olive Owner has invited you to Biz Management Software");
     T.niaInvite = inviteToken(invite);
 
     // The manager hears about their task; the hiring owner doesn't get pinged about their own action.

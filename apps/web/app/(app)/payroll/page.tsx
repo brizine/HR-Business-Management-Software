@@ -52,7 +52,7 @@ function Settings({ settings, onSaved }: { settings: any; onSaved: () => void })
         )}
         <label className="check">
           <input type="checkbox" name="taxFormsInCrewdesk" defaultChecked={settings.taxFormsInCrewdesk} />
-          Collect W-4, I-9 and direct deposit forms in Crewdesk
+          Collect W-4, I-9 and direct deposit forms in Biz Management Software
         </label>
         <p className="muted" style={{ margin: 0 }}>
           Turn this off if your payroll provider collects tax and bank details from employees itself.

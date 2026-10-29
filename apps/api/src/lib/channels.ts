@@ -23,7 +23,7 @@ export interface EmailTransport {
 class SmtpEmail implements EmailTransport {
   private transporter = nodemailer.createTransport(process.env.SMTP_URL);
   async send(msg: EmailMessage) {
-    await this.transporter.sendMail({ from: process.env.EMAIL_FROM ?? "Crewdesk <no-reply@example.com>", ...msg });
+    await this.transporter.sendMail({ from: process.env.EMAIL_FROM ?? "Biz Management Software <no-reply@example.com>", ...msg });
   }
 }
 

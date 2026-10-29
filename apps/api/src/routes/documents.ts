@@ -145,7 +145,7 @@ export const documentViewRoutes: FastifyPluginAsync = async (app) => {
     try {
       claims = app.jwt.verify(req.query.t ?? "");
     } catch {
-      throw new HttpError(404, "This link has expired. Open the document again from Crewdesk.");
+      throw new HttpError(404, "This link has expired. Open the document again from Biz Management Software.");
     }
     if (claims.purpose !== "view" || !claims.doc) throw new HttpError(404, "Not found");
     const [doc] = await db

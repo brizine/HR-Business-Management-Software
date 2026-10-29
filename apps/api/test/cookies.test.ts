@@ -64,7 +64,7 @@ describe("website sessions", () => {
     expect(real.statusCode).toBe(200);
   });
 
-  it("other sites can't send the client header (CORS only allows Crewdesk's own origin)", async () => {
+  it("other sites can't send the client header (CORS only allows Biz Management Software's own origin)", async () => {
     const preflight = await app.inject({
       method: "OPTIONS",
       url: "/assets",
