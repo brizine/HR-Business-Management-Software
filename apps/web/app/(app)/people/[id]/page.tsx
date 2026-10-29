@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { use, useState } from "react";
 import { api, fmtDate, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -24,6 +25,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
     <>
       <PageHead title={`${e.firstName} ${e.lastName}`} sub={[e.title, e.department].filter(Boolean).join(" · ")}>
         <Badge value={e.status} />
+        {can("admin") && <Link className="btn" href={`/settings/notifications?employeeId=${id}`}>Notifications</Link>}
         {can("admin") && <button className="btn" onClick={() => setEditing(!editing)}>{editing ? "Close" : "Edit"}</button>}
       </PageHead>
       {editing ? (

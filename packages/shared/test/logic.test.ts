@@ -53,3 +53,22 @@ describe("hasRole", () => {
     expect(hasRole("employee", "manager")).toBe(false);
   });
 });
+
+import { toE164, webPathFor } from "../src";
+
+describe("toE164", () => {
+  it("normalizes common formats", () => {
+    expect(toE164("(512) 555-0142")).toBe("+15125550142");
+    expect(toE164("1-512-555-0142")).toBe("+15125550142");
+    expect(toE164("+44 20 7946 0958")).toBe("+442079460958");
+    expect(toE164("555-0142")).toBeNull();
+    expect(toE164("")).toBeNull();
+  });
+});
+
+describe("webPathFor", () => {
+  it("maps links to web pages", () => {
+    expect(webPathFor({ screen: "asset", id: "a1" })).toBe("/fleet/a1");
+    expect(webPathFor(null)).toBeNull();
+  });
+});

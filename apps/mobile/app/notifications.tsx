@@ -29,6 +29,7 @@ export default function Inbox() {
 
   return (
     <Screen refreshing={loading} onRefresh={reload}>
+      <Button title="Notification settings" kind="secondary" onPress={() => router.push("/notification-settings")} />
       {!!data?.unread && (
         <Button title="Mark all as read" kind="secondary" onPress={() => api("/notifications/read-all", { method: "POST" }).then(() => { reload(); refresh(); })} />
       )}

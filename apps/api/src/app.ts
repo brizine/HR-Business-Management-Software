@@ -17,6 +17,7 @@ import payrollRoutes from "./routes/payroll";
 import dashboardRoutes from "./routes/dashboard";
 import notificationRoutes from "./routes/notifications";
 import shiftRoutes from "./routes/shifts";
+import unsubscribeRoutes from "./routes/unsubscribe";
 
 export async function buildApp(opts: { logger?: boolean } = {}) {
   const app = Fastify({ logger: opts.logger ?? true });
@@ -26,6 +27,8 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
 
   await app.register(cors, {
     origin: (process.env.CORS_ORIGINS ?? "http://localhost:3000").split(","),
+    // @fastify/cors only allows GET/HEAD/POST by default; the web app also edits and deletes.
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
     credentials: true,
   });
   await app.register(jwt, { secret: secret ?? "dev-only-secret", sign: { expiresIn: "7d" } });
@@ -48,6 +51,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   await app.register(dashboardRoutes, { prefix: "/dashboard" });
   await app.register(notificationRoutes, { prefix: "/notifications" });
   await app.register(shiftRoutes, { prefix: "/shifts" });
+  await app.register(unsubscribeRoutes, { prefix: "/public/unsubscribe" });
 
   return app;
 }

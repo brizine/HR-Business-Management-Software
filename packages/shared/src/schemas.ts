@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DELIVERY_MODES, NOTIFICATION_CATEGORIES } from "./notifications";
 import { ROLES } from "./roles";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
@@ -228,4 +229,19 @@ export type ShiftInput = z.infer<typeof shiftSchema>;
 export const shiftRangeSchema = z.object({
   from: z.string().datetime({ offset: true }),
   to: z.string().datetime({ offset: true }),
+});
+
+export const notificationPreferencesSchema = z.object({
+  preferences: z
+    .array(
+      z.object({
+        category: z.enum(NOTIFICATION_CATEGORIES),
+        app: z.boolean(),
+        email: z.enum(DELIVERY_MODES),
+        sms: z.enum(DELIVERY_MODES),
+      }),
+    )
+    .optional(),
+  /** Consent to receive texts, required before any SMS is sent. */
+  smsOptIn: z.boolean().optional(),
 });

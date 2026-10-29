@@ -85,6 +85,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="company" style={{ paddingBottom: 4 }}>
           {me.user.firstName} {me.user.lastName} · {me.user.role}
         </div>
+        <Link href="/settings/notifications" className={path.startsWith("/settings") ? "active" : ""}>Settings</Link>
         <a href="#" onClick={(e) => { e.preventDefault(); signOut(); router.replace("/login"); }}>
           Sign out
         </a>

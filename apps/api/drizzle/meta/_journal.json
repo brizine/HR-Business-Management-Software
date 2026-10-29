@@ -22,6 +22,13 @@
       "when": 1793240414979,
       "tag": "0002_shifts",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793240917515,
+      "tag": "0003_notification_preferences",
+      "breakpoints": true
     }
   ]
 }

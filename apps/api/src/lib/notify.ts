@@ -1,7 +1,19 @@
 import { and, eq, inArray, ne } from "drizzle-orm";
-import { hasRole, type NotificationCategory, type NotificationLink, type Role } from "@crewdesk/shared";
+import {
+  NOTIFICATION_CATEGORY_INFO,
+  defaultPreference,
+  hasRole,
+  toE164,
+  webPathFor,
+  type DeliveryMode,
+  type NotificationCategory,
+  type NotificationLink,
+  type NotificationPreference,
+  type Role,
+} from "@crewdesk/shared";
 import { db } from "../db";
-import { employees, notifications, pushTokens } from "../db/schema";
+import { companies, employees, notificationPreferences, notifications, pushTokens } from "../db/schema";
+import { SmsError, SMS_UNSUBSCRIBED, WEB_URL, PUBLIC_API_URL, emailTransport, smsTransport, unsubscribeToken } from "./channels";
 
 export interface PushMessage {
   to: string;
@@ -57,8 +69,8 @@ export interface NotificationInput {
 const pending = new Set<Promise<void>>();
 
 /**
- * Stores an inbox notification for each recipient and pushes it to their
- * devices. Runs in the background so API responses never wait on Expo;
+ * Delivers to each recipient by the channels their preferences allow:
+ * inbox + push, email, and/or text. Runs in the background so API responses never wait on Expo;
  * failures are logged, never thrown to the caller.
  */
 export function notify(companyId: string, employeeIds: Iterable<string | null | undefined>, n: NotificationInput) {
@@ -77,21 +89,47 @@ export async function flushNotifications() {
 
 async function deliver(companyId: string, employeeIds: string[], n: NotificationInput) {
   // Only notify active staff in this company.
-  const recipients = await db
-    .select({ id: employees.id })
+  const people = await db
+    .select()
     .from(employees)
     .where(and(eq(employees.companyId, companyId), inArray(employees.id, employeeIds), ne(employees.status, "terminated")));
-  if (!recipients.length) return;
+  if (!people.length) return;
+  const ids = people.map((p) => p.id);
 
+  const [[company], prefRows, tokens] = await Promise.all([
+    db.select().from(companies).where(eq(companies.id, companyId)),
+    db
+      .select()
+      .from(notificationPreferences)
+      .where(and(inArray(notificationPreferences.employeeId, ids), eq(notificationPreferences.category, n.category))),
+    db.select().from(pushTokens).where(inArray(pushTokens.employeeId, ids)),
+  ]);
+  const pref = (id: string) => (prefRows.find((r) => r.employeeId === id) as NotificationPreference | undefined) ?? defaultPreference(n.category);
+  const hasApp = (id: string) => tokens.some((t) => t.employeeId === id);
+  const wants = (mode: DeliveryMode, id: string) => mode === "always" || (mode === "no_app" && !hasApp(id));
+
+  const inApp = people.filter((p) => pref(p.id).app);
+  const byEmail = emailTransport() ? people.filter((p) => p.email && wants(pref(p.id).email, p.id)) : [];
+  const bySms =
+    smsTransport() && company.smsEnabled
+      ? people.filter((p) => p.smsOptInAt && toE164(p.phone) && wants(pref(p.id).sms, p.id))
+      : [];
+
+  const results = await Promise.allSettled([
+    sendInApp(companyId, inApp.map((p) => p.id), tokens, n),
+    ...byEmail.map((p) => sendEmail(p, company.name, n)),
+    ...bySms.map((p) => sendSms(p, company.name, n)),
+  ]);
+  for (const r of results) if (r.status === "rejected") console.error("notification delivery failed", r.reason);
+}
+
+async function sendInApp(companyId: string, ids: string[], allTokens: (typeof pushTokens.$inferSelect)[], n: NotificationInput) {
+  if (!ids.length) return;
   const rows = await db
     .insert(notifications)
-    .values(recipients.map((r) => ({ companyId, employeeId: r.id, ...n, link: n.link ?? null })))
+    .values(ids.map((employeeId) => ({ companyId, employeeId, ...n, link: n.link ?? null })))
     .returning();
-
-  const tokens = await db
-    .select()
-    .from(pushTokens)
-    .where(inArray(pushTokens.employeeId, recipients.map((r) => r.id)));
+  const tokens = allTokens.filter((t) => ids.includes(t.employeeId));
   if (!tokens.length) return;
 
   const byEmployee = new Map(rows.map((r) => [r.employeeId, r.id]));
@@ -110,6 +148,53 @@ async function deliver(companyId: string, employeeIds: string[], n: Notification
     .map((t, i) => (t.status === "error" && t.details?.error === "DeviceNotRegistered" ? messages[i].to : null))
     .filter((x): x is string => !!x);
   if (dead.length) await db.delete(pushTokens).where(inArray(pushTokens.token, dead));
+}
+
+type Person = typeof employees.$inferSelect;
+
+const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
+async function sendEmail(p: Person, companyName: string, n: NotificationInput) {
+  const url = `${WEB_URL}${webPathFor(n.link) ?? "/notifications"}`;
+  const settings = `${WEB_URL}/settings/notifications`;
+  const token = unsubscribeToken(p.id, n.category);
+  const unsubscribe = `${WEB_URL}/unsubscribe?token=${token}`;
+  const label = NOTIFICATION_CATEGORY_INFO[n.category].label;
+  await emailTransport()!.send({
+    to: p.email,
+    subject: n.title,
+    text: `${n.body}\n\nOpen: ${url}\n\n--\n${companyName} via Crewdesk. Stop ${label.toLowerCase()} emails: ${unsubscribe}\nAll notification settings: ${settings}\n`,
+    html: `<div style="font-family:system-ui,sans-serif;max-width:520px;color:#1c2330">
+<p style="font-size:16px;font-weight:600;margin:0 0 8px">${escapeHtml(n.title)}</p>
+<p style="margin:0 0 16px">${escapeHtml(n.body)}</p>
+<p><a href="${url}" style="background:#1f6feb;color:#fff;padding:9px 14px;border-radius:7px;text-decoration:none">Open in Crewdesk</a></p>
+<p style="color:#667085;font-size:12px;margin-top:24px">${escapeHtml(companyName)} via Crewdesk ·
+<a href="${unsubscribe}" style="color:#667085">Stop ${escapeHtml(label.toLowerCase())} emails</a> ·
+<a href="${settings}" style="color:#667085">Notification settings</a></p></div>`,
+    headers: {
+      "List-Unsubscribe": `<${PUBLIC_API_URL}/public/unsubscribe?token=${token}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    },
+  });
+}
+
+const SMS_MAX = 300;
+
+async function sendSms(p: Person, companyName: string, n: NotificationInput) {
+  const path = webPathFor(n.link);
+  const suffix = `${path ? ` ${WEB_URL}${path}` : ""} Reply STOP to opt out.`;
+  let text = `${companyName}: ${n.title}. ${n.body}`;
+  if (text.length + suffix.length > SMS_MAX) text = text.slice(0, SMS_MAX - suffix.length - 1) + "…";
+  try {
+    await smsTransport()!.send(toE164(p.phone)!, text + suffix);
+  } catch (err) {
+    // They replied STOP to our number: record the opt-out so we stop trying.
+    if (err instanceof SmsError && err.code === SMS_UNSUBSCRIBED) {
+      await db.update(employees).set({ smsOptInAt: null }).where(eq(employees.id, p.id));
+      return;
+    }
+    throw err;
+  }
 }
 
 /** Active staff at or above `min` role, e.g. everyone who manages the fleet. */

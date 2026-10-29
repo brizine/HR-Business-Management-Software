@@ -29,7 +29,7 @@ packages/
 | **Preventive maintenance** | Schedules by miles, engine hours and/or days (whichever comes first), due-soon/overdue status, fleet-wide due list |
 | **Work orders** | Numbered work orders with priority, assignment, parts/labor cost, vendor; completing one resets its maintenance schedule; critical issues take the asset out of service |
 | **Inspections** | Pre-trip/pre-use checklists (DVIR-style) on mobile; any defect automatically opens a work order |
-| **Notifications** | Push to phones (Expo) plus an in-app inbox on web and mobile; tapping an alert opens the related screen. See [Notifications](#notifications) |
+| **Notifications** | Push to phones (Expo), in-app inbox, **email** and **text messages**, with per-person, per-category settings (mute anything, email/text only when someone doesn't have the app). See [Notifications](#notifications) |
 | **Dashboard** | Headcount, on-the-clock, pending PTO, overdue maintenance, open work orders, expiring registrations |
 
 The mobile app covers what field staff need: clock in/out with GPS, weekly hours, time-off
@@ -91,8 +91,48 @@ moves shifts by exactly 7 days, so a copy across a daylight-saving change shifts
 
 ## Notifications
 
-Every alert is saved to the recipient's inbox (bell icon on web and mobile) and pushed to any
-phones they're signed in on. Nobody is notified about their own actions.
+Alerts reach people through up to four channels: the in-app inbox (bell icon on web and mobile),
+push to any phone signed in to the app, email, and text message. Nobody is notified about their own
+actions.
+
+### Who gets what, and how
+
+Each person chooses per category (time off, time clock, schedule, fleet, documents, onboarding,
+hiring) in **Settings → Notification settings** on web or **Me → Notification settings** in the app:
+
+| Channel | Options | Default |
+| --- | --- | --- |
+| App & inbox | On / muted | On |
+| Email | Off · Only if no app · Always | Only if no app |
+| Text | Off · Only if no app · Always | Off |
+
+"Only if no app" means the person isn't signed in to the Crewdesk app on any phone, so employees who
+never install the app still hear about their schedule, time off and so on by email (or text).
+Admins can open the same settings for any employee from their profile, which helps for staff who
+never log in.
+
+**Texts** need three things: the owner turns on "Allow text messages" for the company (texts cost
+money), the employee has a valid mobile number, and the employee opts in. Opt-in is recorded with a
+timestamp; an admin may record it on someone's behalf only with their consent. If someone replies
+STOP, Twilio blocks further texts and Crewdesk turns their opt-in off automatically.
+
+**Emails** include a one-click unsubscribe link for that category (and the `List-Unsubscribe`
+headers Gmail and Yahoo look for), plus a link to the full settings page.
+
+### Setting up email and text
+
+Add to `apps/api/.env`:
+
+- `SMTP_URL` and `EMAIL_FROM`: any SMTP email service (Postmark, SendGrid, Amazon SES, Mailgun,
+  Google Workspace…). Use a sending domain with SPF/DKIM set up so mail doesn't land in spam.
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_MESSAGING_SERVICE_SID` (or `TWILIO_FROM`).
+  Texting US numbers from an app requires **A2P 10DLC registration** in Twilio (brand + campaign),
+  which takes a few days to approve.
+- `WEB_URL` and `PUBLIC_API_URL`: public addresses used for links in emails and texts.
+
+If these aren't set, the channel is simply skipped and the settings pages say so.
+
+### Events
 
 | Event | Who gets it |
 | --- | --- |
@@ -156,7 +196,7 @@ This is a working foundation, not a finished product. Before real customers use 
 - **File storage**: swap `LocalStorage` (`apps/api/src/lib/storage.ts`) for S3/R2/GCS.
 - **Auth hardening**: password reset and invite emails, refresh tokens, rate limiting on login, optional SSO/2FA.
 - **Sensitive data**: SSNs/bank details should live only with the payroll provider. If you must store them, encrypt at the field level.
-- **Notifications**: per-user preferences (mute categories), email/SMS delivery for people without the app, and Expo push receipt checking.
+- **Notifications**: delivery history/audit log, email digests instead of one email per event, an inbound Twilio webhook for START/HELP, and Expo push receipt checking.
 - **Compliance**: I-9/W-4 form generation, state-specific overtime (e.g. California daily OT), meal/break rules, record retention. Consider a signature provider (Dropbox Sign, DocuSign) for legally stronger audit trails.
 - **Ops**: hosting (e.g. API on Fly/Render/AWS, web on Vercel, Postgres managed), backups, error monitoring, audit log, EAS builds and App Store / Play Store submission.
 - **Billing**: Stripe subscriptions per company if you sell this as SaaS.

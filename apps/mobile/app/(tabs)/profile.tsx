@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { Alert, View } from "react-native";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -46,6 +47,7 @@ export default function Profile() {
           </View>
         )) : <Txt muted>No documents.</Txt>}
       </Card>
+      <Button title="Notification settings" kind="secondary" onPress={() => router.push("/notification-settings")} />
       <Button title="Sign out" kind="secondary" onPress={signOut} />
     </Screen>
   );

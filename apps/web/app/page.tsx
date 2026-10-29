@@ -4,10 +4,11 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 
 export default function Home() {
-  const { me, ready } = useAuth();
+  const { me, ready, can } = useAuth();
   const router = useRouter();
   useEffect(() => {
-    if (ready) router.replace(me ? "/dashboard" : "/login");
-  }, [me, ready, router]);
+    // The dashboard is for managers; everyone else starts on their schedule.
+    if (ready) router.replace(!me ? "/login" : can("manager") ? "/dashboard" : "/schedule");
+  }, [me, ready, router, can]);
   return null;
 }

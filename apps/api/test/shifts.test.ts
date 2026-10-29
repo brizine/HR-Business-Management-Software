@@ -2,6 +2,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";
+import { setEmailTransport, setSmsTransport } from "../src/lib/channels";
 import { pool } from "../src/db";
 import { runScheduledChecks } from "../src/lib/jobs";
 import { flushNotifications, setPushTransport, type PushMessage } from "../src/lib/notify";
@@ -35,6 +36,8 @@ async function titlesFor(who: keyof typeof people) {
 
 beforeAll(async () => {
   setPushTransport({ send: async (m) => (sent.push(...m), m.map(() => ({ status: "ok" as const, id: "t" }))) });
+  setEmailTransport(null);
+  setSmsTransport(null);
   app = await buildApp({ logger: false });
   const signup = await call("POST", "/auth/signup", undefined, {
     companyName: "Shift Co", firstName: "Sam", lastName: "Owner", email: `sam-${suffix}@test.dev`, password: "password123",
@@ -52,7 +55,9 @@ beforeAll(async () => {
   }
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+  // Let notifications from the previous test land before resetting.
+  await flushNotifications();
   sent = [];
 });
 
@@ -95,8 +100,8 @@ describe("building a schedule", () => {
 
     const pub = await call("POST", "/shifts/publish", "owner", week);
     expect(pub.body.published).toBe(4);
-    expect(await titlesFor("amy")).toEqual(["Your schedule for the week of Jan 7 is posted", "An open shift is available"]);
-    expect((await titlesFor("ben"))[0]).toMatch(/Your schedule for the week of/);
+    expect((await titlesFor("amy")).sort()).toEqual(["An open shift is available", "Your schedule for the week of Jan 7 is posted"]);
+    expect(await titlesFor("ben")).toContain("Your schedule for the week of Jan 7 is posted");
     expect((await call("GET", `/shifts?from=${week.from}&to=${week.to}`, "amy")).body).toHaveLength(4);
 
     sent = [];

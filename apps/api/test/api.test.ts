@@ -5,6 +5,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";
+import { setEmailTransport, setSmsTransport } from "../src/lib/channels";
 import { pool } from "../src/db";
 import { flushNotifications, setPushTransport } from "../src/lib/notify";
 
@@ -26,6 +27,8 @@ async function call(method: string, url: string, token?: string, payload?: unkno
 
 beforeAll(async () => {
   setPushTransport({ send: async (m) => m.map(() => ({ status: "ok" as const, id: "x" })) });
+  setEmailTransport(null);
+  setSmsTransport(null);
   app = await buildApp({ logger: false });
   const signup = await call("POST", "/auth/signup", undefined, {
     companyName: "Test Co",
@@ -54,6 +57,20 @@ afterAll(async () => {
   await app.close();
   await flushNotifications();
   await pool.end();
+});
+
+describe("CORS", () => {
+  it("lets the web app send every method it uses", async () => {
+    for (const method of ["PUT", "PATCH", "DELETE"]) {
+      const res = await app.inject({
+        method: "OPTIONS",
+        url: "/employees/x",
+        headers: { origin: "http://localhost:3000", "access-control-request-method": method },
+      });
+      expect(res.statusCode).toBe(204);
+      expect(res.headers["access-control-allow-methods"]).toContain(method);
+    }
+  });
 });
 
 describe("auth & permissions", () => {

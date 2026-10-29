@@ -23,7 +23,7 @@ export default function Signup() {
             run(async () => {
               const { token } = await api("/auth/signup", { body });
               await signIn(token);
-              router.replace("/dashboard");
+              router.replace("/");
             });
           }}
         >

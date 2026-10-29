@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
 import { buildApp } from "../src/app";
+import { setEmailTransport, setSmsTransport } from "../src/lib/channels";
 import { db, pool } from "../src/db";
 import { maintenanceSchedules, pushTokens, timeEntries } from "../src/db/schema";
 import { runScheduledChecks } from "../src/lib/jobs";
@@ -46,6 +47,8 @@ beforeAll(async () => {
       );
     },
   });
+  setEmailTransport(null);
+  setSmsTransport(null);
   app = await buildApp({ logger: false });
   const signup = await call("POST", "/auth/signup", undefined, {
     companyName: "Notify Co", firstName: "Olga", lastName: "Owner", email: `olga-${suffix}@test.dev`, password: "password123",
@@ -61,7 +64,9 @@ beforeAll(async () => {
   expect((await call("POST", "/notifications/devices", tech.token, { token: tokens.tech, platform: "android" })).status).toBe(200);
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+  // Let notifications from the previous test land before resetting.
+  await flushNotifications();
   sent = [];
 });
 

@@ -24,7 +24,7 @@ export default function Login() {
             run(async () => {
               const { token } = await api("/auth/login", { body });
               await signIn(token);
-              router.replace("/dashboard");
+              router.replace("/");
             });
           }}
         >

@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, fmtDateTime } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
@@ -23,6 +24,7 @@ export default function Notifications() {
   return (
     <>
       <PageHead title="Notifications" sub={data ? `${data.unread} unread` : undefined}>
+        <Link href="/settings/notifications" className="btn">Settings</Link>
         {!!data?.unread && <button className="btn" onClick={() => api("/notifications/read-all", { method: "POST" }).then(changed)}>Mark all as read</button>}
       </PageHead>
       <div className="card">

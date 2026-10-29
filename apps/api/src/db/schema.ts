@@ -1,6 +1,7 @@
 import type { NotificationLink } from "@crewdesk/shared";
 import {
   boolean,
+  primaryKey,
   date,
   doublePrecision,
   index,
@@ -27,6 +28,8 @@ export const companies = pgTable("companies", {
   payrollProvider: text("payroll_provider").notNull().default("csv"),
   payrollProviderCompanyId: text("payroll_provider_company_id"),
   weeklyOvertimeThreshold: doublePrecision("weekly_overtime_threshold").notNull().default(40),
+  /** Texts cost money per message, so the owner turns them on for the company. */
+  smsEnabled: boolean("sms_enabled").notNull().default(false),
   createdAt: createdAt(),
 });
 
@@ -50,6 +53,8 @@ export const employees = pgTable(
     startDate: date("start_date"),
     status: text("status").notNull().default("active"),
     payrollProviderEmployeeId: text("payroll_provider_employee_id"),
+    /** When the person agreed to receive texts; null means no texts. */
+    smsOptInAt: timestamp("sms_opt_in_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [index("employees_company_idx").on(t.companyId)],
@@ -378,4 +383,20 @@ export const shifts = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("shifts_company_time_idx").on(t.companyId, t.startsAt), index("shifts_employee_idx").on(t.employeeId, t.startsAt)],
+);
+
+/** Per-person, per-category delivery choices. Missing rows mean the defaults. */
+export const notificationPreferences = pgTable(
+  "notification_preferences",
+  {
+    companyId: companyId(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    app: boolean("app").notNull().default(true),
+    email: text("email").notNull().default("no_app"),
+    sms: text("sms").notNull().default("never"),
+  },
+  (t) => [primaryKey({ columns: [t.employeeId, t.category] })],
 );
