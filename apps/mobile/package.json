@@ -12,6 +12,7 @@
   "dependencies": {
     "@crewdesk/shared": "workspace:*",
     "expo": "~54.0.38",
+    "expo-camera": "~17.0.10",
     "expo-constants": "~18.0.14",
     "expo-device": "~8.0.10",
     "expo-linking": "~8.0.12",

@@ -28,6 +28,7 @@ packages/
 | **Fleet & equipment** | Asset registry (vehicles, trailers, heavy/small equipment, tools), odometer + engine-hour meters, registration/insurance expiry |
 | **Preventive maintenance** | Schedules by miles, engine hours and/or days (whichever comes first), due-soon/overdue status, fleet-wide due list |
 | **Work orders** | Numbered work orders with priority, assignment, parts/labor cost, vendor; completing one resets its maintenance schedule; critical issues take the asset out of service |
+| **QR labels** | Printable QR label per asset; scanning with any phone camera opens a phone-friendly page to inspect, log a reading or report an issue, no app needed. The app has a built-in scanner. See [QR labels](#qr-labels) |
 | **Inspections** | Pre-trip/pre-use checklists (DVIR-style) on mobile; any defect automatically opens a work order |
 | **Notifications** | Push to phones (Expo), in-app inbox, **email** and **text messages**, with per-person, per-category settings (mute anything, email/text only when someone doesn't have the app). See [Notifications](#notifications) |
 | **Dashboard** | Headcount, on-the-clock, pending PTO, overdue maintenance, open work orders, expiring registrations |
@@ -69,6 +70,28 @@ pnpm typecheck
 ### Changing the database
 
 Edit `apps/api/src/db/schema.ts`, then `pnpm --filter @crewdesk/api db:generate` and `pnpm db:migrate`.
+
+## QR labels
+
+Every vehicle and piece of equipment gets a short code (e.g. `ET2W42AUDZ`) and a QR label that
+links to `https://<your site>/q/<code>`.
+
+- **Printing:** **Assets → Print QR labels** prints a sheet for the whole fleet (large 4″×2″ or small
+  2.6″×1″), or use **Print label** / **Download SVG** on a single asset. Use weatherproof vinyl
+  labels outdoors.
+- **Scanning:** any phone camera opens the scan page: big buttons for a pre-trip inspection,
+  logging the odometer/hours, and reporting an issue, plus open work orders and maintenance due.
+  People who aren't signed in log in and land right back on it. In the Crewdesk app, the Fleet tab
+  has a **Scan equipment QR** button.
+- **Damaged label:** the code is printed under the QR and can be typed into the app's scanner screen.
+- **Lost or stolen label:** a manager clicks **New code** on the asset; the old label stops working.
+- Labels only work for signed-in members of the same company, so a label seen by the public
+  reveals nothing.
+
+If staff reach the site at a different address than the one you print from, set
+`NEXT_PUBLIC_WEB_URL` in `apps/web/.env.local` so labels point to the right place. To have labels
+open the app instead of the browser on phones that have it installed, set up iOS Universal Links /
+Android App Links for your domain (the app already handles `/q/<code>` links).
 
 ## Scheduling
 
@@ -213,4 +236,4 @@ This is a working foundation, not a finished product. Before real customers use 
 
 Shift swaps between employees, geofenced clock-in, performance reviews, benefits enrollment, parts
 inventory, fuel logs and cost-per-mile, telematics/GPS integrations (Samsara, Geotab) to auto-update
-odometers, QR codes on equipment to open its page in the app, and reports/exports.
+odometers, NFC tags as an alternative to QR labels, and reports/exports.

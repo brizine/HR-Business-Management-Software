@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { assetSchema, maintenanceScheduleSchema, meterReadingSchema } from "@crewdesk/shared";
 import { db } from "../db";
-import { assets, inspections, maintenanceSchedules, meterReadings, workOrders } from "../db/schema";
+import { assets, inspections, maintenanceSchedules, meterReadings, newAssetCode, workOrders } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { notFound, parse } from "../lib/errors";
 import { recordMeter, withDue } from "../lib/fleet";
@@ -53,6 +53,31 @@ const routes: FastifyPluginAsync = async (app) => {
       .map(({ schedule, asset }) => ({ ...withDue(schedule, asset), assetName: asset.name }))
       .filter((s) => s.due.status !== "ok")
       .sort((a, b) => STATUS_RANK[b.due.status] - STATUS_RANK[a.due.status]);
+  });
+
+  /**
+   * Resolves a scanned QR label. Codes are case-insensitive and ignore stray
+   * characters so a hand-typed code from a scuffed label still works.
+   */
+  app.get<{ Params: { code: string } }>("/by-code/:code", async (req) => {
+    const code = req.params.code.toUpperCase().replace(/[^0-9A-Z]/g, "");
+    const [asset] = await db
+      .select({ id: assets.id, name: assets.name })
+      .from(assets)
+      .where(and(eq(assets.qrCode, code), eq(assets.companyId, req.user.companyId)));
+    if (!asset) notFound("Equipment for this code");
+    return asset;
+  });
+
+  /** Issues a new code, e.g. when a label is lost or stolen. Old labels stop working. */
+  app.post<{ Params: { id: string } }>("/:id/regenerate-code", { preHandler: requireRole("manager") }, async (req) => {
+    const [row] = await db
+      .update(assets)
+      .set({ qrCode: newAssetCode() })
+      .where(and(eq(assets.id, req.params.id), eq(assets.companyId, req.user.companyId)))
+      .returning();
+    if (!row) notFound("Asset");
+    return row;
   });
 
   app.get<{ Params: { id: string } }>("/:id", async (req) => {

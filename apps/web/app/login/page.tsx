@@ -1,14 +1,18 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction } from "@/lib/hooks";
 import { ErrorBox, formValues } from "@/components/ui";
 
-export default function Login() {
+function Login() {
   const { signIn } = useAuth();
   const router = useRouter();
+  // Only follow same-site paths, never a full URL, so the link can't bounce people elsewhere.
+  const next = useSearchParams().get("next");
+  const target = next?.startsWith("/") && !next.startsWith("//") ? next : "/";
   const { busy, error, run } = useAction();
 
   return (
@@ -24,7 +28,7 @@ export default function Login() {
             run(async () => {
               const { token } = await api("/auth/login", { body });
               await signIn(token);
-              router.replace("/");
+              router.replace(target);
             });
           }}
         >
@@ -37,4 +41,8 @@ export default function Login() {
       </div>
     </div>
   );
+}
+
+export default function Page() {
+  return <Suspense><Login /></Suspense>;
 }

@@ -227,4 +227,27 @@ describe("fleet maintenance", () => {
     const dash = await call("GET", "/dashboard", ownerToken);
     expect(dash.body.fleet.openWorkOrders).toBe(1);
   });
+
+  it("resolves QR label codes and lets managers retire them", async () => {
+    const asset = await call("POST", "/assets", ownerToken, { name: "Trailer QR", type: "trailer" });
+    const code: string = asset.body.qrCode;
+    expect(code).toMatch(/^[2-9A-HJKMNP-Z]{10}$/);
+
+    // Employees can scan; codes are case-insensitive and tolerate stray characters.
+    const scanned = await call("GET", `/assets/by-code/${code.slice(0, 5).toLowerCase()}-${code.slice(5)}`, employeeToken);
+    expect(scanned.body).toEqual({ id: asset.body.id, name: "Trailer QR" });
+    expect((await call("GET", "/assets/by-code/NOPE234567", employeeToken)).status).toBe(404);
+
+    // Another company's code doesn't resolve.
+    const other = await call("POST", "/auth/signup", undefined, {
+      companyName: "Other Co", firstName: "O", lastName: "O", email: `other-${suffix}@test.dev`, password: "password123",
+    });
+    expect((await call("GET", `/assets/by-code/${code}`, other.body.token)).status).toBe(404);
+
+    expect((await call("POST", `/assets/${asset.body.id}/regenerate-code`, employeeToken)).status).toBe(403);
+    const fresh = await call("POST", `/assets/${asset.body.id}/regenerate-code`, ownerToken);
+    expect(fresh.body.qrCode).not.toBe(code);
+    expect((await call("GET", `/assets/by-code/${code}`, employeeToken)).status).toBe(404);
+    expect((await call("GET", `/assets/by-code/${fresh.body.qrCode}`, employeeToken)).status).toBe(200);
+  });
 });

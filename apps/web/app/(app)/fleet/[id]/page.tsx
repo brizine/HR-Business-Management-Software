@@ -7,6 +7,7 @@ import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
 import { AssetFields } from "@/components/asset-form";
 import { DocumentList } from "@/components/documents";
+import { QrCode, assetQrUrl, qrSvg } from "@/components/qr";
 
 export default function AssetDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -136,6 +137,26 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
               </tr>
             ))}</tbody></table>
           ) : <Empty>No inspections recorded.</Empty>}
+        </div>
+      </div>
+      <div className="card row" style={{ alignItems: "flex-start", gap: 18 }}>
+        <QrCode value={assetQrUrl(a.qrCode)} size={128} />
+        <div className="stack" style={{ flex: 1, minWidth: 220 }}>
+          <h2 style={{ margin: 0 }}>QR label</h2>
+          <div className="muted">Scanning opens a page to inspect this {a.type.replace("_", " ")}, log a reading or report an issue. No app needed.</div>
+          <div>Code <code style={{ letterSpacing: ".05em" }}>{a.qrCode}</code></div>
+          <div className="row">
+            <Link className="btn" href={`/fleet/labels?ids=${a.id}`}>Print label</Link>
+            <button className="btn" onClick={async () => {
+              const url = URL.createObjectURL(new Blob([await qrSvg(assetQrUrl(a.qrCode))], { type: "image/svg+xml" }));
+              Object.assign(document.createElement("a"), { href: url, download: `${a.name}-qr.svg` }).click();
+              URL.revokeObjectURL(url);
+            }}>Download SVG</button>
+            {can("manager") && (
+              <button className="btn danger" onClick={() => confirm("Issue a new code? The current label will stop working and you'll need to print a new one.")
+                && api(`/assets/${id}/regenerate-code`, { method: "POST" }).then(asset.reload)}>New code</button>
+            )}
+          </div>
         </div>
       </div>
       <DocumentList assetId={id} title="Asset documents (registration, insurance, manuals)" />

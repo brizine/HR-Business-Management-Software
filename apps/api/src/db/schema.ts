@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import type { NotificationLink } from "@crewdesk/shared";
 import {
   boolean,
@@ -18,6 +19,12 @@ const companyId = () =>
   uuid("company_id")
     .notNull()
     .references(() => companies.id, { onDelete: "cascade" });
+/** Unambiguous characters (no 0/O, 1/I/L) so a code can be typed in by hand if a label is damaged. */
+const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+export function newAssetCode() {
+  return Array.from({ length: 10 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join("");
+}
+
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 
 export const companies = pgTable("companies", {
@@ -227,6 +234,8 @@ export const assets = pgTable(
     assignedEmployeeId: uuid("assigned_employee_id").references(() => employees.id, { onDelete: "set null" }),
     registrationExpires: date("registration_expires"),
     insuranceExpires: date("insurance_expires"),
+    /** Printed on the asset's QR label. Regenerating it retires old labels. */
+    qrCode: text("qr_code").unique().$defaultFn(newAssetCode),
     createdAt: createdAt(),
   },
   (t) => [index("assets_company_idx").on(t.companyId)],

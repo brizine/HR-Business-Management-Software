@@ -95,3 +95,19 @@ describe("availability", () => {
     expect(availabilityConflicts([tuesdayAllDay], segs)).toHaveLength(1);
   });
 });
+
+import { codeFromScan } from "../src";
+
+describe("codeFromScan", () => {
+  it("reads label URLs, app links and bare codes", () => {
+    expect(codeFromScan("https://app.example.com/q/ET2W42AUDZ")).toBe("ET2W42AUDZ");
+    expect(codeFromScan("https://app.example.com/q/ET2W42AUDZ/?utm=x")).toBe("ET2W42AUDZ");
+    expect(codeFromScan("crewdesk://q/ET2W42AUDZ")).toBe("ET2W42AUDZ");
+    expect(codeFromScan(" et2w42audz ")).toBe("et2w42audz");
+  });
+
+  it("ignores unrelated QR codes", () => {
+    expect(codeFromScan("https://example.com/menu")).toBeNull();
+    expect(codeFromScan("WIFI:S:guest;T:WPA;P:hunter2;;")).toBeNull();
+  });
+});

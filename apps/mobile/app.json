@@ -36,6 +36,13 @@
         {
           "color": "#1f6feb"
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Crewdesk uses the camera to scan QR labels on vehicles and equipment.",
+          "recordAudioAndroid": false
+        }
       ]
     ],
     "extra": {

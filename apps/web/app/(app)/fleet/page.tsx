@@ -33,6 +33,7 @@ export default function Fleet() {
           <option value="small_equipment">Small equipment</option>
           <option value="tool">Tools</option>
         </select>
+        <Link className="btn" href="/fleet/labels">Print QR labels</Link>
         {can("manager") && <button className="btn primary" onClick={() => setAdding(!adding)}>Add asset</button>}
       </PageHead>
       {adding && (

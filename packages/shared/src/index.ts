@@ -4,3 +4,4 @@ export * from "./maintenance";
 export * from "./time";
 export * from "./notifications";
 export * from "./availability";
+export * from "./qr";

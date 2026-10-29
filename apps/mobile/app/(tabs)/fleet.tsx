@@ -1,9 +1,9 @@
-import { Link } from "expo-router";
+import { Link, router } from "expo-router";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
-import { Badge, Card, Row, Screen, Txt, useTheme } from "@/components/ui";
+import { Badge, Button, Card, Row, Screen, Txt, useTheme } from "@/components/ui";
 
 export default function Fleet() {
   const { me } = useAuth();
@@ -15,6 +15,7 @@ export default function Fleet() {
 
   return (
     <Screen refreshing={loading} onRefresh={reload}>
+      <Button title="📷  Scan equipment QR" onPress={() => router.push("/scan")} />
       {mine.length > 0 && (
         <Row style={{ justifyContent: "flex-start" }}>
           {[["Assigned to me", true], ["All", false]].map(([label, v]) => (
