@@ -26,7 +26,7 @@ const NAV: { section: string; items: { href: string; label: string; min?: Role }
     section: "Fleet & equipment",
     items: [
       { href: "/fleet", label: "Assets" },
-      { href: "/spray-mix", label: "Spray tank mix" },
+      { href: "/spray-mix", label: "Spray Mix Calculator" },
       { href: "/work-orders", label: "Work orders" },
       { href: "/inspections", label: "Inspections" },
     ],

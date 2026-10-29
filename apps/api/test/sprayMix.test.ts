@@ -1,4 +1,4 @@
-/** Spray tank mix sheets: everyone views; admins + chosen employees edit; every change is logged. */
+/** Spray Mix Calculator sheets: everyone views; admins + chosen employees edit; every change is logged. */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { computeMix } from "@crewdesk/shared";

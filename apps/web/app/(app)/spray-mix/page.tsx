@@ -220,7 +220,7 @@ export default function SprayMix() {
 
   return (
     <>
-      <PageHead title="Spray tank mix" sub="Enter the gallons you're mixing and press Update total to see how much of each product to add.">
+      <PageHead title="Spray Mix Calculator" sub="Enter the gallons you're mixing and press Update total to see how much of each product to add.">
         <button className="btn noprint" onClick={() => window.print()}>Print</button>
         {data.canEdit && sheet && <button className={`btn noprint ${editing ? "primary" : ""}`} onClick={() => setEditing(!editing)}>{editing ? "Done editing" : "Edit products & rates"}</button>}
       </PageHead>

@@ -31,7 +31,7 @@ function describeSheet(before: Sheet, after: Partial<Sheet>) {
 }
 
 /**
- * Spray tank mix sheets. Everyone can view them and calculate their own tank
+ * Spray Mix Calculator sheets. Everyone can view them and calculate their own tank
  * (that happens on the device; nothing is saved). Only admins and the
  * employees an admin picks can change products, rates and sheets.
  */

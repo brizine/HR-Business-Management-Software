@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Spray tank mix calculator, from ProSpray's "Spray Tank Fill" spreadsheet.
+ * Spray Mix Calculator, from ProSpray's "Spray Tank Fill" spreadsheet.
  *
  * Each mix sheet sprays water at a fixed rate (gallons per acre). For each
  * product, with its rate per acre:

@@ -623,7 +623,7 @@ export const jobSites = pgTable("job_sites", {
   createdAt: createdAt(),
 });
 
-/** Spray tank mix sheets (e.g. "Truck Mix" at 87.12 gal/acre). See computeMix in @crewdesk/shared. */
+/** Spray Mix Calculator sheets (e.g. "Truck Mix" at 87.12 gal/acre). See computeMix in @crewdesk/shared. */
 export const mixSheets = pgTable("mix_sheets", {
   id: id(),
   companyId: companyId(),

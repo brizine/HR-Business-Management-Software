@@ -96,7 +96,7 @@ function SheetEditor({ sheet, onSaved }: { sheet: any; onSaved: () => void }) {
   );
 }
 
-/** Spray tank mix: everyone calculates their tank; chosen editors can change products and rates. */
+/** Spray Mix Calculator: everyone calculates their tank; chosen editors can change products and rates. */
 export default function SprayMix() {
   const { data, loading, reload, error } = useApi("/spray-mixes");
   const [sheetId, setSheetId] = useState<string | null>(null);
@@ -125,8 +125,8 @@ export default function SprayMix() {
   if (!sheet) {
     return (
       <Screen>
-        <Card title="Spray tank mix">
-          <Txt muted>No mix sheets yet. {data.canEdit ? "Set them up on the website (Spray tank mix)." : "Ask an admin to set them up."}</Txt>
+        <Card title="Spray Mix Calculator">
+          <Txt muted>No mix sheets yet. {data.canEdit ? "Set them up on the website (Spray Mix Calculator)." : "Ask an admin to set them up."}</Txt>
         </Card>
       </Screen>
     );

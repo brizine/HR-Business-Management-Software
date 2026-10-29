@@ -30,7 +30,7 @@ packages/
 | **Preventive maintenance** | Schedules by miles, engine hours and/or days (whichever comes first), due-soon/overdue status, fleet-wide due list |
 | **Work orders** | Numbered work orders with priority, assignment, parts/labor cost, vendor; completing one resets its maintenance schedule; critical issues take the asset out of service |
 | **QR labels** | Printable QR label per asset; scanning with any phone camera opens a phone-friendly page to inspect, log a reading or report an issue, no app needed. The app has a built-in scanner. See [QR labels](#qr-labels) |
-| **Spray tank mix** | The Spray Tank Fill spreadsheet as a calculator: everyone enters tank gallons and taps **Update total**; admins choose which employees can edit products, rates and mixes; every change is logged. Web and app. See [Spray tank mix](#spray-tank-mix) |
+| **Spray Mix Calculator** | The Spray Tank Fill spreadsheet as a calculator: everyone enters tank gallons and taps **Update total**; admins choose which employees can edit products, rates and mixes; every change is logged. Web and app. See [Spray Mix Calculator](#spray-mix-calculator) |
 | **Inspections** | Pre-trip/pre-use checklists (DVIR-style) on mobile; any defect automatically opens a work order |
 | **Notifications** | Push to phones (Expo), in-app inbox, **email** and **text messages**, with per-person, per-category settings (mute anything, email/text only when someone doesn't have the app). See [Notifications](#notifications) |
 | **Company wiki** | Pages and sub-pages with per-page "who can see" and "who can edit" levels (everyone / managers / admins), a company setting for who can create pages, search, pinning, version history with restore, and optional notifications. Read on the phone, edit on the web. See [Company wiki](#company-wiki) |
@@ -121,9 +121,9 @@ start the clock from home but can still clock out on the drive back.
 - **Legal:** some states require written notice (or consent) before recording employee location.
   Tell employees before turning on a required rule.
 
-## Spray tank mix
+## Spray Mix Calculator
 
-**Fleet & equipment → Spray tank mix** on the web, and **Fleet → Spray tank mix** in the app. It's
+**Fleet & equipment → Spray Mix Calculator** on the web, and **Fleet → Spray Mix Calculator** in the app. It's
 the "Spray Tank Fill" spreadsheet as a shared calculator.
 
 - **Everyone** picks a mix (e.g. *Truck Mix*, *Z spray Mix*), enters **Tank mix in desired

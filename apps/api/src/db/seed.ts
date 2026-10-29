@@ -141,7 +141,7 @@ await db.insert(s.jobSites).values([
   { companyId, name: "Riverside HOA", address: "Riverside Dr, Austin, TX", lat: 30.2501, lng: -97.7302, radiusMeters: 300 },
 ]);
 
-// Spray tank mixes from the original spreadsheet; the crew lead (Marcus) can edit them.
+// Spray Mix Calculatores from the original spreadsheet; the crew lead (Marcus) can edit them.
 for (const [i, t] of SPRAY_MIX_TEMPLATE.entries()) {
   const [sheet] = await db
     .insert(s.mixSheets)
