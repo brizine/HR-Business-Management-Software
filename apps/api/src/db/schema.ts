@@ -37,6 +37,8 @@ export const companies = pgTable("companies", {
   weeklyOvertimeThreshold: doublePrecision("weekly_overtime_threshold").notNull().default(40),
   /** Texts cost money per message, so the owner turns them on for the company. */
   smsEnabled: boolean("sms_enabled").notNull().default(false),
+  /** Lowest role that must use two-factor sign-in ("owner", "admin", "manager", "employee"), or "none". */
+  twoFactorRequiredFor: text("two_factor_required_for").notNull().default("admin"),
   createdAt: createdAt(),
 });
 
@@ -62,6 +64,17 @@ export const employees = pgTable(
     payrollProviderEmployeeId: text("payroll_provider_employee_id"),
     /** When the person agreed to receive texts; null means no texts. */
     smsOptInAt: timestamp("sms_opt_in_at", { withTimezone: true }),
+    /** Bumped to sign the person out of every device; sessions carry the version they were issued with. */
+    tokenVersion: integer("token_version").notNull().default(0),
+    failedLoginCount: integer("failed_login_count").notNull().default(0),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    /** Authenticator-app secret, encrypted (see lib/crypto). Set once two-factor is turned on. */
+    totpSecret: text("totp_secret"),
+    /** Secret shown during setup, kept until the first code confirms it. */
+    totpPendingSecret: text("totp_pending_secret"),
+    totpEnabledAt: timestamp("totp_enabled_at", { withTimezone: true }),
+    /** Last accepted 30-second time step, so a code can't be replayed. */
+    totpLastStep: integer("totp_last_step"),
     createdAt: createdAt(),
   },
   (t) => [index("employees_company_idx").on(t.companyId)],
@@ -440,5 +453,28 @@ export const shiftTemplates = pgTable("shift_templates", {
   location: text("location"),
   assetId: uuid("asset_id").references(() => assets.id, { onDelete: "set null" }),
   notes: text("notes"),
+  createdAt: createdAt(),
+});
+
+/** One-time backup codes for two-factor sign-in, stored as SHA-256 hashes. */
+export const recoveryCodes = pgTable("recovery_codes", {
+  id: id(),
+  employeeId: uuid("employee_id")
+    .notNull()
+    .references(() => employees.id, { onDelete: "cascade" }),
+  codeHash: text("code_hash").notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: createdAt(),
+});
+
+/** Emailed password-reset links. Only a hash of the token is stored. */
+export const passwordResets = pgTable("password_resets", {
+  id: id(),
+  employeeId: uuid("employee_id")
+    .notNull()
+    .references(() => employees.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
   createdAt: createdAt(),
 });

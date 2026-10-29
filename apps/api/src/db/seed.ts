@@ -16,7 +16,8 @@ if (existing.length) {
 }
 
 const hash = await bcrypt.hash("password123", 10);
-const [company] = await db.insert(s.companies).values({ name: "Demo Landscaping & Haul" }).returning();
+// Two-factor is optional in the demo so you can click straight in; real companies default to requiring it for owners and admins.
+const [company] = await db.insert(s.companies).values({ name: "Demo Landscaping & Haul", twoFactorRequiredFor: "none" }).returning();
 const companyId = company.id;
 
 const [owner] = await db

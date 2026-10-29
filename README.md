@@ -67,7 +67,7 @@ pnpm dev:web                               # http://localhost:3000
 pnpm dev:mobile                            # scan the QR code with Expo Go
 ```
 
-Demo logins (password `password123`): `owner@demo.test`, `manager@demo.test`,
+Demo logins (password `password123`; two-factor is optional in the demo company): `owner@demo.test`, `manager@demo.test`,
 `tech@demo.test`, `crew@demo.test`.
 
 On a physical phone, set `EXPO_PUBLIC_API_URL` in `apps/mobile/.env` to your computer's LAN IP
@@ -83,6 +83,24 @@ pnpm typecheck
 ### Changing the database
 
 Edit `apps/api/src/db/schema.ts`, then `pnpm --filter @crewdesk/api db:generate` and `pnpm db:migrate`.
+
+## Account security
+
+- **Two-factor sign-in** with any authenticator app (Google Authenticator, Microsoft Authenticator,
+  1Password…), plus 10 one-time backup codes. The owner chooses who must use it under **Settings →
+  Security** (default: owners and admins); anyone can turn it on for themselves. People newly
+  required are walked through setup at their next sign-in. Secrets are encrypted in the database
+  (`ENCRYPTION_KEY`), and each code works only once.
+- **Lockout:** 5 wrong passwords or codes in a row lock the account for 15 minutes (admins can
+  unlock it). Sign-in endpoints are also rate-limited per IP address.
+- **Forgot password:** emailed one-time link, valid for an hour. Two-factor is still required after a reset.
+- **Sign out everywhere:** from **Settings → Security**, the phone app, or (for admins) an employee's
+  profile. It also stops push notifications to that person's phones. Changing a password, email or
+  role, or terminating someone, signs them out everywhere automatically.
+- **Immediate effect:** every request re-checks the account, so terminations and role changes apply at once.
+- **Admin limits:** admins can't change the owner's or another admin's account or create admins; only
+  the owner can. If someone loses their phone *and* backup codes, an admin (or the owner, for admins)
+  can reset their two-factor from their profile; verify it's really them first.
 
 ## QR labels
 
@@ -238,7 +256,7 @@ provider, which avoids building payroll tax compliance in-house.
 This is a working foundation, not a finished product. Before real customers use it:
 
 - **File storage**: set `UPLOAD_DIR` outside the deployed code, or use an S3/R2 bucket (`S3_*` settings).
-- **Auth hardening**: password reset and invite emails, refresh tokens, rate limiting on login, optional SSO/2FA.
+- **Auth**: invite emails for new staff and optional single sign-on (Google Workspace / Microsoft 365).
 - **Sensitive data**: SSNs/bank details should live only with the payroll provider. If you must store them, encrypt at the field level.
 - **Notifications**: delivery history/audit log, email digests instead of one email per event, an inbound Twilio webhook for START/HELP, and Expo push receipt checking.
 - **Compliance**: I-9/W-4 form generation, state-specific overtime (e.g. California daily OT), meal/break rules, record retention. Consider a signature provider (Dropbox Sign, DocuSign) for legally stronger audit trails.

@@ -49,6 +49,12 @@ export default function Profile() {
       </Card>
       <Button title="Notification settings" kind="secondary" onPress={() => router.push("/notification-settings")} />
       <Button title="Sign out" kind="secondary" onPress={signOut} />
+      <Button title="Sign out on all devices" kind="danger" onPress={() =>
+        Alert.alert("Sign out everywhere?", "Ends your Crewdesk sessions on every phone and computer, including this one. Use this if a device was lost.", [
+          { text: "Cancel", style: "cancel" },
+          { text: "Sign out everywhere", style: "destructive", onPress: () => api("/auth/logout-all", { method: "POST" }).then(signOut, signOut) },
+        ])} />
+      <Txt muted style={{ fontSize: 12, textAlign: "center" }}>Password and two-factor settings are under Settings → Security on the website.</Txt>
     </Screen>
   );
 }

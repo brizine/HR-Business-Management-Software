@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { hasRole, type Role } from "@crewdesk/shared";
-import { api, loadToken, saveToken } from "./api";
+import { api, loadToken, saveToken, setSessionEndedHandler } from "./api";
 import { registerForPush, unregisterForPush } from "./push";
 
 interface Me {
@@ -8,10 +8,15 @@ interface Me {
   company: { id: string; name: string };
 }
 
+export type SignInStep = { kind: "done" } | { kind: "code"; mfaToken: string } | { kind: "setup"; setupToken: string };
+
 interface AuthCtx {
   me: Me | null;
   ready: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  /** Returns the next step when two-factor is needed; otherwise signs in. */
+  signIn: (email: string, password: string) => Promise<SignInStep>;
+  /** Finishes signing in with a session token from the two-factor steps. */
+  completeSignIn: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
   can: (min: Role) => boolean;
 }
@@ -39,11 +44,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (me) registerForPush().catch((e) => console.warn("Push registration failed", e));
   }, [me?.user.id]);
 
-  const signIn = async (email: string, password: string) => {
-    const res = await api<Me & { token: string }>("/auth/login", { body: { email, password } });
-    await saveToken(res.token);
-    setMe({ user: res.user, company: res.company });
+  const signIn = async (email: string, password: string): Promise<SignInStep> => {
+    const res = await api("/auth/login", { body: { email, password } });
+    if (res.mfaRequired) return { kind: "code", mfaToken: res.mfaToken };
+    if (res.mfaSetupRequired) return { kind: "setup", setupToken: res.setupToken };
+    await completeSignIn(res.token);
+    return { kind: "done" };
   };
+  const completeSignIn = async (sessionToken: string) => {
+    await saveToken(sessionToken);
+    setMe(await api<Me>("/auth/me"));
+  };
+
+  // If the server ends the session (signed out everywhere, password changed), drop back to sign-in.
+  useEffect(() => {
+    setSessionEndedHandler(() => {
+      saveToken(null);
+      setMe(null);
+    });
+    return () => setSessionEndedHandler(null);
+  }, []);
   const signOut = async () => {
     await unregisterForPush();
     await saveToken(null);
@@ -51,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ me, ready, signIn, signOut, can: (min) => !!me && hasRole(me.user.role, min) }}>
+    <Ctx.Provider value={{ me, ready, signIn, completeSignIn, signOut, can: (min) => !!me && hasRole(me.user.role, min) }}>
       {children}
     </Ctx.Provider>
   );

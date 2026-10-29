@@ -89,6 +89,7 @@ replaced on redeploy.
 | --- | --- |
 | `DATABASE_URL` | From step 2 |
 | `JWT_SECRET` | A long random string (e.g. 64 random letters/numbers). Keep it secret. |
+| `ENCRYPTION_KEY` | Another long random string. Encrypts two-factor secrets; never change it after launch |
 | `JOBS_SECRET` | Another long random string (used by the cron job in step 7) |
 | `WEB_URL` | `https://app.prospray.biz` |
 | `PUBLIC_API_URL` | `https://app.prospray.biz/api` |
@@ -111,6 +112,10 @@ push any commit to `main`, or deploy from `main` at first and switch later.
 2. Open `https://app.prospray.biz/signup` and create your company and owner login.
 3. **Sign-up then closes automatically.** Add everyone else from **Team → Add employee** (give them
    a password, or let them use email/text notifications only).
+4. **Two-factor:** owners and admins must use an authenticator app. The next time you sign in you'll
+   be walked through setup; save the backup codes it shows. Change who must use it under
+   **Settings → Security**.
+5. Test **Forgot your password?** on the sign-in page once email is set up, so you know reset emails arrive.
 
 ## 7. Add the scheduled-checks cron job
 

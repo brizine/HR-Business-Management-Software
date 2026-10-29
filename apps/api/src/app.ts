@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import multipart from "@fastify/multipart";
+import rateLimit from "@fastify/rate-limit";
 import { registerErrorHandler } from "./lib/errors";
 import authRoutes from "./routes/auth";
 import employeeRoutes from "./routes/employees";
@@ -48,6 +49,8 @@ export async function buildApp(opts: AppOptions = {}) {
   });
   await app.register(jwt, { secret: secret ?? "dev-only-secret", sign: { expiresIn: "7d" } });
   await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024 } });
+  // Opt-in per route (sign-in endpoints set config.rateLimit).
+  await app.register(rateLimit, { global: false });
   registerErrorHandler(app);
   await app.register(apiRoutes, { prefix: opts.prefix ?? "" });
   return app;

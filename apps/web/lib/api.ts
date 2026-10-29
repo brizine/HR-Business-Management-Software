@@ -22,8 +22,12 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T = any>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
-  const token = getToken();
+/**
+ * Calls the API. `token` overrides the stored session (used for the
+ * short-lived tokens in the two-factor sign-in steps).
+ */
+export async function api<T = any>(path: string, init: { method?: string; body?: unknown; token?: string } = {}): Promise<T> {
+  const token = init.token ?? getToken();
   const isForm = typeof FormData !== "undefined" && init.body instanceof FormData;
   const res = await fetch(API_URL + path, {
     method: init.method ?? (init.body ? "POST" : "GET"),
@@ -35,6 +39,11 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
+    // The session ended (signed out everywhere, password changed, account disabled): back to sign-in.
+    if (res.status === 401 && !init.token && token && typeof window !== "undefined" && !path.startsWith("/auth/login")) {
+      setToken(null);
+      window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+    }
     const detail = data.issues?.map((i: { path: string[]; message: string }) => `${i.path.join(".")}: ${i.message}`).join("; ");
     throw new ApiError(res.status, detail || data.error || res.statusText);
   }

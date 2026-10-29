@@ -27,7 +27,7 @@ const TONES: Record<string, string> = {
   active: "ok", approved: "ok", completed: "ok", ok: "ok", hired: "ok", open: "ok", passed: "ok",
   pending: "warn", onboarding: "warn", due_soon: "warn", in_progress: "warn", waiting_parts: "warn",
   in_shop: "warn", medium: "warn", interview: "warn", offer: "warn", draft: "warn",
-  denied: "bad", overdue: "bad", terminated: "bad", out_of_service: "bad", critical: "bad", high: "bad",
+  denied: "bad", overdue: "bad", locked: "bad", terminated: "bad", out_of_service: "bad", critical: "bad", high: "bad",
   rejected: "bad", failed: "bad", cancelled: "bad",
 };
 

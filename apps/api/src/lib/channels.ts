@@ -35,6 +35,16 @@ export function setEmailTransport(t: EmailTransport | null) {
   email = t;
 }
 
+/** Account emails (password resets) that don't go through notification preferences. */
+export async function sendSystemEmail(to: string, subject: string, text: string, html: string) {
+  if (!email) {
+    console.warn(`Email isn't configured (SMTP_URL); couldn't send "${subject}" to ${to}`);
+    return false;
+  }
+  await email.send({ to, subject, text, html });
+  return true;
+}
+
 // ---------- SMS ----------
 
 export class SmsError extends Error {

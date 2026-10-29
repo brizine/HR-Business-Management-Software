@@ -11,7 +11,7 @@ import { EmployeeFields, employeeBody } from "@/components/employee-form";
 
 export default function Person({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { can } = useAuth();
+  const { me, can } = useAuth();
   const emp = useApi(`/employees/${id}`);
   const all = useApi<any[]>(can("admin") ? "/employees" : null);
   const balances = useApi<any[]>(can("manager") ? `/pto/balances?employeeId=${id}` : null);
@@ -57,7 +57,21 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
             {"payRateCents" in e && <div><div className="muted">Pay</div>{money(e.payRateCents)} {e.payType === "hourly" ? "/hr" : "/yr"}</div>}
             <div><div className="muted">Employment</div>{e.employmentType?.replace("_", " ")}</div>
             <div><div className="muted">App login</div>{e.hasLogin ? "Yes" : "Not set"}</div>
+            {"twoFactorEnabled" in e && <div><div className="muted">Two-factor</div>{e.twoFactorEnabled ? "On" : "Off"}</div>}
+            {e.locked && <div><div className="muted">Sign-in</div><Badge value="locked" /></div>}
           </div>
+        </div>
+      )}
+      {can("admin") && e.id !== me?.user.id && e.hasLogin && (
+        <div className="card row">
+          <strong style={{ marginRight: 8 }}>Account</strong>
+          <button className="btn" onClick={() => confirm(`Sign ${e.firstName} out of Crewdesk on every device?`)
+            && api(`/employees/${id}/sign-out-everywhere`, { method: "POST" }).then(() => alert("Signed out everywhere."), (err) => alert(err.message))}>Sign out everywhere</button>
+          {e.twoFactorEnabled && (
+            <button className="btn" onClick={() => confirm(`Reset ${e.firstName}'s two-factor? Only do this if you've confirmed it's really them (e.g. in person). They'll be signed out and can set it up again.`)
+              && api(`/employees/${id}/reset-two-factor`, { method: "POST" }).then(emp.reload, (err) => alert(err.message))}>Reset two-factor</button>
+          )}
+          {e.locked && <button className="btn" onClick={() => api(`/employees/${id}/unlock`, { method: "POST" }).then(emp.reload, (err) => alert(err.message))}>Unlock</button>}
         </div>
       )}
       <div className="grid cols-2">
