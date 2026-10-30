@@ -66,7 +66,7 @@ async function check(companyId: string, s: ShiftInput, ignoreId?: string) {
     .from(employees)
     .where(and(eq(employees.id, s.employeeId), eq(employees.companyId, companyId)));
   if (!emp) notFound("Employee");
-  if (emp.status === "terminated") throw new HttpError(400, `${emp.firstName} ${emp.lastName} is no longer employed`);
+  if (emp.status === "inactive") throw new HttpError(400, `${emp.firstName} ${emp.lastName} is inactive`);
 
   const start = new Date(s.startsAt);
   const end = new Date(s.endsAt);

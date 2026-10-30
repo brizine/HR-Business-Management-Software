@@ -124,7 +124,7 @@ export async function runScheduledChecks(now = new Date()) {
     .from(onboardingTasks)
     .innerJoin(employees, eq(employees.id, onboardingTasks.employeeId))
     .innerJoin(companies, eq(companies.id, onboardingTasks.companyId))
-    .where(and(isNull(onboardingTasks.completedAt), isNotNull(onboardingTasks.dueDate), ne(employees.status, "terminated")));
+    .where(and(isNull(onboardingTasks.completedAt), isNotNull(onboardingTasks.dueDate), ne(employees.status, "inactive")));
   const digests = new Map<string, { companyId: string; due: string[]; overdue: string[] }>();
   for (const { task, employee, tz } of open) {
     const local = localParts(now, tz);

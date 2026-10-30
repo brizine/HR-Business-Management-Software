@@ -94,7 +94,7 @@ export async function buildPayrollLines(db: DB, companyId: string, period: Payro
   const round = (n: number) => Math.round(n * 100) / 100;
 
   return staff
-    .filter((e) => e.status !== "terminated" || entries.some((t) => t.employeeId === e.id))
+    .filter((e) => e.status !== "inactive" || entries.some((t) => t.employeeId === e.id))
     .map((e) => {
       const all = entries.filter((t) => t.employeeId === e.id);
       const counted = period.approvedOnly ? all.filter((t) => t.approvedAt) : all;

@@ -198,7 +198,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .select({ form: taxForms, employee: employees })
       .from(taxForms)
       .innerJoin(employees, eq(employees.id, taxForms.employeeId))
-      .where(and(eq(taxForms.companyId, req.user.companyId), isNull(taxForms.supersededAt), ne(employees.status, "terminated")))
+      .where(and(eq(taxForms.companyId, req.user.companyId), isNull(taxForms.supersededAt), ne(employees.status, "inactive")))
       .orderBy(desc(taxForms.createdAt));
     return rows
       .filter(({ form }) => (form.type === "i9" ? form.status !== "completed" : !form.processedAt))

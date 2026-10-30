@@ -85,7 +85,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
           </div>
         </div>
       )}
-      {can("admin") && !e.hasLogin && e.status !== "terminated" && (
+      {can("admin") && !e.hasLogin && e.status !== "inactive" && (
         <div className="card stack">
           <div className="row">
             <strong style={{ marginRight: 8 }}>Account</strong>

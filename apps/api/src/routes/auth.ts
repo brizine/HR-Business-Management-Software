@@ -139,7 +139,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.post("/login", limited, async (req, reply) => {
     const body = parse(loginSchema, req.body);
     const [user] = await db.select().from(employees).where(eq(employees.email, body.email.toLowerCase()));
-    if (!user?.passwordHash || user.status === "terminated") {
+    if (!user?.passwordHash || user.status === "inactive") {
       await bcrypt.compare(body.password, DUMMY_HASH);
       throw new HttpError(401, "Invalid email or password");
     }
@@ -176,7 +176,7 @@ const routes: FastifyPluginAsync = async (app) => {
           gt(passwordResets.expiresAt, new Date()),
         ),
       );
-    if (!row || row.employee.status === "terminated") {
+    if (!row || row.employee.status === "inactive") {
       throw new HttpError(400, "This invite has expired or was already used. Ask your manager to send a new one.");
     }
     return row;
@@ -329,7 +329,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.post("/forgot-password", limited, async (req) => {
     const { email } = parse(z.object({ email: z.string().email() }), req.body);
     const [user] = await db.select().from(employees).where(eq(employees.email, email.toLowerCase()));
-    if (user && user.status !== "terminated") {
+    if (user && user.status !== "inactive") {
       const token = randomToken();
       await db.insert(passwordResets).values({
         employeeId: user.id,

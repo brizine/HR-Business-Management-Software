@@ -149,7 +149,7 @@ describe("sessions", () => {
     expect(await db.select().from(pushTokens).where(eq(pushTokens.employeeId, id))).toHaveLength(0);
   });
 
-  it("termination and role changes take effect immediately", async () => {
+  it("making someone inactive and role changes take effect immediately", async () => {
     const id = await hire("leaver", "manager");
     const token = (await login("leaver")).body.token;
     expect((await call("GET", "/time/timesheets", token)).status).toBe(200);
@@ -160,7 +160,9 @@ describe("sessions", () => {
     const newToken = (await login("leaver")).body.token;
     expect((await call("GET", "/time/timesheets", newToken)).status).toBe(403);
 
-    await call("PATCH", `/employees/${id}`, ownerToken, { status: "terminated" });
+    // Older clients may still send "terminated"; it's stored as "inactive".
+    const updated = await call("PATCH", `/employees/${id}`, ownerToken, { status: "terminated" });
+    expect(updated.body.status).toBe("inactive");
     expect((await call("GET", "/auth/me", newToken)).status).toBe(401);
     expect((await login("leaver")).status).toBe(401);
   });

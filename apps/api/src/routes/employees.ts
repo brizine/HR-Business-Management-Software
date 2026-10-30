@@ -80,7 +80,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { id: string } }>("/:id/invite", { preHandler: requireRole("admin") }, async (req) => {
     const target = await manageable(req, req.params.id, false);
     if (target.passwordHash) throw new HttpError(409, `${target.firstName} already has a login. They can use "Forgot your password?" if needed.`);
-    if (target.status === "terminated") throw new HttpError(409, "This person is no longer employed");
+    if (target.status === "inactive") throw new HttpError(409, "This person is inactive. Make them active first.");
     return sendInvite(target, await actorName(req.user.sub));
   });
 
@@ -121,7 +121,7 @@ const routes: FastifyPluginAsync = async (app) => {
       !!password ||
       (rest.email !== undefined && rest.email.toLowerCase() !== target.email) ||
       (rest.role !== undefined && rest.role !== target.role) ||
-      (rest.status === "terminated" && target.status !== "terminated");
+      (rest.status === "inactive" && target.status !== "inactive");
     return publicEmployee(changedAccess ? await signOutEverywhere(row.id) : row);
   });
 

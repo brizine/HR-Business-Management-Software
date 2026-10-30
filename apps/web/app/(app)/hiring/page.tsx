@@ -14,7 +14,7 @@ function HireForm({ applicant, job, templates, staff, onCancel, onHired }: {
 }) {
   const { me } = useAuth();
   const { busy, error, run } = useAction();
-  const managers = staff.filter((e) => ["manager", "admin", "owner"].includes(e.role) && e.status !== "terminated");
+  const managers = staff.filter((e) => ["manager", "admin", "owner"].includes(e.role) && e.status !== "inactive");
   return (
     <div className="card">
       <h2>Hire {applicant.firstName} {applicant.lastName}</h2>

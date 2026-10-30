@@ -182,7 +182,7 @@ function Editors() {
   const [saved, setSaved] = useState(false);
   useEffect(() => { if (current.data) setPicked(new Set(current.data)); }, [current.data]);
   if (!staff.data || !picked) return null;
-  const people = staff.data.filter((e) => e.status !== "terminated" && !["admin", "owner"].includes(e.role));
+  const people = staff.data.filter((e) => e.status !== "inactive" && !["admin", "owner"].includes(e.role));
   return (
     <details className="card noprint">
       <summary><strong>Who can edit</strong> <span className="muted">({picked.size} employee{picked.size === 1 ? "" : "s"} + admins)</span></summary>

@@ -92,7 +92,7 @@ async function deliver(companyId: string, employeeIds: string[], n: Notification
   const people = await db
     .select()
     .from(employees)
-    .where(and(eq(employees.companyId, companyId), inArray(employees.id, employeeIds), ne(employees.status, "terminated")));
+    .where(and(eq(employees.companyId, companyId), inArray(employees.id, employeeIds), ne(employees.status, "inactive")));
   if (!people.length) return;
   const ids = people.map((p) => p.id);
 
@@ -202,7 +202,7 @@ export async function staffWithRole(companyId: string, min: Role) {
   const rows = await db
     .select({ id: employees.id, role: employees.role })
     .from(employees)
-    .where(and(eq(employees.companyId, companyId), ne(employees.status, "terminated")));
+    .where(and(eq(employees.companyId, companyId), ne(employees.status, "inactive")));
   return rows.filter((r) => hasRole(r.role as Role, min)).map((r) => r.id);
 }
 
