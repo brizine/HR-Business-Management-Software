@@ -98,6 +98,7 @@ function SheetEditor({ sheet, onSaved }: { sheet: any; onSaved: () => void }) {
 
 /** Spray Mix Calculator: everyone calculates their tank; chosen editors can change products and rates. */
 export default function SprayMix() {
+  const t = useTheme();
   const { data, loading, reload, error } = useApi("/spray-mixes");
   const [sheetId, setSheetId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -156,8 +157,9 @@ export default function SprayMix() {
         </Txt>
       </Card>
       <Card title={`Product needed for ${formatEntered(applied)} gal`}>
-        {mix.rows.map(({ product: p, ratePer1000, needed }) => (
-          <View key={p.id} style={{ gap: 4 }}>
+        {mix.rows.map(({ product: p, ratePer1000, needed }, i) => (
+          // Every other product in yellow, so the eye can follow a row across.
+          <View key={p.id} style={{ gap: 4, backgroundColor: i % 2 ? t.stripe : "transparent", marginHorizontal: -14, paddingHorizontal: 14, paddingBottom: 6 }}>
             <Divider />
             <Row style={{ alignItems: "flex-start" }}>
               <View style={{ flex: 1 }}>

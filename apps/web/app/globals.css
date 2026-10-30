@@ -15,6 +15,7 @@
   --bad: #b42318;
   --bad-bg: #fde7e5;
   --info-bg: #e8f0fe;
+  --stripe: #fff3b0;
   --radius: 10px;
 }
 @media (prefers-color-scheme: dark) {
@@ -33,6 +34,7 @@
     --bad-bg: #3d1210;
     --bad: #ff8a80;
     --info-bg: #14233d;
+    --stripe: #3d3510;
   }
 }
 * { box-sizing: border-box; }
@@ -223,8 +225,14 @@ tr.openrow td { background: var(--bg); }
 }
 
 /* Spray Mix Calculator */
-.mix-table th[scope="row"] { text-align: left; }
+.mix-table th[scope="row"] { text-align: left; color: var(--text); font-size: 14px; }
 .mix-table td:last-child { white-space: nowrap; }
+/* Every other product in yellow, so the eye can follow a row across. */
+.mix-table tbody tr:nth-child(even), .mix-cards li:nth-child(even) {
+  background: var(--stripe);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
 .mix-cards { display: none; list-style: none; padding: 0; margin: 0; }
 .mix-cards .card { margin-bottom: 8px; padding: 12px; }
 @media (max-width: 700px) {

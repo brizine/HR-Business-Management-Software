@@ -13,8 +13,8 @@ import {
   type TextProps,
 } from "react-native";
 
-const light = { bg: "#f6f7f9", surface: "#fff", border: "#e3e6eb", text: "#1c2330", muted: "#667085", primary: "#1f6feb", ok: "#0f7b4b", okBg: "#e3f6ec", warn: "#9a6100", warnBg: "#fff3d6", bad: "#b42318", badBg: "#fde7e5" };
-const dark = { bg: "#0d1117", surface: "#161b22", border: "#2b323c", text: "#e6edf3", muted: "#8b949e", primary: "#4c8dff", ok: "#4ad295", okBg: "#11301f", warn: "#f0b949", warnBg: "#3a2a07", bad: "#ff8a80", badBg: "#3d1210" };
+const light = { stripe: "#fff3b0", bg: "#f6f7f9", surface: "#fff", border: "#e3e6eb", text: "#1c2330", muted: "#667085", primary: "#1f6feb", ok: "#0f7b4b", okBg: "#e3f6ec", warn: "#9a6100", warnBg: "#fff3d6", bad: "#b42318", badBg: "#fde7e5" };
+const dark = { stripe: "#3d3510", bg: "#0d1117", surface: "#161b22", border: "#2b323c", text: "#e6edf3", muted: "#8b949e", primary: "#4c8dff", ok: "#4ad295", okBg: "#11301f", warn: "#f0b949", warnBg: "#3a2a07", bad: "#ff8a80", badBg: "#3d1210" };
 
 export function useTheme() {
   return useColorScheme() === "dark" ? dark : light;
