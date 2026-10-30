@@ -16,7 +16,7 @@ export default function MyInfo() {
   const e = emp.data;
   return (
     <>
-      <PageHead title="My info" sub="Your phone, home address and emergency contact. Only managers and admins can see them." />
+      <PageHead title="My info" sub="Your phone, date of birth, home address and emergency contact. Only managers and admins can see them." />
       <SettingsTabs />
       {!e ? <ErrorBox error={emp.error} /> : (
         <form className="card stack" onChange={() => setSaved(false)} onSubmit={(ev) => {

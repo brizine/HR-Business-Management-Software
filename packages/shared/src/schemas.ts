@@ -31,9 +31,24 @@ export const isInactive = (status: string | null | undefined) => INACTIVE_STATUS
 /** Optional text; an empty box clears it (null). */
 const clearable = (max: number) => z.string().trim().max(max).nullable().optional().transform((v) => (v === "" ? null : v));
 
-/** Home address and emergency contact. Employees can edit their own; managers and up see everyone's. */
+/** A real birth date: not in the future, after 1900. */
+const birthDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter the date as YYYY-MM-DD")
+  .refine((d) => { const t = new Date(`${d}T00:00:00Z`); return !Number.isNaN(t.getTime()) && t.toISOString().startsWith(d); }, "Enter a real date of birth")
+  .refine((d) => d >= "1900-01-01" && d <= new Date().toISOString().slice(0, 10), "Enter a real date of birth");
+
+/** Whole years old on a given day (today by default). */
+export function ageOn(dateOfBirth: string, on = new Date()) {
+  const [y, m, d] = dateOfBirth.split("-").map(Number);
+  const had = on.getMonth() + 1 > m || (on.getMonth() + 1 === m && on.getDate() >= d);
+  return on.getFullYear() - y - (had ? 0 : 1);
+}
+
+/** Date of birth, home address and emergency contact. Employees can edit their own; managers and up see everyone's. */
 export const employeeContactSchema = z.object({
   phone: clearable(40),
+  dateOfBirth: z.union([birthDate, z.literal("")]).nullable().optional().transform((v) => (v === "" ? null : v)),
   addressLine1: clearable(200),
   addressLine2: clearable(200),
   city: clearable(100),
@@ -45,7 +60,7 @@ export const employeeContactSchema = z.object({
 });
 export type EmployeeContact = z.infer<typeof employeeContactSchema>;
 /** Fields that only managers and up (and the person themselves) can see. */
-export const EMPLOYEE_PRIVATE_CONTACT_FIELDS = ["addressLine1", "addressLine2", "city", "state", "zip", "emergencyName", "emergencyRelationship", "emergencyPhone"] as const;
+export const EMPLOYEE_PRIVATE_CONTACT_FIELDS = ["dateOfBirth", "addressLine1", "addressLine2", "city", "state", "zip", "emergencyName", "emergencyRelationship", "emergencyPhone"] as const;
 
 export const employeeSchema = z.object({
   firstName: z.string().min(1),

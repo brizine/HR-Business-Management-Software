@@ -9,7 +9,7 @@ import { Button, Card, ErrorText, Input, Row, Screen, Txt } from "@/components/u
 type Field = "phone" | (typeof EMPLOYEE_PRIVATE_CONTACT_FIELDS)[number];
 const FIELDS: Field[] = ["phone", ...EMPLOYEE_PRIVATE_CONTACT_FIELDS];
 
-/** Your phone, home address and emergency contact. Only managers and admins can see them. */
+/** Your phone, date of birth, home address and emergency contact. Only managers and admins can see them. */
 export default function MyInfo() {
   const { me } = useAuth();
   const [v, setV] = useState<Record<Field, string> | null>(null);
@@ -44,7 +44,10 @@ export default function MyInfo() {
   return (
     <Screen>
       <Txt muted style={{ fontSize: 13 }}>Only managers and admins can see this.</Txt>
-      <Card>{field("phone", "Mobile phone", { keyboardType: "phone-pad", autoComplete: "tel" })}</Card>
+      <Card>
+        {field("phone", "Mobile phone", { keyboardType: "phone-pad", autoComplete: "tel" })}
+        {field("dateOfBirth", "Date of birth (YYYY-MM-DD)", { placeholder: "1990-04-23", keyboardType: "numbers-and-punctuation", autoComplete: "birthdate-full", maxLength: 10 })}
+      </Card>
       <Card title="Home address">
         {field("addressLine1", "Street address", { autoComplete: "street-address" })}
         {field("addressLine2", "Apt, suite, unit")}

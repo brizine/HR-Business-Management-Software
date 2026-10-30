@@ -72,7 +72,8 @@ export const employees = pgTable(
     payRateCents: integer("pay_rate_cents").notNull().default(0),
     startDate: date("start_date"),
     status: text("status").notNull().default("active"),
-    /** Home address and emergency contact: managers and up, and the person themselves, only. */
+    /** Date of birth, home address and emergency contact: managers and up, and the person themselves, only. */
+    dateOfBirth: date("date_of_birth"),
     addressLine1: text("address_line1"),
     addressLine2: text("address_line2"),
     city: text("city"),

@@ -248,3 +248,13 @@ describe("spray tank mix", () => {
     expect(formatAmount(81.783)).toBe("81.8");
   });
 });
+
+import { ageOn } from "../src";
+
+describe("ageOn", () => {
+  it("counts whole years, turning a year older on the birthday", () => {
+    expect(ageOn("1990-04-23", new Date(2026, 3, 22))).toBe(35);
+    expect(ageOn("1990-04-23", new Date(2026, 3, 23))).toBe(36);
+    expect(ageOn("2000-12-31", new Date(2026, 0, 1))).toBe(25);
+  });
+});

@@ -197,7 +197,7 @@ the payroll calendar, safety rules and so on.
   profile. It also stops push notifications to that person's phones. Changing a password, email or
   role, or making someone inactive or terminated, signs them out everywhere automatically.
 - **Immediate effect:** every request re-checks the account, so making someone inactive or terminated and role changes apply at once.
-- **Home address and emergency contact:** on each employee's profile (admins edit them with **Edit**).
+- **Date of birth, home address and emergency contact:** on each employee's profile (admins edit them with **Edit**).
   Employees keep their own up to date under **Settings → My info** on the website or **Me → My info**
   in the app. Only managers, admins and the person themselves can see them.
 - **Leaving:** choosing **inactive** or **terminated** on someone's profile shows a **Reason** box. The

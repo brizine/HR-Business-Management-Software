@@ -120,6 +120,13 @@
       "when": 1793380000002,
       "tag": "0016_employee_contact",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793380787640,
+      "tag": "0017_employee_date_of_birth",
+      "breakpoints": true
     }
   ]
 }

@@ -1,10 +1,14 @@
 "use client";
-import { EMPLOYEE_PRIVATE_CONTACT_FIELDS } from "@crewdesk/shared";
+import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, ageOn } from "@crewdesk/shared";
+import { fmtDate, today } from "@/lib/api";
 
-/** Home address and emergency contact inputs, shared by the employee form and Settings → My info. */
+/** Date of birth, home address and emergency contact inputs, shared by the employee form and Settings → My info. */
 export function ContactFields({ initial = {} as any }) {
   return (
     <>
+      <div className="formgrid" style={{ marginTop: 14 }}>
+        <label>Date of birth<input name="dateOfBirth" type="date" min="1900-01-01" max={today()} defaultValue={initial.dateOfBirth ?? ""} autoComplete="bday" /></label>
+      </div>
       <fieldset className="formgrid contact-fieldset">
         <legend>Home address</legend>
         <label style={{ gridColumn: "span 2" }}>Street address<input name="addressLine1" defaultValue={initial.addressLine1 ?? ""} autoComplete="address-line1" /></label>
@@ -31,10 +35,12 @@ export function withClearedContact(v: Record<string, any>) {
 
 /** Read-only view for profiles. */
 export function ContactSummary({ e }: { e: any }) {
+  const dob = e.dateOfBirth ? `${fmtDate(e.dateOfBirth)} (age ${ageOn(e.dateOfBirth)})` : "—";
   const street = [e.addressLine1, e.addressLine2].filter(Boolean).join(", ");
   const cityLine = [e.city, [e.state, e.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
   return (
     <>
+      <div><div className="muted">Date of birth</div>{dob}</div>
       <div><div className="muted">Home address</div>{street || cityLine ? <>{street}{street && cityLine && <br />}{cityLine}</> : "—"}</div>
       <div>
         <div className="muted">Emergency contact</div>

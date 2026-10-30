@@ -205,11 +205,19 @@ describe("sessions", () => {
     expect((await call("GET", "/employees", nosyToken)).body.find((e: any) => e.id === id)).not.toHaveProperty("addressLine1");
 
     // Employees update their own; an empty value clears it; they can't touch anything else this way.
+    // Date of birth: private like the address, and must be a real past date.
+    expect((await call("PATCH", `/employees/${id}`, ownerToken, { dateOfBirth: "1990-04-23" })).body.dateOfBirth).toBe("1990-04-23");
+    expect((await call("GET", `/employees/${id}`, nosyToken)).body).not.toHaveProperty("dateOfBirth");
+    expect((await call("GET", `/employees/${id}`, leadToken)).body.dateOfBirth).toBe("1990-04-23");
+    expect((await call("PATCH", "/employees/me/profile", selfToken, { dateOfBirth: "2999-01-01" })).status).toBe(400);
+    expect((await call("PATCH", "/employees/me/profile", selfToken, { dateOfBirth: "1990-02-30" })).status).toBe(400);
+
     const mine = await call("PATCH", "/employees/me/profile", selfToken, { addressLine2: "Apt 4", emergencyPhone: "", payRateCents: 999999, role: "owner" });
     expect(mine.status).toBe(200);
     expect(mine.body.addressLine2).toBe("Apt 4");
     expect(mine.body.emergencyPhone).toBeNull();
     expect(mine.body.addressLine1).toBe("12 Elm St");
+    expect(mine.body.dateOfBirth).toBe("1990-04-23");
     expect(mine.body.role).toBe("employee");
     expect(mine.body.payRateCents).not.toBe(999999);
   });
