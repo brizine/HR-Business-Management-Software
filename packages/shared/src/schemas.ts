@@ -43,6 +43,8 @@ export const employeeSchema = z.object({
   payRateCents: z.number().int().nonnegative().default(0),
   startDate: isoDate.optional(),
   status: z.enum(EMPLOYEE_STATUSES).default("active"),
+  /** Why they were made inactive or terminated. Ignored (cleared) for active and onboarding. */
+  statusReason: z.string().trim().max(2000).nullable().optional(),
   /** Optional initial password so the employee can sign in to the app. */
   password: z.string().min(8).optional(),
   /** Email them a link to choose their own password (when no password is given). */

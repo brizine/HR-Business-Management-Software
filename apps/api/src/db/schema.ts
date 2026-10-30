@@ -72,6 +72,10 @@ export const employees = pgTable(
     payRateCents: integer("pay_rate_cents").notNull().default(0),
     startDate: date("start_date"),
     status: text("status").notNull().default("active"),
+    /** Why someone was made inactive or terminated (managers and up only). Cleared when they're made active again. */
+    statusReason: text("status_reason"),
+    statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),
+    statusChangedById: uuid("status_changed_by_id"),
     payrollProviderEmployeeId: text("payroll_provider_employee_id"),
     /** When the person agreed to receive texts; null means no texts. */
     smsOptInAt: timestamp("sms_opt_in_at", { withTimezone: true }),

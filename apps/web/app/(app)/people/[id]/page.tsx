@@ -36,7 +36,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
   const { id } = use(params);
   const { me, can } = useAuth();
   const emp = useApi(`/employees/${id}`);
-  const all = useApi<any[]>(can("admin") ? "/employees" : null);
+  const all = useApi<any[]>(can("manager") ? "/employees" : null);
   const balances = useApi<any[]>(can("manager") ? `/pto/balances?employeeId=${id}` : null);
   const tasks = useApi<any[]>(can("manager") ? `/onboarding/tasks?employeeId=${id}` : null);
   const templates = useApi<any[]>(can("admin") ? "/onboarding/templates" : null);
@@ -45,6 +45,8 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
   const { busy, error, run } = useAction();
   const e = emp.data;
   if (!e) return <ErrorBox error={emp.error} />;
+  const by = (all.data ?? []).find((x: any) => x.id === e.statusChangedById);
+  const changedBy = by ? `${by.firstName} ${by.lastName}` : null;
 
   return (
     <>
@@ -84,6 +86,15 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
             {"twoFactorEnabled" in e && <div><div className="muted">Two-factor</div>{e.twoFactorEnabled ? "On" : "Off"}</div>}
             {e.locked && <div><div className="muted">Sign-in</div><Badge value="locked" /></div>}
           </div>
+          {isInactive(e.status) && "statusReason" in e && (
+            <div className="status-reason">
+              <div className="muted">
+                Reason {e.status === "terminated" ? "for termination" : "they're inactive"}
+                {e.statusChangedAt && <> · {e.status} {fmtDate(e.statusChangedAt)}{changedBy ? ` by ${changedBy}` : ""}</>}
+              </div>
+              <div style={{ whiteSpace: "pre-wrap" }}>{e.statusReason || <span className="muted">No reason given. Click Edit to add one.</span>}</div>
+            </div>
+          )}
         </div>
       )}
       {can("admin") && !e.hasLogin && !isInactive(e.status) && (

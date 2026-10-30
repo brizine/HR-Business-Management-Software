@@ -197,6 +197,9 @@ the payroll calendar, safety rules and so on.
   profile. It also stops push notifications to that person's phones. Changing a password, email or
   role, or making someone inactive or terminated, signs them out everywhere automatically.
 - **Immediate effect:** every request re-checks the account, so making someone inactive or terminated and role changes apply at once.
+- **Leaving:** choosing **inactive** or **terminated** on someone's profile shows a **Reason** box. The
+  reason, who changed the status and when are shown on their profile and under their badge on the Team
+  page, to managers and admins only. Making them active again clears the reason.
 - **Encryption:** all traffic is HTTPS. Uploaded documents are encrypted with AES-256-GCM (a separate
   key per file, from `ENCRYPTION_KEY`) before they're written to disk or a bucket. Passwords are
   bcrypt-hashed and two-factor secrets are encrypted. Database backups are encrypted with a public key

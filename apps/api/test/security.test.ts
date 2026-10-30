@@ -184,6 +184,32 @@ describe("sessions", () => {
     expect((await login("fired")).status).toBe(200);
   });
 
+  it("keeps a reason for inactive or terminated, visible to managers only", async () => {
+    const id = await hire("reasoned", "employee");
+    await hire("peer", "employee");
+    await hire("boss", "manager");
+    const peerToken = (await login("peer")).body.token;
+    const bossToken = (await login("boss")).body.token;
+
+    const t = await call("PATCH", `/employees/${id}`, ownerToken, { status: "terminated", statusReason: "  No-call no-show 3 times  " });
+    expect(t.body.statusReason).toBe("No-call no-show 3 times");
+    expect(t.body.statusChangedAt).toBeTruthy();
+    expect(t.body.statusChangedById).toBeTruthy();
+
+    expect((await call("GET", `/employees/${id}`, bossToken)).body.statusReason).toBe("No-call no-show 3 times");
+    const peerView = (await call("GET", `/employees/${id}`, peerToken)).body;
+    expect(peerView.status).toBe("terminated");
+    expect(peerView).not.toHaveProperty("statusReason");
+    expect((await call("GET", "/employees", peerToken)).body.find((e: any) => e.id === id)).not.toHaveProperty("statusReason");
+
+    // Editing other fields keeps the reason; making them active clears it.
+    expect((await call("PATCH", `/employees/${id}`, ownerToken, { title: "Former crew" })).body.statusReason).toBe("No-call no-show 3 times");
+    expect((await call("PATCH", `/employees/${id}`, ownerToken, { status: "active", statusReason: "ignored" })).body.statusReason).toBeNull();
+    // Added straight in as inactive, with a reason.
+    const created = await call("POST", "/employees", ownerToken, { firstName: "Old", lastName: "Hire", email: email("oldhire"), status: "inactive", statusReason: "Seasonal", sendInvite: false });
+    expect(created.body.statusReason).toBe("Seasonal");
+  });
+
   it("changing your password needs the current one and signs out other devices", async () => {
     await hire("changer");
     const a = (await login("changer")).body.token;

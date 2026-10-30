@@ -253,6 +253,10 @@ tr.openrow td { background: var(--bg); }
   .mix-table { font-size: 12px; }
 }
 
+/* Why someone is inactive or terminated */
+.status-reason { margin-top: 14px; padding: 10px 12px; border-left: 3px solid var(--bad); background: var(--bad-bg); border-radius: 6px; }
+.status-reason-short { font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+
 /* Filter bars (Team page) */
 .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
 .filters label { width: 170px; }

@@ -160,7 +160,10 @@ function People() {
                 <td>{e.department ?? "—"}</td>
                 <td>{e.email}<div className="muted">{e.phone}</div></td>
                 {seesPay && <td>{money(e.payRateCents)}{e.payType === "hourly" ? "/hr" : "/yr"}</td>}
-                <td><Badge value={e.status} /></td>
+                <td>
+                  <Badge value={e.status} />
+                  {e.statusReason && <div className="muted status-reason-short" title={e.statusReason}>{e.statusReason}</div>}
+                </td>
               </tr>
             ))}
           </tbody>

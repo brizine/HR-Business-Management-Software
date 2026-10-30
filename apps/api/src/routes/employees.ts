@@ -27,10 +27,24 @@ export function publicEmployee(e: EmployeeRow) {
   };
 }
 
-/** Strips pay details for viewers who are not managers. */
+/** Strips pay details and the reason someone left for viewers who are not managers. */
 function directoryView(e: EmployeeRow) {
-  const { payRateCents, payType, payrollProviderEmployeeId, ...rest } = publicEmployee(e);
+  const { payRateCents, payType, payrollProviderEmployeeId, statusReason, statusChangedById, ...rest } = publicEmployee(e);
   return rest;
+}
+
+/** Fills in the reason and who/when for a status change; the reason only applies to inactive and terminated. */
+function statusFields(body: { status?: string; statusReason?: string | null }, before: EmployeeRow | null, actorId: string) {
+  const status = body.status ?? before?.status ?? "active";
+  const changed = status !== (before?.status ?? "active");
+  const out: Partial<EmployeeRow> = {};
+  if (!isInactive(status)) out.statusReason = null;
+  else if (body.statusReason !== undefined) out.statusReason = body.statusReason || null;
+  if (changed || (out.statusReason !== undefined && out.statusReason !== (before?.statusReason ?? null))) {
+    out.statusChangedAt = new Date();
+    out.statusChangedById = actorId;
+  }
+  return out;
 }
 
 const routes: FastifyPluginAsync = async (app) => {
@@ -51,18 +65,23 @@ const routes: FastifyPluginAsync = async (app) => {
       .from(employees)
       .where(and(eq(employees.id, req.params.id), eq(employees.companyId, req.user.companyId)));
     if (!row) notFound("Employee");
-    const canSeePay = hasRole(req.user.role, "manager") || row.id === req.user.sub;
-    return canSeePay ? publicEmployee(row) : directoryView(row);
+    if (hasRole(req.user.role, "manager")) return publicEmployee(row);
+    if (row.id === req.user.sub) {
+      const { statusReason, statusChangedById, ...own } = publicEmployee(row);
+      return own;
+    }
+    return directoryView(row);
   });
 
   app.post("/", { preHandler: requireRole("admin") }, async (req) => {
     const body = parse(employeeSchema, req.body);
     if (!canManageAccount(req.user.role, body.role)) throw new HttpError(403, "Only the owner can add admins and owners");
-    const { password, sendInvite: wantsInvite, ...rest } = body;
+    const { password, sendInvite: wantsInvite, statusReason, ...rest } = body;
     const [row] = await db
       .insert(employees)
       .values({
         ...rest,
+        ...(isInactive(rest.status) ? statusFields(body, null, req.user.sub) : {}),
         email: rest.email.toLowerCase(),
         companyId: req.user.companyId,
         passwordHash: password ? await bcrypt.hash(password, 10) : null,
@@ -105,11 +124,12 @@ const routes: FastifyPluginAsync = async (app) => {
       if (target.id === req.user.sub) throw new HttpError(403, "You can't change your own role");
       if (!canManageAccount(req.user.role, body.role)) throw new HttpError(403, "Only the owner can make someone an admin or owner");
     }
-    const { password, ...rest } = body;
+    const { password, statusReason, ...rest } = body;
     const [row] = await db
       .update(employees)
       .set({
         ...rest,
+        ...statusFields(body, target, req.user.sub),
         ...(rest.email ? { email: rest.email.toLowerCase() } : {}),
         ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}),
       })
