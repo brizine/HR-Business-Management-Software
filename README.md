@@ -40,6 +40,13 @@ The mobile app covers what field staff need: clock in/out with GPS, weekly hours
 requests (and approvals for managers), assigned assets, meter readings, inspections, issue
 reports, assigned work orders, onboarding tasks and document signing.
 
+## Try it
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/brizine/HR-Business-Management-Software)
+
+Click the button to run Crewdesk with a demo company in your browser. Steps and demo logins are in
+[docs/try-it.md](docs/try-it.md). To run it on your own computer instead, see **Running locally** below.
+
 ## Hosting
 
 Production runs as a single Node.js process (website + API under `/api`) with PostgreSQL:

@@ -14,7 +14,8 @@
     "start": "NODE_ENV=production node --env-file-if-exists=apps/api/.env apps/api/dist/main.js",
     "backup:keygen": "node apps/api/dist/backup-cli.js keygen",
     "backup:run": "node --env-file-if-exists=apps/api/.env apps/api/dist/backup-cli.js run",
-    "backup:decrypt": "node apps/api/dist/backup-cli.js decrypt"
+    "backup:decrypt": "node apps/api/dist/backup-cli.js decrypt",
+    "demo": "pnpm db:migrate && pnpm db:seed && pnpm build && NODE_ENV=production node apps/api/dist/main.js"
   },
   "engines": {
     "node": ">=22"

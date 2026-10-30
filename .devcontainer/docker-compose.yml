@@ -1,0 +1,26 @@
+# GitHub Codespaces / VS Code Dev Containers: the app container plus PostgreSQL.
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm
+    command: sleep infinity
+    volumes:
+      - ../..:/workspaces:cached
+    environment:
+      DATABASE_URL: postgres://crewdesk:crewdesk@db:5432/crewdesk
+      # Demo-only secrets; never use these for a real deployment.
+      JWT_SECRET: codespaces-demo-secret-change-me
+      ENCRYPTION_KEY: codespaces-demo-encryption-key
+      PORT: "3000"
+    depends_on:
+      - db
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: crewdesk
+      POSTGRES_PASSWORD: crewdesk
+      POSTGRES_DB: crewdesk
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:
