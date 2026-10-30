@@ -66,31 +66,40 @@ export const mixProductSchema = z.object({
   unit: z.string().trim().min(1).max(40),
 });
 
-/** The two mixes from the original spreadsheet, as a starting point. */
+const TRUCK_PRODUCTS = (): MixProductLike[] =>
+  [
+    ["Flumioxazin 51%", 15, "ounces dry"],
+    ["Specticle Flo", 5, "ounces liquid"],
+    ["Aquacap", 47.9, "ounces liquid"],
+    ["Resolute 65WG DRY", 19, "ounces dry"],
+    ["Resolute 4FL Liquid", 24, "ounces liquid"],
+    ["Ranger Pro 41%", 48, "ounces liquid"],
+    ["90/10 Surfactant", 28, "ounces liquid"],
+    ["Ranger Pro 53%", 37, "ounces liquid"],
+    ["Vessel/Acid Blue 9 Dye", 64, "ounces liquid"],
+    ["SensiPro Dye", 8.71, "ounces dry"],
+    ["Monument 75WG", 0.25, "ounces dry"],
+    ["Celcius WG High rate", 4.9, "ounces dry"],
+    ["Celsius WG Med. rate", 3.7, "ounces dry"],
+    ["MSM", 0.25, "ounces dry"],
+    ["46-0-0", 95, "pounds dry"],
+    ["15-1-1 Fish Protien", 6, "ounces dry"],
+  ].map(([name, ratePerAcre, unit]) => ({ name: name as string, ratePerAcre: ratePerAcre as number, unit: unit as string }));
+
+/**
+ * The mixes from the original spreadsheet plus the truck at 1.5 gal/1,000 ft² and the
+ * backpack at 1 gal/1,000 ft², as a starting point. The lighter mixes use the Truck Mix
+ * products and per-acre rates; only the water per acre changes.
+ */
 export const SPRAY_MIX_TEMPLATE: { name: string; gallonsPerAcre: number; defaultTankGallons: number; notes?: string; products: MixProductLike[] }[] = [
   {
     name: "Truck Mix",
     gallonsPerAcre: 87.12,
     defaultTankGallons: 75,
-    products: [
-      ["Flumioxazin 51%", 15, "ounces dry"],
-      ["Specticle Flo", 5, "ounces liquid"],
-      ["Aquacap", 47.9, "ounces liquid"],
-      ["Resolute 65WG DRY", 19, "ounces dry"],
-      ["Resolute 4FL Liquid", 24, "ounces liquid"],
-      ["Ranger Pro 41%", 48, "ounces liquid"],
-      ["90/10 Surfactant", 28, "ounces liquid"],
-      ["Ranger Pro 53%", 37, "ounces liquid"],
-      ["Vessel/Acid Blue 9 Dye", 64, "ounces liquid"],
-      ["SensiPro Dye", 8.71, "ounces dry"],
-      ["Monument 75WG", 0.25, "ounces dry"],
-      ["Celcius WG High rate", 4.9, "ounces dry"],
-      ["Celsius WG Med. rate", 3.7, "ounces dry"],
-      ["MSM", 0.25, "ounces dry"],
-      ["46-0-0", 95, "pounds dry"],
-      ["15-1-1 Fish Protien", 6, "ounces dry"],
-    ].map(([name, ratePerAcre, unit]) => ({ name: name as string, ratePerAcre: ratePerAcre as number, unit: unit as string })),
+    products: TRUCK_PRODUCTS(),
   },
+  { name: "Truck 1.5 gal/1000", gallonsPerAcre: 65.34, defaultTankGallons: 75, products: TRUCK_PRODUCTS() },
+  { name: "Backpack 1 gal/1000", gallonsPerAcre: 43.56, defaultTankGallons: 4, products: TRUCK_PRODUCTS() },
   {
     name: "Z spray Mix",
     gallonsPerAcre: 11.1,

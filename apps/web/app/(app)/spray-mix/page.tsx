@@ -230,7 +230,7 @@ export default function SprayMix() {
           {data.canEdit ? (
             <div className="row">
               <button className="btn primary" disabled={action.busy} onClick={() => action.run(async () => { await api("/spray-mixes/template", { method: "POST" }); reload(); })}>
-                Start with the Truck Mix and Z spray Mix
+                Start with the Truck, Backpack and Z spray mixes
               </button>
               <span className="muted">From the original Spray Tank Fill spreadsheet.</span>
             </div>

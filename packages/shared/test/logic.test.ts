@@ -192,8 +192,9 @@ describe("geofencing", () => {
 import { SPRAY_MIX_TEMPLATE, computeMix, formatAmount } from "../src";
 
 describe("spray tank mix", () => {
-  const truck = SPRAY_MIX_TEMPLATE[0];
-  const z = SPRAY_MIX_TEMPLATE[1];
+  const mix = (name: string) => SPRAY_MIX_TEMPLATE.find((m) => m.name === name)!;
+  const truck = mix("Truck Mix");
+  const z = mix("Z spray Mix");
   const row = (sheet: typeof truck, tank: number, name: string) => computeMix(sheet, tank).rows.find((r) => r.product.name === name)!;
 
   it("matches the spreadsheet's Truck Mix (75 gal)", () => {
@@ -224,6 +225,19 @@ describe("spray tank mix", () => {
       if (r.product.name === "90/10 Surfactant") expect(zExcel[i]).toBeCloseTo(3.857, 3); // spreadsheet's F36
       else expect(r.needed).toBeCloseTo(zExcel[i], 6);
     });
+  });
+
+  it("has the truck at 1.5 gal/1000 and the backpack at 1 gal/1000 with the Truck Mix rates", () => {
+    const truck15 = mix("Truck 1.5 gal/1000");
+    const backpack = mix("Backpack 1 gal/1000");
+    expect(computeMix(truck15, 75).gallonsPer1000).toBeCloseTo(1.5, 10);
+    expect(computeMix(backpack, 4).gallonsPer1000).toBeCloseTo(1, 10);
+    expect(truck15.products).toEqual(truck.products);
+    expect(backpack.products).toEqual(truck.products);
+    // 1 gal/1000: a 4-gal backpack covers 4,000 ft², so it gets 4 × the per-1,000 rate.
+    expect(row(backpack, 4, "Aquacap").needed).toBeCloseTo((47.9 / 43.56) * 4, 10);
+    expect(row(truck15, 75, "Aquacap").needed).toBeCloseTo((47.9 / 43.56 / 1.5) * 75, 10);
+    expect(computeMix(backpack, 4).squareFeet).toBeCloseTo(4000, 6);
   });
 
   it("handles empty or bad tank sizes without blowing up", () => {

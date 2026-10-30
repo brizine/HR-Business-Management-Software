@@ -92,6 +92,13 @@
       "when": 1793326089264,
       "tag": "0012_employee_status_inactive",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793340000000,
+      "tag": "0013_spray_mix_truck_backpack",
+      "breakpoints": true
     }
   ]
 }

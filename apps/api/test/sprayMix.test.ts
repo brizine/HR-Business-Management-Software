@@ -51,6 +51,8 @@ describe("spray mixes", () => {
     expect(body.canEdit).toBe(false);
     expect(body.sheets.map((s: any) => [s.name, s.gallonsPerAcre, s.defaultTankGallons, s.products.length])).toEqual([
       ["Truck Mix", 87.12, 75, 16],
+      ["Truck 1.5 gal/1000", 65.34, 75, 16],
+      ["Backpack 1 gal/1000", 43.56, 4, 16],
       ["Z spray Mix", 11.1, 12, 14],
     ]);
     ID.truck = body.sheets[0].id;
