@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import bcrypt from "bcryptjs";
 import { and, asc, eq } from "drizzle-orm";
-import { employeeSchema, hasRole, type Role } from "@crewdesk/shared";
+import { employeeSchema, hasRole, isInactive, type Role } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
 import { employees, recoveryCodes } from "../db/schema";
@@ -80,7 +80,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { id: string } }>("/:id/invite", { preHandler: requireRole("admin") }, async (req) => {
     const target = await manageable(req, req.params.id, false);
     if (target.passwordHash) throw new HttpError(409, `${target.firstName} already has a login. They can use "Forgot your password?" if needed.`);
-    if (target.status === "inactive") throw new HttpError(409, "This person is inactive. Make them active first.");
+    if (isInactive(target.status)) throw new HttpError(409, `This person is ${target.status}. Make them active first.`);
     return sendInvite(target, await actorName(req.user.sub));
   });
 
@@ -121,7 +121,7 @@ const routes: FastifyPluginAsync = async (app) => {
       !!password ||
       (rest.email !== undefined && rest.email.toLowerCase() !== target.email) ||
       (rest.role !== undefined && rest.role !== target.role) ||
-      (rest.status === "inactive" && target.status !== "inactive");
+      (isInactive(rest.status) && !isInactive(target.status));
     return publicEmployee(changedAccess ? await signOutEverywhere(row.id) : row);
   });
 

@@ -1,22 +1,6 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
-import { and, desc, eq, isNull, ne } from "drizzle-orm";
-import {
-  TAX_FORM_LABELS,
-  W4_AMOUNTS,
-  directDepositSchema,
-  hasRole,
-  i9Section1Schema,
-  i9Section2Schema,
-  maskAccount,
-  maskSsn,
-  w4Schema,
-  type DirectDeposit,
-  type I9Section1,
-  type I9Section2,
-  type Role,
-  type TaxFormType,
-  type W4,
-} from "@crewdesk/shared";
+import { and, desc, eq, isNull, notInArray } from "drizzle-orm";
+import { INACTIVE_STATUSES, TAX_FORM_LABELS, W4_AMOUNTS, directDepositSchema, hasRole, i9Section1Schema, i9Section2Schema, maskAccount, maskSsn, w4Schema, type DirectDeposit, type I9Section1, type I9Section2, type Role, type TaxFormType, type W4 } from "@crewdesk/shared";
 import type { ZodType } from "zod";
 import { db } from "../db";
 import { companies, employees, onboardingTasks, sensitiveAccessLog, taxForms } from "../db/schema";
@@ -198,7 +182,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .select({ form: taxForms, employee: employees })
       .from(taxForms)
       .innerJoin(employees, eq(employees.id, taxForms.employeeId))
-      .where(and(eq(taxForms.companyId, req.user.companyId), isNull(taxForms.supersededAt), ne(employees.status, "inactive")))
+      .where(and(eq(taxForms.companyId, req.user.companyId), isNull(taxForms.supersededAt), notInArray(employees.status, INACTIVE_STATUSES)))
       .orderBy(desc(taxForms.createdAt));
     return rows
       .filter(({ form }) => (form.type === "i9" ? form.status !== "completed" : !form.processedAt))

@@ -1,16 +1,5 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
-import {
-  NOTIFICATION_CATEGORY_INFO,
-  defaultPreference,
-  hasRole,
-  toE164,
-  webPathFor,
-  type DeliveryMode,
-  type NotificationCategory,
-  type NotificationLink,
-  type NotificationPreference,
-  type Role,
-} from "@crewdesk/shared";
+import { and, eq, inArray, notInArray } from "drizzle-orm";
+import { INACTIVE_STATUSES, NOTIFICATION_CATEGORY_INFO, defaultPreference, hasRole, toE164, webPathFor, type DeliveryMode, type NotificationCategory, type NotificationLink, type NotificationPreference, type Role } from "@crewdesk/shared";
 import { db } from "../db";
 import { companies, employees, notificationPreferences, notifications, pushTokens } from "../db/schema";
 import { SmsError, SMS_UNSUBSCRIBED, WEB_URL, PUBLIC_API_URL, emailTransport, smsTransport, unsubscribeToken } from "./channels";
@@ -92,7 +81,7 @@ async function deliver(companyId: string, employeeIds: string[], n: Notification
   const people = await db
     .select()
     .from(employees)
-    .where(and(eq(employees.companyId, companyId), inArray(employees.id, employeeIds), ne(employees.status, "inactive")));
+    .where(and(eq(employees.companyId, companyId), inArray(employees.id, employeeIds), notInArray(employees.status, INACTIVE_STATUSES)));
   if (!people.length) return;
   const ids = people.map((p) => p.id);
 
@@ -202,7 +191,7 @@ export async function staffWithRole(companyId: string, min: Role) {
   const rows = await db
     .select({ id: employees.id, role: employees.role })
     .from(employees)
-    .where(and(eq(employees.companyId, companyId), ne(employees.status, "inactive")));
+    .where(and(eq(employees.companyId, companyId), notInArray(employees.status, INACTIVE_STATUSES)));
   return rows.filter((r) => hasRole(r.role as Role, min)).map((r) => r.id);
 }
 

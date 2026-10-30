@@ -21,6 +21,13 @@ export const loginSchema = z.object({
 export const EMPLOYMENT_TYPES = ["full_time", "part_time", "contractor", "seasonal"] as const;
 export const PAY_TYPES = ["hourly", "salary"] as const;
 
+/** Employee statuses. Inactive and terminated people can't sign in and aren't notified, scheduled or invited. */
+export const EMPLOYEE_STATUSES = ["active", "onboarding", "inactive", "terminated"] as const;
+export type EmployeeStatus = (typeof EMPLOYEE_STATUSES)[number];
+export const INACTIVE_STATUSES: string[] = ["inactive", "terminated"];
+/** True for inactive or terminated (no access). */
+export const isInactive = (status: string | null | undefined) => INACTIVE_STATUSES.includes(status ?? "");
+
 export const employeeSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
@@ -35,8 +42,7 @@ export const employeeSchema = z.object({
   /** Hourly rate or annual salary, in cents. */
   payRateCents: z.number().int().nonnegative().default(0),
   startDate: isoDate.optional(),
-  // "terminated" was the old name for "inactive"; still accepted so older clients keep working.
-  status: z.preprocess((v) => (v === "terminated" ? "inactive" : v), z.enum(["active", "onboarding", "inactive"])).default("active"),
+  status: z.enum(EMPLOYEE_STATUSES).default("active"),
   /** Optional initial password so the employee can sign in to the app. */
   password: z.string().min(8).optional(),
   /** Email them a link to choose their own password (when no password is given). */

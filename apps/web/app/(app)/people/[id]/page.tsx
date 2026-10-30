@@ -11,6 +11,7 @@ import { OnboardingTask } from "@/components/onboarding-task";
 import { DownloadPdf, FormStatus, signedLine } from "@/components/tax-form-bits";
 import { AvailabilityEditor } from "@/components/availability-editor";
 import { EmployeeFields, employeeBody } from "@/components/employee-form";
+import { isInactive } from "@crewdesk/shared";
 
 /** Admins: the person's W-4, I-9 and direct deposit on file (current and earlier versions). */
 function EmployeeTaxForms({ employeeId }: { employeeId: string }) {
@@ -85,7 +86,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
           </div>
         </div>
       )}
-      {can("admin") && !e.hasLogin && e.status !== "inactive" && (
+      {can("admin") && !e.hasLogin && !isInactive(e.status) && (
         <div className="card stack">
           <div className="row">
             <strong style={{ marginRight: 8 }}>Account</strong>

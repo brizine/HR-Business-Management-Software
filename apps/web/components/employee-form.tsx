@@ -1,5 +1,5 @@
 "use client";
-import { EMPLOYMENT_TYPES, PAY_TYPES, ROLES } from "@crewdesk/shared";
+import { EMPLOYEE_STATUSES, EMPLOYMENT_TYPES, PAY_TYPES, ROLES } from "@crewdesk/shared";
 import { formValues } from "./ui";
 
 export function EmployeeFields({ initial = {} as any, employees = [] as any[] }) {
@@ -29,7 +29,7 @@ export function EmployeeFields({ initial = {} as any, employees = [] as any[] })
       <label>Pay rate ($/hr or $/yr)<input name="payRate" type="number" step="0.01" min="0" defaultValue={initial.payRateCents != null ? initial.payRateCents / 100 : ""} /></label>
       <label>Start date<input name="startDate" type="date" defaultValue={initial.startDate ?? ""} /></label>
       <label>Status
-        <select name="status" defaultValue={initial.status ?? "active"}>{["active", "onboarding", "inactive"].map((s) => <option key={s}>{s}</option>)}</select>
+        <select name="status" defaultValue={initial.status ?? "active"}>{EMPLOYEE_STATUSES.map((s) => <option key={s}>{s}</option>)}</select>
       </label>
       <label>{initial.id ? "Reset password" : "App password (optional)"}<input name="password" type="password" minLength={8} autoComplete="new-password" /></label>
     </div>

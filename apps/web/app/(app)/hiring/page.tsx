@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
-import { APPLICANT_STAGES, EMPLOYMENT_TYPES, PAY_TYPES } from "@crewdesk/shared";
+import { APPLICANT_STAGES, EMPLOYMENT_TYPES, PAY_TYPES, isInactive } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -14,7 +14,7 @@ function HireForm({ applicant, job, templates, staff, onCancel, onHired }: {
 }) {
   const { me } = useAuth();
   const { busy, error, run } = useAction();
-  const managers = staff.filter((e) => ["manager", "admin", "owner"].includes(e.role) && e.status !== "inactive");
+  const managers = staff.filter((e) => ["manager", "admin", "owner"].includes(e.role) && !isInactive(e.status));
   return (
     <div className="card">
       <h2>Hire {applicant.firstName} {applicant.lastName}</h2>

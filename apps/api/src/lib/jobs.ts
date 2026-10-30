@@ -1,5 +1,5 @@
-import { and, eq, gt, isNotNull, isNull, lt, lte, ne } from "drizzle-orm";
-import { computeDue } from "@crewdesk/shared";
+import { and, eq, gt, isNotNull, isNull, lt, lte, notInArray } from "drizzle-orm";
+import { INACTIVE_STATUSES, computeDue } from "@crewdesk/shared";
 import { db } from "../db";
 import { assets, companies, employees, maintenanceSchedules, notificationLog, onboardingTasks, shifts, timeEntries } from "../db/schema";
 import { taskOwners } from "../routes/onboarding";
@@ -124,7 +124,7 @@ export async function runScheduledChecks(now = new Date()) {
     .from(onboardingTasks)
     .innerJoin(employees, eq(employees.id, onboardingTasks.employeeId))
     .innerJoin(companies, eq(companies.id, onboardingTasks.companyId))
-    .where(and(isNull(onboardingTasks.completedAt), isNotNull(onboardingTasks.dueDate), ne(employees.status, "inactive")));
+    .where(and(isNull(onboardingTasks.completedAt), isNotNull(onboardingTasks.dueDate), notInArray(employees.status, INACTIVE_STATUSES)));
   const digests = new Map<string, { companyId: string; due: string[]; overdue: string[] }>();
   for (const { task, employee, tz } of open) {
     const local = localParts(now, tz);

@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useRef, useState } from "react";
-import { availabilityConflicts, describeRule } from "@crewdesk/shared";
+import { availabilityConflicts, describeRule, isInactive } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -153,7 +153,7 @@ export default function Schedule() {
   const [notice, setNotice] = useState<string | null>(null);
   const action = useAction();
 
-  const staff = useMemo(() => (employees.data ?? []).filter((e) => e.status !== "inactive"), [employees.data]);
+  const staff = useMemo(() => (employees.data ?? []).filter((e) => !isInactive(e.status)), [employees.data]);
   const shifts = (list.data ?? []).map((r) => ({ ...r.shift, assetName: r.assetName }));
   const drafts = shifts.filter((s) => s.status === "draft").length;
   const reload = () => { list.reload(); drops.reload(); };

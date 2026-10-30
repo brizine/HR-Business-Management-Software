@@ -19,8 +19,7 @@ const distinct = (rows: any[], key: string) =>
 
 function matches(e: any, f: Filters) {
   if (f.q && !`${e.firstName} ${e.lastName} ${e.email} ${e.title ?? ""} ${e.department ?? ""}`.toLowerCase().includes(f.q.toLowerCase())) return false;
-  // Old bookmarks may still say "terminated", the former name for "inactive".
-  if (f.status && e.status !== (f.status === "terminated" ? "inactive" : f.status)) return false;
+  if (f.status && e.status !== f.status) return false;
   if (f.title && (f.title === NONE ? !!e.title : e.title !== f.title)) return false;
   if (f.dept && (f.dept === NONE ? !!e.department : e.department !== f.dept)) return false;
   if (f.payType && e.payType !== f.payType) return false;
@@ -78,6 +77,7 @@ function People() {
             <option value="active">Active</option>
             <option value="onboarding">Onboarding</option>
             <option value="inactive">Inactive</option>
+            <option value="terminated">Terminated</option>
           </select>
         </label>
         <label>Title

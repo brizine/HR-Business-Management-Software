@@ -160,11 +160,28 @@ describe("sessions", () => {
     const newToken = (await login("leaver")).body.token;
     expect((await call("GET", "/time/timesheets", newToken)).status).toBe(403);
 
-    // Older clients may still send "terminated"; it's stored as "inactive".
-    const updated = await call("PATCH", `/employees/${id}`, ownerToken, { status: "terminated" });
+    const updated = await call("PATCH", `/employees/${id}`, ownerToken, { status: "inactive" });
     expect(updated.body.status).toBe("inactive");
     expect((await call("GET", "/auth/me", newToken)).status).toBe(401);
     expect((await login("leaver")).status).toBe(401);
+  });
+
+  it("terminated people are locked out like inactive ones", async () => {
+    const id = await hire("fired", "employee");
+    const token = (await login("fired")).body.token;
+    expect((await call("GET", "/auth/me", token)).status).toBe(200);
+
+    const updated = await call("PATCH", `/employees/${id}`, ownerToken, { status: "terminated" });
+    expect(updated.body.status).toBe("terminated");
+    expect((await call("GET", "/auth/me", token)).status).toBe(401);
+    expect((await login("fired")).status).toBe(401);
+    expect((await call("POST", `/employees/${id}/invite`, ownerToken, {})).status).toBe(409);
+
+    // Moving between inactive and terminated keeps them locked out; making them active lets them back in.
+    expect((await call("PATCH", `/employees/${id}`, ownerToken, { status: "inactive" })).body.status).toBe("inactive");
+    expect((await login("fired")).status).toBe(401);
+    await call("PATCH", `/employees/${id}`, ownerToken, { status: "active" });
+    expect((await login("fired")).status).toBe(200);
   });
 
   it("changing your password needs the current one and signs out other devices", async () => {

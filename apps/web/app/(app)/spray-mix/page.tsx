@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { MIX_UNITS, computeMix, formatAmount, formatEntered } from "@crewdesk/shared";
+import { MIX_UNITS, computeMix, formatAmount, formatEntered, isInactive } from "@crewdesk/shared";
 import { api, fmtDateTime } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
@@ -269,7 +269,7 @@ function Editors() {
   const [saved, setSaved] = useState(false);
   useEffect(() => { if (current.data) setPicked(new Set(current.data)); }, [current.data]);
   if (!staff.data || !picked) return null;
-  const people = staff.data.filter((e) => e.status !== "inactive" && !["admin", "owner"].includes(e.role));
+  const people = staff.data.filter((e) => !isInactive(e.status) && !["admin", "owner"].includes(e.role));
   return (
     <details className="card noprint">
       <summary><strong>Who can edit</strong> <span className="muted">({picked.size} employee{picked.size === 1 ? "" : "s"} + admins)</span></summary>

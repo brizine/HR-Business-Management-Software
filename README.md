@@ -195,8 +195,8 @@ the payroll calendar, safety rules and so on.
 - **Forgot password:** emailed one-time link, valid for an hour. Two-factor is still required after a reset.
 - **Sign out everywhere:** from **Settings → Security**, the phone app, or (for admins) an employee's
   profile. It also stops push notifications to that person's phones. Changing a password, email or
-  role, or making someone inactive, signs them out everywhere automatically.
-- **Immediate effect:** every request re-checks the account, so making someone inactive and role changes apply at once.
+  role, or making someone inactive or terminated, signs them out everywhere automatically.
+- **Immediate effect:** every request re-checks the account, so making someone inactive or terminated and role changes apply at once.
 - **Encryption:** all traffic is HTTPS. Uploaded documents are encrypted with AES-256-GCM (a separate
   key per file, from `ENCRYPTION_KEY`) before they're written to disk or a bucket. Passwords are
   bcrypt-hashed and two-factor secrets are encrypted. Database backups are encrypted with a public key
@@ -418,7 +418,7 @@ system, then click **Mark entered in payroll**.
 - **E-Verify**, if you use it, is still done on the E-Verify site.
 - **Keep records:** W-4s for at least 4 years. I-9s for 3 years after the hire date or 1 year after
   employment ends, whichever is later. Crewdesk keeps every version, including after someone is
-  marked inactive (there's no way to delete employees).
+  marked inactive or terminated (there's no way to delete employees).
 - If you switch to a provider that collects these itself, turn the setting off; forms already on
   file stay available.
 

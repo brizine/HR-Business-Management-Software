@@ -1,16 +1,6 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, type SQL } from "drizzle-orm";
-import {
-  WEEKDAYS,
-  availabilityConflicts,
-  describeRule,
-  shiftBaseSchema,
-  shiftRangeSchema,
-  shiftSchema,
-  shiftSegments,
-  shiftTemplateSchema,
-  type ShiftInput,
-} from "@crewdesk/shared";
+import { WEEKDAYS, availabilityConflicts, describeRule, isInactive, shiftBaseSchema, shiftRangeSchema, shiftSchema, shiftSegments, shiftTemplateSchema, type ShiftInput } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
 import { assets, availability, companies, employees, ptoRequests, shiftTemplates, shifts } from "../db/schema";
@@ -66,7 +56,7 @@ async function check(companyId: string, s: ShiftInput, ignoreId?: string) {
     .from(employees)
     .where(and(eq(employees.id, s.employeeId), eq(employees.companyId, companyId)));
   if (!emp) notFound("Employee");
-  if (emp.status === "inactive") throw new HttpError(400, `${emp.firstName} ${emp.lastName} is inactive`);
+  if (isInactive(emp.status)) throw new HttpError(400, `${emp.firstName} ${emp.lastName} is ${emp.status}`);
 
   const start = new Date(s.startsAt);
   const end = new Date(s.endsAt);

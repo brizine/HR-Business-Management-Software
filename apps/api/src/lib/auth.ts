@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { eq, sql } from "drizzle-orm";
-import { ROLES, hasRole, type Role } from "@crewdesk/shared";
+import { ROLES, hasRole, isInactive, type Role } from "@crewdesk/shared";
 import { db } from "../db";
 import { companies, employees, pushTokens } from "../db/schema";
 import { HttpError } from "./errors";
@@ -72,7 +72,7 @@ export function issueToken(app: FastifyInstance, e: EmployeeRow, purpose: TokenP
 
 /**
  * Verifies the token and re-checks the person on every request, so being
- * made inactive, signed out everywhere or having a role changed takes effect
+ * made inactive or terminated, signed out everywhere or having a role changed takes effect
  * immediately rather than when the token expires.
  */
 export async function verifyToken(req: FastifyRequest, allowed: TokenPurpose[]) {
@@ -89,7 +89,7 @@ export async function verifyToken(req: FastifyRequest, allowed: TokenPurpose[]) 
     throw new HttpError(403, "Request blocked: missing the Crewdesk client header");
   }
   const [row] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
-  if (!row || row.status === "inactive" || row.tokenVersion !== (req.user.ver ?? 0)) {
+  if (!row || isInactive(row.status) || row.tokenVersion !== (req.user.ver ?? 0)) {
     throw new HttpError(401, "Your session has ended. Please sign in again.");
   }
   req.user.role = row.role as Role;

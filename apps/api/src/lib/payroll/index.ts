@@ -1,5 +1,5 @@
 import { and, eq, gte, lt, lte, isNotNull } from "drizzle-orm";
-import { summarizeHours } from "@crewdesk/shared";
+import { isInactive, summarizeHours } from "@crewdesk/shared";
 import type { DB } from "../../db";
 import { companies, employees, ptoRequests, timeEntries } from "../../db/schema";
 import { CheckPayrollProvider } from "./check";
@@ -94,7 +94,7 @@ export async function buildPayrollLines(db: DB, companyId: string, period: Payro
   const round = (n: number) => Math.round(n * 100) / 100;
 
   return staff
-    .filter((e) => e.status !== "inactive" || entries.some((t) => t.employeeId === e.id))
+    .filter((e) => !isInactive(e.status) || entries.some((t) => t.employeeId === e.id))
     .map((e) => {
       const all = entries.filter((t) => t.employeeId === e.id);
       const counted = period.approvedOnly ? all.filter((t) => t.approvedAt) : all;
