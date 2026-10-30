@@ -80,7 +80,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
             <div><div className="muted">Email</div>{e.email}</div>
             <div><div className="muted">Phone</div>{e.phone ?? "—"}</div>
             <div><div className="muted">Role</div>{e.role}</div>
-            <div><div className="muted">Start date</div>{fmtDate(e.startDate)}</div>
+            <div><div className="muted">Hire date</div>{fmtDate(e.startDate)}</div>
             {"payRateCents" in e && <div><div className="muted">Pay</div>{money(e.payRateCents)} {e.payType === "hourly" ? "/hr" : "/yr"}</div>}
             <div><div className="muted">Employment</div>{e.employmentType?.replace("_", " ")}</div>
             <div><div className="muted">App login</div>{e.hasLogin ? "Yes" : "Not set"}</div>

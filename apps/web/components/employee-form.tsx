@@ -31,7 +31,7 @@ export function EmployeeFields({ initial = {} as any, employees = [] as any[] })
         <select name="payType" defaultValue={initial.payType ?? "hourly"}>{PAY_TYPES.map((r) => <option key={r}>{r}</option>)}</select>
       </label>
       <label>Pay rate ($/hr or $/yr)<input name="payRate" type="number" step="0.01" min="0" defaultValue={initial.payRateCents != null ? initial.payRateCents / 100 : ""} /></label>
-      <label>Start date<input name="startDate" type="date" defaultValue={initial.startDate ?? ""} /></label>
+      <label>Hire date<input name="startDate" type="date" defaultValue={initial.startDate ?? ""} /></label>
       <label>Status
         <select name="status" value={status} onChange={(e) => setStatus(e.target.value)}>{EMPLOYEE_STATUSES.map((s) => <option key={s}>{s}</option>)}</select>
       </label>

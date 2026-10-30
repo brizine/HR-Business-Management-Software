@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { api, money } from "@/lib/api";
+import { api, fmtDate, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, ErrorBox, PageHead } from "@/components/ui";
@@ -10,7 +10,7 @@ import { EmployeeFields, employeeBody } from "@/components/employee-form";
 import { InviteResult } from "@/components/invite-result";
 
 const NONE = "__none";
-const FILTER_KEYS = ["q", "status", "title", "dept", "payType", "payMin", "payMax"] as const;
+const FILTER_KEYS = ["q", "status", "title", "dept", "hiredFrom", "hiredTo", "payType", "payMin", "payMax"] as const;
 type Filters = Record<(typeof FILTER_KEYS)[number], string>;
 
 /** Distinct values of a field, sorted, for a filter dropdown. */
@@ -22,6 +22,9 @@ function matches(e: any, f: Filters) {
   if (f.status && e.status !== f.status) return false;
   if (f.title && (f.title === NONE ? !!e.title : e.title !== f.title)) return false;
   if (f.dept && (f.dept === NONE ? !!e.department : e.department !== f.dept)) return false;
+  // Hire date range (YYYY-MM-DD compares correctly as text); no hire date never matches a range.
+  if (f.hiredFrom && !(e.startDate && e.startDate >= f.hiredFrom)) return false;
+  if (f.hiredTo && !(e.startDate && e.startDate <= f.hiredTo)) return false;
   if (f.payType && e.payType !== f.payType) return false;
   // Pay range in dollars (per hour for hourly, per year for salaried).
   const dollars = (e.payRateCents ?? 0) / 100;
@@ -80,7 +83,7 @@ function People() {
             <option value="terminated">Terminated</option>
           </select>
         </label>
-        <label>Title
+        <label>Job title
           <select value={filters.title} onChange={(e) => setFilter({ title: e.target.value })}>
             <option value="">All</option>
             {titles.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -94,6 +97,12 @@ function People() {
             <option value={NONE}>(no department)</option>
           </select>
         </label>
+        <fieldset className="pay-range date-range">
+          <legend>Hired</legend>
+          <input type="date" aria-label="Hired on or after" value={filters.hiredFrom} max={filters.hiredTo || undefined} onChange={(e) => setFilter({ hiredFrom: e.target.value })} />
+          <span aria-hidden="true">–</span>
+          <input type="date" aria-label="Hired on or before" value={filters.hiredTo} min={filters.hiredFrom || undefined} onChange={(e) => setFilter({ hiredTo: e.target.value })} />
+        </fieldset>
         {seesPay && (
           <>
             <label>Pay type
@@ -148,16 +157,17 @@ function People() {
       )}
       <div className="card tablewrap">
         <table>
-          <thead><tr><th>Name</th><th>Title</th><th>Department</th><th>Contact</th>{seesPay && <th>Pay</th>}<th>Status</th></tr></thead>
+          <thead><tr><th>Name</th><th>Job title</th><th>Department</th><th>Hired</th><th>Contact</th>{seesPay && <th>Pay</th>}<th>Status</th></tr></thead>
           <tbody>
             {data && !rows.length && (
-              <tr><td colSpan={seesPay ? 6 : 5} className="empty">No one matches these filters. <a href="#" onClick={(ev) => { ev.preventDefault(); router.replace(path, { scroll: false }); }}>Clear filters</a></td></tr>
+              <tr><td colSpan={seesPay ? 7 : 6} className="empty">No one matches these filters. <a href="#" onClick={(ev) => { ev.preventDefault(); router.replace(path, { scroll: false }); }}>Clear filters</a></td></tr>
             )}
             {rows.map((e) => (
               <tr key={e.id}>
                 <td><Link href={`/people/${e.id}`}>{e.firstName} {e.lastName}</Link><div className="muted">{e.role}</div></td>
                 <td>{e.title ?? "—"}</td>
                 <td>{e.department ?? "—"}</td>
+                <td style={{ whiteSpace: "nowrap" }}>{fmtDate(e.startDate)}</td>
                 <td>{e.email}<div className="muted">{e.phone}</div></td>
                 {seesPay && <td>{money(e.payRateCents)}{e.payType === "hourly" ? "/hr" : "/yr"}</td>}
                 <td>
