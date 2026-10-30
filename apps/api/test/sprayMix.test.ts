@@ -50,10 +50,10 @@ describe("spray mixes", () => {
     const { body } = await call("GET", "/spray-mixes", "crew");
     expect(body.canEdit).toBe(false);
     expect(body.sheets.map((s: any) => [s.name, s.gallonsPerAcre, s.defaultTankGallons, s.products.length])).toEqual([
-      ["Truck Mix", 87.12, 75, 16],
-      ["Truck 1.5 gal/1000", 65.34, 75, 16],
-      ["Backpack 1 gal/1000", 43.56, 4, 16],
-      ["Z spray Mix", 11.1, 12, 14],
+      ["Truck 2gal/1000ft", 87.12, 75, 16],
+      ["Truck 1.5gal/1000ft", 65.34, 75, 16],
+      ["Backpack 1gal/1000ft", 43.56, 4, 16],
+      ["ZSpray(Green Tips)", 11.1, 12, 14],
     ]);
     ID.truck = body.sheets[0].id;
     ID.aquacap = body.sheets[0].products.find((p: any) => p.name === "Aquacap").id;
@@ -91,9 +91,9 @@ describe("spray mixes", () => {
     expect(changes.map((c) => c.summary)).toEqual([
       "Removed Iron (was 32 ounces liquid/acre)",
       "Added Iron: 32 ounces liquid/acre",
-      "Truck Mix: default tank 75 → 100 gal",
+      "Truck 2gal/1000ft: default tank 75 → 100 gal",
       "Aquacap: rate 47.9 → 50 per acre",
-      "Truck Mix: created from the original spreadsheet",
+      "Truck 2gal/1000ft: created from the original spreadsheet",
     ]);
     expect(changes[0].by).toBe("lead Sprayer");
   });

@@ -193,8 +193,8 @@ import { SPRAY_MIX_TEMPLATE, computeMix, formatAmount } from "../src";
 
 describe("spray tank mix", () => {
   const mix = (name: string) => SPRAY_MIX_TEMPLATE.find((m) => m.name === name)!;
-  const truck = mix("Truck Mix");
-  const z = mix("Z spray Mix");
+  const truck = mix("Truck 2gal/1000ft");
+  const z = mix("ZSpray(Green Tips)");
   const row = (sheet: typeof truck, tank: number, name: string) => computeMix(sheet, tank).rows.find((r) => r.product.name === name)!;
 
   it("matches the spreadsheet's Truck Mix (75 gal)", () => {
@@ -228,8 +228,8 @@ describe("spray tank mix", () => {
   });
 
   it("has the truck at 1.5 gal/1000 and the backpack at 1 gal/1000 with the Truck Mix rates", () => {
-    const truck15 = mix("Truck 1.5 gal/1000");
-    const backpack = mix("Backpack 1 gal/1000");
+    const truck15 = mix("Truck 1.5gal/1000ft");
+    const backpack = mix("Backpack 1gal/1000ft");
     expect(computeMix(truck15, 75).gallonsPer1000).toBeCloseTo(1.5, 10);
     expect(computeMix(backpack, 4).gallonsPer1000).toBeCloseTo(1, 10);
     expect(truck15.products).toEqual(truck.products);

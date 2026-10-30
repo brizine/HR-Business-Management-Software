@@ -133,8 +133,8 @@ start the clock from home but can still clock out on the drive back.
 **Spray Mix Calculator** at the top of the sidebar on the web, and its own **Spray Mix** tab in the app. It's
 the "Spray Tank Fill" spreadsheet as a shared calculator.
 
-- **Everyone** picks a mix (*Truck Mix* at 2 gal/1,000 ft², *Truck 1.5 gal/1000*,
-  *Backpack 1 gal/1000*, *Z spray Mix*), enters **Tank mix in desired
+- **Everyone** picks a mix (*Truck 2gal/1000ft*, *Truck 1.5gal/1000ft*, *Backpack 1gal/1000ft*,
+  *ZSpray(Green Tips)*), enters **Tank mix in desired
   gallons** and taps **Update total**. They see each product's amount, plus how many acres and
   square feet the tank covers. Each person's tank size is their own (remembered on their device),
   so one crew's fill doesn't change anyone else's screen.
@@ -148,12 +148,12 @@ the "Spray Tank Fill" spreadsheet as a shared calculator.
   on every row but one: the spreadsheet's Z-spray **90/10 Surfactant** cell (F36) used the
   truck-mix formula and gave 3.86 oz for 12 gal; the consistent formula gives 30.27 oz. Check that
   rate against the product label.
-- **Truck 1.5 gal/1000** (65.34 gal/acre, 75-gal tank) and **Backpack 1 gal/1000** (43.56 gal/acre,
-  4-gal tank) use the Truck Mix products and per-acre rates; less water per acre means more
-  product per gallon. Companies that already had mixes get both added after the Truck Mix,
+- **Truck 1.5gal/1000ft** (65.34 gal/acre, 75-gal tank) and **Backpack 1gal/1000ft** (43.56 gal/acre,
+  4-gal tank) use the Truck 2gal/1000ft products and per-acre rates; less water per acre means more
+  product per gallon. Companies that already had mixes get both added after the 2 gal truck mix,
   copied from its current rates.
 - **Starting point:** with no mixes yet, an editor can click **Start with the Truck, Backpack and
-  Z spray mixes** to load all four (the Truck and Z spray sheets exactly as in the spreadsheet).
+  ZSpray mixes** to load all four (the 2 gal truck and ZSpray sheets with the spreadsheet's rates).
 - **Print** gives a clean copy for a clipboard in the truck.
 
 ## Company wiki

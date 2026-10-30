@@ -7,7 +7,7 @@ import { z } from "zod";
  * product, with its rate per acre:
  *   rate per 1,000 ft²  = rate per acre ÷ 43.56          (43,560 ft² per acre)
  *   product for a tank  = rate per acre × tank gallons ÷ gallons per acre
- * e.g. Truck Mix at 87.12 gal/acre: a 75-gal tank covers 0.86 acre, so it
+ * e.g. Truck 2gal/1000ft at 87.12 gal/acre: a 75-gal tank covers 0.86 acre, so it
  * gets 0.86 × each product's per-acre rate.
  */
 export const SQFT_PER_ACRE = 43_560;
@@ -88,20 +88,20 @@ const TRUCK_PRODUCTS = (): MixProductLike[] =>
 
 /**
  * The mixes from the original spreadsheet plus the truck at 1.5 gal/1,000 ft² and the
- * backpack at 1 gal/1,000 ft², as a starting point. The lighter mixes use the Truck Mix
+ * backpack at 1 gal/1,000 ft², as a starting point. The lighter mixes use the Truck 2gal/1000ft
  * products and per-acre rates; only the water per acre changes.
  */
 export const SPRAY_MIX_TEMPLATE: { name: string; gallonsPerAcre: number; defaultTankGallons: number; notes?: string; products: MixProductLike[] }[] = [
   {
-    name: "Truck Mix",
+    name: "Truck 2gal/1000ft",
     gallonsPerAcre: 87.12,
     defaultTankGallons: 75,
     products: TRUCK_PRODUCTS(),
   },
-  { name: "Truck 1.5 gal/1000", gallonsPerAcre: 65.34, defaultTankGallons: 75, products: TRUCK_PRODUCTS() },
-  { name: "Backpack 1 gal/1000", gallonsPerAcre: 43.56, defaultTankGallons: 4, products: TRUCK_PRODUCTS() },
+  { name: "Truck 1.5gal/1000ft", gallonsPerAcre: 65.34, defaultTankGallons: 75, products: TRUCK_PRODUCTS() },
+  { name: "Backpack 1gal/1000ft", gallonsPerAcre: 43.56, defaultTankGallons: 4, products: TRUCK_PRODUCTS() },
   {
-    name: "Z spray Mix",
+    name: "ZSpray(Green Tips)",
     gallonsPerAcre: 11.1,
     defaultTankGallons: 12,
     notes: "Green Tips/4MPH",
