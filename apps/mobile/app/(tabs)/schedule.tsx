@@ -1,10 +1,11 @@
-import { router } from "expo-router";
-import { useState } from "react";
-import { Alert, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
+import { Alert, Pressable, View } from "react-native";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { shiftDay, shiftTimes } from "@/lib/shifts";
-import { Badge, Button, Card, Divider, Row, Screen, Txt } from "@/components/ui";
+import { Badge, Button, Card, Divider, Row, Screen, Txt, useTheme } from "@/components/ui";
+import { TimeOffView } from "@/components/time-off-view";
 
 
 function ShiftDetails({ shift, assetName }: { shift: any; assetName: string | null }) {
@@ -19,7 +20,8 @@ function ShiftDetails({ shift, assetName }: { shift: any; assetName: string | nu
   );
 }
 
-export default function Schedule() {
+/** Upcoming shifts, open shifts and availability. */
+function ShiftsView() {
   const { data, loading, reload } = useApi<{ mine: any[]; open: any[] }>("/shifts/mine");
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -71,5 +73,32 @@ export default function Schedule() {
         )) : <Txt muted>No open shifts right now.</Txt>}
       </Card>
     </Screen>
+  );
+}
+
+type ScheduleView = "shifts" | "time-off";
+
+/** The Schedule tab: shifts and time off, switched at the top. */
+export default function Schedule() {
+  const t = useTheme();
+  // Notifications about time off open this tab with ?view=time-off.
+  const params = useLocalSearchParams<{ view?: string }>();
+  const [view, setView] = useState<ScheduleView>(params.view === "time-off" ? "time-off" : "shifts");
+  useEffect(() => {
+    if (params.view === "time-off" || params.view === "shifts") setView(params.view);
+  }, [params.view]);
+
+  return (
+    <View style={{ flex: 1, backgroundColor: t.bg }}>
+      <View accessibilityRole="tablist" style={{ flexDirection: "row", margin: 12, marginBottom: 0, borderRadius: 10, borderWidth: 1, borderColor: t.border, backgroundColor: t.surface, padding: 3 }}>
+        {([["shifts", "Shifts"], ["time-off", "Time off"]] as const).map(([value, label]) => (
+          <Pressable key={value} onPress={() => setView(value)} accessibilityRole="tab" accessibilityState={{ selected: view === value }}
+            style={{ flex: 1, paddingVertical: 9, borderRadius: 8, alignItems: "center", backgroundColor: view === value ? t.primary : "transparent" }}>
+            <Txt style={{ fontWeight: "600", color: view === value ? "#fff" : t.text }}>{label}</Txt>
+          </Pressable>
+        ))}
+      </View>
+      {view === "shifts" ? <ShiftsView /> : <TimeOffView />}
+    </View>
   );
 }

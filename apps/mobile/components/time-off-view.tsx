@@ -3,9 +3,10 @@ import { Alert, Pressable, View } from "react-native";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
-import { Badge, Button, Card, Divider, ErrorText, Input, Row, Screen, Txt, useTheme } from "@/components/ui";
+import { Badge, Button, Card, Divider, ErrorText, Input, Row, Screen, Txt, useTheme } from "./ui";
 
-export default function TimeOff() {
+/** Time-off balances, requests and (for managers) approvals. Shown inside the Schedule tab. */
+export function TimeOffView() {
   const { can } = useAuth();
   const t = useTheme();
   const balances = useApi<any[]>("/pto/balances");

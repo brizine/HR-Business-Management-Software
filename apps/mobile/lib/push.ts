@@ -57,7 +57,7 @@ export async function unregisterForPush() {
 /** Maps a notification's link to a screen in this app. */
 export function routeFor(link: NotificationLink | null | undefined): string | null {
   switch (link?.screen) {
-    case "pto": return "/time-off";
+    case "pto": return "/schedule?view=time-off";
     case "time": return "/";
     case "schedule": return "/schedule";
     case "tasks":

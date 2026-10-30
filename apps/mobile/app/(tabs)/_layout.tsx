@@ -26,7 +26,6 @@ export default function TabsLayout() {
     <Tabs screenOptions={{ tabBarActiveTintColor: t.primary, headerStyle: { backgroundColor: t.surface }, headerTintColor: t.text, tabBarStyle: { backgroundColor: t.surface }, headerRight: () => <Bell /> }}>
       <Tabs.Screen name="index" options={{ title: "Clock", tabBarIcon: icon("⏱") }} />
       <Tabs.Screen name="schedule" options={{ title: "Schedule", tabBarIcon: icon("📅") }} />
-      <Tabs.Screen name="time-off" options={{ title: "Time off", tabBarIcon: icon("🌴") }} />
       <Tabs.Screen name="fleet" options={{ title: "Fleet", tabBarIcon: icon("🚚") }} />
       <Tabs.Screen name="spray-mix" options={{ title: "Spray Mix", headerTitle: "Spray Mix Calculator", tabBarIcon: icon("🧪") }} />
       <Tabs.Screen name="tasks" options={{ title: "Tasks", tabBarIcon: icon("✓") }} />
