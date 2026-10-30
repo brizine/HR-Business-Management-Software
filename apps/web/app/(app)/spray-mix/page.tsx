@@ -171,7 +171,7 @@ function Calculator({ sheet, canEdit, onChange }: { sheet: any; canEdit: boolean
   );
 }
 
-/** Editors: settings that aren't in the calculator itself (order, default tank, deleting the mix). */
+/** Editors: settings that aren't in the calculator itself (product order, deleting the mix). */
 function Editor({ sheet, onChange }: { sheet: any; onChange: () => void }) {
   const { busy, error, run } = useAction();
   const num = (v: FormDataEntryValue | null) => Number(v);
@@ -180,7 +180,7 @@ function Editor({ sheet, onChange }: { sheet: any; onChange: () => void }) {
   return (
     <div className="card stack noprint">
       <h2 style={{ margin: 0 }}>More settings for {sheet.name}</h2>
-      <p className="muted" style={{ margin: 0 }}>Tip: you can also click any name, rate or measurement in the calculator above to change it.</p>
+      <p className="muted" style={{ margin: 0 }}>Tip: you can also click any name, rate, measurement or the default tank in the calculator above to change it.</p>
       <form className="formgrid" onSubmit={(e) => {
         e.preventDefault();
         const f = new FormData(e.currentTarget);
@@ -344,7 +344,9 @@ export default function SprayMix() {
             </h2>
             <p className="muted" style={{ marginTop: 0 }}>
               <Editable canEdit={data.canEdit} kind="number" width={90} label="Gallons of water per acre" value={sheet.gallonsPerAcre} display={formatEntered(sheet.gallonsPerAcre)}
-                onSave={(v) => { if (!(Number(v) > 0)) throw new Error("Enter gallons per acre above 0."); return saveSheet({ gallonsPerAcre: Number(v) }); }} /> gallons/acre · {formatAmount(computeMix(sheet, 1).gallonsPer1000)} gallons/1000 ft²
+                onSave={(v) => { if (!(Number(v) > 0)) throw new Error("Enter gallons per acre above 0."); return saveSheet({ gallonsPerAcre: Number(v) }); }} /> gallons/acre · {formatAmount(computeMix(sheet, 1).gallonsPer1000)} gallons/1000 ft² · default tank{" "}
+              <Editable canEdit={data.canEdit} kind="number" width={90} label="Default tank (gallons)" value={sheet.defaultTankGallons} display={formatEntered(sheet.defaultTankGallons)}
+                onSave={(v) => { if (!(Number(v) > 0)) throw new Error("Enter a tank size above 0."); return saveSheet({ defaultTankGallons: Number(v) }); }} /> gal
               {sheet.notes || data.canEdit ? " · " : ""}
               <Editable canEdit={data.canEdit} label="Notes" value={sheet.notes ?? ""} width={220} display={sheet.notes || (data.canEdit ? <em>add a note</em> : null)} onSave={(v) => saveSheet({ notes: v })} />
               {sheet.updatedBy ? ` · Last changed by ${sheet.updatedBy}, ${fmtDateTime(sheet.updatedAt)}` : ""}

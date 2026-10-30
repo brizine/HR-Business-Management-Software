@@ -146,9 +146,13 @@ export default function SprayMix() {
   return (
     <Screen refreshing={loading} onRefresh={reload}>
       <Chips label="Mix" value={sheet.id} onChange={(id) => { setSheetId(id); setEditingProduct(null); }} options={data.sheets.map((s: any) => ({ value: s.id, label: s.name }))} />
-      <Txt muted style={{ fontSize: 13 }}>
-        {formatEntered(sheet.gallonsPerAcre)} gal/acre · {formatAmount(mix.gallonsPer1000)} gal/1000 ft²{sheet.notes ? ` · ${sheet.notes}` : ""}
-      </Txt>
+      {/* Editors tap this line to change gallons per acre, the default tank and notes. */}
+      <Pressable disabled={!data.canEdit} onPress={() => setEditing(!editing)} accessibilityRole={data.canEdit ? "button" : undefined}
+        accessibilityHint={data.canEdit ? "Change gallons per acre, default tank and notes" : undefined}>
+        <Txt muted style={{ fontSize: 13 }}>
+          {formatEntered(sheet.gallonsPerAcre)} gal/acre · {formatAmount(mix.gallonsPer1000)} gal/1000 ft² · default tank {formatEntered(sheet.defaultTankGallons)} gal{sheet.notes ? ` · ${sheet.notes}` : ""}{data.canEdit ? "  ✎" : ""}
+        </Txt>
+      </Pressable>
       <Card>
         <Input label="Tank mix in desired gallons" value={input} onChangeText={setInput} keyboardType="decimal-pad" returnKeyType="done" onSubmitEditing={update} />
         <Button title="Update total" kind={pending ? "primary" : "secondary"} onPress={update} disabled={!valid} />
