@@ -1,12 +1,15 @@
 "use client";
 import type { ReactNode } from "react";
 
-export function PageHead({ title, sub, children }: { title: string; sub?: ReactNode; children?: ReactNode }) {
+export function PageHead({ title, sub, children, before }: { title: string; sub?: ReactNode; children?: ReactNode; before?: ReactNode }) {
   return (
     <div className="pagehead">
-      <div>
-        <h1>{title}</h1>
-        {sub && <div className="muted">{sub}</div>}
+      <div className="pagehead-title">
+        {before}
+        <div>
+          <h1>{title}</h1>
+          {sub && <div className="muted">{sub}</div>}
+        </div>
       </div>
       <div className="row">{children}</div>
     </div>

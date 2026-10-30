@@ -200,6 +200,10 @@ the payroll calendar, safety rules and so on.
 - **Team filters:** search, status, job title, department, hire date range (**Hired** from / to) and,
   for managers and up, pay type and pay range. Filters are kept in the page address, so a filtered
   list can be bookmarked or shared.
+- **Photos:** a photo next to each person's name on their profile and on the Team list (initials when
+  there's none). Admins add, change or remove anyone's photo from their profile; employees set their
+  own from their profile on the website or by tapping the photo on the app's **Me** tab. JPEG, PNG or
+  WebP up to 5 MB; the website shrinks photos before uploading. Stored encrypted with the other uploads.
 - **Date of birth, home address and emergency contact:** on each employee's profile (admins edit them with **Edit**).
   Employees keep their own up to date under **Settings → My info** on the website or **Me → My info**
   in the app. Only managers, admins and the person themselves can see them.

@@ -222,6 +222,45 @@ describe("sessions", () => {
     expect(mine.body.payRateCents).not.toBe(999999);
   });
 
+  it("profile photos: set by yourself or an admin, seen by coworkers, images only", async () => {
+    const id = await hire("smiley", "employee");
+    const otherId = await hire("bystander", "employee");
+    const selfToken = (await login("smiley")).body.token;
+    const otherToken = (await login("bystander")).body.token;
+    const upload = (target: string, token: string, bytes: Buffer, type = "image/png") => {
+      const boundary = "----crewdeskphoto";
+      const payload = Buffer.concat([
+        Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="p.png"\r\nContent-Type: ${type}\r\n\r\n`),
+        bytes,
+        Buffer.from(`\r\n--${boundary}--\r\n`),
+      ]);
+      return app.inject({ method: "PUT", url: `/employees/${target}/photo`, payload, headers: { authorization: `Bearer ${token}`, "content-type": `multipart/form-data; boundary=${boundary}` } });
+    };
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32, 1)]);
+
+    expect((await upload(id, selfToken, png)).statusCode).toBe(200);
+    expect((await upload(id, otherToken, png)).statusCode).toBe(403);
+    expect((await upload(otherId, ownerToken, png)).statusCode).toBe(200);
+    // Claims to be an image but isn't.
+    const fake = await upload(id, selfToken, Buffer.from("<script>alert(1)</script>"), "image/png");
+    expect(fake.statusCode).toBe(400);
+
+    const me = (await call("GET", `/employees/${id}`, otherToken)).body;
+    expect(me.hasPhoto).toBe(true);
+    expect(me).not.toHaveProperty("photoKey");
+    const img = await app.inject({ method: "GET", url: `/employees/${id}/photo`, headers: { authorization: `Bearer ${otherToken}` } });
+    expect(img.statusCode).toBe(200);
+    expect(img.headers["content-type"]).toBe("image/png");
+    expect(img.rawPayload.equals(png)).toBe(true);
+    // Other companies can't load it.
+    const outsider = await app.inject({ method: "POST", url: "/auth/signup", payload: { companyName: "Other", firstName: "O", lastName: "X", email: email("photo-outsider"), password: "password123" } });
+    const outsiderImg = await app.inject({ method: "GET", url: `/employees/${id}/photo`, headers: { authorization: `Bearer ${outsider.json().token}` } });
+    expect(outsiderImg.statusCode).toBe(404);
+
+    expect((await call("DELETE", `/employees/${id}/photo`, selfToken)).body.hasPhoto).toBe(false);
+    expect((await app.inject({ method: "GET", url: `/employees/${id}/photo`, headers: { authorization: `Bearer ${otherToken}` } })).statusCode).toBe(404);
+  });
+
   it("keeps a reason for inactive or terminated, visible to managers only", async () => {
     const id = await hire("reasoned", "employee");
     await hire("peer", "employee");

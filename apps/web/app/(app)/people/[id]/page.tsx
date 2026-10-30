@@ -12,6 +12,7 @@ import { DownloadPdf, FormStatus, signedLine } from "@/components/tax-form-bits"
 import { AvailabilityEditor } from "@/components/availability-editor";
 import { EmployeeFields, employeeBody } from "@/components/employee-form";
 import { ContactSummary } from "@/components/contact-fields";
+import { PhotoEditor } from "@/components/avatar";
 import { isInactive } from "@crewdesk/shared";
 
 /** Admins: the person's W-4, I-9 and direct deposit on file (current and earlier versions). */
@@ -51,7 +52,8 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
 
   return (
     <>
-      <PageHead title={`${e.firstName} ${e.lastName}`} sub={[e.title, e.department].filter(Boolean).join(" · ")}>
+      <PageHead title={`${e.firstName} ${e.lastName}`} sub={[e.title, e.department].filter(Boolean).join(" · ")}
+        before={<PhotoEditor e={e} canEdit={can("admin") || e.id === me?.user.id} onChange={emp.setData} />}>
         <Badge value={e.status} />
         {can("admin") && <Link className="btn" href={`/settings/notifications?employeeId=${id}`}>Notifications</Link>}
         {can("admin") && <button className="btn" onClick={() => setEditing(!editing)}>{editing ? "Close" : "Edit"}</button>}

@@ -127,6 +127,13 @@
       "when": 1793380787640,
       "tag": "0017_employee_date_of_birth",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793385922879,
+      "tag": "0018_employee_photo",
+      "breakpoints": true
     }
   ]
 }

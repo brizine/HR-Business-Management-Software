@@ -72,6 +72,9 @@ export const employees = pgTable(
     payRateCents: integer("pay_rate_cents").notNull().default(0),
     startDate: date("start_date"),
     status: text("status").notNull().default("active"),
+    /** Profile photo in encrypted storage (see lib/storage); everyone in the company can see it. */
+    photoKey: text("photo_key"),
+    photoUpdatedAt: timestamp("photo_updated_at", { withTimezone: true }),
     /** Date of birth, home address and emergency contact: managers and up, and the person themselves, only. */
     dateOfBirth: date("date_of_birth"),
     addressLine1: text("address_line1"),

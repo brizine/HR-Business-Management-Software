@@ -4,10 +4,12 @@ import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
 import { Badge, Button, Card, Divider, Row, Screen, Txt } from "@/components/ui";
+import { MyPhoto } from "@/components/avatar";
 
 export default function Profile() {
   const { me, signOut } = useAuth();
   const docs = useApi<any[]>("/documents");
+  const mine = useApi<any>(me ? `/employees/${me.user.id}` : null);
   const toSign = docs.data?.filter((d) => d.requiresSignature && !d.signedAt && d.employeeId === me?.user.id) ?? [];
 
   const sign = (doc: any) => {
@@ -21,9 +23,14 @@ export default function Profile() {
   return (
     <Screen refreshing={docs.loading} onRefresh={docs.reload}>
       <Card>
-        <Txt style={{ fontSize: 20, fontWeight: "700" }}>{me?.user.firstName} {me?.user.lastName}</Txt>
-        <Txt muted>{me?.user.email}</Txt>
-        <Txt muted>{me?.company.name} · {me?.user.role}</Txt>
+        <Row style={{ justifyContent: "flex-start", gap: 14 }}>
+          {mine.data && <MyPhoto e={mine.data} onChange={mine.reload} />}
+          <View style={{ flex: 1 }}>
+            <Txt style={{ fontSize: 20, fontWeight: "700" }}>{me?.user.firstName} {me?.user.lastName}</Txt>
+            <Txt muted>{me?.user.email}</Txt>
+            <Txt muted>{me?.company.name} · {me?.user.role}</Txt>
+          </View>
+        </Row>
       </Card>
       {toSign.length > 0 && (
         <Card title="Needs your signature">

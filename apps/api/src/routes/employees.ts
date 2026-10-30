@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import bcrypt from "bcryptjs";
 import { and, asc, eq } from "drizzle-orm";
@@ -6,6 +7,7 @@ import { db } from "../db";
 import { employees, recoveryCodes } from "../db/schema";
 import { authenticate, canManageAccount, requireRole, signOutEverywhere } from "../lib/auth";
 import { sendInvite } from "../lib/invites";
+import { storage } from "../lib/storage";
 
 async function actorName(id: string) {
   const [e] = await db.select({ f: employees.firstName, l: employees.lastName }).from(employees).where(eq(employees.id, id));
@@ -15,13 +17,24 @@ import { HttpError, notFound, parse } from "../lib/errors";
 
 type EmployeeRow = typeof employees.$inferSelect;
 
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+
+/** The image type from the file's first bytes (not its name or claimed type), or null if it isn't one we accept. */
+function imageType(b: Buffer) {
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+  if (b.length > 12 && b.toString("ascii", 0, 4) === "RIFF" && b.toString("ascii", 8, 12) === "WEBP") return "image/webp";
+  return null;
+}
+
 /** Never sends password hashes, two-factor secrets or lockout counters to clients. */
 export function publicEmployee(e: EmployeeRow) {
-  const { passwordHash, totpSecret, totpPendingSecret, totpLastStep, tokenVersion, failedLoginCount, lockedUntil, ...rest } = e;
+  const { passwordHash, totpSecret, totpPendingSecret, totpLastStep, tokenVersion, failedLoginCount, lockedUntil, photoKey, ...rest } = e;
   return {
     ...rest,
     hasLogin: !!passwordHash,
     twoFactorEnabled: !!totpSecret,
+    hasPhoto: !!photoKey,
     locked: !!lockedUntil && lockedUntil > new Date(),
   };
 }
@@ -175,6 +188,52 @@ const routes: FastifyPluginAsync = async (app) => {
     const target = await manageable(req, req.params.id);
     await db.update(employees).set({ failedLoginCount: 0, lockedUntil: null }).where(eq(employees.id, target.id));
     return { ok: true };
+  });
+
+  // ---- Profile photos ----
+
+  /** Admins can set anyone's photo (within canManageAccount); everyone can set their own. */
+  async function photoTarget(req: { user: { companyId: string; sub: string; role: Role } }, id: string) {
+    if (id === req.user.sub) {
+      const [me] = await db.select().from(employees).where(eq(employees.id, id));
+      return me;
+    }
+    if (!hasRole(req.user.role, "admin")) throw new HttpError(403, "You can only change your own photo");
+    return manageable(req, id);
+  }
+
+  /** multipart/form-data with one image (JPEG, PNG or WebP, up to 5 MB). */
+  app.put<{ Params: { id: string } }>("/:id/photo", async (req) => {
+    const target = await photoTarget(req, req.params.id);
+    const file = await req.file();
+    if (!file) throw new HttpError(400, "No photo uploaded");
+    const buf = await file.toBuffer();
+    if (buf.length > MAX_PHOTO_BYTES) throw new HttpError(400, "That photo is too large (5 MB max)");
+    if (!imageType(buf)) throw new HttpError(400, "Use a JPEG, PNG or WebP photo");
+    const key = `${req.user.companyId}/photos/${target.id}-${randomUUID()}`;
+    await storage.put(key, buf);
+    const [row] = await db.update(employees).set({ photoKey: key, photoUpdatedAt: new Date() }).where(eq(employees.id, target.id)).returning();
+    return publicEmployee(row);
+  });
+
+  app.delete<{ Params: { id: string } }>("/:id/photo", async (req) => {
+    const target = await photoTarget(req, req.params.id);
+    const [row] = await db.update(employees).set({ photoKey: null, photoUpdatedAt: new Date() }).where(eq(employees.id, target.id)).returning();
+    return publicEmployee(row);
+  });
+
+  /** Anyone in the company can see coworkers' photos. Add ?v=<photoUpdatedAt> so a new photo isn't served from cache. */
+  app.get<{ Params: { id: string } }>("/:id/photo", async (req, reply) => {
+    const [row] = await db
+      .select({ photoKey: employees.photoKey })
+      .from(employees)
+      .where(and(eq(employees.id, req.params.id), eq(employees.companyId, req.user.companyId)));
+    if (!row?.photoKey) notFound("Photo");
+    const buf = await storage.get(row.photoKey);
+    reply.header("Content-Type", imageType(buf) ?? "application/octet-stream");
+    reply.header("Cache-Control", "private, max-age=86400");
+    reply.header("X-Content-Type-Options", "nosniff");
+    return reply.send(buf);
   });
 
   /** Lets an employee update their own phone, home address and emergency contact. Passwords change via /auth/password. */

@@ -191,6 +191,14 @@ tr.openrow td { background: var(--bg); }
   background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin: 0;
   columns: 2;
 }
+/* Employee photos */
+.pagehead-title { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.avatar { border-radius: 50%; object-fit: cover; flex: none; display: inline-flex; align-items: center; justify-content: center; background: var(--border); }
+.avatar-initials { background: color-mix(in srgb, var(--primary) 18%, var(--surface, #fff)); color: var(--primary); font-weight: 700; letter-spacing: .02em; }
+.photo-editor { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.photo-actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; max-width: 200px; }
+.photo-actions .error-text { color: var(--bad); font-size: 12px; width: 100%; text-align: center; }
+.person-cell { display: flex; align-items: center; gap: 10px; }
 .settings-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
 .contact-fieldset { border: 0; padding: 0; margin: 14px 0 0; min-width: 0; }
 .contact-fieldset legend { font-weight: 600; padding: 0; margin-bottom: 6px; }

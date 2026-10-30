@@ -6,6 +6,9 @@ export const WEB_URL = API_URL.replace(/\/api\/?$/, "");
 const TOKEN_KEY = "crewdesk.token";
 let token: string | null = null;
 
+/** Headers for loading protected files directly, e.g. an <Image> of an employee photo. */
+export const authHeaders = (): Record<string, string> => (token ? { Authorization: `Bearer ${token}` } : {});
+
 export async function loadToken() {
   token = await SecureStore.getItemAsync(TOKEN_KEY);
   return token;

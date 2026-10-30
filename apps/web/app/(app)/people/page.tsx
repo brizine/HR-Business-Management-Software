@@ -8,6 +8,7 @@ import { useAction, useApi } from "@/lib/hooks";
 import { Badge, ErrorBox, PageHead } from "@/components/ui";
 import { EmployeeFields, employeeBody } from "@/components/employee-form";
 import { InviteResult } from "@/components/invite-result";
+import { Avatar } from "@/components/avatar";
 
 const NONE = "__none";
 const FILTER_KEYS = ["q", "status", "title", "dept", "hiredFrom", "hiredTo", "payType", "payMin", "payMax"] as const;
@@ -164,7 +165,12 @@ function People() {
             )}
             {rows.map((e) => (
               <tr key={e.id}>
-                <td><Link href={`/people/${e.id}`}>{e.firstName} {e.lastName}</Link><div className="muted">{e.role}</div></td>
+                <td>
+                  <div className="person-cell">
+                    <Avatar e={e} size={36} />
+                    <div><Link href={`/people/${e.id}`}>{e.firstName} {e.lastName}</Link><div className="muted">{e.role}</div></div>
+                  </div>
+                </td>
                 <td>{e.title ?? "—"}</td>
                 <td>{e.department ?? "—"}</td>
                 <td style={{ whiteSpace: "nowrap" }}>{fmtDate(e.startDate)}</td>
