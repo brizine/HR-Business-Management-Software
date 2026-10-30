@@ -8,8 +8,9 @@ Run the whole app (website and API, with a demo company) in your browser. Nothin
    (or use https://codespaces.new/brizine/HR-Business-Management-Software).
 2. Wait for setup (the first time takes about 3–5 minutes). A terminal named **crewdesk** sets up the
    database, loads demo data and builds the app.
-3. When it says it's listening on port 3000, Crewdesk opens in a new browser tab. If it doesn't, open
-   the **Ports** tab at the bottom and click the globe icon next to **Crewdesk (3000)**.
+3. When the terminal says **✔ Crewdesk is running on port 3000**, Crewdesk opens in a new browser
+   tab. If it doesn't, open the **Ports** tab at the bottom and click the globe icon next to
+   **Crewdesk (3000)**.
 
 ## Sign in
 
@@ -27,6 +28,27 @@ asking for time off while the manager approves it.
 
 On your phone, open the same Codespaces address in the phone's browser to see the mobile layout.
 (The installable phone app needs an Expo build; see the README.)
+
+## If you see "…app.github.dev is currently unable to handle this request"
+
+That page means nothing is running on port 3000 yet.
+
+1. **Still building?** Click the **crewdesk** terminal at the bottom (or **Terminal → crewdesk**). If
+   it says "Building Crewdesk…", wait until it says **✔ Crewdesk is running**, then refresh the page.
+2. **Stopped with an error, or no crewdesk terminal?** Open a new terminal (**Terminal → New
+   Terminal**) and run:
+
+   ```
+   pnpm demo
+   ```
+
+   Wait for **✔ Crewdesk is running**, then refresh.
+3. **Says it can't reach the database?** Open the Command Palette (**Ctrl+Shift+P** / **Cmd+Shift+P**)
+   and run **Codespaces: Rebuild Container**, then try again.
+4. **Codespace was stopped** (after 30 idle minutes)? Reopen it from https://github.com/codespaces,
+   then run `pnpm demo`.
+
+If it still fails, copy the last 20 lines of the terminal and send them over.
 
 ## Things to know
 

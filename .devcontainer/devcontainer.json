@@ -3,14 +3,26 @@
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-  "forwardPorts": [3000],
   "portsAttributes": {
-    "3000": { "label": "Crewdesk", "onAutoForward": "openBrowser" }
+    "3000": {
+      "label": "Crewdesk",
+      "onAutoForward": "openBrowserOnce"
+    }
   },
   "postCreateCommand": "sudo corepack enable && corepack install && pnpm install",
-  "postAttachCommand": { "crewdesk": "pnpm demo" },
+  "postAttachCommand": {
+    "crewdesk": "pnpm demo"
+  },
   "customizations": {
-    "codespaces": { "openFiles": ["docs/try-it.md"] },
-    "vscode": { "extensions": ["dbaeumer.vscode-eslint"] }
+    "codespaces": {
+      "openFiles": [
+        "docs/try-it.md"
+      ]
+    },
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint"
+      ]
+    }
   }
 }

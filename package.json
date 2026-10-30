@@ -15,7 +15,7 @@
     "backup:keygen": "node apps/api/dist/backup-cli.js keygen",
     "backup:run": "node --env-file-if-exists=apps/api/.env apps/api/dist/backup-cli.js run",
     "backup:decrypt": "node apps/api/dist/backup-cli.js decrypt",
-    "demo": "pnpm db:migrate && pnpm db:seed && pnpm build && NODE_ENV=production node apps/api/dist/main.js"
+    "demo": "node scripts/wait-for-db.mjs && pnpm db:migrate && pnpm db:seed && echo '\u2026 Building Crewdesk (1\u20133 minutes). Until it says it is running, the web address shows \"unable to handle this request\".' && pnpm build && NODE_ENV=production node apps/api/dist/main.js"
   },
   "engines": {
     "node": ">=22"

@@ -52,7 +52,9 @@ await app.register(async (site: FastifyInstance) => {
   } });
 });
 
-await app.listen({ port: Number(process.env.PORT ?? 3000), host: process.env.HOST ?? "0.0.0.0" });
+const port = Number(process.env.PORT ?? 3000);
+await app.listen({ port, host: process.env.HOST ?? "0.0.0.0" });
+console.log(`\n✔ Crewdesk is running on port ${port}.${process.env.CODESPACES ? " Open the Ports tab and click the globe next to port " + port + "." : ""}\n`);
 
 const timer = process.env.DISABLE_SCHEDULER === "true" ? null : startScheduler();
 
