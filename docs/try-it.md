@@ -31,7 +31,7 @@ On your phone, open the same Codespaces address in the phone's browser to see th
 
 ## If you see "…app.github.dev is currently unable to handle this request"
 
-That page means nothing is running on port 3000 yet.
+That page means the link can't reach the app on port 3000.
 
 1. **Still building?** Click the **crewdesk** terminal at the bottom (or **Terminal → crewdesk**). If
    it says "Building Crewdesk…", wait until it says **✔ Crewdesk is running**, then refresh the page.
@@ -45,7 +45,10 @@ That page means nothing is running on port 3000 yet.
    Wait for **✔ Crewdesk is running**, then refresh.
 3. **Says it can't reach the database?** Open the Command Palette (**Ctrl+Shift+P** / **Cmd+Shift+P**)
    and run **Codespaces: Rebuild Container**, then try again.
-4. **Codespace was stopped** (after 30 idle minutes)? Reopen it from https://github.com/codespaces,
+4. **Says ✔ Crewdesk is running but still won't load?** Open the **Ports** tab, right-click
+   port 3000 and choose **Change Port Protocol → HTTP** (it must not say HTTPS; your link is
+   still secure). Then click the globe icon on that row.
+5. **Codespace was stopped** (after 30 idle minutes)? Reopen it from https://github.com/codespaces,
    then run `pnpm demo`.
 
 If it still fails, copy the last 20 lines of the terminal and send them over.
