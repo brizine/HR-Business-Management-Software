@@ -197,7 +197,7 @@ the payroll calendar, safety rules and so on.
   profile. It also stops push notifications to that person's phones. Changing a password, email or
   role, or making someone inactive or terminated, signs them out everywhere automatically.
 - **Immediate effect:** every request re-checks the account, so making someone inactive or terminated and role changes apply at once.
-- **Team filters:** search, status, job title, department, hire date range (**Hired** from / to) and,
+- **Team filters:** search, status (each choice shows how many people have it), job title, department, hire date range (**Hired** from / to) and,
   for managers and up, pay type and pay range. Filters are kept in the page address, so a filtered
   list can be bookmarked or shared.
 - **Photos:** a photo next to each person's name on their profile and on the Team list (initials when

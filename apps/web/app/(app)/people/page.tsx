@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { EMPLOYEE_STATUSES } from "@crewdesk/shared";
 import { api, fmtDate, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -65,10 +66,18 @@ function People() {
   const depts = useMemo(() => distinct(all, "department"), [all]);
   const rows = all.filter((e) => matches(e, filters));
   const seesPay = can("manager");
+  // How many people have each status, given the other filters (so the numbers add up to what "All" shows).
+  const byStatus = all.filter((e) => matches(e, { ...filters, status: "" })).reduce<Record<string, number>>((n, e) => ({ ...n, [e.status]: (n[e.status] ?? 0) + 1 }), {});
+  const statusTotal = Object.values(byStatus).reduce((a, b) => a + b, 0);
+  const otherFilters = FILTER_KEYS.some((k) => k !== "status" && filters[k]);
+  const people = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
+  const summary = filters.status
+    ? `${rows.length} ${filters.status}${otherFilters ? " matching your filters" : ""} · ${people(all.length)} in all`
+    : active ? `Showing ${rows.length} of ${people(all.length)}` : people(all.length);
 
   return (
     <>
-      <PageHead title="Team" sub={active ? `Showing ${rows.length} of ${all.length} people` : `${all.length} people`}>
+      <PageHead title="Team" sub={<span role="status">{summary}</span>}>
         {can("admin") && <button className="btn primary" onClick={() => setAdding(!adding)}>Add employee</button>}
       </PageHead>
       <form className="card filters" role="search" aria-label="Filter the team" onSubmit={(e) => e.preventDefault()}>
@@ -77,11 +86,8 @@ function People() {
         </label>
         <label>Status
           <select value={filters.status} onChange={(e) => setFilter({ status: e.target.value })}>
-            <option value="">All</option>
-            <option value="active">Active</option>
-            <option value="onboarding">Onboarding</option>
-            <option value="inactive">Inactive</option>
-            <option value="terminated">Terminated</option>
+            <option value="">All ({statusTotal})</option>
+            {EMPLOYEE_STATUSES.map((s) => <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)} ({byStatus[s] ?? 0})</option>)}
           </select>
         </label>
         <label>Job title
