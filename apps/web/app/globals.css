@@ -243,3 +243,12 @@ tr.openrow td { background: var(--bg); }
   .noprint { display: none !important; }
   .mix-table { font-size: 12px; }
 }
+
+/* Filter bars (Team page) */
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.filters label { width: 170px; }
+.filters label:first-child { width: 220px; }
+.filters .pay-range { border: 0; padding: 0; margin: 0; display: flex; align-items: center; gap: 6px; }
+.filters .pay-range legend { font-size: 12px; color: var(--muted); font-weight: 500; padding: 0; margin-bottom: 4px; }
+.filters .pay-range input { width: 90px; }
+@media (max-width: 700px) { .filters label, .filters label:first-child { width: 100%; } }

@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { api, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -8,21 +9,111 @@ import { Badge, ErrorBox, PageHead } from "@/components/ui";
 import { EmployeeFields, employeeBody } from "@/components/employee-form";
 import { InviteResult } from "@/components/invite-result";
 
-export default function People() {
+const NONE = "__none";
+const FILTER_KEYS = ["q", "status", "title", "dept", "payType", "payMin", "payMax"] as const;
+type Filters = Record<(typeof FILTER_KEYS)[number], string>;
+
+/** Distinct values of a field, sorted, for a filter dropdown. */
+const distinct = (rows: any[], key: string) =>
+  [...new Set(rows.map((r) => r[key]).filter((v): v is string => !!v && v.trim() !== ""))].sort((a, b) => a.localeCompare(b));
+
+function matches(e: any, f: Filters) {
+  if (f.q && !`${e.firstName} ${e.lastName} ${e.email} ${e.title ?? ""} ${e.department ?? ""}`.toLowerCase().includes(f.q.toLowerCase())) return false;
+  if (f.status && e.status !== f.status) return false;
+  if (f.title && (f.title === NONE ? !!e.title : e.title !== f.title)) return false;
+  if (f.dept && (f.dept === NONE ? !!e.department : e.department !== f.dept)) return false;
+  if (f.payType && e.payType !== f.payType) return false;
+  // Pay range in dollars (per hour for hourly, per year for salaried).
+  const dollars = (e.payRateCents ?? 0) / 100;
+  if (f.payMin !== "" && dollars < Number(f.payMin)) return false;
+  if (f.payMax !== "" && dollars > Number(f.payMax)) return false;
+  return true;
+}
+
+function People() {
   const { can } = useAuth();
   const { data, reload } = useApi<any[]>("/employees");
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState<any>(null);
-  const [q, setQ] = useState("");
   const { busy, error, run } = useAction();
-  const rows = (data ?? []).filter((e) => `${e.firstName} ${e.lastName} ${e.title ?? ""} ${e.department ?? ""}`.toLowerCase().includes(q.toLowerCase()));
+
+  // Filters live in the address bar, so a filtered view can be bookmarked or shared.
+  const params = useSearchParams();
+  const router = useRouter();
+  const path = usePathname();
+  const filters = Object.fromEntries(FILTER_KEYS.map((k) => [k, params.get(k) ?? ""])) as Filters;
+  const setFilter = (patch: Partial<Filters>) => {
+    const next = new URLSearchParams(params.toString());
+    for (const [k, v] of Object.entries(patch)) {
+      if (v) next.set(k, v);
+      else next.delete(k);
+    }
+    // Pay range only applies to one pay type at a time.
+    if (patch.payType !== undefined && patch.payType !== filters.payType) {
+      next.delete("payMin");
+      next.delete("payMax");
+    }
+    router.replace(`${path}${next.size ? `?${next}` : ""}`, { scroll: false });
+  };
+  const active = FILTER_KEYS.some((k) => filters[k]);
+  const all = data ?? [];
+  const titles = useMemo(() => distinct(all, "title"), [all]);
+  const depts = useMemo(() => distinct(all, "department"), [all]);
+  const rows = all.filter((e) => matches(e, filters));
+  const seesPay = can("manager");
 
   return (
     <>
-      <PageHead title="Team" sub={`${data?.length ?? 0} people`}>
-        <input placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 200 }} />
+      <PageHead title="Team" sub={active ? `Showing ${rows.length} of ${all.length} people` : `${all.length} people`}>
         {can("admin") && <button className="btn primary" onClick={() => setAdding(!adding)}>Add employee</button>}
       </PageHead>
+      <form className="card filters" role="search" aria-label="Filter the team" onSubmit={(e) => e.preventDefault()}>
+        <label>Search
+          <input type="search" placeholder="Name, email…" value={filters.q} onChange={(e) => setFilter({ q: e.target.value })} />
+        </label>
+        <label>Status
+          <select value={filters.status} onChange={(e) => setFilter({ status: e.target.value })}>
+            <option value="">All</option>
+            <option value="active">Active</option>
+            <option value="onboarding">Onboarding</option>
+            <option value="terminated">Terminated</option>
+          </select>
+        </label>
+        <label>Title
+          <select value={filters.title} onChange={(e) => setFilter({ title: e.target.value })}>
+            <option value="">All</option>
+            {titles.map((t) => <option key={t} value={t}>{t}</option>)}
+            <option value={NONE}>(no title)</option>
+          </select>
+        </label>
+        <label>Department
+          <select value={filters.dept} onChange={(e) => setFilter({ dept: e.target.value })}>
+            <option value="">All</option>
+            {depts.map((d) => <option key={d} value={d}>{d}</option>)}
+            <option value={NONE}>(no department)</option>
+          </select>
+        </label>
+        {seesPay && (
+          <>
+            <label>Pay type
+              <select value={filters.payType} onChange={(e) => setFilter({ payType: e.target.value })}>
+                <option value="">All</option>
+                <option value="hourly">Hourly</option>
+                <option value="salary">Salaried</option>
+              </select>
+            </label>
+            {filters.payType && (
+              <fieldset className="pay-range">
+                <legend>Pay {filters.payType === "hourly" ? "($/hour)" : "($/year)"}</legend>
+                <input type="number" inputMode="decimal" min="0" step="any" aria-label="Minimum pay" placeholder="Min" value={filters.payMin} onChange={(e) => setFilter({ payMin: e.target.value })} />
+                <span aria-hidden="true">–</span>
+                <input type="number" inputMode="decimal" min="0" step="any" aria-label="Maximum pay" placeholder="Max" value={filters.payMax} onChange={(e) => setFilter({ payMax: e.target.value })} />
+              </fieldset>
+            )}
+          </>
+        )}
+        {active && <button type="button" className="btn" onClick={() => router.replace(path, { scroll: false })}>Clear filters</button>}
+      </form>
       {added && (
         <div className="card">
           <div className="row" style={{ justifyContent: "space-between" }}>
@@ -56,15 +147,18 @@ export default function People() {
       )}
       <div className="card tablewrap">
         <table>
-          <thead><tr><th>Name</th><th>Title</th><th>Department</th><th>Contact</th>{can("manager") && <th>Pay</th>}<th>Status</th></tr></thead>
+          <thead><tr><th>Name</th><th>Title</th><th>Department</th><th>Contact</th>{seesPay && <th>Pay</th>}<th>Status</th></tr></thead>
           <tbody>
+            {data && !rows.length && (
+              <tr><td colSpan={seesPay ? 6 : 5} className="empty">No one matches these filters. <a href="#" onClick={(ev) => { ev.preventDefault(); router.replace(path, { scroll: false }); }}>Clear filters</a></td></tr>
+            )}
             {rows.map((e) => (
               <tr key={e.id}>
                 <td><Link href={`/people/${e.id}`}>{e.firstName} {e.lastName}</Link><div className="muted">{e.role}</div></td>
                 <td>{e.title ?? "—"}</td>
                 <td>{e.department ?? "—"}</td>
                 <td>{e.email}<div className="muted">{e.phone}</div></td>
-                {can("manager") && <td>{money(e.payRateCents)}{e.payType === "hourly" ? "/hr" : "/yr"}</td>}
+                {seesPay && <td>{money(e.payRateCents)}{e.payType === "hourly" ? "/hr" : "/yr"}</td>}
                 <td><Badge value={e.status} /></td>
               </tr>
             ))}
@@ -73,4 +167,8 @@ export default function People() {
       </div>
     </>
   );
+}
+
+export default function Page() {
+  return <Suspense><People /></Suspense>;
 }
