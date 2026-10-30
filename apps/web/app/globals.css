@@ -233,6 +233,15 @@ tr.openrow td { background: var(--bg); }
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
+/* Editors click a value to change it in place. */
+.mix-editable { all: unset; cursor: text; border-bottom: 1px dashed var(--muted); border-radius: 3px; padding: 0 2px; }
+.mix-editable:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); border-bottom-color: var(--primary); }
+.mix-editable:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.mix-editing { display: inline-flex; flex-direction: column; gap: 2px; max-width: 100%; }
+.mix-edit-error { color: var(--bad); font-size: 12px; font-weight: 400; }
+.mix-remove { padding: 0 8px; line-height: 1.4; }
+.mix-table tbody tr.mix-add-row { background: transparent; }
+@media print { .mix-editable { border-bottom: 0; } }
 .mix-cards { display: none; list-style: none; padding: 0; margin: 0; }
 .mix-cards .card { margin-bottom: 8px; padding: 12px; }
 @media (max-width: 700px) {

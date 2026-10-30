@@ -140,7 +140,11 @@ the "Spray Tank Fill" spreadsheet as a shared calculator.
   so one crew's fill doesn't change anyone else's screen.
 - **Editing** products, rates, measurements, a mix's gallons per acre and default tank size, and
   adding or removing products and mixes, is limited to **admins plus the employees an admin
-  checks** under **Who can edit**.
+  checks** under **Who can edit**. Editors change things right in the calculator: click a product's
+  name, rate or measurement (or the mix name, gallons per acre or notes), type, and press Enter or
+  click away to save (Esc cancels). Add a product in the blank row at the bottom; × removes one. In
+  the phone app, tap a product to change it. **More settings** has the rest: product order, the
+  default tank size and deleting a mix.
 - **Every change is logged** with who made it and the old and new values (e.g. "Aquacap: rate
   47.9 → 50 per acre"), shown under **Change history**.
 - **Math:** rate per 1,000 ft² = rate per acre ÷ 43.56; product needed = rate per acre × tank

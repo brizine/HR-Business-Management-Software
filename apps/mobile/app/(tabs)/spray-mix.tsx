@@ -91,7 +91,7 @@ function SheetEditor({ sheet, onSaved }: { sheet: any; onSaved: () => void }) {
           setNewName("");
           setNewRate("");
         })} />
-      <Txt muted style={{ fontSize: 12 }}>New products start as ounces liquid; tap Edit on the product to change the measurement.</Txt>
+      <Txt muted style={{ fontSize: 12 }}>New products start as ounces liquid; tap the product to change the measurement.</Txt>
     </Card>
   );
 }
@@ -157,27 +157,32 @@ export default function SprayMix() {
         </Txt>
       </Card>
       <Card title={`Product needed for ${formatEntered(applied)} gal`}>
+        {data.canEdit && <Txt muted style={{ fontSize: 12 }}>Tap a product to change its name, rate or measurement.</Txt>}
         {mix.rows.map(({ product: p, ratePer1000, needed }, i) => (
           // Every other product in yellow, so the eye can follow a row across.
           <View key={p.id} style={{ gap: 4, backgroundColor: i % 2 ? t.stripe : "transparent", marginHorizontal: -14, paddingHorizontal: 14, paddingBottom: 6 }}>
             <Divider />
-            <Row style={{ alignItems: "flex-start" }}>
-              <View style={{ flex: 1 }}>
-                <Txt style={{ fontWeight: "600" }}>{p.name}</Txt>
-                <Txt muted style={{ fontSize: 12 }}>{formatEntered(p.ratePerAcre)}/acre · {formatAmount(ratePer1000)}/1000 ft²</Txt>
-              </View>
-              <View style={{ alignItems: "flex-end" }}>
-                <Txt style={{ fontSize: 22, fontWeight: "800" }}>{formatAmount(needed)}</Txt>
-                <Txt muted style={{ fontSize: 12 }}>{p.unit}</Txt>
-              </View>
-            </Row>
-            {editing && (editingProduct === p.id
-              ? <ProductEditor product={p} onSaved={() => { setEditingProduct(null); reload(); changes.reload(); }} />
-              : <Button title={`Edit ${p.name}`} kind="secondary" onPress={() => setEditingProduct(p.id ?? null)} />)}
+            {/* Editors tap a product to change it right here. */}
+            <Pressable disabled={!data.canEdit} onPress={() => setEditingProduct(editingProduct === p.id ? null : p.id ?? null)}
+              accessibilityRole={data.canEdit ? "button" : undefined} accessibilityHint={data.canEdit ? "Change this product's name, rate or measurement" : undefined}>
+              <Row style={{ alignItems: "flex-start" }}>
+                <View style={{ flex: 1 }}>
+                  <Txt style={{ fontWeight: "600" }}>{p.name}{data.canEdit ? <Txt muted style={{ fontSize: 12 }}>  ✎</Txt> : null}</Txt>
+                  <Txt muted style={{ fontSize: 12 }}>{formatEntered(p.ratePerAcre)}/acre · {formatAmount(ratePer1000)}/1000 ft²</Txt>
+                </View>
+                <View style={{ alignItems: "flex-end" }}>
+                  <Txt style={{ fontSize: 22, fontWeight: "800" }}>{formatAmount(needed)}</Txt>
+                  <Txt muted style={{ fontSize: 12 }}>{p.unit}</Txt>
+                </View>
+              </Row>
+            </Pressable>
+            {data.canEdit && editingProduct === p.id && (
+              <ProductEditor key={`${p.id}-${p.name}-${p.ratePerAcre}-${p.unit}`} product={p} onSaved={() => { setEditingProduct(null); reload(); changes.reload(); }} />
+            )}
           </View>
         ))}
       </Card>
-      {data.canEdit && <Button title={editing ? "Done editing" : "Edit products & rates"} kind="secondary" onPress={() => { setEditing(!editing); setEditingProduct(null); }} />}
+      {data.canEdit && <Button title={editing ? "Close mix settings" : "Mix settings, add a product & history"} kind="secondary" onPress={() => { setEditing(!editing); setEditingProduct(null); }} />}
       {editing && <SheetEditor key={sheet.id} sheet={sheet} onSaved={() => { reload(); changes.reload(); }} />}
       {editing && !!changes.data?.length && (
         <Card title="Change history">

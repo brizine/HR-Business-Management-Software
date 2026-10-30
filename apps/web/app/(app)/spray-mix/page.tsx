@@ -19,8 +19,82 @@ const remember = (sheetId: string, gallons: number) => {
   } catch {}
 };
 
+/**
+ * Editors click a value in the calculator to change it in place: Enter or clicking away saves,
+ * Esc cancels. Everyone else just sees the value.
+ */
+function Editable({ value, display, label, canEdit, onSave, kind = "text", options, width }: {
+  value: string | number;
+  display?: React.ReactNode;
+  label: string;
+  canEdit: boolean;
+  onSave: (v: string) => Promise<unknown>;
+  kind?: "text" | "number" | "select";
+  options?: string[];
+  width?: number | string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+  const { busy, error, run } = useAction();
+  if (!canEdit) return <>{display ?? value}</>;
+  const start = () => { setDraft(String(value)); setEditing(true); };
+  const save = async () => {
+    if (draft.trim() === String(value)) return setEditing(false);
+    if (await run(() => onSave(draft.trim()))) setEditing(false);
+  };
+  const keys = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") { e.preventDefault(); save(); }
+    if (e.key === "Escape") { e.preventDefault(); setEditing(false); }
+  };
+  if (!editing) {
+    return (
+      <button type="button" className="mix-editable" onClick={start} title={`Click to change ${label}`} aria-label={`${label}: ${value}. Click to change.`}>
+        {display ?? value}
+      </button>
+    );
+  }
+  const common = { autoFocus: true, disabled: busy, "aria-label": label, onKeyDown: keys, onBlur: save, style: { width: width ?? "100%", minWidth: 0, padding: "3px 6px" } };
+  return (
+    <span className="mix-editing">
+      {kind === "select" ? (
+        <select {...common} value={draft} onChange={(e) => setDraft(e.target.value)}>
+          {[...new Set([...(options ?? []), String(value)])].map((o) => <option key={o}>{o}</option>)}
+        </select>
+      ) : (
+        <input {...common} type={kind === "number" ? "number" : "text"} step="any" min={kind === "number" ? 0 : undefined} inputMode={kind === "number" ? "decimal" : undefined} value={draft} onChange={(e) => setDraft(e.target.value)} />
+      )}
+      {error && <span className="mix-edit-error" role="alert">{error}</span>}
+    </span>
+  );
+}
+
+const units = MIX_UNITS as readonly string[];
+
+/** Editors: a blank row at the bottom of the calculator for a new product. */
+function AddProductRow({ sheet, onChange, columns }: { sheet: any; onChange: () => void; columns: number }) {
+  const { busy, error, run } = useAction();
+  return (
+    <tr className="noprint mix-add-row">
+      <td colSpan={columns}>
+        <form className="row" onSubmit={(e) => {
+          e.preventDefault();
+          const form = e.currentTarget;
+          const f = new FormData(form);
+          run(async () => { await api(`/spray-mixes/${sheet.id}/products`, { body: { name: f.get("name"), ratePerAcre: Number(f.get("ratePerAcre")), unit: f.get("unit") } }); form.reset(); onChange(); });
+        }}>
+          <input name="name" placeholder="+ Add a product" aria-label="New product name" required style={{ flex: 2, minWidth: 160 }} />
+          <input name="ratePerAcre" type="number" step="any" min="0" placeholder="Rate/acre" aria-label="New product rate per acre" required style={{ width: 110 }} />
+          <select name="unit" aria-label="New product measurement" style={{ width: 150 }}>{units.map((u) => <option key={u}>{u}</option>)}</select>
+          <button className="btn sm primary" disabled={busy}>Add</button>
+          <ErrorBox error={error} />
+        </form>
+      </td>
+    </tr>
+  );
+}
+
 /** Everyone: enter tank gallons, Update total. Nothing here is saved to the server. */
-function Calculator({ sheet }: { sheet: any }) {
+function Calculator({ sheet, canEdit, onChange }: { sheet: any; canEdit: boolean; onChange: () => void }) {
   const [input, setInput] = useState("");
   const [applied, setApplied] = useState<number>(sheet.defaultTankGallons);
   useEffect(() => {
@@ -38,6 +112,9 @@ function Calculator({ sheet }: { sheet: any }) {
     setApplied(value);
     remember(sheet.id, value);
   };
+  const saveProduct = (p: any, body: Record<string, unknown>) => api(`/spray-mixes/products/${p.id}`, { method: "PATCH", body }).then(onChange);
+  const remove = (p: any) => confirm(`Remove ${p.name} from ${sheet.name}?`) && api(`/spray-mixes/products/${p.id}`, { method: "DELETE" }).then(onChange, (e) => alert(e.message));
+  const rateNumber = (v: string) => { const n = Number(v); if (v === "" || !(n >= 0)) throw new Error("Enter a rate of 0 or more."); return n; };
 
   return (
     <>
@@ -53,18 +130,22 @@ function Calculator({ sheet }: { sheet: any }) {
       <div className="card tablewrap mix-table-wrap">
         <table className="mix-table">
           <caption className="sr-only">Product needed for a {applied}-gallon tank of {sheet.name}</caption>
-          <thead><tr><th scope="col">Product</th><th scope="col">Rate/Acre</th><th scope="col">Rate/1000 ft²</th><th scope="col">Measurement</th><th scope="col">Water volume</th><th scope="col">Product needed</th></tr></thead>
+          <thead><tr><th scope="col">Product</th><th scope="col">Rate/Acre</th><th scope="col">Rate/1000 ft²</th><th scope="col">Measurement</th><th scope="col">Water volume</th><th scope="col">Product needed</th>{canEdit && <th className="noprint"><span className="sr-only">Remove</span></th>}</tr></thead>
           <tbody>
             {mix.rows.map(({ product: p, ratePer1000, needed }) => (
               <tr key={p.id}>
-                <th scope="row" style={{ fontWeight: 500 }}>{p.name}</th>
-                <td>{formatEntered(p.ratePerAcre)}</td>
+                <th scope="row" style={{ fontWeight: 500 }}>
+                  <Editable canEdit={canEdit} label={`${p.name} name`} value={p.name} onSave={(v) => saveProduct(p, { name: v })} />
+                </th>
+                <td><Editable canEdit={canEdit} kind="number" width={90} label={`${p.name} rate per acre`} value={p.ratePerAcre} display={formatEntered(p.ratePerAcre)} onSave={async (v) => saveProduct(p, { ratePerAcre: rateNumber(v) })} /></td>
                 <td>{formatAmount(ratePer1000)}</td>
-                <td>{p.unit}</td>
+                <td><Editable canEdit={canEdit} kind="select" options={units as string[]} width={140} label={`${p.name} measurement`} value={p.unit} onSave={(v) => saveProduct(p, { unit: v })} /></td>
                 <td>{formatEntered(applied)} gal</td>
                 <td><strong style={{ fontSize: 16 }}>{formatAmount(needed)}</strong> <span className="muted">{p.unit.split(" ")[0]}</span></td>
+                {canEdit && <td className="noprint"><button type="button" className="btn sm danger mix-remove" aria-label={`Remove ${p.name}`} title={`Remove ${p.name}`} onClick={() => remove(p)}>×</button></td>}
               </tr>
             ))}
+            {canEdit && <AddProductRow sheet={sheet} onChange={onChange} columns={7} />}
           </tbody>
         </table>
         {!mix.rows.length && <Empty>No products on this sheet yet.</Empty>}
@@ -74,10 +155,15 @@ function Calculator({ sheet }: { sheet: any }) {
         {mix.rows.map(({ product: p, ratePer1000, needed }) => (
           <li key={p.id} className="card">
             <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
-              <strong>{p.name}</strong>
-              <span><strong style={{ fontSize: 20 }}>{formatAmount(needed)}</strong> <span className="muted">{p.unit}</span></span>
+              <strong><Editable canEdit={canEdit} label={`${p.name} name`} value={p.name} onSave={(v) => saveProduct(p, { name: v })} /></strong>
+              <span><strong style={{ fontSize: 20 }}>{formatAmount(needed)}</strong> <span className="muted">
+                <Editable canEdit={canEdit} kind="select" options={units as string[]} width={140} label={`${p.name} measurement`} value={p.unit} onSave={(v) => saveProduct(p, { unit: v })} />
+              </span></span>
             </div>
-            <div className="muted" style={{ fontSize: 13 }}>{formatEntered(p.ratePerAcre)}/acre · {formatAmount(ratePer1000)}/1000 ft²</div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              <Editable canEdit={canEdit} kind="number" width={90} label={`${p.name} rate per acre`} value={p.ratePerAcre} display={formatEntered(p.ratePerAcre)} onSave={async (v) => saveProduct(p, { ratePerAcre: rateNumber(v) })} />/acre · {formatAmount(ratePer1000)}/1000 ft²
+              {canEdit && <button type="button" className="btn sm danger noprint" style={{ float: "right" }} onClick={() => remove(p)}>Remove</button>}
+            </div>
           </li>
         ))}
       </ul>
@@ -85,7 +171,7 @@ function Calculator({ sheet }: { sheet: any }) {
   );
 }
 
-/** Editors: change the sheet's settings and its products. */
+/** Editors: settings that aren't in the calculator itself (order, default tank, deleting the mix). */
 function Editor({ sheet, onChange }: { sheet: any; onChange: () => void }) {
   const { busy, error, run } = useAction();
   const num = (v: FormDataEntryValue | null) => Number(v);
@@ -93,7 +179,8 @@ function Editor({ sheet, onChange }: { sheet: any; onChange: () => void }) {
 
   return (
     <div className="card stack noprint">
-      <h2 style={{ margin: 0 }}>Edit {sheet.name}</h2>
+      <h2 style={{ margin: 0 }}>More settings for {sheet.name}</h2>
+      <p className="muted" style={{ margin: 0 }}>Tip: you can also click any name, rate or measurement in the calculator above to change it.</p>
       <form className="formgrid" onSubmit={(e) => {
         e.preventDefault();
         const f = new FormData(e.currentTarget);
@@ -217,12 +304,13 @@ export default function SprayMix() {
   const action = useAction();
   if (!data) return <ErrorBox error={error} />;
   const sheet = data.sheets.find((s: any) => s.id === tab) ?? data.sheets[0];
+  const saveSheet = async (body: Record<string, unknown>) => { await api(`/spray-mixes/${sheet.id}`, { method: "PATCH", body }); await reload(); };
 
   return (
     <>
-      <PageHead title="Spray Mix Calculator" sub="Enter the gallons you're mixing and press Update total to see how much of each product to add.">
+      <PageHead title="Spray Mix Calculator" sub={`Enter the gallons you're mixing and press Update total to see how much of each product to add.${data.canEdit ? " To change a product, rate or measurement, click it." : ""}`}>
         <button className="btn noprint" onClick={() => window.print()}>Print</button>
-        {data.canEdit && sheet && <button className={`btn noprint ${editing ? "primary" : ""}`} onClick={() => setEditing(!editing)}>{editing ? "Done editing" : "Edit products & rates"}</button>}
+        {data.canEdit && sheet && <button className={`btn noprint ${editing ? "primary" : ""}`} onClick={() => setEditing(!editing)}>{editing ? "Close settings" : "More settings"}</button>}
       </PageHead>
       {!data.sheets.length ? (
         <div className="card stack">
@@ -251,13 +339,17 @@ export default function SprayMix() {
             )}
           </div>
           <section role="tabpanel" aria-label={sheet.name}>
-            <h2 style={{ marginBottom: 2 }}>{sheet.name}</h2>
+            <h2 style={{ marginBottom: 2 }}>
+              <Editable canEdit={data.canEdit} label="Mix name" value={sheet.name} width={320} onSave={(v) => saveSheet({ name: v })} />
+            </h2>
             <p className="muted" style={{ marginTop: 0 }}>
-              {formatEntered(sheet.gallonsPerAcre)} gallons/acre · {formatAmount(computeMix(sheet, 1).gallonsPer1000)} gallons/1000 ft²
-              {sheet.notes ? ` · ${sheet.notes}` : ""}
+              <Editable canEdit={data.canEdit} kind="number" width={90} label="Gallons of water per acre" value={sheet.gallonsPerAcre} display={formatEntered(sheet.gallonsPerAcre)}
+                onSave={(v) => { if (!(Number(v) > 0)) throw new Error("Enter gallons per acre above 0."); return saveSheet({ gallonsPerAcre: Number(v) }); }} /> gallons/acre · {formatAmount(computeMix(sheet, 1).gallonsPer1000)} gallons/1000 ft²
+              {sheet.notes || data.canEdit ? " · " : ""}
+              <Editable canEdit={data.canEdit} label="Notes" value={sheet.notes ?? ""} width={220} display={sheet.notes || (data.canEdit ? <em>add a note</em> : null)} onSave={(v) => saveSheet({ notes: v })} />
               {sheet.updatedBy ? ` · Last changed by ${sheet.updatedBy}, ${fmtDateTime(sheet.updatedAt)}` : ""}
             </p>
-            <Calculator sheet={sheet} />
+            <Calculator sheet={sheet} canEdit={data.canEdit} onChange={reload} />
             {editing && data.canEdit && <Editor sheet={sheet} onChange={reload} />}
             <Changes sheetId={sheet.id} />
           </section>
