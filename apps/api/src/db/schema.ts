@@ -72,6 +72,15 @@ export const employees = pgTable(
     payRateCents: integer("pay_rate_cents").notNull().default(0),
     startDate: date("start_date"),
     status: text("status").notNull().default("active"),
+    /** Home address and emergency contact: managers and up, and the person themselves, only. */
+    addressLine1: text("address_line1"),
+    addressLine2: text("address_line2"),
+    city: text("city"),
+    state: text("state"),
+    zip: text("zip"),
+    emergencyName: text("emergency_name"),
+    emergencyRelationship: text("emergency_relationship"),
+    emergencyPhone: text("emergency_phone"),
     /** Why someone was made inactive or terminated (managers and up only). Cleared when they're made active again. */
     statusReason: text("status_reason"),
     statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),

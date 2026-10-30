@@ -9,6 +9,7 @@ export function SettingsTabs() {
   );
   return (
     <div className="settings-tabs">
+      {tab("/settings/profile", "My info")}
       {tab("/settings/security", "Security")}
       {tab("/settings/notifications", "Notifications")}
     </div>

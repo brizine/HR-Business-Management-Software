@@ -28,6 +28,25 @@ export const INACTIVE_STATUSES: string[] = ["inactive", "terminated"];
 /** True for inactive or terminated (no access). */
 export const isInactive = (status: string | null | undefined) => INACTIVE_STATUSES.includes(status ?? "");
 
+/** Optional text; an empty box clears it (null). */
+const clearable = (max: number) => z.string().trim().max(max).nullable().optional().transform((v) => (v === "" ? null : v));
+
+/** Home address and emergency contact. Employees can edit their own; managers and up see everyone's. */
+export const employeeContactSchema = z.object({
+  phone: clearable(40),
+  addressLine1: clearable(200),
+  addressLine2: clearable(200),
+  city: clearable(100),
+  state: z.string().trim().toUpperCase().regex(/^([A-Z]{2})?$/, "Use the 2-letter state code").nullable().optional().transform((v) => (v === "" ? null : v)),
+  zip: z.string().trim().regex(/^(\d{5}(-\d{4})?)?$/, "Enter a 5-digit ZIP code").nullable().optional().transform((v) => (v === "" ? null : v)),
+  emergencyName: clearable(120),
+  emergencyRelationship: clearable(60),
+  emergencyPhone: clearable(40),
+});
+export type EmployeeContact = z.infer<typeof employeeContactSchema>;
+/** Fields that only managers and up (and the person themselves) can see. */
+export const EMPLOYEE_PRIVATE_CONTACT_FIELDS = ["addressLine1", "addressLine2", "city", "state", "zip", "emergencyName", "emergencyRelationship", "emergencyPhone"] as const;
+
 export const employeeSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
@@ -45,6 +64,7 @@ export const employeeSchema = z.object({
   status: z.enum(EMPLOYEE_STATUSES).default("active"),
   /** Why they were made inactive or terminated. Ignored (cleared) for active and onboarding. */
   statusReason: z.string().trim().max(2000).nullable().optional(),
+  ...employeeContactSchema.omit({ phone: true }).shape,
   /** Optional initial password so the employee can sign in to the app. */
   password: z.string().min(8).optional(),
   /** Email them a link to choose their own password (when no password is given). */

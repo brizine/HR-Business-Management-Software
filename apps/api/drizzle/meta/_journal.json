@@ -113,6 +113,13 @@
       "when": 1793380000001,
       "tag": "0015_employee_status_reason",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1793380000002,
+      "tag": "0016_employee_contact",
+      "breakpoints": true
     }
   ]
 }

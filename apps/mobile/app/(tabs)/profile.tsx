@@ -48,6 +48,7 @@ export default function Profile() {
         )) : <Txt muted>No documents.</Txt>}
       </Card>
       <Button title="📖  Company wiki" onPress={() => router.push("/wiki")} />
+      <Button title="My info: address & emergency contact" kind="secondary" onPress={() => router.push("/my-info")} />
       <Button title="Notification settings" kind="secondary" onPress={() => router.push("/notification-settings")} />
       <Button title="Sign out" kind="secondary" onPress={signOut} />
       <Button title="Sign out on all devices" kind="danger" onPress={() =>

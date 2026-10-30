@@ -2,10 +2,12 @@
 import { useState } from "react";
 import { EMPLOYEE_STATUSES, EMPLOYMENT_TYPES, PAY_TYPES, ROLES, isInactive } from "@crewdesk/shared";
 import { formValues } from "./ui";
+import { ContactFields, withClearedContact } from "./contact-fields";
 
 export function EmployeeFields({ initial = {} as any, employees = [] as any[] }) {
   const [status, setStatus] = useState<string>(initial.status ?? "active");
   return (
+    <>
     <div className="formgrid">
       <label>First name<input name="firstName" defaultValue={initial.firstName} required /></label>
       <label>Last name<input name="lastName" defaultValue={initial.lastName} required /></label>
@@ -41,6 +43,8 @@ export function EmployeeFields({ initial = {} as any, employees = [] as any[] })
       )}
       <label>{initial.id ? "Reset password" : "App password (optional)"}<input name="password" type="password" minLength={8} autoComplete="new-password" /></label>
     </div>
+    <ContactFields initial={initial} />
+    </>
   );
 }
 
@@ -49,6 +53,7 @@ export function employeeBody(form: HTMLFormElement) {
   const { payRate, ...v } = formValues(form);
   if (payRate != null) v.payRateCents = Math.round(payRate * 100);
   v.managerId = v.managerId ?? null;
+  withClearedContact(v);
   // An emptied reason box clears the reason.
   v.statusReason = isInactive(v.status) ? v.statusReason ?? null : null;
   return v;

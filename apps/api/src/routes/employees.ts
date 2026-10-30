@@ -1,8 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import bcrypt from "bcryptjs";
 import { and, asc, eq } from "drizzle-orm";
-import { employeeSchema, hasRole, isInactive, type Role } from "@crewdesk/shared";
-import { z } from "zod";
+import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, employeeContactSchema, employeeSchema, hasRole, isInactive, type Role } from "@crewdesk/shared";
 import { db } from "../db";
 import { employees, recoveryCodes } from "../db/schema";
 import { authenticate, canManageAccount, requireRole, signOutEverywhere } from "../lib/auth";
@@ -27,9 +26,16 @@ export function publicEmployee(e: EmployeeRow) {
   };
 }
 
-/** Strips pay details and the reason someone left for viewers who are not managers. */
+/** Strips pay, home address, emergency contact and the reason someone left for viewers who are not managers. */
 function directoryView(e: EmployeeRow) {
   const { payRateCents, payType, payrollProviderEmployeeId, statusReason, statusChangedById, ...rest } = publicEmployee(e);
+  for (const f of EMPLOYEE_PRIVATE_CONTACT_FIELDS) delete (rest as Partial<EmployeeRow>)[f];
+  return rest;
+}
+
+/** Someone looking at their own record: everything except the notes managers keep about them leaving. */
+function ownView(e: EmployeeRow) {
+  const { statusReason, statusChangedById, ...rest } = publicEmployee(e);
   return rest;
 }
 
@@ -66,11 +72,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .where(and(eq(employees.id, req.params.id), eq(employees.companyId, req.user.companyId)));
     if (!row) notFound("Employee");
     if (hasRole(req.user.role, "manager")) return publicEmployee(row);
-    if (row.id === req.user.sub) {
-      const { statusReason, statusChangedById, ...own } = publicEmployee(row);
-      return own;
-    }
-    return directoryView(row);
+    return row.id === req.user.sub ? ownView(row) : directoryView(row);
   });
 
   app.post("/", { preHandler: requireRole("admin") }, async (req) => {
@@ -175,15 +177,14 @@ const routes: FastifyPluginAsync = async (app) => {
     return { ok: true };
   });
 
-  /** Lets an employee update their own contact info. Passwords change via /auth/password. */
+  /** Lets an employee update their own phone, home address and emergency contact. Passwords change via /auth/password. */
   app.patch("/me/profile", async (req) => {
-    const body = parse(z.object({ phone: z.string().optional() }), req.body);
-    const [row] = await db
-      .update(employees)
-      .set(body.phone !== undefined ? { phone: body.phone } : {})
-      .where(eq(employees.id, req.user.sub))
-      .returning();
-    return publicEmployee(row);
+    const body = parse(employeeContactSchema, req.body);
+    const changes = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined));
+    const [row] = Object.keys(changes).length
+      ? await db.update(employees).set(changes).where(eq(employees.id, req.user.sub)).returning()
+      : await db.select().from(employees).where(eq(employees.id, req.user.sub));
+    return ownView(row);
   });
 };
 

@@ -192,6 +192,9 @@ tr.openrow td { background: var(--bg); }
   columns: 2;
 }
 .settings-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+.contact-fieldset { border: 0; padding: 0; margin: 14px 0 0; min-width: 0; }
+.contact-fieldset legend { font-weight: 600; padding: 0; margin-bottom: 6px; }
+@media (max-width: 600px) { .contact-fieldset label[style] { grid-column: auto !important; } }
 
 /* Screen-reader-only text */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

@@ -11,6 +11,7 @@ import { OnboardingTask } from "@/components/onboarding-task";
 import { DownloadPdf, FormStatus, signedLine } from "@/components/tax-form-bits";
 import { AvailabilityEditor } from "@/components/availability-editor";
 import { EmployeeFields, employeeBody } from "@/components/employee-form";
+import { ContactSummary } from "@/components/contact-fields";
 import { isInactive } from "@crewdesk/shared";
 
 /** Admins: the person's W-4, I-9 and direct deposit on file (current and earlier versions). */
@@ -85,6 +86,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
             <div><div className="muted">App login</div>{e.hasLogin ? "Yes" : "Not set"}</div>
             {"twoFactorEnabled" in e && <div><div className="muted">Two-factor</div>{e.twoFactorEnabled ? "On" : "Off"}</div>}
             {e.locked && <div><div className="muted">Sign-in</div><Badge value="locked" /></div>}
+            {"emergencyName" in e && <ContactSummary e={e} />}
           </div>
           {isInactive(e.status) && "statusReason" in e && (
             <div className="status-reason">

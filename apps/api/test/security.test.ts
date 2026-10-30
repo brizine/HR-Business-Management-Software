@@ -184,6 +184,36 @@ describe("sessions", () => {
     expect((await login("fired")).status).toBe(200);
   });
 
+  it("home address and emergency contact: set by admins or yourself, seen by managers and yourself", async () => {
+    const id = await hire("homebody", "employee");
+    await hire("nosy", "employee");
+    await hire("lead2", "manager");
+    const selfToken = (await login("homebody")).body.token;
+    const nosyToken = (await login("nosy")).body.token;
+    const leadToken = (await login("lead2")).body.token;
+
+    const set = await call("PATCH", `/employees/${id}`, ownerToken, { addressLine1: "12 Elm St", city: "Austin", state: "tx", zip: "78701", emergencyName: "Pat Home", emergencyRelationship: "Spouse", emergencyPhone: "512-555-0100" });
+    expect(set.status).toBe(200);
+    expect(set.body.state).toBe("TX");
+    expect((await call("PATCH", `/employees/${id}`, ownerToken, { zip: "7870" })).status).toBe(400);
+    expect((await call("PATCH", `/employees/${id}`, ownerToken, { state: "Texas" })).status).toBe(400);
+
+    expect((await call("GET", `/employees/${id}`, leadToken)).body.emergencyName).toBe("Pat Home");
+    expect((await call("GET", `/employees/${id}`, selfToken)).body.addressLine1).toBe("12 Elm St");
+    const nosy = (await call("GET", `/employees/${id}`, nosyToken)).body;
+    for (const f of ["addressLine1", "city", "state", "zip", "emergencyName", "emergencyPhone"]) expect(nosy).not.toHaveProperty(f);
+    expect((await call("GET", "/employees", nosyToken)).body.find((e: any) => e.id === id)).not.toHaveProperty("addressLine1");
+
+    // Employees update their own; an empty value clears it; they can't touch anything else this way.
+    const mine = await call("PATCH", "/employees/me/profile", selfToken, { addressLine2: "Apt 4", emergencyPhone: "", payRateCents: 999999, role: "owner" });
+    expect(mine.status).toBe(200);
+    expect(mine.body.addressLine2).toBe("Apt 4");
+    expect(mine.body.emergencyPhone).toBeNull();
+    expect(mine.body.addressLine1).toBe("12 Elm St");
+    expect(mine.body.role).toBe("employee");
+    expect(mine.body.payRateCents).not.toBe(999999);
+  });
+
   it("keeps a reason for inactive or terminated, visible to managers only", async () => {
     const id = await hire("reasoned", "employee");
     await hire("peer", "employee");
