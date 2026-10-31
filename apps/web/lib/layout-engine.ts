@@ -11,6 +11,18 @@ export type PageLayout = Record<string, string[]>;
 
 /** In a page's layout, this key lists the boxes and items the owner hid. */
 export const HIDDEN_KEY = "__hidden";
+/** …and this one each resized box's width, as "<box id>|<percent>". */
+export const WIDTH_KEY = "__width";
+export const WIDTHS = [25, 33, 50, 67, 75, 100] as const;
+export const WIDTH_LABELS: Record<number, string> = { 25: "¼", 33: "⅓", 50: "½", 67: "⅔", 75: "¾", 100: "Full" };
+const snapWidth = (w: number) => WIDTHS.reduce((best, x) => (Math.abs(x - w) < Math.abs(best - w) ? x : best), 100);
+
+export function readWidths(layout: PageLayout | undefined) {
+  return new Map((layout?.[WIDTH_KEY] ?? []).map((v) => { const i = v.lastIndexOf("|"); return [v.slice(0, i), Number(v.slice(i + 1))] as const; }).filter(([, w]) => WIDTHS.includes(w as never)));
+}
+export function writeWidths(widths: Map<string, number>) {
+  return [...widths].map(([id, w]) => `${id}|${w}`);
+}
 
 /** Pages with ids in the address share a layout, e.g. every /people/<id>. */
 export function pageKey(pathname: string) {
@@ -78,7 +90,13 @@ function boxLabel(el: Element) {
 
 function children(container: Element) {
   // Things the owner hid are display:none, but still count, so ids don't shift around them.
-  return Array.from(container.children).filter((c) => (!c.matches(SKIP) && ((c as HTMLElement).offsetParent !== null || (c as HTMLElement).dataset.lhidden === "1")) || c.matches(".pagehead"));
+  // Flattened wrappers (display: contents) have no box of their own, so they never look visible.
+  return Array.from(container.children).filter((c) => {
+    const el = c as HTMLElement;
+    if (c.matches(".pagehead")) return true;
+    if (c.matches(SKIP)) return false;
+    return el.offsetParent !== null || el.dataset.lhidden === "1" || (el.dataset.lflat === "1" && el.children.length > 0);
+  });
 }
 
 /** Saved items move into the slots saved items occupy; anything new stays where the page put it. */
@@ -103,8 +121,9 @@ export function applyLayout(root: HTMLElement, layout: PageLayout | undefined, e
   const containers = new Map<string, HTMLElement[]>();
   const hidden = new Set(layout?.[HIDDEN_KEY] ?? []);
 
-  const tagChildren = (container: Element, key: string, kind: "box" | "item") => {
-    const kids = children(container) as HTMLElement[];
+  const widths = readWidths(layout);
+  const tagChildren = (container: Element, key: string, kind: "box" | "item") => tagList(children(container) as HTMLElement[], key, kind);
+  const tagList = (kids: HTMLElement[], key: string, kind: "box" | "item") => {
     if (kids.length < 2) return [];
     const used = new Map<string, number>();
     const ids = kids.map((el) => {
@@ -149,15 +168,28 @@ export function applyLayout(root: HTMLElement, layout: PageLayout | undefined, e
   };
 
   root.dataset.lid = "page";
-  // Plain wrappers holding boxes (e.g. a tab panel) become stacks so their boxes can move too.
-  for (const el of Array.from(root.children) as HTMLElement[]) {
-    if (!el.matches(".card, .pagehead, .grid, " + SKIP) && el.querySelector(":scope > .card")) el.dataset.lgroup = "1";
-  }
-  const boxes = tagChildren(root, "page", "box");
-  for (const b of boxes) {
-    if (b.matches(".grid") || b.dataset.lgroup) {
-      for (const inner of tagChildren(b, b.dataset.lid!, "box")) tagItems(inner);
-    } else if (!b.matches(".pagehead")) tagItems(b);
+  // Every box on the page shares one space so it can go anywhere: wrappers around boxes (two-column
+  // sections, tab panels) step aside with display: contents, and each box gets a width.
+  const boxes: HTMLElement[] = [];
+  const gather = (container: Element, depth: number) => {
+    for (const el of children(container) as HTMLElement[]) {
+      const wrapper = depth < 2 && !el.matches(".card, .pagehead, " + SKIP) && (el.matches(".grid") || !!el.querySelector(":scope > .card"));
+      if (wrapper) {
+        el.dataset.lflat = "1";
+        delete el.dataset.lid;
+        for (const inner of children(el) as HTMLElement[]) inner.dataset.lhalf = el.matches(".grid.cols-2") ? "1" : "";
+        gather(el, depth + 1);
+      } else boxes.push(el);
+    }
+  };
+  gather(root, 0);
+  const placed = tagList(boxes, "page", "box");
+  for (const b of placed) {
+    // Default: full width, or half for boxes that sat in a two-column section.
+    const w = b.matches(".pagehead") ? 100 : widths.get(b.dataset.lid!) ?? (b.dataset.lhalf === "1" ? 50 : 100);
+    b.dataset.lwidth = String(w);
+    b.style.flex = w === 100 ? "0 0 100%" : `0 0 calc(${w}% - ${(16 * (1 - w / 100)).toFixed(2)}px)`;
+    if (!b.matches(".pagehead")) tagItems(b);
   }
   return { containers };
 }
@@ -179,5 +211,25 @@ export function dropsAfter(target: HTMLElement, x: number, y: number) {
   return horizontal ? x > r.left + r.width / 2 : y > r.top + r.height / 2;
 }
 
-export const isEmptyLayout = (l: PageLayout | undefined) => !l || !Object.entries(l).some(([k, v]) => k !== HIDDEN_KEY || v.length);
+/**
+ * Where a box lands when dropped at (x, y) on another box: beside it (outer quarter of either side,
+ * the two then share the space) or above / below it.
+ */
+export function boxDrop(target: HTMLElement, x: number, y: number): "left" | "right" | "before" | "after" {
+  const r = target.getBoundingClientRect();
+  if (x < r.left + r.width * 0.25) return "left";
+  if (x > r.right - r.width * 0.25) return "right";
+  return y < r.top + r.height / 2 ? "before" : "after";
+}
+
+/** Widths after putting a box beside another: the target's width is split between the two. */
+export function besideWidths(widths: Map<string, number>, moving: HTMLElement, target: HTMLElement) {
+  const next = new Map(widths);
+  const half = snapWidth(Math.max(25, Number(target.dataset.lwidth ?? 100) / 2));
+  next.set(target.dataset.lid!, half);
+  next.set(moving.dataset.lid!, half);
+  return next;
+}
+
+export const isEmptyLayout = (l: PageLayout | undefined) => !l || !Object.entries(l).some(([k, v]) => (k !== HIDDEN_KEY && k !== WIDTH_KEY) || v.length);
 export type { PageLayouts };

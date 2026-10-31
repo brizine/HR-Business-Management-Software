@@ -192,8 +192,11 @@ tr.openrow td { background: var(--bg); }
   columns: 2;
 }
 /* Page layouts: boxes and items are put in order with CSS order, so their containers stack. */
-.layout-page, [data-lgroup] { display: flex; flex-direction: column; }
-.layout-page > *, [data-lgroup] > * { min-width: 0; }
+/* Every box on a page shares one wrapping row (wrappers step aside), each with its own width. */
+.layout-page { display: flex; flex-wrap: wrap; column-gap: 16px; align-items: stretch; }
+.layout-page > *, [data-lflat] > * { flex: 0 0 100%; min-width: 0; box-sizing: border-box; }
+[data-lflat] { display: contents !important; }
+@media (max-width: 900px) { .layout-page > *, [data-lflat] > * { flex-basis: 100% !important; } }
 /* The owner's layout editor */
 .layout-editor-bar { position: sticky; top: 0; z-index: 900; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
   margin: -24px -28px 16px; padding: 10px 28px; background: #1f2a44; color: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.2); }
@@ -212,8 +215,13 @@ tr.openrow td { background: var(--bg); }
 .layout-editing .row > [data-lhidden="1"], .layout-editing .filters > [data-lhidden="1"] { display: revert !important; }
 .layout-editing [data-lhidden="1"][data-lkind="item"]::after { content: "hidden"; position: absolute; top: -9px; right: 4px; font-size: 10px; background: var(--muted); color: #fff; padding: 0 4px; border-radius: 3px; pointer-events: none; }
 .layout-editing [data-lhidden="1"][data-lkind="box"]::before { content: "🚫 hidden · " attr(data-lname); background: var(--muted); }
-.layout-hide-btn { position: fixed; z-index: 950; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); box-shadow: 0 2px 6px rgba(0,0,0,.18); cursor: pointer; }
-.layout-hide-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+.layout-toolbar { position: fixed; z-index: 950; display: flex; gap: 2px; align-items: center; padding: 2px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); box-shadow: 0 2px 6px rgba(0,0,0,.18); font-size: 11px; }
+.layout-toolbar .layout-toolbar-label { color: var(--muted); padding: 0 4px; }
+.layout-hide-btn { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 5px; border: 1px solid transparent; background: transparent; color: var(--text); cursor: pointer; }
+.layout-hide-btn:hover { background: var(--primary); color: #fff; }
+.layout-hide-btn[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); border-color: var(--primary); }
+.layout-editing .layout-drop-left { box-shadow: -4px 0 0 0 var(--primary); }
+.layout-editing .layout-drop-right { box-shadow: 4px 0 0 0 var(--primary); }
 .layout-editing .layout-drop-before { box-shadow: 0 -3px 0 0 var(--primary); }
 .layout-editing .layout-drop-after { box-shadow: 0 3px 0 0 var(--primary); }
 .layout-editing .filters > .layout-drop-before, .layout-editing .row > .layout-drop-before, .layout-editing .formgrid > .layout-drop-before { box-shadow: -3px 0 0 0 var(--primary); }

@@ -211,6 +211,10 @@ the payroll calendar, safety rules and so on.
 - **Layout editor (owner):** **Settings → Company → Open layout editor** opens a working copy of Crewdesk in
   a new tab. On any page, drag the outlined boxes to move them on the page, and drag the items inside a
   box (fields, details, filters, buttons) to move them within it; a line shows where it will land.
+  Every box on a page shares one space, so a box (including either half of a two-column section)
+  can go anywhere: drop it on another box's left or right edge to sit beside it (the two resize to
+  share the space), or its top or bottom to go above or below. Point at a box to set its width
+  (¼, ⅓, ½, ⅔, ¾ or full). On narrow screens boxes always stack full width.
   Point at any box or item and click **Hide** to hide it (it shows faded in the editor, with **Show**
   to bring it back). Hiding only changes what the page shows; it isn't a permission, so don't rely on
   it to keep information private.
