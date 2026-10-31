@@ -211,6 +211,9 @@ the payroll calendar, safety rules and so on.
 - **Layout editor (owner):** **Settings → Company → Open layout editor** opens a working copy of Crewdesk in
   a new tab. On any page, drag the outlined boxes to move them on the page, and drag the items inside a
   box (fields, details, filters, buttons) to move them within it; a line shows where it will land.
+  Point at any box or item and click **Hide** to hide it (it shows faded in the editor, with **Show**
+  to bring it back). Hiding only changes what the page shows; it isn't a permission, so don't rely on
+  it to keep information private.
   Everything still works while editing. Nobody else sees the changes until you click **Save** in the
   editor's top bar (**Reset this page**, **Discard** and **Exit editor** are there too). Saved layouts
   apply to everyone on the website; Settings → Company lists the pages you've arranged, each with Reset.

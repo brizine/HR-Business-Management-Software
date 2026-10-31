@@ -1,9 +1,10 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { applyLayout, dropsAfter, isEmptyLayout, moveWithin, pageKey, type PageLayout, type PageLayouts } from "@/lib/layout-engine";
+import { HIDDEN_KEY, applyLayout, dropsAfter, isEmptyLayout, moveWithin, pageKey, type PageLayout, type PageLayouts } from "@/lib/layout-engine";
 
 const EDITOR_FLAG = "crewdesk.layoutEditor";
 /** Unsaved editor changes, kept for this tab so a reload doesn't lose them. */
@@ -189,6 +190,34 @@ export function PageLayoutRoot({ children }: { children: ReactNode }) {
     };
   }, [editor.on, page, saved, setDraft]);
 
+  // Hide / Show (editor only): a small button over whatever box or item the pointer is on.
+  const [hovered, setHovered] = useState<{ el: HTMLElement; rect: DOMRect } | null>(null);
+  useEffect(() => {
+    const el = root.current;
+    if (!el || !editor.on) return setHovered(null);
+    const onMove = (e: MouseEvent) => {
+      if (dragging.current) return;
+      const t = (e.target as Element | null)?.closest?.("[data-ldrag='1']") as HTMLElement | null;
+      setHovered((h) => (t ? (h?.el === t ? h : { el: t, rect: t.getBoundingClientRect() }) : h));
+    };
+    const refresh = () => setHovered((h) => (h && h.el.isConnected ? { el: h.el, rect: h.el.getBoundingClientRect() } : null));
+    el.addEventListener("mouseover", onMove);
+    window.addEventListener("scroll", refresh, true);
+    window.addEventListener("resize", refresh);
+    return () => { el.removeEventListener("mouseover", onMove); window.removeEventListener("scroll", refresh, true); window.removeEventListener("resize", refresh); };
+  }, [editor.on]);
+  const toggleHidden = (target: HTMLElement) => {
+    const id = target.dataset.lid!;
+    setDraft((d) => {
+      const current = page in d ? d[page] : saved[page] ?? {};
+      const list = current[HIDDEN_KEY] ?? [];
+      const next = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+      return { ...d, [page]: { ...current, [HIDDEN_KEY]: next } };
+    });
+    setNote(target.dataset.lhidden === "1" ? `“${target.dataset.lname}” will show again.` : `“${target.dataset.lname}” will be hidden for everyone once you save.`);
+    requestAnimationFrame(() => setHovered((h) => (h ? { el: h.el, rect: h.el.getBoundingClientRect() } : null)));
+  };
+
   const save = async () => {
     setBusy(true);
     try {
@@ -212,7 +241,7 @@ export function PageLayoutRoot({ children }: { children: ReactNode }) {
           <div>
             <strong>Layout editor</strong> · {pageName}
             <div className="layout-editor-hint">
-              {note ?? "Drag the outlined boxes to move them on this page, and drag the items inside a box to move them within it. Only you see changes until you save."}
+              {note ?? "Drag the outlined boxes to move them on this page, and the items inside a box to move them within it. Point at anything and click Hide to hide it. Only you see changes until you save."}
             </div>
           </div>
           <div className="row" style={{ flexWrap: "nowrap" }}>
@@ -231,6 +260,19 @@ export function PageLayoutRoot({ children }: { children: ReactNode }) {
         </div>
       )}
       <div ref={root} className={`layout-page${editor.on ? " layout-editing" : ""}`}>{children}</div>
+      {editor.on && hovered && hovered.el.isConnected && createPortal(
+        <button
+          type="button"
+          className="layout-hide-btn"
+          // A box's button sits on its top edge (so reaching it doesn't cross the box's items); an item's just inside.
+          style={{ top: Math.max(hovered.rect.top + (hovered.el.dataset.lkind === "box" ? -14 : 2), 4), left: Math.max(hovered.rect.right - 72, 4) }}
+          onClick={() => toggleHidden(hovered.el)}
+          aria-label={`${hovered.el.dataset.lhidden === "1" ? "Show" : "Hide"} ${hovered.el.dataset.lname}`}
+        >
+          {hovered.el.dataset.lhidden === "1" ? "👁 Show" : "🚫 Hide"}
+        </button>,
+        document.body,
+      )}
     </Ctx.Provider>
   );
 }

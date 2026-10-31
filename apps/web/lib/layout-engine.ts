@@ -9,6 +9,9 @@ import type { PageLayouts } from "@crewdesk/shared";
 
 export type PageLayout = Record<string, string[]>;
 
+/** In a page's layout, this key lists the boxes and items the owner hid. */
+export const HIDDEN_KEY = "__hidden";
+
 /** Pages with ids in the address share a layout, e.g. every /people/<id>. */
 export function pageKey(pathname: string) {
   return (
@@ -74,7 +77,8 @@ function boxLabel(el: Element) {
 }
 
 function children(container: Element) {
-  return Array.from(container.children).filter((c) => !c.matches(SKIP) && (c as HTMLElement).offsetParent !== null || c.matches(".pagehead"));
+  // Things the owner hid are display:none, but still count, so ids don't shift around them.
+  return Array.from(container.children).filter((c) => (!c.matches(SKIP) && ((c as HTMLElement).offsetParent !== null || (c as HTMLElement).dataset.lhidden === "1")) || c.matches(".pagehead"));
 }
 
 /** Saved items move into the slots saved items occupy; anything new stays where the page put it. */
@@ -97,6 +101,7 @@ export interface Scanned {
  */
 export function applyLayout(root: HTMLElement, layout: PageLayout | undefined, editing: boolean): Scanned {
   const containers = new Map<string, HTMLElement[]>();
+  const hidden = new Set(layout?.[HIDDEN_KEY] ?? []);
 
   const tagChildren = (container: Element, key: string, kind: "box" | "item") => {
     const kids = children(container) as HTMLElement[];
@@ -111,6 +116,8 @@ export function applyLayout(root: HTMLElement, layout: PageLayout | undefined, e
       el.dataset.lkind = kind;
       el.dataset.lname = kind === "box" ? boxLabel(el) : nameOf(el);
       el.dataset.lparent = key;
+      if (hidden.has(id) && !el.matches(".pagehead")) el.dataset.lhidden = "1";
+      else delete el.dataset.lhidden;
       const movable = editing && !el.matches(".pagehead");
       if (movable) el.setAttribute("draggable", "true");
       else if (el.dataset.ldrag) el.removeAttribute("draggable");
@@ -172,5 +179,5 @@ export function dropsAfter(target: HTMLElement, x: number, y: number) {
   return horizontal ? x > r.left + r.width / 2 : y > r.top + r.height / 2;
 }
 
-export const isEmptyLayout = (l: PageLayout | undefined) => !l || !Object.keys(l).length;
+export const isEmptyLayout = (l: PageLayout | undefined) => !l || !Object.entries(l).some(([k, v]) => k !== HIDDEN_KEY || v.length);
 export type { PageLayouts };
