@@ -200,13 +200,6 @@ tr.openrow td { background: var(--bg); }
 .photo-actions .error-text { color: var(--bad); font-size: 12px; width: 100%; text-align: center; }
 .person-cell { display: flex; align-items: center; gap: 10px; }
 /* Owner: drag to order the details on employee pages */
-.field-order { border: 1px dashed var(--border); border-radius: 10px; padding: 12px; }
-.field-order-list { list-style: none; padding: 0; margin: 10px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px; }
-.field-order-list li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: grab; user-select: none; }
-.field-order-list li.dragging { opacity: .45; border-style: dashed; border-color: var(--primary); }
-.field-order-list .drag-handle { color: var(--muted); font-size: 16px; }
-.field-order-num { color: var(--muted); font-size: 12px; width: 16px; text-align: right; }
-.field-order-list .btn.sm { padding: 1px 7px; }
 .arrange-hint { font-size: 12px; margin-bottom: 8px; }
 .arrangeable .arrange-item { cursor: grab; border: 1px dashed transparent; border-radius: 8px; padding: 4px 6px; margin: -5px -7px; }
 .arrangeable .arrange-item:hover { border-color: var(--border); background: color-mix(in srgb, var(--primary) 5%, transparent); }

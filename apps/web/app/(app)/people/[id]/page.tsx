@@ -11,7 +11,7 @@ import { OnboardingTask } from "@/components/onboarding-task";
 import { DownloadPdf, FormStatus, signedLine } from "@/components/tax-form-bits";
 import { AvailabilityEditor } from "@/components/availability-editor";
 import { EmployeeFields, employeeBody } from "@/components/employee-form";
-import { FieldOrderEditor, ProfileDetails } from "@/components/profile-details";
+import { ProfileDetails } from "@/components/profile-details";
 import { PhotoEditor } from "@/components/avatar";
 import { PROFILE_FIELDS, isInactive, type ProfileFieldKey } from "@crewdesk/shared";
 
@@ -77,7 +77,6 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
               });
             }}
           >
-            {can("owner") && <FieldOrderEditor order={order} onSaved={(o) => fieldOrder.setData({ order: o })} />}
             <EmployeeFields initial={e} employees={all.data ?? []} />
             <ErrorBox error={error} />
             <div><button className="btn primary" disabled={busy}>Save changes</button></div>
