@@ -207,6 +207,11 @@ tr.openrow td { background: var(--bg); }
 .field-order-list .drag-handle { color: var(--muted); font-size: 16px; }
 .field-order-num { color: var(--muted); font-size: 12px; width: 16px; text-align: right; }
 .field-order-list .btn.sm { padding: 1px 7px; }
+.arrange-hint { font-size: 12px; margin-bottom: 8px; }
+.arrangeable .arrange-item { cursor: grab; border: 1px dashed transparent; border-radius: 8px; padding: 4px 6px; margin: -5px -7px; }
+.arrangeable .arrange-item:hover { border-color: var(--border); background: color-mix(in srgb, var(--primary) 5%, transparent); }
+.arrangeable .arrange-item.dragging { opacity: .45; border-color: var(--primary); }
+.arrangeable .drag-handle { color: var(--muted); }
 .settings-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
 .contact-fieldset { border: 0; padding: 0; margin: 14px 0 0; min-width: 0; }
 .contact-fieldset legend { font-weight: 600; padding: 0; margin-bottom: 6px; }
