@@ -305,6 +305,18 @@ describe("sessions", () => {
     expect((await call("PUT", "/employees/team-filters", ownerToken, { order: ["bogus"], hidden: [] })).status).toBe(400);
   });
 
+  it("page layouts: only the owner saves them; everyone reads them; null resets a page", async () => {
+    await hire("viewer", "manager");
+    const token = (await login("viewer")).body.token;
+    const layout = { page: ["page/page-heading", "page/documents", "page/card-formgrid"], "page/card-formgrid>formgrid-1": ["x/pay", "x/email"] };
+    expect((await call("PUT", "/employees/layouts", token, { pages: { "/people/:id": layout } })).status).toBe(403);
+    expect((await call("PUT", "/employees/layouts", ownerToken, { pages: { "/people/:id": layout, "/spray-mix": { page: ["a", "b"] } } })).status).toBe(200);
+    expect((await call("GET", "/employees/layouts", token)).body.pages["/people/:id"]).toEqual(layout);
+    const reset = await call("PUT", "/employees/layouts", ownerToken, { pages: { "/spray-mix": null } });
+    expect(Object.keys(reset.body.pages)).toEqual(["/people/:id"]);
+    expect((await call("PUT", "/employees/layouts", ownerToken, { pages: { "/x": { page: "nope" } } })).status).toBe(400);
+  });
+
   it("keeps a reason for inactive or terminated, visible to managers only", async () => {
     const id = await hire("reasoned", "employee");
     await hire("peer", "employee");

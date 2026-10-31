@@ -53,6 +53,8 @@ export const companies = pgTable("companies", {
   /** Order of the details on employee pages, set by the owner (see PROFILE_FIELDS). Null = default order. */
   profileFieldOrder: jsonb("profile_field_order").$type<string[]>(),
   /** Order and hidden filters on the Team page, set by the owner (see TEAM_FILTERS). Null = default. */
+  /** Page layouts from the owner's layout editor (see pageLayoutsUpdateSchema). */
+  pageLayouts: jsonb("page_layouts").$type<Record<string, Record<string, string[]>>>().notNull().default({}),
   teamFilterLayout: jsonb("team_filter_layout").$type<{ order: string[]; hidden: string[] }>(),
   /** Choices for the Job title and Department menus, set by the owner (in their order). */
   jobTitles: jsonb("job_titles").$type<string[]>().notNull().default([]),

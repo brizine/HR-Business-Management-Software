@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { Role } from "@crewdesk/shared";
 import { useAuth } from "@/lib/auth";
+import { PageLayoutRoot } from "@/components/page-layout";
 
 const NAV: { section: string; items: { href: string; label: string; min?: Role }[] }[] = [
   { section: "", items: [{ href: "/dashboard", label: "Dashboard", min: "manager" }, { href: "/wiki", label: "Company wiki" }, { href: "/spray-mix", label: "Spray Mix Calculator" }] },
@@ -91,7 +92,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           Sign out
         </a>
       </nav>
-      <main className="main">{children}</main>
+      <main className="main"><PageLayoutRoot>{children}</PageLayoutRoot></main>
     </div>
   );
 }

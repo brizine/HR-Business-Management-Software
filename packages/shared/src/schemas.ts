@@ -97,6 +97,18 @@ export function orderProfileFields(saved: readonly string[] | null | undefined):
   return [...picked, ...PROFILE_FIELD_KEYS.filter((k) => !picked.includes(k))];
 }
 
+/**
+ * Owner's page layouts from the layout editor: for each page, for each container on it (the page
+ * itself, or a box), the order of what's inside, by layout id. Pages left out are untouched;
+ * null resets a page to its default layout.
+ */
+const layoutId = z.string().min(1).max(200);
+const pageLayout = z.record(layoutId, z.array(layoutId).max(300)).refine((v) => Object.keys(v).length <= 300, "Too many boxes");
+export const pageLayoutsUpdateSchema = z.object({
+  pages: z.record(layoutId, pageLayout.nullable()).refine((v) => Object.keys(v).length <= 200, "Too many pages"),
+});
+export type PageLayouts = Record<string, Record<string, string[]>>;
+
 /** The Team page's filters, in the default order. The owner can reorder or hide them for the company. */
 export const TEAM_FILTERS = [
   { key: "search", label: "Search" },

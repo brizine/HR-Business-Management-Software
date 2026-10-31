@@ -191,6 +191,26 @@ tr.openrow td { background: var(--bg); }
   background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin: 0;
   columns: 2;
 }
+/* Page layouts: boxes and items are put in order with CSS order, so their containers stack. */
+.layout-page, [data-lgroup] { display: flex; flex-direction: column; }
+.layout-page > *, [data-lgroup] > * { min-width: 0; }
+/* The owner's layout editor */
+.layout-editor-bar { position: sticky; top: 0; z-index: 900; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin: -24px -28px 16px; padding: 10px 28px; background: #1f2a44; color: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.2); }
+.layout-editor-bar .btn:not(.primary) { background: rgba(255,255,255,.1); color: #fff; border-color: rgba(255,255,255,.25); }
+.layout-editor-hint { font-size: 12px; opacity: .85; max-width: 640px; }
+.layout-editing [data-ldrag="1"] { position: relative; outline: 1px dashed color-mix(in srgb, var(--primary) 55%, transparent); outline-offset: 2px; cursor: grab; }
+.layout-editing [data-ldrag="1"][data-lkind="box"] { outline: 2px dashed var(--primary); outline-offset: 4px; margin-top: 18px; }
+.layout-editing [data-ldrag="1"][data-lkind="box"]::before { content: "⠿ " attr(data-lname); position: absolute; top: -12px; left: 8px; z-index: 2; font-size: 11px; font-weight: 600;
+  background: var(--primary); color: #fff; padding: 1px 6px; border-radius: 4px; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.layout-editing [data-ldrag="1"][data-lkind="item"]:hover { outline: 2px dashed var(--primary); background: color-mix(in srgb, var(--primary) 6%, transparent); }
+.layout-editing .layout-dragging { opacity: .4; }
+.layout-editing .layout-drop-before { box-shadow: 0 -3px 0 0 var(--primary); }
+.layout-editing .layout-drop-after { box-shadow: 0 3px 0 0 var(--primary); }
+.layout-editing .filters > .layout-drop-before, .layout-editing .row > .layout-drop-before, .layout-editing .formgrid > .layout-drop-before { box-shadow: -3px 0 0 0 var(--primary); }
+.layout-editing .filters > .layout-drop-after, .layout-editing .row > .layout-drop-after, .layout-editing .formgrid > .layout-drop-after { box-shadow: 3px 0 0 0 var(--primary); }
+@media (max-width: 700px) { .layout-editor-bar { margin: -16px -16px 12px; padding: 10px 16px; } }
+
 /* Employee photos */
 .pagehead-title { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .avatar { border-radius: 50%; object-fit: cover; flex: none; display: inline-flex; align-items: center; justify-content: center; background: var(--border); }

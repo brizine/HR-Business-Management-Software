@@ -208,6 +208,13 @@ the payroll calendar, safety rules and so on.
   edits the choices under **Settings → Company**: add, rename (everyone who has the old name is
   updated), reorder and remove (people who have a removed choice keep it until it's changed). The lists
   start from the titles and departments already in use.
+- **Layout editor (owner):** **Settings → Company → Open layout editor** opens a working copy of Crewdesk in
+  a new tab. On any page, drag the outlined boxes to move them on the page, and drag the items inside a
+  box (fields, details, filters, buttons) to move them within it; a line shows where it will land.
+  Everything still works while editing. Nobody else sees the changes until you click **Save** in the
+  editor's top bar (**Reset this page**, **Discard** and **Exit editor** are there too). Saved layouts
+  apply to everyone on the website; Settings → Company lists the pages you've arranged, each with Reset.
+  Pages with an id in the address (like each employee's page) share one layout.
 - **Employee page layout (owner):** under **Settings → Company**, drag the details (email, phone, home
   address, emergency contact, pay…) into the order every employee page uses, then **Save layout**.
 - **Team page filters (owner):** also under **Settings → Company**, drag the Team page's filters into

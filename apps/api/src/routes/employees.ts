@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import bcrypt from "bcryptjs";
 import { and, asc, eq } from "drizzle-orm";
-import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, employeeContactSchema, employeeMenusSchema, employeeSchema, hasRole, isInactive, menuRenameSchema, normalizeTeamFilterLayout, orderProfileFields, profileFieldOrderSchema, teamFilterLayoutSchema, type Role } from "@crewdesk/shared";
+import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, employeeContactSchema, employeeMenusSchema, employeeSchema, hasRole, isInactive, menuRenameSchema, normalizeTeamFilterLayout, orderProfileFields, pageLayoutsUpdateSchema, profileFieldOrderSchema, teamFilterLayoutSchema, type Role } from "@crewdesk/shared";
 import { db } from "../db";
 import { companies, employees, jobs, recoveryCodes } from "../db/schema";
 import { authenticate, canManageAccount, requireRole, signOutEverywhere } from "../lib/auth";
@@ -110,6 +110,26 @@ const routes: FastifyPluginAsync = async (app) => {
       if (kind === "departments") await tx.update(jobs).set({ department: to }).where(and(eq(jobs.companyId, req.user.companyId), eq(jobs.department, from)));
     });
     return menus(req.user.companyId);
+  });
+
+  /** Page layouts from the owner's layout editor; every page reads them. */
+  app.get("/layouts", async (req) => {
+    const [c] = await db.select({ pages: companies.pageLayouts }).from(companies).where(eq(companies.id, req.user.companyId));
+    return { pages: c?.pages ?? {} };
+  });
+
+  /** Saves the pages sent (an empty or null page goes back to its default layout); other pages are kept. */
+  app.put("/layouts", { preHandler: requireRole("owner") }, async (req) => {
+    const { pages } = parse(pageLayoutsUpdateSchema, req.body);
+    const [c] = await db.select({ pages: companies.pageLayouts }).from(companies).where(eq(companies.id, req.user.companyId));
+    const next = { ...(c?.pages ?? {}) };
+    for (const [page, layout] of Object.entries(pages)) {
+      if (!layout || !Object.keys(layout).length) delete next[page];
+      else next[page] = layout;
+    }
+    if (Object.keys(next).length > 200) throw new HttpError(400, "Too many page layouts");
+    await db.update(companies).set({ pageLayouts: next }).where(eq(companies.id, req.user.companyId));
+    return { pages: next };
   });
 
   /** The Team page's filters: their order and which are hidden (the same for everyone in the company). */

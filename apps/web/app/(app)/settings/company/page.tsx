@@ -6,6 +6,7 @@ import { useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead } from "@/components/ui";
 import { SettingsTabs } from "@/components/settings-tabs";
 import { EmployeeLayoutEditor, TeamFilterLayoutEditor } from "@/components/layout-editor";
+import { PageLayoutsCard } from "@/components/page-layout";
 
 type Kind = "jobTitles" | "departments";
 type Menus = { jobTitles: string[]; departments: string[]; usage: Record<Kind, Record<string, number>> };
@@ -101,6 +102,7 @@ export default function CompanySettings() {
       <SettingsTabs />
       {!can("owner") ? <p className="muted">Only the owner can change company settings.</p> : !menus.data ? <ErrorBox error={menus.error} /> : (
         <>
+        <PageLayoutsCard />
         <EmployeeLayoutEditor />
         <TeamFilterLayoutEditor />
         <div className="grid cols-2" style={{ alignItems: "start" }}>
