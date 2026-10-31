@@ -53,7 +53,15 @@ await app.register(async (site: FastifyInstance) => {
 });
 
 const port = Number(process.env.PORT ?? 3000);
-await app.listen({ port, host: process.env.HOST ?? "0.0.0.0" });
+try {
+  await app.listen({ port, host: process.env.HOST ?? "0.0.0.0" });
+} catch (err) {
+  if ((err as NodeJS.ErrnoException).code !== "EADDRINUSE") throw err;
+  // Usually Crewdesk is already running in another terminal (Codespaces starts one by itself).
+  console.error(`\n✖ Port ${port} is already in use, so Crewdesk is probably already running in another terminal.`);
+  console.error(`  Use that one, or stop every copy with:  pkill -f apps/api/dist/main.js   and start again.\n`);
+  process.exit(1);
+}
 console.log(`\n✔ Crewdesk is running on port ${port}.${process.env.CODESPACES ? " Open the Ports tab and click the globe next to port " + port + "." : ""}\n`);
 
 const timer = process.env.DISABLE_SCHEDULER === "true" ? null : startScheduler();

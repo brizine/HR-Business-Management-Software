@@ -53,6 +53,20 @@ That page means the link can't reach the app on port 3000.
 
 If it still fails, copy the last 20 lines of the terminal and send them over.
 
+## If you see "address already in use" (EADDRINUSE) or "Port 3000 is already in use"
+
+Crewdesk is already running in another terminal (the codespace starts one by itself in the
+**crewdesk** terminal). Use that one, or stop every copy and start one:
+
+```
+pkill -f apps/api/dist/main.js
+pnpm demo
+```
+
+## If a page says "Application error" or "Crewdesk was updated"
+
+The page was opened before Crewdesk was rebuilt. Refresh the browser tab.
+
 ## Things to know
 
 - **It's a demo.** Data lives in the codespace and is deleted with it. Don't enter real employee
