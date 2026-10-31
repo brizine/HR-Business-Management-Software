@@ -13,7 +13,8 @@ export type NotificationLink =
   | { screen: "tax-forms" }
   | { screen: "wiki"; id: string }
   | { screen: "asset"; id: string }
-  | { screen: "work-order"; id: string; assetId: string };
+  | { screen: "work-order"; id: string; assetId: string }
+  | { screen: "pay-period"; id: string };
 
 export const NOTIFICATION_CATEGORIES = ["pto", "time", "schedule", "fleet", "documents", "onboarding", "hiring", "payroll", "wiki"] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
@@ -30,7 +31,7 @@ export const NOTIFICATION_CATEGORY_INFO: Record<NotificationCategory, { label: s
   onboarding: { label: "Onboarding", description: "Your new-hire checklist" },
   hiring: { label: "Hiring", description: "New job applicants" },
   wiki: { label: "Company wiki", description: "Pages your company flags as important when they're published or updated" },
-  payroll: { label: "Payroll & tax forms", description: "New or updated W-4s and direct deposit details to enter in payroll (admins)" },
+  payroll: { label: "Payroll & tax forms", description: "Pay periods to approve, and new or updated W-4s and direct deposit details to enter in payroll" },
 };
 
 /**
@@ -67,6 +68,7 @@ export function webPathFor(link: NotificationLink | null | undefined): string | 
     case "wiki": return `/wiki/${link.id}`;
     case "asset": return `/fleet/${link.id}`;
     case "work-order": return `/work-orders?highlight=${link.id}`;
+    case "pay-period": return `/pay-periods/${link.id}`;
     default: return null;
   }
 }

@@ -66,6 +66,7 @@ export function routeFor(link: NotificationLink | null | undefined): string | nu
     case "asset": return `/asset/${link.id}`;
     case "wiki": return `/wiki/${link.id}`;
     case "work-order": return `/asset/${link.assetId}`;
+    // Approving a pay period happens on the website (it's a wide table); the email/text link opens it.
     default: return "/notifications";
   }
 }

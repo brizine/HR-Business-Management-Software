@@ -272,3 +272,32 @@ describe("totalsByUnit", () => {
     expect(totalsByUnit([])).toEqual([]);
   });
 });
+
+import { lastEndedPeriod, periodContaining, upcomingPeriods } from "../src";
+
+describe("pay periods", () => {
+  const weekly = { frequency: "weekly" as const, anchorDate: "2026-01-05", paydayOffsetDays: 5 };
+  it("counts weekly and bi-weekly periods from the anchor, before and after it", () => {
+    expect(periodContaining("2026-11-04", weekly)).toEqual({ start: "2026-11-02", end: "2026-11-08", payday: "2026-11-13" });
+    expect(periodContaining("2025-12-31", weekly)).toEqual({ start: "2025-12-29", end: "2026-01-04", payday: "2026-01-09" });
+    const biweekly = { ...weekly, frequency: "biweekly" as const };
+    expect(periodContaining("2026-01-18", biweekly)).toMatchObject({ start: "2026-01-05", end: "2026-01-18" });
+    expect(periodContaining("2026-01-19", biweekly)).toMatchObject({ start: "2026-01-19", end: "2026-02-01" });
+  });
+  it("splits semi-monthly at the 15th and uses calendar months", () => {
+    const semi = { frequency: "semimonthly" as const, paydayOffsetDays: 0 };
+    expect(periodContaining("2026-02-15", semi)).toMatchObject({ start: "2026-02-01", end: "2026-02-15" });
+    expect(periodContaining("2026-02-16", semi)).toMatchObject({ start: "2026-02-16", end: "2026-02-28" });
+    expect(periodContaining("2028-02-20", semi)).toMatchObject({ end: "2028-02-29" });
+    expect(periodContaining("2026-12-31", { frequency: "monthly", paydayOffsetDays: 3 })).toEqual({ start: "2026-12-01", end: "2026-12-31", payday: "2027-01-03" });
+  });
+  it("finds the period that just ended, and lists upcoming ones back to back", () => {
+    // Sunday Nov 8 is the last day; on Monday Nov 9 that period has ended.
+    expect(lastEndedPeriod("2026-11-09", weekly)).toMatchObject({ start: "2026-11-02", end: "2026-11-08" });
+    // Mid-week, the last ended period is still the previous week.
+    expect(lastEndedPeriod("2026-11-11", weekly)).toMatchObject({ start: "2026-11-02", end: "2026-11-08" });
+    expect(lastEndedPeriod("2026-11-16", { frequency: "semimonthly", paydayOffsetDays: 0 })).toMatchObject({ start: "2026-11-01", end: "2026-11-15" });
+    const next = upcomingPeriods("2026-11-04", weekly, 3);
+    expect(next.map((p) => p.start)).toEqual(["2026-11-02", "2026-11-09", "2026-11-16"]);
+  });
+});

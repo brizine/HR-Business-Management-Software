@@ -1,7 +1,7 @@
 import { and, eq, gt, isNotNull, isNull, lt, lte, notInArray } from "drizzle-orm";
-import { INACTIVE_STATUSES, computeDue } from "@crewdesk/shared";
+import { INACTIVE_STATUSES, computeDue, lastEndedPeriod, type PayFrequency } from "@crewdesk/shared";
 import { db } from "../db";
-import { assets, companies, employees, maintenanceSchedules, notificationLog, onboardingTasks, shifts, timeEntries } from "../db/schema";
+import { assets, companies, employees, maintenanceSchedules, notificationLog, onboardingTasks, payPeriodApprovers, payPeriods, shifts, timeEntries } from "../db/schema";
 import { taskOwners } from "../routes/onboarding";
 import { fmtTime, localParts } from "./tz";
 import { notify, staffWithRole } from "./notify";
@@ -147,6 +147,27 @@ export async function runScheduledChecks(now = new Date()) {
         : `Onboarding task${count > 1 ? "s" : ""} due today`,
       body: [...d.overdue.map((t) => `Overdue: ${t}`), ...d.due.map((t) => `Due today: ${t}`)].join("\n"),
       link: { screen: "onboarding" },
+    });
+    sent++;
+  }
+
+  // Pay periods: once one ends, record it and ask the approvers (or, if none are picked, admins) to approve it.
+  for (const c of await db.select().from(companies).where(isNotNull(companies.payFrequency))) {
+    const local = localParts(now, c.timezone);
+    if (local.minutes < REMINDER_HOUR * 60) continue;
+    const period = lastEndedPeriod(local.date, { frequency: c.payFrequency as PayFrequency, anchorDate: c.payPeriodAnchor, paydayOffsetDays: c.paydayOffsetDays });
+    const [created] = await db
+      .insert(payPeriods)
+      .values({ companyId: c.id, periodStart: period.start, periodEnd: period.end, payday: period.payday })
+      .onConflictDoNothing()
+      .returning();
+    if (!created) continue;
+    const approvers = (await db.select({ id: payPeriodApprovers.employeeId }).from(payPeriodApprovers).where(eq(payPeriodApprovers.companyId, c.id))).map((r) => r.id);
+    notify(c.id, approvers.length ? approvers : await staffWithRole(c.id, "admin"), {
+      category: "payroll",
+      title: `Pay period ${period.start} – ${period.end} is ready to approve`,
+      body: `Review everyone's hours and approve them before payday on ${period.payday}.`,
+      link: { screen: "pay-period", id: created.id },
     });
     sent++;
   }

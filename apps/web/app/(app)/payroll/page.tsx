@@ -5,6 +5,7 @@ import { api, download, fmtDate, fmtDateTime, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
+import { PayPeriodList, PaySchedule } from "@/components/pay-schedule";
 
 function lastWeek() {
   const d = new Date();
@@ -148,6 +149,10 @@ export default function Payroll() {
           Gross pay before taxes and deductions. Overtime is 1.5× after {s?.weeklyOvertimeThreshold ?? 40} hours a week; approved time off is paid at the regular rate.
           The CSV has one row per employee with regular, overtime and time-off hours, ready to key into QuickBooks, ADP, Gusto, Paychex, or to send to your accountant.
         </p>
+      </div>
+      <div className="grid cols-2">
+        <PaySchedule />
+        <PayPeriodList onUse={(a, b) => { setStart(a); setEnd(b); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
       </div>
       <div className="grid cols-2">
         {s && <Settings settings={s} onSaved={settings.reload} />}

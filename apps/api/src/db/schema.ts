@@ -11,6 +11,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -50,6 +51,10 @@ export const companies = pgTable("companies", {
   /** Location rule for clocking in / out: optional | required | geofence_flag | geofence_block */
   clockInLocation: text("clock_in_location").notNull().default("optional"),
   clockOutLocation: text("clock_out_location").notNull().default("optional"),
+  /** Pay schedule (see payPeriods in @crewdesk/shared); null frequency = not set up. */
+  payFrequency: text("pay_frequency"),
+  payPeriodAnchor: date("pay_period_anchor"),
+  paydayOffsetDays: integer("payday_offset_days").notNull().default(5),
   /** Page layouts from the owner's layout editor (see pageLayoutsUpdateSchema). */
   pageLayouts: jsonb("page_layouts").$type<Record<string, Record<string, string[]>>>().notNull().default({}),
   /** Choices for the Job title and Department menus, set by the owner (in their order). */
@@ -397,6 +402,35 @@ export const payrollRuns = pgTable("payroll_runs", {
   createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
   createdAt: createdAt(),
 });
+
+/** Who is asked to approve each pay period once it ends. */
+export const payPeriodApprovers = pgTable(
+  "pay_period_approvers",
+  {
+    companyId: companyId(),
+    employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.companyId, t.employeeId] })],
+);
+
+/** A pay period that has ended, created by the scheduler, and its approval. */
+export const payPeriods = pgTable(
+  "pay_periods",
+  {
+    id: id(),
+    companyId: companyId(),
+    periodStart: date("period_start").notNull(),
+    periodEnd: date("period_end").notNull(),
+    payday: date("payday").notNull(),
+    /** pending | approved */
+    status: text("status").notNull().default("pending"),
+    approvedById: uuid("approved_by_id").references(() => employees.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvalNote: text("approval_note"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("pay_periods_company_start_idx").on(t.companyId, t.periodStart)],
+);
 
 /** Expo push tokens, one row per device. A device moves with whoever last signed in on it. */
 export const pushTokens = pgTable(

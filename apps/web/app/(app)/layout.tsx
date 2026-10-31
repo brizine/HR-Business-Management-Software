@@ -57,6 +57,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const path = usePathname();
   const unread = useUnreadCount(!!me);
+  // Pay period approvers who aren't admins reach their approvals from the sidebar.
+  const [payApprovals, setPayApprovals] = useState<{ isApprover: boolean; pending: number } | null>(null);
+  useEffect(() => {
+    if (me) api<{ isApprover: boolean; pending: number }>("/pay-periods/me").then(setPayApprovals, () => {});
+  }, [me?.user.id, path]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (ready && !me) router.replace("/login");
@@ -83,6 +88,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               ))}
           </div>
         ))}
+        {payApprovals?.isApprover && (
+          <Link href="/pay-periods" className={path.startsWith("/pay-periods") ? "active" : ""}>
+            Pay approvals {payApprovals.pending > 0 && <span className="badge warn" style={{ marginLeft: 4 }}>{payApprovals.pending}</span>}
+          </Link>
+        )}
         <div className="spacer" />
         <div className="company" style={{ paddingBottom: 4 }}>
           {me.user.firstName} {me.user.lastName} · {me.user.role}

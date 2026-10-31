@@ -24,7 +24,7 @@ packages/
 | **Time off** | Multiple policies, accrual per hour worked with caps, grants/adjustments ledger, request → approve/deny, balance checks |
 | **Hiring** | Job postings, public careers page (`/careers/<companyId>`), applicant pipeline board, one-click hire → employee |
 | **Onboarding** | Hire form (start date, pay, manager, checklist) → invite email → new hire sets their password and works through a checklist of check-off, **upload** (phone camera works) and **sign** tasks; managers and admins see what's waiting on them; reminders and milestone notifications; the hire becomes active when everything is done. See [Onboarding](#onboarding) |
-| **Payroll** | Optional provider: export each pay period as CSV (regular, overtime and approved time-off hours, estimated gross; approved-time-only option) and run payroll anywhere, **or** send hours to Check. See [Payroll](#payroll) |
+| **Payroll** | Pay schedule (weekly, bi-weekly, semi-monthly or monthly) with paydays; when a period ends, chosen approvers are notified to approve it. Optional provider: export each pay period as CSV (regular, overtime and approved time-off hours, estimated gross; approved-time-only option) and run payroll anywhere, **or** send hours to Check. See [Payroll](#payroll) |
 | **Pay & tax forms** | Optional: employees fill out **W-4**, **I-9** Section 1 and **direct deposit** online (admins complete I-9 Section 2); encrypted, access-logged, PDF records; an "enter in payroll" queue for admins. See [Pay & tax forms](#pay--tax-forms) |
 | **Fleet & equipment** | Asset registry (vehicles, trailers, heavy/small equipment, tools), odometer + engine-hour meters, registration/insurance expiry |
 | **Preventive maintenance** | Schedules by miles, engine hours and/or days (whichever comes first), due-soon/overdue status, fleet-wide due list |
@@ -400,6 +400,23 @@ Push goes through Expo's push service, which relays to Apple (APNs) and Google (
 If you turn on "enhanced push security" for the Expo project, set `EXPO_ACCESS_TOKEN` in the API's `.env`.
 
 ## Payroll
+
+### Pay schedule and approvals
+
+Under **Payroll → Pay schedule** the owner sets:
+
+- **How often people are paid:** weekly, every two weeks (bi-weekly), twice a month (1st–15th and
+  16th–end) or monthly. Weekly and bi-weekly also need the first day of any pay period.
+- **Payday:** how many days after a period ends.
+- **Who approves each pay period:** any employees. Approvers see everyone's hours and estimated pay for
+  the period, so pick accordingly. With nobody picked, admins are asked.
+
+When a period ends, Crewdesk records it and (from 7 am company time the next day) notifies the
+approvers through their usual inbox, push, email or text. They open it from the notification or the
+**Pay approvals** link in their sidebar, review the hours and click **Approve** (with an optional
+note); admins are told who approved it. **Payroll → Pay periods** lists each period's status, and
+**Use dates** fills in the export dates. Admins can **Reopen** an approved period (e.g. after hours
+were corrected), which asks the approvers again.
 
 A payroll provider is **optional**. Under **Payroll → Payroll settings** the owner chooses:
 
