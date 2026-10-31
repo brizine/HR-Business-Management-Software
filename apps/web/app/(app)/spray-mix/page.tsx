@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { MIX_UNITS, computeMix, formatAmount, formatEntered, isInactive } from "@crewdesk/shared";
+import { MIX_UNITS, computeMix, formatAmount, formatEntered, isInactive, totalsByUnit } from "@crewdesk/shared";
 import { api, fmtDateTime } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
@@ -129,6 +129,16 @@ function SelectedWindow({ sheet, gallons, rows, acres, squareFeet, onClose }: { 
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr className="mix-total">
+              <th scope="row" colSpan={3}>Total ({rows.length} product{rows.length === 1 ? "" : "s"})</th>
+              <td>
+                {totalsByUnit(rows).map((t) => (
+                  <div key={t.unit} style={{ whiteSpace: "nowrap" }}><strong style={{ fontSize: 18 }}>{formatAmount(t.amount)}</strong> <span className="muted">{t.unit}</span></div>
+                ))}
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>

@@ -264,6 +264,7 @@ tr.openrow td { background: var(--bg); }
 .mix-window-close { all: unset; cursor: pointer; font-size: 30px; line-height: 1; width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; color: var(--muted); }
 .mix-window-close:hover { background: var(--border); color: var(--text); }
 .mix-window-close:focus-visible { outline: 2px solid var(--primary); }
+.mix-window .mix-total th, .mix-window .mix-total td { border-top: 2px solid var(--text); border-bottom: 0; padding-top: 10px; vertical-align: top; }
 .mix-window .mix-table tbody tr:nth-child(even) { background: var(--stripe); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 /* With the window open, Print prints only the window. */
 @media print {

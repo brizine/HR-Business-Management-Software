@@ -2,7 +2,7 @@ import * as SecureStore from "expo-secure-store";
 import { useEffect, useState } from "react";
 import * as Print from "expo-print";
 import { Alert, Modal, Pressable, ScrollView, View } from "react-native";
-import { MIX_UNITS, computeMix, formatAmount, formatEntered } from "@crewdesk/shared";
+import { MIX_UNITS, computeMix, formatAmount, formatEntered, totalsByUnit } from "@crewdesk/shared";
 import { api, fmtDate } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { Button, Card, Divider, ErrorText, Input, Row, Screen, Txt, useTheme } from "@/components/ui";
@@ -102,15 +102,16 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 /** Just the ticked products, full screen: × closes, Print sends them to a printer (or a PDF). */
 function SelectedWindow({ sheet, gallons, rows, acres, onClose }: { sheet: any; gallons: number; rows: any[]; acres: number; onClose: () => void }) {
   const t = useTheme();
+  const totals = totalsByUnit(rows);
   const print = () => {
     const html = `<html><head><meta name="viewport" content="width=device-width"><style>
       body{font-family:-apple-system,Roboto,sans-serif;padding:24px;color:#111}h1{margin:0 0 4px;font-size:22px}p{margin:0 0 16px;color:#555}
       table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px;border-bottom:1px solid #ddd}tbody tr:nth-child(even){background:#fff3b0}
-      td.n{font-weight:700;font-size:18px;white-space:nowrap}</style></head><body>
+      td.n{font-weight:700;font-size:18px;white-space:nowrap}tfoot th,tfoot td{border-top:2px solid #111;border-bottom:0;vertical-align:top}</style></head><body>
       <h1>${esc(sheet.name)}</h1><p>${esc(formatEntered(gallons))} gal tank · covers ${acres.toFixed(2)} acre · ${new Date().toLocaleDateString()}</p>
       <table><thead><tr><th>Product</th><th>Rate/Acre</th><th>Measurement</th><th>Product needed</th></tr></thead><tbody>
       ${rows.map(({ product: p, needed }) => `<tr><td>${esc(p.name)}</td><td>${esc(formatEntered(p.ratePerAcre))}</td><td>${esc(p.unit)}</td><td class="n">${esc(formatAmount(needed))} ${esc(p.unit.split(" ")[0])}</td></tr>`).join("")}
-      </tbody></table></body></html>`;
+      </tbody><tfoot><tr><th colspan="3">Total (${rows.length} product${rows.length === 1 ? "" : "s"})</th><td class="n">${totals.map((x) => `${esc(formatAmount(x.amount))} ${esc(x.unit)}`).join("<br>")}</td></tr></tfoot></table></body></html>`;
     Print.printAsync({ html }).catch((e) => Alert.alert("Couldn't print", (e as Error).message));
   };
   return (
@@ -142,6 +143,14 @@ function SelectedWindow({ sheet, gallons, rows, acres, onClose }: { sheet: any; 
                 </Row>
               </View>
             ))}
+            <View style={{ borderTopWidth: 2, borderTopColor: t.text, marginHorizontal: -14, paddingHorizontal: 14, paddingTop: 8 }}>
+              <Row style={{ alignItems: "flex-start" }}>
+                <Txt style={{ fontWeight: "700", flex: 1 }}>Total ({rows.length} product{rows.length === 1 ? "" : "s"})</Txt>
+                <View style={{ alignItems: "flex-end" }}>
+                  {totals.map((x) => <Txt key={x.unit}><Txt style={{ fontSize: 18, fontWeight: "800" }}>{formatAmount(x.amount)}</Txt> <Txt muted style={{ fontSize: 12 }}>{x.unit}</Txt></Txt>)}
+                </View>
+              </Row>
+            </View>
           </Card>
           <Button title="Print" onPress={print} />
         </ScrollView>

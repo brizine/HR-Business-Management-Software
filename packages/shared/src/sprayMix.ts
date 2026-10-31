@@ -43,6 +43,13 @@ export function computeMix<P extends MixProductLike>(sheet: { gallonsPerAcre: nu
   };
 }
 
+/** Adds up product amounts per measurement (ounces liquid and pounds dry can't be added together), in first-seen order. */
+export function totalsByUnit(rows: { product: { unit: string }; needed: number }[]) {
+  const totals = new Map<string, number>();
+  for (const r of rows) totals.set(r.product.unit, (totals.get(r.product.unit) ?? 0) + (Number.isFinite(r.needed) ? r.needed : 0));
+  return [...totals].map(([unit, amount]) => ({ unit, amount }));
+}
+
 /** Numbers someone typed in (rates, gallons per acre, tank size): shown exactly, up to 3 decimals. */
 export const formatEntered = (n: number) => (Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 3 }) : "—");
 

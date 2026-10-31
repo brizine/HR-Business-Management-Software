@@ -258,3 +258,17 @@ describe("ageOn", () => {
     expect(ageOn("2000-12-31", new Date(2026, 0, 1))).toBe(25);
   });
 });
+
+import { totalsByUnit } from "../src";
+
+describe("totalsByUnit", () => {
+  it("adds amounts per measurement, never across measurements", () => {
+    const row = (unit: string, needed: number) => ({ product: { unit }, needed });
+    expect(totalsByUnit([row("ounces liquid", 41.2), row("ounces dry", 12.9), row("ounces liquid", 24.1), row("pounds dry", 81.8)])).toEqual([
+      { unit: "ounces liquid", amount: 41.2 + 24.1 },
+      { unit: "ounces dry", amount: 12.9 },
+      { unit: "pounds dry", amount: 81.8 },
+    ]);
+    expect(totalsByUnit([])).toEqual([]);
+  });
+});
