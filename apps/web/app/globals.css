@@ -76,7 +76,7 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
 th { font-size: 12px; color: var(--muted); font-weight: 600; }
-tr:last-child td { border-bottom: 0; }
+tr:last-child td, tr:last-child th[scope="row"] { border-bottom: 0; }
 .tablewrap { overflow-x: auto; }
 
 .btn {
@@ -253,6 +253,26 @@ tr.openrow td { background: var(--bg); }
 .mix-remove { padding: 0 8px; line-height: 1.4; }
 .mix-table tbody tr.mix-add-row { background: transparent; }
 @media print { .mix-editable { border-bottom: 0; } }
+/* Tick products to show (and print) just those */
+.mix-pick-col { width: 32px; padding-right: 0 !important; }
+.mix-pick { width: 18px; height: 18px; cursor: pointer; vertical-align: middle; accent-color: var(--primary); }
+.mix-table tbody tr.mix-picked th, .mix-table tbody tr.mix-picked td, .mix-cards li.mix-picked { box-shadow: inset 0 0 0 9999px color-mix(in srgb, var(--primary) 10%, transparent); }
+.mix-select-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -4px 0 8px; min-height: 30px; }
+.mix-window-backdrop { position: fixed; inset: 0; background: rgba(15, 20, 30, .55); display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px; z-index: 1000; overflow-y: auto; }
+.mix-window { background: var(--surface); color: var(--text); border-radius: 12px; width: min(760px, 100%); padding: 18px 20px 20px; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.mix-window-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.mix-window-close { all: unset; cursor: pointer; font-size: 30px; line-height: 1; width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; color: var(--muted); }
+.mix-window-close:hover { background: var(--border); color: var(--text); }
+.mix-window-close:focus-visible { outline: 2px solid var(--primary); }
+.mix-window .mix-table tbody tr:nth-child(even) { background: var(--stripe); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+/* With the window open, Print prints only the window. */
+@media print {
+  body.printing-window * { visibility: hidden; }
+  body.printing-window .mix-window, body.printing-window .mix-window * { visibility: visible; }
+  body.printing-window .mix-window-backdrop { position: absolute; inset: 0; background: none; padding: 0; display: block; }
+  body.printing-window .mix-window { box-shadow: none; width: 100%; padding: 0; }
+  body.printing-window .mix-window .noprint { display: none !important; }
+}
 .mix-cards { display: none; list-style: none; padding: 0; margin: 0; }
 .mix-cards .card { margin-bottom: 8px; padding: 12px; }
 @media (max-width: 700px) {

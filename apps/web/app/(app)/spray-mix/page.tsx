@@ -93,6 +93,48 @@ function AddProductRow({ sheet, onChange, columns }: { sheet: any; onChange: () 
   );
 }
 
+/**
+ * Just the ticked products, in a window over the page: × closes it (so do Esc and clicking outside),
+ * Print prints only this window.
+ */
+function SelectedWindow({ sheet, gallons, rows, acres, squareFeet, onClose }: { sheet: any; gallons: number; rows: any[]; acres: number; squareFeet: number; onClose: () => void }) {
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", key);
+    document.body.classList.add("printing-window");
+    return () => { document.removeEventListener("keydown", key); document.body.classList.remove("printing-window"); };
+  }, [onClose]);
+  return (
+    <div className="mix-window-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="mix-window" role="dialog" aria-modal="true" aria-labelledby="mix-window-title">
+        <div className="mix-window-head">
+          <div>
+            <h2 id="mix-window-title" style={{ margin: 0 }}>{sheet.name}</h2>
+            <div className="muted">{formatEntered(gallons)} gal tank · covers {acres.toFixed(2)} acre ({Math.round(squareFeet).toLocaleString()} ft²) · {new Date().toLocaleDateString()}</div>
+          </div>
+          <div className="row noprint" style={{ flexWrap: "nowrap" }}>
+            <button type="button" className="btn" onClick={() => window.print()}>Print</button>
+            <button type="button" className="mix-window-close" onClick={onClose} aria-label="Close" title="Close" autoFocus>×</button>
+          </div>
+        </div>
+        <table className="mix-table">
+          <thead><tr><th scope="col">Product</th><th scope="col">Rate/Acre</th><th scope="col">Measurement</th><th scope="col">Product needed</th></tr></thead>
+          <tbody>
+            {rows.map(({ product: p, needed }) => (
+              <tr key={p.id}>
+                <th scope="row" style={{ fontWeight: 500 }}>{p.name}</th>
+                <td>{formatEntered(p.ratePerAcre)}</td>
+                <td>{p.unit}</td>
+                <td><strong style={{ fontSize: 18 }}>{formatAmount(needed)}</strong> <span className="muted">{p.unit.split(" ")[0]}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 /** Everyone: enter tank gallons, Update total. Nothing here is saved to the server. */
 function Calculator({ sheet, canEdit, onChange }: { sheet: any; canEdit: boolean; onChange: () => void }) {
   const [input, setInput] = useState("");
@@ -116,6 +158,18 @@ function Calculator({ sheet, canEdit, onChange }: { sheet: any; canEdit: boolean
   const remove = (p: any) => confirm(`Remove ${p.name} from ${sheet.name}?`) && api(`/spray-mixes/products/${p.id}`, { method: "DELETE" }).then(onChange, (e) => alert(e.message));
   const rateNumber = (v: string) => { const n = Number(v); if (v === "" || !(n >= 0)) throw new Error("Enter a rate of 0 or more."); return n; };
 
+  // Ticked products, shown on their own in a window that can be printed.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [showing, setShowing] = useState(false);
+  useEffect(() => { setPicked(new Set()); setShowing(false); }, [sheet.id]);
+  const ids = mix.rows.map((r) => r.product.id as string);
+  const pickedRows = mix.rows.filter((r) => picked.has(r.product.id as string));
+  const allPicked = ids.length > 0 && ids.every((id) => picked.has(id));
+  const toggle = (id: string) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const pickBox = (p: any) => (
+    <input type="checkbox" className="mix-pick" checked={picked.has(p.id)} onChange={() => toggle(p.id)} aria-label={`Select ${p.name}`} />
+  );
+
   return (
     <>
       <form className="card row noprint-border" onSubmit={(e) => { e.preventDefault(); update(); }} style={{ alignItems: "flex-end" }}>
@@ -127,13 +181,28 @@ function Calculator({ sheet, canEdit, onChange }: { sheet: any; canEdit: boolean
           {!valid ? "Enter the gallons of water you're mixing." : pending ? "Press Update total to recalculate." : `${formatEntered(applied)} gal covers ${mix.acres.toFixed(2)} acre (${Math.round(mix.squareFeet).toLocaleString()} ft²).`}
         </span>
       </form>
+      <div className="mix-select-bar noprint" role="region" aria-label="Selected products">
+        <span className="muted">{picked.size ? `${picked.size} selected` : "Tick products to show just those in their own window."}</span>
+        {picked.size > 0 && (
+          <>
+            <button type="button" className="btn primary sm" onClick={() => setShowing(true)}>Show selected ({pickedRows.length})</button>
+            <button type="button" className="btn sm" onClick={() => setPicked(new Set())}>Clear</button>
+          </>
+        )}
+      </div>
+      {showing && pickedRows.length > 0 && (
+        <SelectedWindow sheet={sheet} gallons={applied} rows={pickedRows} acres={mix.acres} squareFeet={mix.squareFeet} onClose={() => setShowing(false)} />
+      )}
       <div className="card tablewrap mix-table-wrap">
         <table className="mix-table">
           <caption className="sr-only">Product needed for a {applied}-gallon tank of {sheet.name}</caption>
-          <thead><tr><th scope="col">Product</th><th scope="col">Rate/Acre</th><th scope="col">Rate/1000 ft²</th><th scope="col">Measurement</th><th scope="col">Water volume</th><th scope="col">Product needed</th>{canEdit && <th className="noprint"><span className="sr-only">Remove</span></th>}</tr></thead>
+          <thead><tr><th scope="col" className="mix-pick-col noprint">
+            <input type="checkbox" className="mix-pick" checked={allPicked} disabled={!ids.length} onChange={() => setPicked(allPicked ? new Set() : new Set(ids))} aria-label="Select all products" />
+          </th><th scope="col">Product</th><th scope="col">Rate/Acre</th><th scope="col">Rate/1000 ft²</th><th scope="col">Measurement</th><th scope="col">Water volume</th><th scope="col">Product needed</th>{canEdit && <th className="noprint"><span className="sr-only">Remove</span></th>}</tr></thead>
           <tbody>
             {mix.rows.map(({ product: p, ratePer1000, needed }) => (
-              <tr key={p.id}>
+              <tr key={p.id} className={picked.has(p.id!) ? "mix-picked" : undefined}>
+                <td className="mix-pick-col noprint">{pickBox(p)}</td>
                 <th scope="row" style={{ fontWeight: 500 }}>
                   <Editable canEdit={canEdit} label={`${p.name} name`} value={p.name} onSave={(v) => saveProduct(p, { name: v })} />
                 </th>
@@ -145,7 +214,7 @@ function Calculator({ sheet, canEdit, onChange }: { sheet: any; canEdit: boolean
                 {canEdit && <td className="noprint"><button type="button" className="btn sm danger mix-remove" aria-label={`Remove ${p.name}`} title={`Remove ${p.name}`} onClick={() => remove(p)}>×</button></td>}
               </tr>
             ))}
-            {canEdit && <AddProductRow sheet={sheet} onChange={onChange} columns={7} />}
+            {canEdit && <AddProductRow sheet={sheet} onChange={onChange} columns={8} />}
           </tbody>
         </table>
         {!mix.rows.length && <Empty>No products on this sheet yet.</Empty>}
@@ -153,9 +222,9 @@ function Calculator({ sheet, canEdit, onChange }: { sheet: any; canEdit: boolean
       {/* Phones: the amount to add first and large, rates underneath, so nothing scrolls sideways. */}
       <ul className="mix-cards" aria-label={`Product needed for a ${applied}-gallon tank`}>
         {mix.rows.map(({ product: p, ratePer1000, needed }) => (
-          <li key={p.id} className="card">
+          <li key={p.id} className={`card${picked.has(p.id!) ? " mix-picked" : ""}`}>
             <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
-              <strong><Editable canEdit={canEdit} label={`${p.name} name`} value={p.name} onSave={(v) => saveProduct(p, { name: v })} /></strong>
+              <strong><span className="noprint" style={{ marginRight: 8 }}>{pickBox(p)}</span><Editable canEdit={canEdit} label={`${p.name} name`} value={p.name} onSave={(v) => saveProduct(p, { name: v })} /></strong>
               <span><strong style={{ fontSize: 20 }}>{formatAmount(needed)}</strong> <span className="muted">
                 <Editable canEdit={canEdit} kind="select" options={units as string[]} width={140} label={`${p.name} measurement`} value={p.unit} onSave={(v) => saveProduct(p, { unit: v })} />
               </span></span>

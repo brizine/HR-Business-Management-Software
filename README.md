@@ -159,6 +159,9 @@ the "Spray Tank Fill" spreadsheet as a shared calculator.
 - **Starting point:** with no mixes yet, an editor can click **Start with the Truck, Backpack and
   ZSpray mixes** to load all four (the 2 gal truck and ZSpray sheets with the spreadsheet's rates).
 - **Print** gives a clean copy for a clipboard in the truck.
+- **Show selected:** tick the box to the left of any products (or the top box for all), then **Show
+  selected** opens just those in a window with **×** to close and **Print** to print only them. In
+  the app, tap the boxes, then **Show selected**; **Print** sends it to a printer or saves a PDF.
 
 ## Company wiki
 
