@@ -84,7 +84,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
         </div>
       ) : (
         <div className="card">
-          <ProfileDetails e={e} order={order} canArrange={can("owner")} onReordered={(o) => fieldOrder.setData({ order: o })} />
+          <ProfileDetails e={e} order={order} />
           {isInactive(e.status) && "statusReason" in e && (
             <div className="status-reason">
               <div className="muted">

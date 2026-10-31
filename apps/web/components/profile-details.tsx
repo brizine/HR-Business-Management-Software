@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import { PROFILE_FIELDS, ageOn, type ProfileFieldKey } from "@crewdesk/shared";
 import { api, fmtDate, money } from "@/lib/api";
-import { Badge } from "./ui";
+import { useApi } from "@/lib/hooks";
+import { Badge, ErrorBox } from "./ui";
 
 const LABELS = Object.fromEntries(PROFILE_FIELDS.map((f) => [f.key, f.label])) as Record<ProfileFieldKey, string>;
 
@@ -36,67 +37,84 @@ function value(key: ProfileFieldKey, e: any) {
   }
 }
 
-/**
- * The employee's details, in the company's order. The owner can drag them right here to
- * rearrange; the new order saves as soon as they drop and applies to every employee page.
- */
-export function ProfileDetails({ e, order, canArrange = false, onReordered }: { e: any; order: ProfileFieldKey[]; canArrange?: boolean; onReordered?: (order: ProfileFieldKey[]) => void }) {
-  const [list, setList] = useState(order);
-  const [dragging, setDragging] = useState<ProfileFieldKey | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  useEffect(() => setList(order), [order]);
+/** The employee's details, in the company's order (the owner sets it in Settings → Company). */
+export function ProfileDetails({ e, order }: { e: any; order: ProfileFieldKey[] }) {
+  return (
+    <div className="formgrid">
+      {order.map((key) => {
+        const v = value(key, e);
+        return v === null || v === undefined ? null : <div key={key}><div className="muted">{LABELS[key]}</div>{v}</div>;
+      })}
+    </div>
+  );
+}
 
-  const moveOver = (target: ProfileFieldKey) => {
-    if (!dragging || dragging === target) return;
+/**
+ * Owner, in Settings → Company: drag the details into the order every employee page uses.
+ * ↑ ↓ do the same without a mouse.
+ */
+export function EmployeeLayoutEditor() {
+  const saved = useApi<{ order: ProfileFieldKey[] }>("/employees/field-order");
+  const [list, setList] = useState<ProfileFieldKey[] | null>(null);
+  const [dragging, setDragging] = useState<ProfileFieldKey | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  useEffect(() => { if (saved.data) setList(saved.data.order); }, [saved.data]);
+  if (!list || !saved.data) return <ErrorBox error={saved.error} />;
+  const changed = list.join() !== saved.data.order.join();
+
+  const move = (key: ProfileFieldKey, to: number) => {
+    setDone(false);
     setList((l) => {
-      const next = l.filter((k) => k !== dragging);
-      next.splice(next.indexOf(target) + (l.indexOf(dragging) < l.indexOf(target) ? 1 : 0), 0, dragging);
+      const next = l!.filter((k) => k !== key);
+      next.splice(Math.max(0, Math.min(to, next.length)), 0, key);
       return next;
     });
   };
   const save = async () => {
-    setDragging(null);
-    if (list.join() === order.join()) return;
-    setStatus("Saving…");
+    setBusy(true);
+    setError(null);
     try {
-      const res = await api<{ order: ProfileFieldKey[] }>("/employees/field-order", { method: "PUT", body: { order: list } });
-      onReordered?.(res.order);
-      setStatus("Order saved for every employee page.");
+      saved.setData(await api<{ order: ProfileFieldKey[] }>("/employees/field-order", { method: "PUT", body: { order: list } }));
+      setDone(true);
     } catch (err) {
-      setList(order);
-      setStatus((err as Error).message);
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
     }
   };
 
   return (
-    <>
-      {canArrange && (
-        <div className="muted arrange-hint" role="status">
-          {status ?? "Owner: drag any detail by its ⠿ handle to change the order on every employee page."}
-        </div>
-      )}
-      <div className={`formgrid${canArrange ? " arrangeable" : ""}`}>
-        {list.map((key) => {
-          const v = value(key, e);
-          if (v === null || v === undefined) return null;
-          return canArrange ? (
-            <div
-              key={key}
-              draggable
-              className={`arrange-item${dragging === key ? " dragging" : ""}`}
-              onDragStart={(ev) => { setDragging(key); setStatus(null); ev.dataTransfer.effectAllowed = "move"; ev.dataTransfer.setData("text/plain", key); }}
-              onDragOver={(ev) => { ev.preventDefault(); moveOver(key); }}
-              onDrop={(ev) => ev.preventDefault()}
-              onDragEnd={save}
-            >
-              <div className="muted"><span className="drag-handle" aria-hidden="true">⠿</span> {LABELS[key]}</div>
-              {v}
-            </div>
-          ) : (
-            <div key={key}><div className="muted">{LABELS[key]}</div>{v}</div>
-          );
-        })}
+    <div className="card stack">
+      <h2 style={{ margin: 0 }}>Employee page layout</h2>
+      <p className="muted" style={{ margin: 0 }}>The order of the details on every employee&apos;s page. Drag them by the ⠿ handle (or use ↑ ↓), then Save. People still only see the details they&apos;re allowed to.</p>
+      <ol className="field-order-list" aria-label="Employee page layout">
+        {list.map((key, i) => (
+          <li
+            key={key}
+            draggable
+            className={dragging === key ? "dragging" : undefined}
+            onDragStart={(ev) => { setDragging(key); ev.dataTransfer.effectAllowed = "move"; ev.dataTransfer.setData("text/plain", key); }}
+            onDragEnd={() => setDragging(null)}
+            onDragOver={(ev) => { ev.preventDefault(); if (dragging && dragging !== key) move(dragging, i); }}
+            onDrop={(ev) => ev.preventDefault()}
+          >
+            <span className="drag-handle" aria-hidden="true">⠿</span>
+            <span className="field-order-num">{i + 1}</span>
+            <span style={{ flex: 1 }}>{LABELS[key]}</span>
+            <button type="button" className="btn sm" aria-label={`Move ${LABELS[key]} up`} disabled={i === 0} onClick={() => move(key, i - 1)}>↑</button>
+            <button type="button" className="btn sm" aria-label={`Move ${LABELS[key]} down`} disabled={i === list.length - 1} onClick={() => move(key, i + 1)}>↓</button>
+          </li>
+        ))}
+      </ol>
+      <ErrorBox error={error} />
+      <div className="row">
+        <button type="button" className="btn primary" disabled={busy || !changed} onClick={save}>{busy ? "Saving…" : "Save layout"}</button>
+        <button type="button" className="btn" disabled={busy} onClick={() => { setList(PROFILE_FIELDS.map((f) => f.key)); setDone(false); }}>Reset to default</button>
+        {changed && <button type="button" className="btn" disabled={busy} onClick={() => setList(saved.data!.order)}>Undo changes</button>}
+        {done && !changed && <span className="muted" role="status">Saved. Every employee page now uses this order.</span>}
       </div>
-    </>
+    </div>
   );
 }

@@ -208,9 +208,8 @@ the payroll calendar, safety rules and so on.
   edits the choices under **Settings → Company**: add, rename (everyone who has the old name is
   updated), reorder and remove (people who have a removed choice keep it until it's changed). The lists
   start from the titles and departments already in use.
-- **Order of details (owner):** on any employee page, drag a detail (email, phone, home address,
-  emergency contact, pay…) by its ⠿ handle to a new spot; the order saves when you let go and applies
-  to every employee page for everyone.
+- **Employee page layout (owner):** under **Settings → Company**, drag the details (email, phone, home
+  address, emergency contact, pay…) into the order every employee page uses, then **Save layout**.
 - **Photos:** a photo next to each person's name on their profile and on the Team list (initials when
   there's none). Admins add, change or remove anyone's photo from their profile; employees set their
   own from their profile on the website or by tapping the photo on the app's **Me** tab. JPEG, PNG or
