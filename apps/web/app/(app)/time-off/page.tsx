@@ -23,13 +23,18 @@ export default function TimeOff() {
       <PageHead title="Time off">
         <button className="btn primary" onClick={() => setRequesting(!requesting)}>Request time off</button>
       </PageHead>
-      <div className="stats">
-        {balances.data?.map((b) => (
-          <div className="stat" key={b.policyId}>
-            <div className="v">{b.balanceHours}h</div>
-            <div className="l">{b.name}{b.pendingHours ? ` · ${b.pendingHours}h pending` : ""}</div>
+      <div className="card">
+        <h2>Accrued Time Off</h2>
+        {balances.data?.length ? (
+          <div className="stats" style={{ marginBottom: 0 }}>
+            {balances.data.map((b) => (
+              <div className="stat" key={b.policyId}>
+                <div className="v">{b.balanceHours}h</div>
+                <div className="l">{b.name}{b.pendingHours ? ` · ${b.pendingHours}h pending` : ""}</div>
+              </div>
+            ))}
           </div>
-        ))}
+        ) : balances.data ? <p className="muted" style={{ margin: 0 }}>No time off accrued yet.</p> : null}
       </div>
       {requesting && (
         <div className="card">

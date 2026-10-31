@@ -37,14 +37,18 @@ export function TimeOffView() {
 
   return (
     <Screen refreshing={balances.loading} onRefresh={reload}>
-      <Row style={{ flexWrap: "wrap", justifyContent: "flex-start" }}>
-        {balances.data?.map((b) => (
-          <Card key={b.policyId}>
-            <Txt style={{ fontSize: 24, fontWeight: "800" }}>{b.balanceHours}h</Txt>
-            <Txt muted>{b.name}{b.pendingHours ? ` · ${b.pendingHours}h pending` : ""}</Txt>
-          </Card>
-        ))}
-      </Row>
+      <Card title="Accrued Time Off">
+        {balances.data?.length ? (
+          <Row style={{ flexWrap: "wrap", justifyContent: "flex-start", gap: 8 }}>
+            {balances.data.map((b) => (
+              <View key={b.policyId} style={{ borderWidth: 1, borderColor: t.border, borderRadius: 10, padding: 12, minWidth: 130, flexGrow: 1 }}>
+                <Txt style={{ fontSize: 24, fontWeight: "800" }}>{b.balanceHours}h</Txt>
+                <Txt muted>{b.name}{b.pendingHours ? ` · ${b.pendingHours}h pending` : ""}</Txt>
+              </View>
+            ))}
+          </Row>
+        ) : balances.data ? <Txt muted>No time off accrued yet.</Txt> : null}
+      </Card>
 
       {form ? (
         <Card title="Request time off">
