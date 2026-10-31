@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import bcrypt from "bcryptjs";
 import { and, asc, eq } from "drizzle-orm";
-import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, employeeContactSchema, employeeSchema, hasRole, isInactive, orderProfileFields, profileFieldOrderSchema, type Role } from "@crewdesk/shared";
+import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, employeeContactSchema, employeeMenusSchema, employeeSchema, hasRole, isInactive, menuRenameSchema, orderProfileFields, profileFieldOrderSchema, type Role } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, employees, recoveryCodes } from "../db/schema";
+import { companies, employees, jobs, recoveryCodes } from "../db/schema";
 import { authenticate, canManageAccount, requireRole, signOutEverywhere } from "../lib/auth";
 import { sendInvite } from "../lib/invites";
 import { storage } from "../lib/storage";
@@ -76,6 +76,40 @@ const routes: FastifyPluginAsync = async (app) => {
       .where(eq(employees.companyId, req.user.companyId))
       .orderBy(asc(employees.lastName), asc(employees.firstName));
     return hasRole(req.user.role, "manager") ? rows.map(publicEmployee) : rows.map(directoryView);
+  });
+
+  // ---- Job title and Department menus (owner edits; everyone can read) ----
+
+  async function menus(companyId: string) {
+    const [c] = await db.select({ jobTitles: companies.jobTitles, departments: companies.departments }).from(companies).where(eq(companies.id, companyId));
+    const used = await db.select({ title: employees.title, department: employees.department }).from(employees).where(eq(employees.companyId, companyId));
+    const count = (vals: (string | null)[]) => vals.reduce<Record<string, number>>((n, v) => (v ? { ...n, [v]: (n[v] ?? 0) + 1 } : n), {});
+    return { jobTitles: c.jobTitles, departments: c.departments, usage: { jobTitles: count(used.map((u) => u.title)), departments: count(used.map((u) => u.department)) } };
+  }
+
+  app.get("/menus", async (req) => menus(req.user.companyId));
+
+  /** Replaces the lists (adding, removing, reordering). Removing an entry leaves people who have it as they are. */
+  app.put("/menus", { preHandler: requireRole("owner") }, async (req) => {
+    const body = parse(employeeMenusSchema, req.body);
+    await db.update(companies).set(body).where(eq(companies.id, req.user.companyId));
+    return menus(req.user.companyId);
+  });
+
+  /** Renames an entry everywhere: the list, everyone who has it, and (for departments) job postings. */
+  app.post("/menus/rename", { preHandler: requireRole("owner") }, async (req) => {
+    const { kind, from, to } = parse(menuRenameSchema, req.body);
+    const current = await menus(req.user.companyId);
+    const list = current[kind];
+    if (!list.includes(from)) notFound("Menu entry");
+    if (from !== to && list.includes(to)) throw new HttpError(409, `"${to}" is already on the list`);
+    await db.transaction(async (tx) => {
+      await tx.update(companies).set({ [kind]: list.map((v) => (v === from ? to : v)) }).where(eq(companies.id, req.user.companyId));
+      const col = kind === "jobTitles" ? employees.title : employees.department;
+      await tx.update(employees).set(kind === "jobTitles" ? { title: to } : { department: to }).where(and(eq(employees.companyId, req.user.companyId), eq(col, from)));
+      if (kind === "departments") await tx.update(jobs).set({ department: to }).where(and(eq(jobs.companyId, req.user.companyId), eq(jobs.department, from)));
+    });
+    return menus(req.user.companyId);
   });
 
   /** The order of the details on employee pages (the same for everyone in the company). */

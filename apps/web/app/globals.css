@@ -205,6 +205,8 @@ tr.openrow td { background: var(--bg); }
 .arrangeable .arrange-item:hover { border-color: var(--border); background: color-mix(in srgb, var(--primary) 5%, transparent); }
 .arrangeable .arrange-item.dragging { opacity: .45; border-color: var(--primary); }
 .arrangeable .drag-handle { color: var(--muted); }
+.menu-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.menu-list li { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap; }
 .settings-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
 .contact-fieldset { border: 0; padding: 0; margin: 14px 0 0; min-width: 0; }
 .contact-fieldset legend { font-weight: 600; padding: 0; margin-bottom: 6px; }

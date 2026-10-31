@@ -62,6 +62,15 @@ export type EmployeeContact = z.infer<typeof employeeContactSchema>;
 /** Fields that only managers and up (and the person themselves) can see. */
 export const EMPLOYEE_PRIVATE_CONTACT_FIELDS = ["dateOfBirth", "addressLine1", "addressLine2", "city", "state", "zip", "emergencyName", "emergencyRelationship", "emergencyPhone"] as const;
 
+/** The owner's menus for the employee form's Job title and Department. */
+const menuEntry = z.string().trim().min(1).max(80);
+export const employeeMenusSchema = z.object({
+  jobTitles: z.array(menuEntry).max(200).transform((l) => [...new Set(l)]),
+  departments: z.array(menuEntry).max(200).transform((l) => [...new Set(l)]),
+});
+export type EmployeeMenus = z.infer<typeof employeeMenusSchema>;
+export const menuRenameSchema = z.object({ kind: z.enum(["jobTitles", "departments"]), from: menuEntry, to: menuEntry });
+
 /** The details on an employee's page, in the default order. The owner can rearrange them for the company. */
 export const PROFILE_FIELDS = [
   { key: "email", label: "Email" },
@@ -93,8 +102,8 @@ export const employeeSchema = z.object({
   lastName: z.string().min(1),
   email: z.string().email(),
   phone: z.string().optional(),
-  title: z.string().optional(),
-  department: z.string().optional(),
+  title: z.string().trim().max(120).nullable().optional(),
+  department: z.string().trim().max(120).nullable().optional(),
   role: z.enum(ROLES).default("employee"),
   managerId: z.string().uuid().nullable().optional(),
   employmentType: z.enum(EMPLOYMENT_TYPES).default("full_time"),

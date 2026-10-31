@@ -21,7 +21,8 @@ const hash = await bcrypt.hash("password123", 10);
 // Two-factor is optional in the demo so you can click straight in; real companies default to requiring it for owners and admins.
 const [company] = await db
   .insert(s.companies)
-  .values({ name: "Demo Landscaping & Haul", twoFactorRequiredFor: "none", legalName: "Demo Landscaping & Haul LLC", ein: "12-3456789", address: "100 Congress Ave, Austin, TX 78701" })
+  .values({ name: "Demo Landscaping & Haul", twoFactorRequiredFor: "none", legalName: "Demo Landscaping & Haul LLC", ein: "12-3456789", address: "100 Congress Ave, Austin, TX 78701",
+    jobTitles: ["Owner", "Crew Lead", "Mechanic", "Driver", "CDL Truck Driver", "Spray Technician"], departments: ["Field", "Shop", "Office"] })
   .returning();
 const companyId = company.id;
 

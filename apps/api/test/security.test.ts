@@ -275,6 +275,24 @@ describe("sessions", () => {
     expect((await call("GET", "/employees/field-order", managerToken)).body.order).toEqual(saved.body.order);
   });
 
+  it("job title and department menus: the owner edits them, renames carry over to people", async () => {
+    const id = await hire("titled", "manager");
+    const token = (await login("titled")).body.token;
+    expect((await call("PUT", "/employees/menus", token, { jobTitles: ["X"], departments: [] })).status).toBe(403);
+    const set = await call("PUT", "/employees/menus", ownerToken, { jobTitles: ["Spray Tech", "Crew Lead", "Spray Tech"], departments: ["Field"] });
+    expect(set.body.jobTitles).toEqual(["Spray Tech", "Crew Lead"]);
+    await call("PATCH", `/employees/${id}`, ownerToken, { title: "Spray Tech", department: "Field" });
+    expect((await call("GET", "/employees/menus", token)).body.usage.jobTitles["Spray Tech"]).toBe(1);
+
+    const renamed = await call("POST", "/employees/menus/rename", ownerToken, { kind: "jobTitles", from: "Spray Tech", to: "Spray Technician" });
+    expect(renamed.body.jobTitles).toEqual(["Spray Technician", "Crew Lead"]);
+    expect((await call("GET", `/employees/${id}`, ownerToken)).body.title).toBe("Spray Technician");
+    expect((await call("POST", "/employees/menus/rename", ownerToken, { kind: "jobTitles", from: "Crew Lead", to: "Spray Technician" })).status).toBe(409);
+    expect((await call("POST", "/employees/menus/rename", token, { kind: "departments", from: "Field", to: "Crew" })).status).toBe(403);
+    // "—" clears someone's department.
+    expect((await call("PATCH", `/employees/${id}`, ownerToken, { department: null })).body.department).toBeNull();
+  });
+
   it("keeps a reason for inactive or terminated, visible to managers only", async () => {
     const id = await hire("reasoned", "employee");
     await hire("peer", "employee");

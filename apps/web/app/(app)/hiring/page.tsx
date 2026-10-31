@@ -7,11 +7,13 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
 import { InviteResult } from "@/components/invite-result";
+import { MenuSelect, useMenus } from "@/components/menu-select";
 
 /** Details for a new hire: start date, pay, manager, checklist and invite. */
 function HireForm({ applicant, job, templates, staff, onCancel, onHired }: {
   applicant: any; job: any; templates: any[]; staff: any[]; onCancel: () => void; onHired: (res: any) => void;
 }) {
+  const menus = useMenus();
   const { me } = useAuth();
   const { busy, error, run } = useAction();
   const managers = staff.filter((e) => ["manager", "admin", "owner"].includes(e.role) && !isInactive(e.status));
@@ -31,8 +33,8 @@ function HireForm({ applicant, job, templates, staff, onCancel, onHired }: {
       }}>
         <div className="formgrid">
           <label>Start date<input name="startDate" type="date" required /></label>
-          <label>Job title<input name="title" defaultValue={job?.title ?? ""} /></label>
-          <label>Department<input name="department" defaultValue={job?.department ?? ""} /></label>
+          <MenuSelect name="title" label="Job title" options={menus.jobTitles} current={job?.title} />
+          <MenuSelect name="department" label="Department" options={menus.departments} current={job?.department} />
           <label>Manager
             <select name="managerId" defaultValue={managers.find((m) => m.id === me?.user.id) ? me?.user.id : ""}>
               <option value="">—</option>
@@ -62,6 +64,7 @@ function HireForm({ applicant, job, templates, staff, onCancel, onHired }: {
 }
 
 export default function Hiring() {
+  const menus = useMenus();
   const { me, can } = useAuth();
   const jobs = useApi<any[]>("/jobs");
   const [jobId, setJobId] = useState<string | null>(null);
@@ -91,7 +94,7 @@ export default function Hiring() {
           }}>
             <div className="formgrid">
               <label>Title<input name="title" required /></label>
-              <label>Department<input name="department" /></label>
+              <MenuSelect name="department" label="Department" options={menus.departments} />
               <label>Location<input name="location" /></label>
               <label>Pay range<input name="payRange" placeholder="$20–$25/hr" /></label>
             </div>

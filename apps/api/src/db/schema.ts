@@ -52,6 +52,9 @@ export const companies = pgTable("companies", {
   clockOutLocation: text("clock_out_location").notNull().default("optional"),
   /** Order of the details on employee pages, set by the owner (see PROFILE_FIELDS). Null = default order. */
   profileFieldOrder: jsonb("profile_field_order").$type<string[]>(),
+  /** Choices for the Job title and Department menus, set by the owner (in their order). */
+  jobTitles: jsonb("job_titles").$type<string[]>().notNull().default([]),
+  departments: jsonb("departments").$type<string[]>().notNull().default([]),
   createdAt: createdAt(),
 });
 

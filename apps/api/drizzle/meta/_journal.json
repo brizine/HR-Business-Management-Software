@@ -141,6 +141,13 @@
       "when": 1793468075573,
       "tag": "0019_profile_field_order",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793470796628,
+      "tag": "0020_employee_menus",
+      "breakpoints": true
     }
   ]
 }

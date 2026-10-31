@@ -3,9 +3,11 @@ import { useState } from "react";
 import { EMPLOYEE_STATUSES, EMPLOYMENT_TYPES, PAY_TYPES, ROLES, isInactive } from "@crewdesk/shared";
 import { formValues } from "./ui";
 import { ContactFields, withClearedContact } from "./contact-fields";
+import { MenuSelect, useMenus } from "./menu-select";
 
 export function EmployeeFields({ initial = {} as any, employees = [] as any[] }) {
   const [status, setStatus] = useState<string>(initial.status ?? "active");
+  const menus = useMenus();
   return (
     <>
     <div className="formgrid">
@@ -13,8 +15,8 @@ export function EmployeeFields({ initial = {} as any, employees = [] as any[] })
       <label>Last name<input name="lastName" defaultValue={initial.lastName} required /></label>
       <label>Email<input name="email" type="email" defaultValue={initial.email} required /></label>
       <label>Phone<input name="phone" defaultValue={initial.phone ?? ""} /></label>
-      <label>Job title<input name="title" defaultValue={initial.title ?? ""} /></label>
-      <label>Department<input name="department" defaultValue={initial.department ?? ""} /></label>
+      <MenuSelect name="title" label="Job title" options={menus.jobTitles} current={initial.title} />
+      <MenuSelect name="department" label="Department" options={menus.departments} current={initial.department} />
       <label>Role
         <select name="role" defaultValue={initial.role ?? "employee"}>{ROLES.map((r) => <option key={r}>{r}</option>)}</select>
       </label>
@@ -53,6 +55,9 @@ export function employeeBody(form: HTMLFormElement) {
   const { payRate, ...v } = formValues(form);
   if (payRate != null) v.payRateCents = Math.round(payRate * 100);
   v.managerId = v.managerId ?? null;
+  // "—" in a menu clears it.
+  v.title = v.title ?? null;
+  v.department = v.department ?? null;
   withClearedContact(v);
   // An emptied reason box clears the reason.
   v.statusReason = isInactive(v.status) ? v.statusReason ?? null : null;
