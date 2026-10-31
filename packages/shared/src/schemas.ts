@@ -62,6 +62,32 @@ export type EmployeeContact = z.infer<typeof employeeContactSchema>;
 /** Fields that only managers and up (and the person themselves) can see. */
 export const EMPLOYEE_PRIVATE_CONTACT_FIELDS = ["dateOfBirth", "addressLine1", "addressLine2", "city", "state", "zip", "emergencyName", "emergencyRelationship", "emergencyPhone"] as const;
 
+/** The details on an employee's page, in the default order. The owner can rearrange them for the company. */
+export const PROFILE_FIELDS = [
+  { key: "email", label: "Email" },
+  { key: "phone", label: "Phone" },
+  { key: "role", label: "Role" },
+  { key: "hireDate", label: "Hire date" },
+  { key: "pay", label: "Pay" },
+  { key: "employment", label: "Employment" },
+  { key: "login", label: "App login" },
+  { key: "twoFactor", label: "Two-factor" },
+  { key: "signIn", label: "Sign-in (locked)" },
+  { key: "dateOfBirth", label: "Date of birth" },
+  { key: "address", label: "Home address" },
+  { key: "emergency", label: "Emergency contact" },
+] as const;
+export type ProfileFieldKey = (typeof PROFILE_FIELDS)[number]["key"];
+const PROFILE_FIELD_KEYS = PROFILE_FIELDS.map((f) => f.key) as [ProfileFieldKey, ...ProfileFieldKey[]];
+export const profileFieldOrderSchema = z.object({ order: z.array(z.enum(PROFILE_FIELD_KEYS)).max(PROFILE_FIELDS.length) });
+
+/** The saved order, ignoring unknown keys and adding any fields it doesn't mention (e.g. ones added later) at the end. */
+export function orderProfileFields(saved: readonly string[] | null | undefined): ProfileFieldKey[] {
+  const known = new Set<string>(PROFILE_FIELD_KEYS);
+  const picked = [...new Set((saved ?? []).filter((k) => known.has(k)))] as ProfileFieldKey[];
+  return [...picked, ...PROFILE_FIELD_KEYS.filter((k) => !picked.includes(k))];
+}
+
 export const employeeSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),

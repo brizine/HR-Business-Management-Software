@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import bcrypt from "bcryptjs";
 import { and, asc, eq } from "drizzle-orm";
-import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, employeeContactSchema, employeeSchema, hasRole, isInactive, type Role } from "@crewdesk/shared";
+import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, employeeContactSchema, employeeSchema, hasRole, isInactive, orderProfileFields, profileFieldOrderSchema, type Role } from "@crewdesk/shared";
 import { db } from "../db";
-import { employees, recoveryCodes } from "../db/schema";
+import { companies, employees, recoveryCodes } from "../db/schema";
 import { authenticate, canManageAccount, requireRole, signOutEverywhere } from "../lib/auth";
 import { sendInvite } from "../lib/invites";
 import { storage } from "../lib/storage";
@@ -76,6 +76,19 @@ const routes: FastifyPluginAsync = async (app) => {
       .where(eq(employees.companyId, req.user.companyId))
       .orderBy(asc(employees.lastName), asc(employees.firstName));
     return hasRole(req.user.role, "manager") ? rows.map(publicEmployee) : rows.map(directoryView);
+  });
+
+  /** The order of the details on employee pages (the same for everyone in the company). */
+  app.get("/field-order", async (req) => {
+    const [c] = await db.select({ order: companies.profileFieldOrder }).from(companies).where(eq(companies.id, req.user.companyId));
+    return { order: orderProfileFields(c?.order) };
+  });
+
+  app.put("/field-order", { preHandler: requireRole("owner") }, async (req) => {
+    const { order } = parse(profileFieldOrderSchema, req.body);
+    const full = orderProfileFields(order);
+    await db.update(companies).set({ profileFieldOrder: full }).where(eq(companies.id, req.user.companyId));
+    return { order: full };
   });
 
   app.get<{ Params: { id: string } }>("/:id", async (req) => {

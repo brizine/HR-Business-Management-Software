@@ -50,6 +50,8 @@ export const companies = pgTable("companies", {
   /** Location rule for clocking in / out: optional | required | geofence_flag | geofence_block */
   clockInLocation: text("clock_in_location").notNull().default("optional"),
   clockOutLocation: text("clock_out_location").notNull().default("optional"),
+  /** Order of the details on employee pages, set by the owner (see PROFILE_FIELDS). Null = default order. */
+  profileFieldOrder: jsonb("profile_field_order").$type<string[]>(),
   createdAt: createdAt(),
 });
 

@@ -1,0 +1,1 @@
+ALTER TABLE "companies" ADD COLUMN "profile_field_order" jsonb;

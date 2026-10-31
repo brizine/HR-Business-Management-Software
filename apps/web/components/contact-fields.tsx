@@ -1,6 +1,6 @@
 "use client";
-import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, ageOn } from "@crewdesk/shared";
-import { fmtDate, today } from "@/lib/api";
+import { EMPLOYEE_PRIVATE_CONTACT_FIELDS } from "@crewdesk/shared";
+import { today } from "@/lib/api";
 
 /** Date of birth, home address and emergency contact inputs, shared by the employee form and Settings → My info. */
 export function ContactFields({ initial = {} as any }) {
@@ -31,26 +31,4 @@ export function ContactFields({ initial = {} as any }) {
 export function withClearedContact(v: Record<string, any>) {
   for (const f of EMPLOYEE_PRIVATE_CONTACT_FIELDS) v[f] = v[f] ?? null;
   return v;
-}
-
-/** Read-only view for profiles. */
-export function ContactSummary({ e }: { e: any }) {
-  const dob = e.dateOfBirth ? `${fmtDate(e.dateOfBirth)} (age ${ageOn(e.dateOfBirth)})` : "—";
-  const street = [e.addressLine1, e.addressLine2].filter(Boolean).join(", ");
-  const cityLine = [e.city, [e.state, e.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
-  return (
-    <>
-      <div><div className="muted">Date of birth</div>{dob}</div>
-      <div><div className="muted">Home address</div>{street || cityLine ? <>{street}{street && cityLine && <br />}{cityLine}</> : "—"}</div>
-      <div>
-        <div className="muted">Emergency contact</div>
-        {e.emergencyName || e.emergencyPhone ? (
-          <>
-            {e.emergencyName ?? ""}{e.emergencyRelationship ? ` (${e.emergencyRelationship})` : ""}
-            {e.emergencyPhone && <div><a href={`tel:${e.emergencyPhone}`}>{e.emergencyPhone}</a></div>}
-          </>
-        ) : "—"}
-      </div>
-    </>
-  );
 }

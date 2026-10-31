@@ -11,9 +11,9 @@ import { OnboardingTask } from "@/components/onboarding-task";
 import { DownloadPdf, FormStatus, signedLine } from "@/components/tax-form-bits";
 import { AvailabilityEditor } from "@/components/availability-editor";
 import { EmployeeFields, employeeBody } from "@/components/employee-form";
-import { ContactSummary } from "@/components/contact-fields";
+import { FieldOrderEditor, ProfileDetails } from "@/components/profile-details";
 import { PhotoEditor } from "@/components/avatar";
-import { isInactive } from "@crewdesk/shared";
+import { PROFILE_FIELDS, isInactive, type ProfileFieldKey } from "@crewdesk/shared";
 
 /** Admins: the person's W-4, I-9 and direct deposit on file (current and earlier versions). */
 function EmployeeTaxForms({ employeeId }: { employeeId: string }) {
@@ -43,6 +43,8 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
   const tasks = useApi<any[]>(can("manager") ? `/onboarding/tasks?employeeId=${id}` : null);
   const templates = useApi<any[]>(can("admin") ? "/onboarding/templates" : null);
   const [editing, setEditing] = useState(false);
+  const fieldOrder = useApi<{ order: ProfileFieldKey[] }>("/employees/field-order");
+  const order = fieldOrder.data?.order ?? PROFILE_FIELDS.map((f) => f.key);
   const [invite, setInvite] = useState<{ emailed: boolean; link: string } | null>(null);
   const { busy, error, run } = useAction();
   const e = emp.data;
@@ -75,6 +77,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
               });
             }}
           >
+            {can("owner") && <FieldOrderEditor order={order} onSaved={(o) => fieldOrder.setData({ order: o })} />}
             <EmployeeFields initial={e} employees={all.data ?? []} />
             <ErrorBox error={error} />
             <div><button className="btn primary" disabled={busy}>Save changes</button></div>
@@ -82,18 +85,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
         </div>
       ) : (
         <div className="card">
-          <div className="formgrid">
-            <div><div className="muted">Email</div>{e.email}</div>
-            <div><div className="muted">Phone</div>{e.phone ?? "—"}</div>
-            <div><div className="muted">Role</div>{e.role}</div>
-            <div><div className="muted">Hire date</div>{fmtDate(e.startDate)}</div>
-            {"payRateCents" in e && <div><div className="muted">Pay</div>{money(e.payRateCents)} {e.payType === "hourly" ? "/hr" : "/yr"}</div>}
-            <div><div className="muted">Employment</div>{e.employmentType?.replace("_", " ")}</div>
-            <div><div className="muted">App login</div>{e.hasLogin ? "Yes" : "Not set"}</div>
-            {"twoFactorEnabled" in e && <div><div className="muted">Two-factor</div>{e.twoFactorEnabled ? "On" : "Off"}</div>}
-            {e.locked && <div><div className="muted">Sign-in</div><Badge value="locked" /></div>}
-            {"emergencyName" in e && <ContactSummary e={e} />}
-          </div>
+          <ProfileDetails e={e} order={order} />
           {isInactive(e.status) && "statusReason" in e && (
             <div className="status-reason">
               <div className="muted">

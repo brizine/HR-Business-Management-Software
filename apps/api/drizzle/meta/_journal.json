@@ -134,6 +134,13 @@
       "when": 1793385922879,
       "tag": "0018_employee_photo",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793468075573,
+      "tag": "0019_profile_field_order",
+      "breakpoints": true
     }
   ]
 }

@@ -261,6 +261,20 @@ describe("sessions", () => {
     expect((await app.inject({ method: "GET", url: `/employees/${id}/photo`, headers: { authorization: `Bearer ${otherToken}` } })).statusCode).toBe(404);
   });
 
+  it("only the owner sets the order of details on employee pages", async () => {
+    await hire("arranger", "manager");
+    const managerToken = (await login("arranger")).body.token;
+    const def = (await call("GET", "/employees/field-order", managerToken)).body.order;
+    expect(def.slice(0, 3)).toEqual(["email", "phone", "role"]);
+    expect((await call("PUT", "/employees/field-order", managerToken, { order: ["address"] })).status).toBe(403);
+    expect((await call("PUT", "/employees/field-order", ownerToken, { order: ["nope"] })).status).toBe(400);
+    // A partial order keeps the rest after it.
+    const saved = await call("PUT", "/employees/field-order", ownerToken, { order: ["address", "phone", "emergency"] });
+    expect(saved.body.order.slice(0, 4)).toEqual(["address", "phone", "emergency", "email"]);
+    expect(saved.body.order).toHaveLength(def.length);
+    expect((await call("GET", "/employees/field-order", managerToken)).body.order).toEqual(saved.body.order);
+  });
+
   it("keeps a reason for inactive or terminated, visible to managers only", async () => {
     const id = await hire("reasoned", "employee");
     await hire("peer", "employee");

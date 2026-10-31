@@ -204,6 +204,9 @@ the payroll calendar, safety rules and so on.
 - **Team filters:** search, status (each choice shows how many people have it), job title, department, hire date range (**Hired** from / to) and,
   for managers and up, pay type and pay range. Filters are kept in the page address, so a filtered
   list can be bookmarked or shared.
+- **Order of details (owner):** clicking **Edit** on any employee shows **Field order**; drag the details
+  (email, phone, home address, emergency contact, pay…) into the order you want and **Save order**. It
+  applies to every employee page for everyone. The ↑ ↓ buttons do the same without a mouse.
 - **Photos:** a photo next to each person's name on their profile and on the Team list (initials when
   there's none). Admins add, change or remove anyone's photo from their profile; employees set their
   own from their profile on the website or by tapping the photo on the app's **Me** tab. JPEG, PNG or
