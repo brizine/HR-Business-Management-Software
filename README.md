@@ -210,6 +210,9 @@ the payroll calendar, safety rules and so on.
   start from the titles and departments already in use.
 - **Employee page layout (owner):** under **Settings → Company**, drag the details (email, phone, home
   address, emergency contact, pay…) into the order every employee page uses, then **Save layout**.
+- **Team page filters (owner):** also under **Settings → Company**, drag the Team page's filters into
+  order and untick any to hide them, then **Save layout**. A hidden filter never applies, even from an
+  old bookmarked link. Pay filters only ever show for managers and up.
 - **Photos:** a photo next to each person's name on their profile and on the Team list (initials when
   there's none). Admins add, change or remove anyone's photo from their profile; employees set their
   own from their profile on the website or by tapping the photo on the app's **Me** tab. JPEG, PNG or

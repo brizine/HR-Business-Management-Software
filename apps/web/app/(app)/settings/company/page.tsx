@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead } from "@/components/ui";
 import { SettingsTabs } from "@/components/settings-tabs";
-import { EmployeeLayoutEditor } from "@/components/profile-details";
+import { EmployeeLayoutEditor, TeamFilterLayoutEditor } from "@/components/layout-editor";
 
 type Kind = "jobTitles" | "departments";
 type Menus = { jobTitles: string[]; departments: string[]; usage: Record<Kind, Record<string, number>> };
@@ -102,6 +102,7 @@ export default function CompanySettings() {
       {!can("owner") ? <p className="muted">Only the owner can change company settings.</p> : !menus.data ? <ErrorBox error={menus.error} /> : (
         <>
         <EmployeeLayoutEditor />
+        <TeamFilterLayoutEditor />
         <div className="grid cols-2" style={{ alignItems: "start" }}>
           <MenuEditor kind="jobTitles" title="Job titles" noun="job title" data={menus.data} onChange={menus.setData} />
           <MenuEditor kind="departments" title="Departments" noun="department" data={menus.data} onChange={menus.setData} />

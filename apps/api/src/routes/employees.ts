@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import bcrypt from "bcryptjs";
 import { and, asc, eq } from "drizzle-orm";
-import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, employeeContactSchema, employeeMenusSchema, employeeSchema, hasRole, isInactive, menuRenameSchema, orderProfileFields, profileFieldOrderSchema, type Role } from "@crewdesk/shared";
+import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, employeeContactSchema, employeeMenusSchema, employeeSchema, hasRole, isInactive, menuRenameSchema, normalizeTeamFilterLayout, orderProfileFields, profileFieldOrderSchema, teamFilterLayoutSchema, type Role } from "@crewdesk/shared";
 import { db } from "../db";
 import { companies, employees, jobs, recoveryCodes } from "../db/schema";
 import { authenticate, canManageAccount, requireRole, signOutEverywhere } from "../lib/auth";
@@ -110,6 +110,18 @@ const routes: FastifyPluginAsync = async (app) => {
       if (kind === "departments") await tx.update(jobs).set({ department: to }).where(and(eq(jobs.companyId, req.user.companyId), eq(jobs.department, from)));
     });
     return menus(req.user.companyId);
+  });
+
+  /** The Team page's filters: their order and which are hidden (the same for everyone in the company). */
+  app.get("/team-filters", async (req) => {
+    const [c] = await db.select({ layout: companies.teamFilterLayout }).from(companies).where(eq(companies.id, req.user.companyId));
+    return normalizeTeamFilterLayout(c?.layout);
+  });
+
+  app.put("/team-filters", { preHandler: requireRole("owner") }, async (req) => {
+    const layout = normalizeTeamFilterLayout(parse(teamFilterLayoutSchema, req.body));
+    await db.update(companies).set({ teamFilterLayout: layout }).where(eq(companies.id, req.user.companyId));
+    return layout;
   });
 
   /** The order of the details on employee pages (the same for everyone in the company). */

@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
-import { Suspense, useMemo, useState } from "react";
+import { Fragment, Suspense, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { EMPLOYEE_STATUSES } from "@crewdesk/shared";
+import { EMPLOYEE_STATUSES, TEAM_FILTERS, type TeamFilterKey } from "@crewdesk/shared";
 import { api, fmtDate, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -14,6 +14,10 @@ import { Avatar } from "@/components/avatar";
 const NONE = "__none";
 const FILTER_KEYS = ["q", "status", "title", "dept", "hiredFrom", "hiredTo", "payType", "payMin", "payMax"] as const;
 type Filters = Record<(typeof FILTER_KEYS)[number], string>;
+/** Which address-bar values belong to each filter the owner can show or hide. */
+const FILTER_PARAMS: Record<TeamFilterKey, (typeof FILTER_KEYS)[number][]> = {
+  search: ["q"], status: ["status"], jobTitle: ["title"], department: ["dept"], hired: ["hiredFrom", "hiredTo"], pay: ["payType", "payMin", "payMax"],
+};
 
 /** Distinct values of a field, sorted, for a filter dropdown. */
 const distinct = (rows: any[], key: string) =>
@@ -46,7 +50,10 @@ function People() {
   const params = useSearchParams();
   const router = useRouter();
   const path = usePathname();
-  const filters = Object.fromEntries(FILTER_KEYS.map((k) => [k, params.get(k) ?? ""])) as Filters;
+  const layout = useApi<{ order: TeamFilterKey[]; hidden: TeamFilterKey[] }>("/employees/team-filters").data ?? { order: TEAM_FILTERS.map((f) => f.key), hidden: [] };
+  // A hidden filter never applies, even from an old bookmark.
+  const hiddenParams = new Set(layout.hidden.flatMap((k) => FILTER_PARAMS[k]));
+  const filters = Object.fromEntries(FILTER_KEYS.map((k) => [k, hiddenParams.has(k) ? "" : params.get(k) ?? ""])) as Filters;
   const setFilter = (patch: Partial<Filters>) => {
     const next = new URLSearchParams(params.toString());
     for (const [k, v] of Object.entries(patch)) {
@@ -75,62 +82,82 @@ function People() {
     ? `${rows.length} ${filters.status}${otherFilters ? " matching your filters" : ""} · ${people(all.length)} in all`
     : active ? `Showing ${rows.length} of ${people(all.length)}` : people(all.length);
 
+  // The owner sets the order and which filters show (Settings → Company).
+  const filterControls: Record<TeamFilterKey, React.ReactNode> = {
+    search: (
+      <label>Search
+        <input type="search" placeholder="Name, email…" value={filters.q} onChange={(e) => setFilter({ q: e.target.value })} />
+      </label>
+    ),
+    status: (
+      <label>Status
+        <select value={filters.status} onChange={(e) => setFilter({ status: e.target.value })}>
+          <option value="">All ({statusTotal})</option>
+          {EMPLOYEE_STATUSES.map((s) => <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)} ({byStatus[s] ?? 0})</option>)}
+        </select>
+      </label>
+    ),
+    jobTitle: (
+      <label>Job title
+        <select value={filters.title} onChange={(e) => setFilter({ title: e.target.value })}>
+          <option value="">All</option>
+          {titles.map((t) => <option key={t} value={t}>{t}</option>)}
+          <option value={NONE}>(no title)</option>
+        </select>
+      </label>
+    ),
+    department: (
+      <label>Department
+        <select value={filters.dept} onChange={(e) => setFilter({ dept: e.target.value })}>
+          <option value="">All</option>
+          {depts.map((d) => <option key={d} value={d}>{d}</option>)}
+          <option value={NONE}>(no department)</option>
+        </select>
+      </label>
+    ),
+    hired: (
+      <fieldset className="pay-range date-range">
+        <legend>Hired</legend>
+        <input type="date" aria-label="Hired on or after" value={filters.hiredFrom} max={filters.hiredTo || undefined} onChange={(e) => setFilter({ hiredFrom: e.target.value })} />
+        <span aria-hidden="true">–</span>
+        <input type="date" aria-label="Hired on or before" value={filters.hiredTo} min={filters.hiredFrom || undefined} onChange={(e) => setFilter({ hiredTo: e.target.value })} />
+      </fieldset>
+    ),
+    pay: seesPay && (
+      <>
+        <label>Pay type
+          <select value={filters.payType} onChange={(e) => setFilter({ payType: e.target.value })}>
+            <option value="">All</option>
+            <option value="hourly">Hourly</option>
+            <option value="salary">Salaried</option>
+          </select>
+        </label>
+        {filters.payType && (
+          <fieldset className="pay-range">
+            <legend>Pay {filters.payType === "hourly" ? "($/hour)" : "($/year)"}</legend>
+            <input type="number" inputMode="decimal" min="0" step="any" aria-label="Minimum pay" placeholder="Min" value={filters.payMin} onChange={(e) => setFilter({ payMin: e.target.value })} />
+            <span aria-hidden="true">–</span>
+            <input type="number" inputMode="decimal" min="0" step="any" aria-label="Maximum pay" placeholder="Max" value={filters.payMax} onChange={(e) => setFilter({ payMax: e.target.value })} />
+          </fieldset>
+        )}
+      </>
+    ),
+  };
+
+
+  const shownFilters = layout.order.filter((k) => !layout.hidden.includes(k) && (k !== "pay" || seesPay));
+
   return (
     <>
       <PageHead title="Team" sub={<span role="status">{summary}</span>}>
         {can("admin") && <button className="btn primary" onClick={() => setAdding(!adding)}>Add employee</button>}
       </PageHead>
-      <form className="card filters" role="search" aria-label="Filter the team" onSubmit={(e) => e.preventDefault()}>
-        <label>Search
-          <input type="search" placeholder="Name, email…" value={filters.q} onChange={(e) => setFilter({ q: e.target.value })} />
-        </label>
-        <label>Status
-          <select value={filters.status} onChange={(e) => setFilter({ status: e.target.value })}>
-            <option value="">All ({statusTotal})</option>
-            {EMPLOYEE_STATUSES.map((s) => <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)} ({byStatus[s] ?? 0})</option>)}
-          </select>
-        </label>
-        <label>Job title
-          <select value={filters.title} onChange={(e) => setFilter({ title: e.target.value })}>
-            <option value="">All</option>
-            {titles.map((t) => <option key={t} value={t}>{t}</option>)}
-            <option value={NONE}>(no title)</option>
-          </select>
-        </label>
-        <label>Department
-          <select value={filters.dept} onChange={(e) => setFilter({ dept: e.target.value })}>
-            <option value="">All</option>
-            {depts.map((d) => <option key={d} value={d}>{d}</option>)}
-            <option value={NONE}>(no department)</option>
-          </select>
-        </label>
-        <fieldset className="pay-range date-range">
-          <legend>Hired</legend>
-          <input type="date" aria-label="Hired on or after" value={filters.hiredFrom} max={filters.hiredTo || undefined} onChange={(e) => setFilter({ hiredFrom: e.target.value })} />
-          <span aria-hidden="true">–</span>
-          <input type="date" aria-label="Hired on or before" value={filters.hiredTo} min={filters.hiredFrom || undefined} onChange={(e) => setFilter({ hiredTo: e.target.value })} />
-        </fieldset>
-        {seesPay && (
-          <>
-            <label>Pay type
-              <select value={filters.payType} onChange={(e) => setFilter({ payType: e.target.value })}>
-                <option value="">All</option>
-                <option value="hourly">Hourly</option>
-                <option value="salary">Salaried</option>
-              </select>
-            </label>
-            {filters.payType && (
-              <fieldset className="pay-range">
-                <legend>Pay {filters.payType === "hourly" ? "($/hour)" : "($/year)"}</legend>
-                <input type="number" inputMode="decimal" min="0" step="any" aria-label="Minimum pay" placeholder="Min" value={filters.payMin} onChange={(e) => setFilter({ payMin: e.target.value })} />
-                <span aria-hidden="true">–</span>
-                <input type="number" inputMode="decimal" min="0" step="any" aria-label="Maximum pay" placeholder="Max" value={filters.payMax} onChange={(e) => setFilter({ payMax: e.target.value })} />
-              </fieldset>
-            )}
-          </>
-        )}
-        {active && <button type="button" className="btn" onClick={() => router.replace(path, { scroll: false })}>Clear filters</button>}
-      </form>
+      {shownFilters.length > 0 && (
+        <form className="card filters" role="search" aria-label="Filter the team" onSubmit={(e) => e.preventDefault()}>
+          {shownFilters.map((k) => <Fragment key={k}>{filterControls[k]}</Fragment>)}
+          {active && <button type="button" className="btn" onClick={() => router.replace(path, { scroll: false })}>Clear filters</button>}
+        </form>
+      )}
       {added && (
         <div className="card">
           <div className="row" style={{ justifyContent: "space-between" }}>

@@ -293,6 +293,18 @@ describe("sessions", () => {
     expect((await call("PATCH", `/employees/${id}`, ownerToken, { department: null })).body.department).toBeNull();
   });
 
+  it("only the owner sets the Team page filter layout", async () => {
+    await hire("filterer", "manager");
+    const token = (await login("filterer")).body.token;
+    expect((await call("GET", "/employees/team-filters", token)).body.order[0]).toBe("search");
+    expect((await call("PUT", "/employees/team-filters", token, { order: ["status"], hidden: [] })).status).toBe(403);
+    const saved = await call("PUT", "/employees/team-filters", ownerToken, { order: ["department", "status"], hidden: ["hired"] });
+    expect(saved.body.order.slice(0, 3)).toEqual(["department", "status", "search"]);
+    expect(saved.body.hidden).toEqual(["hired"]);
+    expect((await call("GET", "/employees/team-filters", token)).body).toEqual(saved.body);
+    expect((await call("PUT", "/employees/team-filters", ownerToken, { order: ["bogus"], hidden: [] })).status).toBe(400);
+  });
+
   it("keeps a reason for inactive or terminated, visible to managers only", async () => {
     const id = await hire("reasoned", "employee");
     await hire("peer", "employee");
