@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { Fragment, Suspense, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { EMPLOYEE_STATUSES, TEAM_FILTERS, type TeamFilterKey } from "@crewdesk/shared";
+import { EMPLOYEE_STATUSES } from "@crewdesk/shared";
 import { api, fmtDate, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -14,10 +14,6 @@ import { Avatar } from "@/components/avatar";
 const NONE = "__none";
 const FILTER_KEYS = ["q", "status", "title", "dept", "hiredFrom", "hiredTo", "payType", "payMin", "payMax"] as const;
 type Filters = Record<(typeof FILTER_KEYS)[number], string>;
-/** Which address-bar values belong to each filter the owner can show or hide. */
-const FILTER_PARAMS: Record<TeamFilterKey, (typeof FILTER_KEYS)[number][]> = {
-  search: ["q"], status: ["status"], jobTitle: ["title"], department: ["dept"], hired: ["hiredFrom", "hiredTo"], pay: ["payType", "payMin", "payMax"],
-};
 
 /** Distinct values of a field, sorted, for a filter dropdown. */
 const distinct = (rows: any[], key: string) =>
@@ -50,10 +46,7 @@ function People() {
   const params = useSearchParams();
   const router = useRouter();
   const path = usePathname();
-  const layout = useApi<{ order: TeamFilterKey[]; hidden: TeamFilterKey[] }>("/employees/team-filters").data ?? { order: TEAM_FILTERS.map((f) => f.key), hidden: [] };
-  // A hidden filter never applies, even from an old bookmark.
-  const hiddenParams = new Set(layout.hidden.flatMap((k) => FILTER_PARAMS[k]));
-  const filters = Object.fromEntries(FILTER_KEYS.map((k) => [k, hiddenParams.has(k) ? "" : params.get(k) ?? ""])) as Filters;
+  const filters = Object.fromEntries(FILTER_KEYS.map((k) => [k, params.get(k) ?? ""])) as Filters;
   const setFilter = (patch: Partial<Filters>) => {
     const next = new URLSearchParams(params.toString());
     for (const [k, v] of Object.entries(patch)) {
@@ -82,8 +75,7 @@ function People() {
     ? `${rows.length} ${filters.status}${otherFilters ? " matching your filters" : ""} · ${people(all.length)} in all`
     : active ? `Showing ${rows.length} of ${people(all.length)}` : people(all.length);
 
-  // The owner sets the order and which filters show (Settings → Company).
-  const filterControls: Record<TeamFilterKey, React.ReactNode> = {
+  const filterControls = {
     search: (
       <label>Search
         <input type="search" placeholder="Name, email…" value={filters.q} onChange={(e) => setFilter({ q: e.target.value })} />
@@ -145,19 +137,16 @@ function People() {
   };
 
 
-  const shownFilters = layout.order.filter((k) => !layout.hidden.includes(k) && (k !== "pay" || seesPay));
 
   return (
     <>
       <PageHead title="Team" sub={<span role="status">{summary}</span>}>
         {can("admin") && <button className="btn primary" onClick={() => setAdding(!adding)}>Add employee</button>}
       </PageHead>
-      {shownFilters.length > 0 && (
-        <form className="card filters" role="search" aria-label="Filter the team" onSubmit={(e) => e.preventDefault()}>
-          {shownFilters.map((k) => <Fragment key={k}>{filterControls[k]}</Fragment>)}
-          {active && <button type="button" className="btn" onClick={() => router.replace(path, { scroll: false })}>Clear filters</button>}
-        </form>
-      )}
+      <form className="card filters" role="search" aria-label="Filter the team" onSubmit={(e) => e.preventDefault()}>
+        {Object.entries(filterControls).map(([k, control]) => <Fragment key={k}>{control}</Fragment>)}
+        {active && <button type="button" className="btn" onClick={() => router.replace(path, { scroll: false })}>Clear filters</button>}
+      </form>
       {added && (
         <div className="card">
           <div className="row" style={{ justifyContent: "space-between" }}>

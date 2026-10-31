@@ -219,15 +219,6 @@ tr.openrow td { background: var(--bg); }
 .photo-actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; max-width: 200px; }
 .photo-actions .error-text { color: var(--bad); font-size: 12px; width: 100%; text-align: center; }
 .person-cell { display: flex; align-items: center; gap: 10px; }
-/* Owner (Settings → Company): drag to order the details on employee pages */
-.field-order-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px; }
-.field-order-list li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: grab; user-select: none; }
-.field-order-list li.dragging { opacity: .45; border-style: dashed; border-color: var(--primary); }
-.field-order-list .drag-handle { color: var(--muted); font-size: 16px; }
-.field-order-num { color: var(--muted); font-size: 12px; width: 16px; text-align: right; }
-.field-order-list .btn.sm { padding: 1px 7px; }
-.field-order-list li.is-hidden { opacity: .6; border-style: dashed; }
-.field-order-list input[type="checkbox"] { width: 18px; height: 18px; flex: none; margin: 0; accent-color: var(--primary); }
 .menu-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
 .menu-list li { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap; }
 .settings-tabs { display: flex; gap: 6px; margin-bottom: 16px; }

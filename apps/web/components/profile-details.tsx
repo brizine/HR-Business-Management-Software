@@ -35,11 +35,11 @@ function value(key: ProfileFieldKey, e: any) {
   }
 }
 
-/** The employee's details, in the company's order (the owner sets it in Settings → Company). */
-export function ProfileDetails({ e, order }: { e: any; order: ProfileFieldKey[] }) {
+/** The employee's details. (The owner can rearrange them with the layout editor.) */
+export function ProfileDetails({ e }: { e: any }) {
   return (
     <div className="formgrid">
-      {order.map((key) => {
+      {PROFILE_FIELDS.map(({ key }) => {
         const v = value(key, e);
         return v === null || v === undefined ? null : <div key={key}><div className="muted">{LABELS[key]}</div>{v}</div>;
       })}

@@ -71,7 +71,7 @@ export const employeeMenusSchema = z.object({
 export type EmployeeMenus = z.infer<typeof employeeMenusSchema>;
 export const menuRenameSchema = z.object({ kind: z.enum(["jobTitles", "departments"]), from: menuEntry, to: menuEntry });
 
-/** The details on an employee's page, in the default order. The owner can rearrange them for the company. */
+/** The details on an employee's page, in order. (The owner rearranges pages with the layout editor.) */
 export const PROFILE_FIELDS = [
   { key: "email", label: "Email" },
   { key: "phone", label: "Phone" },
@@ -87,15 +87,6 @@ export const PROFILE_FIELDS = [
   { key: "emergency", label: "Emergency contact" },
 ] as const;
 export type ProfileFieldKey = (typeof PROFILE_FIELDS)[number]["key"];
-const PROFILE_FIELD_KEYS = PROFILE_FIELDS.map((f) => f.key) as [ProfileFieldKey, ...ProfileFieldKey[]];
-export const profileFieldOrderSchema = z.object({ order: z.array(z.enum(PROFILE_FIELD_KEYS)).max(PROFILE_FIELDS.length) });
-
-/** The saved order, ignoring unknown keys and adding any fields it doesn't mention (e.g. ones added later) at the end. */
-export function orderProfileFields(saved: readonly string[] | null | undefined): ProfileFieldKey[] {
-  const known = new Set<string>(PROFILE_FIELD_KEYS);
-  const picked = [...new Set((saved ?? []).filter((k) => known.has(k)))] as ProfileFieldKey[];
-  return [...picked, ...PROFILE_FIELD_KEYS.filter((k) => !picked.includes(k))];
-}
 
 /**
  * Owner's page layouts from the layout editor: for each page, for each container on it (the page
@@ -108,33 +99,6 @@ export const pageLayoutsUpdateSchema = z.object({
   pages: z.record(layoutId, pageLayout.nullable()).refine((v) => Object.keys(v).length <= 200, "Too many pages"),
 });
 export type PageLayouts = Record<string, Record<string, string[]>>;
-
-/** The Team page's filters, in the default order. The owner can reorder or hide them for the company. */
-export const TEAM_FILTERS = [
-  { key: "search", label: "Search" },
-  { key: "status", label: "Status" },
-  { key: "jobTitle", label: "Job title" },
-  { key: "department", label: "Department" },
-  { key: "hired", label: "Hired (date range)" },
-  { key: "pay", label: "Pay type & range (managers and up)" },
-] as const;
-export type TeamFilterKey = (typeof TEAM_FILTERS)[number]["key"];
-const TEAM_FILTER_KEYS = TEAM_FILTERS.map((f) => f.key) as [TeamFilterKey, ...TeamFilterKey[]];
-export const teamFilterLayoutSchema = z.object({
-  order: z.array(z.enum(TEAM_FILTER_KEYS)).max(TEAM_FILTERS.length),
-  hidden: z.array(z.enum(TEAM_FILTER_KEYS)).max(TEAM_FILTERS.length).default([]),
-});
-export type TeamFilterLayout = { order: TeamFilterKey[]; hidden: TeamFilterKey[] };
-
-/** A saved Team filter layout made complete: unknown keys dropped, filters it doesn't mention added at the end. */
-export function normalizeTeamFilterLayout(saved: { order?: readonly string[]; hidden?: readonly string[] } | null | undefined): TeamFilterLayout {
-  const known = new Set<string>(TEAM_FILTER_KEYS);
-  const picked = [...new Set((saved?.order ?? []).filter((k) => known.has(k)))] as TeamFilterKey[];
-  return {
-    order: [...picked, ...TEAM_FILTER_KEYS.filter((k) => !picked.includes(k))],
-    hidden: [...new Set((saved?.hidden ?? []).filter((k) => known.has(k)))] as TeamFilterKey[],
-  };
-}
 
 export const employeeSchema = z.object({
   firstName: z.string().min(1),

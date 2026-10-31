@@ -215,11 +215,6 @@ the payroll calendar, safety rules and so on.
   editor's top bar (**Reset this page**, **Discard** and **Exit editor** are there too). Saved layouts
   apply to everyone on the website; Settings → Company lists the pages you've arranged, each with Reset.
   Pages with an id in the address (like each employee's page) share one layout.
-- **Employee page layout (owner):** under **Settings → Company**, drag the details (email, phone, home
-  address, emergency contact, pay…) into the order every employee page uses, then **Save layout**.
-- **Team page filters (owner):** also under **Settings → Company**, drag the Team page's filters into
-  order and untick any to hide them, then **Save layout**. A hidden filter never applies, even from an
-  old bookmarked link. Pay filters only ever show for managers and up.
 - **Photos:** a photo next to each person's name on their profile and on the Team list (initials when
   there's none). Admins add, change or remove anyone's photo from their profile; employees set their
   own from their profile on the website or by tapping the photo on the app's **Me** tab. JPEG, PNG or

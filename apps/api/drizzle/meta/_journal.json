@@ -162,6 +162,13 @@
       "when": 1793478965102,
       "tag": "0022_page_layouts",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793482175185,
+      "tag": "0023_drop_old_layout_settings",
+      "breakpoints": true
     }
   ]
 }

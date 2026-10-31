@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import bcrypt from "bcryptjs";
 import { and, asc, eq } from "drizzle-orm";
-import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, employeeContactSchema, employeeMenusSchema, employeeSchema, hasRole, isInactive, menuRenameSchema, normalizeTeamFilterLayout, orderProfileFields, pageLayoutsUpdateSchema, profileFieldOrderSchema, teamFilterLayoutSchema, type Role } from "@crewdesk/shared";
+import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, employeeContactSchema, employeeMenusSchema, employeeSchema, hasRole, isInactive, menuRenameSchema, pageLayoutsUpdateSchema, type Role } from "@crewdesk/shared";
 import { db } from "../db";
 import { companies, employees, jobs, recoveryCodes } from "../db/schema";
 import { authenticate, canManageAccount, requireRole, signOutEverywhere } from "../lib/auth";
@@ -130,31 +130,6 @@ const routes: FastifyPluginAsync = async (app) => {
     if (Object.keys(next).length > 200) throw new HttpError(400, "Too many page layouts");
     await db.update(companies).set({ pageLayouts: next }).where(eq(companies.id, req.user.companyId));
     return { pages: next };
-  });
-
-  /** The Team page's filters: their order and which are hidden (the same for everyone in the company). */
-  app.get("/team-filters", async (req) => {
-    const [c] = await db.select({ layout: companies.teamFilterLayout }).from(companies).where(eq(companies.id, req.user.companyId));
-    return normalizeTeamFilterLayout(c?.layout);
-  });
-
-  app.put("/team-filters", { preHandler: requireRole("owner") }, async (req) => {
-    const layout = normalizeTeamFilterLayout(parse(teamFilterLayoutSchema, req.body));
-    await db.update(companies).set({ teamFilterLayout: layout }).where(eq(companies.id, req.user.companyId));
-    return layout;
-  });
-
-  /** The order of the details on employee pages (the same for everyone in the company). */
-  app.get("/field-order", async (req) => {
-    const [c] = await db.select({ order: companies.profileFieldOrder }).from(companies).where(eq(companies.id, req.user.companyId));
-    return { order: orderProfileFields(c?.order) };
-  });
-
-  app.put("/field-order", { preHandler: requireRole("owner") }, async (req) => {
-    const { order } = parse(profileFieldOrderSchema, req.body);
-    const full = orderProfileFields(order);
-    await db.update(companies).set({ profileFieldOrder: full }).where(eq(companies.id, req.user.companyId));
-    return { order: full };
   });
 
   app.get<{ Params: { id: string } }>("/:id", async (req) => {

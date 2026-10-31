@@ -13,7 +13,7 @@ import { AvailabilityEditor } from "@/components/availability-editor";
 import { EmployeeFields, employeeBody } from "@/components/employee-form";
 import { ProfileDetails } from "@/components/profile-details";
 import { PhotoEditor } from "@/components/avatar";
-import { PROFILE_FIELDS, isInactive, type ProfileFieldKey } from "@crewdesk/shared";
+import { isInactive } from "@crewdesk/shared";
 
 /** Admins: the person's W-4, I-9 and direct deposit on file (current and earlier versions). */
 function EmployeeTaxForms({ employeeId }: { employeeId: string }) {
@@ -43,8 +43,6 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
   const tasks = useApi<any[]>(can("manager") ? `/onboarding/tasks?employeeId=${id}` : null);
   const templates = useApi<any[]>(can("admin") ? "/onboarding/templates" : null);
   const [editing, setEditing] = useState(false);
-  const fieldOrder = useApi<{ order: ProfileFieldKey[] }>("/employees/field-order");
-  const order = fieldOrder.data?.order ?? PROFILE_FIELDS.map((f) => f.key);
   const [invite, setInvite] = useState<{ emailed: boolean; link: string } | null>(null);
   const { busy, error, run } = useAction();
   const e = emp.data;
@@ -84,7 +82,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
         </div>
       ) : (
         <div className="card">
-          <ProfileDetails e={e} order={order} />
+          <ProfileDetails e={e} />
           {isInactive(e.status) && "statusReason" in e && (
             <div className="status-reason">
               <div className="muted">

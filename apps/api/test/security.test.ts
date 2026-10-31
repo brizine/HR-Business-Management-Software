@@ -261,20 +261,6 @@ describe("sessions", () => {
     expect((await app.inject({ method: "GET", url: `/employees/${id}/photo`, headers: { authorization: `Bearer ${otherToken}` } })).statusCode).toBe(404);
   });
 
-  it("only the owner sets the order of details on employee pages", async () => {
-    await hire("arranger", "manager");
-    const managerToken = (await login("arranger")).body.token;
-    const def = (await call("GET", "/employees/field-order", managerToken)).body.order;
-    expect(def.slice(0, 3)).toEqual(["email", "phone", "role"]);
-    expect((await call("PUT", "/employees/field-order", managerToken, { order: ["address"] })).status).toBe(403);
-    expect((await call("PUT", "/employees/field-order", ownerToken, { order: ["nope"] })).status).toBe(400);
-    // A partial order keeps the rest after it.
-    const saved = await call("PUT", "/employees/field-order", ownerToken, { order: ["address", "phone", "emergency"] });
-    expect(saved.body.order.slice(0, 4)).toEqual(["address", "phone", "emergency", "email"]);
-    expect(saved.body.order).toHaveLength(def.length);
-    expect((await call("GET", "/employees/field-order", managerToken)).body.order).toEqual(saved.body.order);
-  });
-
   it("job title and department menus: the owner edits them, renames carry over to people", async () => {
     const id = await hire("titled", "manager");
     const token = (await login("titled")).body.token;
@@ -291,18 +277,6 @@ describe("sessions", () => {
     expect((await call("POST", "/employees/menus/rename", token, { kind: "departments", from: "Field", to: "Crew" })).status).toBe(403);
     // "—" clears someone's department.
     expect((await call("PATCH", `/employees/${id}`, ownerToken, { department: null })).body.department).toBeNull();
-  });
-
-  it("only the owner sets the Team page filter layout", async () => {
-    await hire("filterer", "manager");
-    const token = (await login("filterer")).body.token;
-    expect((await call("GET", "/employees/team-filters", token)).body.order[0]).toBe("search");
-    expect((await call("PUT", "/employees/team-filters", token, { order: ["status"], hidden: [] })).status).toBe(403);
-    const saved = await call("PUT", "/employees/team-filters", ownerToken, { order: ["department", "status"], hidden: ["hired"] });
-    expect(saved.body.order.slice(0, 3)).toEqual(["department", "status", "search"]);
-    expect(saved.body.hidden).toEqual(["hired"]);
-    expect((await call("GET", "/employees/team-filters", token)).body).toEqual(saved.body);
-    expect((await call("PUT", "/employees/team-filters", ownerToken, { order: ["bogus"], hidden: [] })).status).toBe(400);
   });
 
   it("page layouts: only the owner saves them; everyone reads them; null resets a page", async () => {
