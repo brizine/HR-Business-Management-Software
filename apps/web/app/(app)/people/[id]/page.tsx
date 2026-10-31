@@ -55,6 +55,10 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
       <PageHead title={`${e.firstName} ${e.lastName}`} sub={[e.title, e.department].filter(Boolean).join(" · ")}
         before={<PhotoEditor e={e} canEdit={can("admin") || e.id === me?.user.id} onChange={emp.setData} />}>
         <Badge value={e.status} />
+        {can("admin") && e.id !== me?.user.id && e.hasLogin && (
+          <button className="btn" onClick={() => confirm(`Sign ${e.firstName} out of Crewdesk on every device?`)
+            && api(`/employees/${id}/sign-out-everywhere`, { method: "POST" }).then(() => alert("Signed out everywhere."), (err) => alert(err.message))}>Sign out everywhere</button>
+        )}
         {can("admin") && <Link className="btn" href={`/settings/notifications?employeeId=${id}`}>Notifications</Link>}
         {can("admin") && <button className="btn" onClick={() => setEditing(!editing)}>{editing ? "Close" : "Edit"}</button>}
       </PageHead>
@@ -113,11 +117,9 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
           {invite && <InviteResult invite={invite} name={e.firstName} email={e.email} />}
         </div>
       )}
-      {can("admin") && e.id !== me?.user.id && e.hasLogin && (
+      {can("admin") && e.id !== me?.user.id && e.hasLogin && (e.twoFactorEnabled || e.locked) && (
         <div className="card row">
           <strong style={{ marginRight: 8 }}>Account</strong>
-          <button className="btn" onClick={() => confirm(`Sign ${e.firstName} out of Crewdesk on every device?`)
-            && api(`/employees/${id}/sign-out-everywhere`, { method: "POST" }).then(() => alert("Signed out everywhere."), (err) => alert(err.message))}>Sign out everywhere</button>
           {e.twoFactorEnabled && (
             <button className="btn" onClick={() => confirm(`Reset ${e.firstName}'s two-factor? Only do this if you've confirmed it's really them (e.g. in person). They'll be signed out and can set it up again.`)
               && api(`/employees/${id}/reset-two-factor`, { method: "POST" }).then(emp.reload, (err) => alert(err.message))}>Reset two-factor</button>
