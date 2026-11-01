@@ -12,14 +12,17 @@ import {
 import { z } from "zod";
 import { db } from "../db";
 import { companies, employees, notificationPreferences, notifications, pushTokens } from "../db/schema";
-import { authenticate, requireRole } from "../lib/auth";
+import { authenticate, requireRole, roleIn } from "../lib/auth";
 import { emailTransport, smsTransport } from "../lib/channels";
 import { HttpError, notFound, parse } from "../lib/errors";
+
+/** Which area of the Permissions page controls access here. */
+const AREA = "people" as const;
 
 /** Everyone manages their own settings; admins can also set them for staff without a login. */
 async function targetEmployee(req: FastifyRequest<{ Querystring: { employeeId?: string } }>) {
   const id = req.query.employeeId ?? req.user.sub;
-  if (id !== req.user.sub && !hasRole(req.user.role, "admin")) throw new HttpError(403, "You can only change your own notification settings");
+  if (id !== req.user.sub && !hasRole(roleIn(req, AREA), "admin")) throw new HttpError(403, "You can only change your own notification settings");
   const [emp] = await db
     .select()
     .from(employees)
@@ -118,12 +121,12 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Company-wide delivery settings and whether email/SMS providers are configured on the server. */
-  app.get("/company-settings", { preHandler: requireRole("admin") }, async (req) => {
+  app.get("/company-settings", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const [c] = await db.select().from(companies).where(eq(companies.id, req.user.companyId));
     return { smsEnabled: c.smsEnabled, emailConfigured: !!emailTransport(), smsConfigured: !!smsTransport() };
   });
 
-  app.put("/company-settings", { preHandler: requireRole("owner") }, async (req) => {
+  app.put("/company-settings", { preHandler: requireRole("owner", "company") }, async (req) => {
     const { smsEnabled } = parse(z.object({ smsEnabled: z.boolean() }), req.body);
     const [c] = await db.update(companies).set({ smsEnabled }).where(eq(companies.id, req.user.companyId)).returning();
     return { smsEnabled: c.smsEnabled, emailConfigured: !!emailTransport(), smsConfigured: !!smsTransport() };

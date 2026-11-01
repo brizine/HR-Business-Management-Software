@@ -13,13 +13,16 @@ import {
 import { z } from "zod";
 import { db } from "../db";
 import { companies, employees, wikiPages, wikiRevisions } from "../db/schema";
-import { authenticate, requireRole } from "../lib/auth";
+import { authenticate, requireRole, roleIn } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { except, notify, staffWithRole } from "../lib/notify";
 
+/** Which area of the Permissions page controls access here. */
+const AREA = "wiki" as const;
+
 type Page = typeof wikiPages.$inferSelect;
 
-const role = (req: FastifyRequest) => req.user.role as Role;
+const role = (req: FastifyRequest) => roleIn(req, AREA);
 const isAdmin = (req: FastifyRequest) => hasRole(role(req), "admin");
 const canView = (req: FastifyRequest, p: Page) => canAccess(role(req), p.viewMin);
 const canEdit = (req: FastifyRequest, p: Page) => canAccess(role(req), p.editMin) && canView(req, p);
@@ -94,7 +97,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Who can create pages; admins decide. */
-  app.put("/settings", { preHandler: requireRole("admin") }, async (req) => {
+  app.put("/settings", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const { createMin: m } = parse(z.object({ createMin: z.enum(WIKI_LEVELS) }), req.body);
     await db.update(companies).set({ wikiCreateMin: m }).where(eq(companies.id, req.user.companyId));
     return { createMin: m };
@@ -232,7 +235,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Removes a page (admins). Its sub-pages move up a level. It's kept in the database and can be restored. */
-  app.delete<{ Params: { id: string } }>("/pages/:id", { preHandler: requireRole("admin") }, async (req) => {
+  app.delete<{ Params: { id: string } }>("/pages/:id", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const page = await loadPage(req, req.params.id);
     await db.transaction(async (tx) => {
       await tx.update(wikiPages).set({ parentId: page.parentId }).where(eq(wikiPages.parentId, page.id));
@@ -241,7 +244,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return { ok: true };
   });
 
-  app.get("/deleted", { preHandler: requireRole("admin") }, async (req) => {
+  app.get("/deleted", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const rows = await db
       .select({ id: wikiPages.id, title: wikiPages.title, deletedAt: wikiPages.deletedAt })
       .from(wikiPages)
@@ -249,7 +252,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return rows.filter((r) => r.deletedAt).sort((a, b) => b.deletedAt!.getTime() - a.deletedAt!.getTime());
   });
 
-  app.post<{ Params: { id: string } }>("/pages/:id/undelete", { preHandler: requireRole("admin") }, async (req) => {
+  app.post<{ Params: { id: string } }>("/pages/:id/undelete", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const [row] = await db
       .update(wikiPages)
       .set({ deletedAt: null, parentId: null, updatedAt: new Date(), updatedById: req.user.sub })

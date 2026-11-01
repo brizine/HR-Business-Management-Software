@@ -7,6 +7,9 @@ import { authenticate, requireRole } from "../lib/auth";
 import { notFound, parse } from "../lib/errors";
 import { recordMeter, withDue } from "../lib/fleet";
 
+/** Which area of the Permissions page controls access here. */
+const AREA = "fleet" as const;
+
 const STATUS_RANK = { ok: 0, due_soon: 1, overdue: 2 } as const;
 
 async function loadAsset(companyId: string, id: string) {
@@ -70,7 +73,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Issues a new code, e.g. when a label is lost or stolen. Old labels stop working. */
-  app.post<{ Params: { id: string } }>("/:id/regenerate-code", { preHandler: requireRole("manager") }, async (req) => {
+  app.post<{ Params: { id: string } }>("/:id/regenerate-code", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const [row] = await db
       .update(assets)
       .set({ qrCode: newAssetCode() })
@@ -109,7 +112,7 @@ const routes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.post("/", { preHandler: requireRole("manager") }, async (req) => {
+  app.post("/", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const body = parse(assetSchema, req.body);
     const [row] = await db
       .insert(assets)
@@ -118,7 +121,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return row;
   });
 
-  app.patch<{ Params: { id: string } }>("/:id", { preHandler: requireRole("manager") }, async (req) => {
+  app.patch<{ Params: { id: string } }>("/:id", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const body = parse(assetSchema.partial(), req.body);
     const [row] = await db
       .update(assets)
@@ -136,7 +139,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return recordMeter(db, asset, body, req.user.sub);
   });
 
-  app.post("/schedules", { preHandler: requireRole("manager") }, async (req) => {
+  app.post("/schedules", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const body = parse(maintenanceScheduleSchema, req.body);
     const asset = await loadAsset(req.user.companyId, body.assetId);
     const [row] = await db
@@ -153,7 +156,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return withDue(row, asset);
   });
 
-  app.delete<{ Params: { id: string } }>("/schedules/:id", { preHandler: requireRole("manager") }, async (req) => {
+  app.delete<{ Params: { id: string } }>("/schedules/:id", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const [row] = await db
       .delete(maintenanceSchedules)
       .where(and(eq(maintenanceSchedules.id, req.params.id), eq(maintenanceSchedules.companyId, req.user.companyId)))

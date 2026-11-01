@@ -18,6 +18,7 @@ import workOrderRoutes from "./routes/workOrders";
 import inspectionRoutes from "./routes/inspections";
 import payrollRoutes from "./routes/payroll";
 import payPeriodRoutes from "./routes/payPeriods";
+import permissionRoutes from "./routes/permissions";
 import dashboardRoutes from "./routes/dashboard";
 import notificationRoutes from "./routes/notifications";
 import shiftRoutes from "./routes/shifts";
@@ -81,6 +82,7 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(inspectionRoutes, { prefix: "/inspections" });
   await app.register(payrollRoutes, { prefix: "/payroll" });
   await app.register(payPeriodRoutes, { prefix: "/pay-periods" });
+  await app.register(permissionRoutes, { prefix: "/permissions" });
   await app.register(dashboardRoutes, { prefix: "/dashboard" });
   await app.register(notificationRoutes, { prefix: "/notifications" });
   await app.register(shiftRoutes, { prefix: "/shifts" });

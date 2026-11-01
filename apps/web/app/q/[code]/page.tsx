@@ -170,7 +170,7 @@ export default function Scan({ params }: { params: Promise<{ code: string }> }) 
 
       <div className="muted" style={{ marginTop: 12 }}>
         Last inspection: {asset.inspections[0] ? `${fmtDate(asset.inspections[0].createdAt)} (${asset.inspections[0].passed ? "passed" : "failed"})` : "never"}
-        {can("manager") && <> · <Link href={`/fleet/${asset.id}`}>Full details</Link></>}
+        {can("manager", "fleet") && <> · <Link href={`/fleet/${asset.id}`}>Full details</Link></>}
       </div>
     </div>
   );

@@ -22,7 +22,7 @@ export function TasksBox({ employeeId, firstName, isSelf }: { employeeId: string
   const { can } = useAuth();
   const workOrders = useApi<any[]>(isSelf ? "/work-orders?status=active&mine=true" : `/work-orders?status=active&assignedToId=${employeeId}`);
   const onboarding = useApi<any[]>(`/onboarding/tasks?open=true${isSelf ? "" : `&employeeId=${employeeId}`}`);
-  const waitingOnMe = useApi<any[]>(isSelf && can("manager") ? "/onboarding/assigned" : null);
+  const waitingOnMe = useApi<any[]>(isSelf && can("manager", "onboarding") ? "/onboarding/assigned" : null);
   const documents = useApi<any[]>(isSelf ? "/documents" : null);
   const payPeriods = useApi<{ canApprove: boolean; periods: any[] }>(isSelf ? "/pay-periods" : null);
 

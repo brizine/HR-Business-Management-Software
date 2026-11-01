@@ -202,10 +202,10 @@ export default function Time() {
   return (
     <>
       <PageHead title="Time clock" sub="Clock in and out, review timesheets, fix missed punches">
-        {can("manager") && <Link className="btn" href="/job-sites">Job sites & location rules</Link>}
+        {can("manager", "time") && <Link className="btn" href="/job-sites">Job sites & location rules</Link>}
       </PageHead>
       <ClockCard />
-      {can("manager") ? <ManagerView /> : <MyEntries />}
+      {can("manager", "time") ? <ManagerView /> : <MyEntries />}
     </>
   );
 }

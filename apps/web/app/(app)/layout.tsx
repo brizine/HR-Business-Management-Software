@@ -3,12 +3,12 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { Role } from "@crewdesk/shared";
+import type { PermissionArea, Role } from "@crewdesk/shared";
 import { useAuth } from "@/lib/auth";
 import { PageLayoutRoot } from "@/components/page-layout";
 
-const NAV: { section: string; items: { href: string; label: string; min?: Role }[] }[] = [
-  { section: "", items: [{ href: "/dashboard", label: "Dashboard", min: "manager" }, { href: "/wiki", label: "Company wiki" }, { href: "/spray-mix", label: "Spray Mix Calculator" }] },
+const NAV: { section: string; items: { href: string; label: string; min?: Role; area?: PermissionArea }[] }[] = [
+  { section: "", items: [{ href: "/dashboard", label: "Dashboard", min: "manager", area: "dashboard" }, { href: "/wiki", label: "Company wiki" }, { href: "/spray-mix", label: "Spray Mix Calculator" }] },
   {
     section: "People",
     items: [
@@ -19,8 +19,8 @@ const NAV: { section: string; items: { href: string; label: string; min?: Role }
       { href: "/documents", label: "Documents" },
       { href: "/tax-forms", label: "Pay & tax forms" },
       { href: "/onboarding", label: "Onboarding" },
-      { href: "/hiring", label: "Hiring", min: "manager" },
-      { href: "/payroll", label: "Payroll", min: "admin" },
+      { href: "/hiring", label: "Hiring", min: "manager", area: "hiring" },
+      { href: "/payroll", label: "Payroll", min: "admin", area: "payroll" },
     ],
   },
   {
@@ -80,7 +80,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div key={s.section} style={{ display: "contents" }}>
             {s.section && <div className="navsection">{s.section}</div>}
             {s.items
-              .filter((i) => !i.min || can(i.min))
+              .filter((i) => !i.min || can(i.min, i.area))
               .map((i) => (
                 <Link key={i.href} href={i.href} className={path.startsWith(i.href) ? "active" : ""}>
                   {i.label}

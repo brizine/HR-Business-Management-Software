@@ -17,7 +17,7 @@ function lastWeek() {
 
 function Settings({ settings, onSaved }: { settings: any; onSaved: () => void }) {
   const { can } = useAuth();
-  const owner = can("owner");
+  const owner = can("owner", "payroll");
   const [provider, setProvider] = useState(settings.payrollProvider);
   const { busy, error, run } = useAction();
   const [saved, setSaved] = useState(false);

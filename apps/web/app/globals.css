@@ -246,6 +246,17 @@ tr.openrow td { background: var(--bg); }
 .task-list { list-style: none; padding: 0; margin: 0; }
 .task-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); }
 .task-list li:first-child { border-top: 0; }
+/* Settings → Permissions */
+.perm-layout { display: grid; grid-template-columns: 260px 1fr; gap: 16px; align-items: start; }
+.perm-people { padding: 6px; display: flex; flex-direction: column; gap: 2px; max-height: 75vh; overflow-y: auto; }
+.perm-person { all: unset; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.perm-person:hover { background: color-mix(in srgb, var(--primary) 6%, transparent); }
+.perm-person.active { background: color-mix(in srgb, var(--primary) 14%, transparent); }
+.perm-person:focus-visible { outline: 2px solid var(--primary); }
+.perm-table th[scope="row"] { text-align: left; width: 34%; vertical-align: top; padding-top: 12px; }
+.perm-table select { width: 100%; max-width: 360px; }
+.perm-table tr.perm-custom th[scope="row"]::after { content: " ●"; color: var(--warn); }
+@media (max-width: 800px) { .perm-layout { grid-template-columns: 1fr; } .perm-people { max-height: 260px; } }
 .settings-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
 .contact-fieldset { border: 0; padding: 0; margin: 14px 0 0; min-width: 0; }
 .contact-fieldset legend { font-weight: 600; padding: 0; margin-bottom: 6px; }

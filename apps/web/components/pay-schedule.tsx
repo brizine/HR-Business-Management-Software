@@ -18,7 +18,7 @@ interface Schedule {
 /** Payroll page: how often people are paid, payday, and who approves each period (the owner edits). */
 export function PaySchedule() {
   const { can } = useAuth();
-  const owner = can("owner");
+  const owner = can("owner", "payroll");
   const saved = useApi<Schedule>("/pay-periods/schedule");
   const staff = useApi<any[]>("/employees");
   const [s, setS] = useState<Schedule | null>(null);

@@ -106,7 +106,7 @@ export function PageLayoutRoot({ children }: { children: ReactNode }) {
   }, []);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const editor = useEditorMode(can("owner"));
+  const editor = useEditorMode(can("owner", "company"));
   useEffect(() => { if (editor.on) setDraftState(readDraft()); }, [editor.on]);
   const scanned = useRef<ReturnType<typeof applyLayout> | null>(null);
   const dragging = useRef<HTMLElement | null>(null);

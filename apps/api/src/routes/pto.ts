@@ -8,6 +8,9 @@ import { authenticate, isManager, requireRole } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { approversFor, except, notify } from "../lib/notify";
 
+/** Which area of the Permissions page controls access here. */
+const AREA = "timeoff" as const;
+
 async function balances(companyId: string, employeeId: string) {
   const policies = await db.select().from(ptoPolicies).where(eq(ptoPolicies.companyId, companyId));
   const ledger = await db.select().from(ptoLedger).where(eq(ptoLedger.employeeId, employeeId));
@@ -44,7 +47,7 @@ const routes: FastifyPluginAsync = async (app) => {
     db.select().from(ptoPolicies).where(eq(ptoPolicies.companyId, req.user.companyId)).orderBy(asc(ptoPolicies.createdAt)),
   );
 
-  app.post("/policies", { preHandler: requireRole("admin") }, async (req) => {
+  app.post("/policies", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const body = parse(ptoPolicySchema, req.body);
     const [row] = await db
       .insert(ptoPolicies)
@@ -53,7 +56,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return row;
   });
 
-  app.put<{ Params: { id: string } }>("/policies/:id", { preHandler: requireRole("admin") }, async (req) => {
+  app.put<{ Params: { id: string } }>("/policies/:id", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const body = parse(ptoPolicySchema, req.body);
     const [before] = await db.select().from(ptoPolicies).where(and(eq(ptoPolicies.id, req.params.id), eq(ptoPolicies.companyId, req.user.companyId)));
     if (!before) notFound("Policy");
@@ -75,7 +78,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Adds (or with negative hours, removes) hours, e.g. the annual grant or a correction. */
-  app.post("/adjustments", { preHandler: requireRole("admin") }, async (req) => {
+  app.post("/adjustments", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const body = parse(
       z.object({
         employeeId: z.string().uuid(),
@@ -98,13 +101,13 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   app.get<{ Querystring: { employeeId?: string } }>("/balances", async (req) => {
-    const employeeId = isManager(req) && req.query.employeeId ? req.query.employeeId : req.user.sub;
+    const employeeId = isManager(req, AREA) && req.query.employeeId ? req.query.employeeId : req.user.sub;
     return balances(req.user.companyId, employeeId);
   });
 
   app.get<{ Querystring: { status?: string; mine?: string; employeeId?: string } }>("/requests", async (req) => {
     const filters = [eq(ptoRequests.companyId, req.user.companyId)];
-    if (!isManager(req) || req.query.mine === "true") filters.push(eq(ptoRequests.employeeId, req.user.sub));
+    if (!isManager(req, AREA) || req.query.mine === "true") filters.push(eq(ptoRequests.employeeId, req.user.sub));
     else if (req.query.employeeId) filters.push(eq(ptoRequests.employeeId, req.query.employeeId));
     if (req.query.status) filters.push(eq(ptoRequests.status, req.query.status));
     return db
@@ -126,7 +129,7 @@ const routes: FastifyPluginAsync = async (app) => {
     // Your own request, or (managers and up) one entered for someone else.
     const forId = employeeId && employeeId !== req.user.sub ? employeeId : req.user.sub;
     const onBehalf = forId !== req.user.sub;
-    if (onBehalf && !isManager(req)) throw new HttpError(403, "Only managers can request time off for someone else");
+    if (onBehalf && !isManager(req, AREA)) throw new HttpError(403, "Only managers can request time off for someone else");
     const [who] = await db.select().from(employees).where(and(eq(employees.id, forId), eq(employees.companyId, req.user.companyId)));
     if (!who) notFound("Employee");
     const bal = (await balances(req.user.companyId, forId)).find((b) => b.policyId === body.policyId);
@@ -157,7 +160,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return row;
   });
 
-  app.post<{ Params: { id: string } }>("/requests/:id/decide", { preHandler: requireRole("manager") }, async (req) => {
+  app.post<{ Params: { id: string } }>("/requests/:id/decide", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const body = parse(ptoDecisionSchema, req.body);
     const decided = await db.transaction(async (tx) => {
       const [existing] = await tx

@@ -3,12 +3,15 @@ import { and, desc, eq } from "drizzle-orm";
 import { applicantSchema, applicantStageSchema, hireSchema, jobSchema } from "@crewdesk/shared";
 import { db } from "../db";
 import { applicants, companies, employees, jobs } from "../db/schema";
-import { authenticate, canManageAccount, requireRole } from "../lib/auth";
+import { authenticate, canManageAccount, requireRole, roleIn } from "../lib/auth";
 import { sendInvite } from "../lib/invites";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { notify, staffWithRole } from "../lib/notify";
 import { applyOnboardingTemplate } from "./onboarding";
 import { publicEmployee } from "./employees";
+
+/** Which area of the Permissions page controls access here. */
+const AREA = "hiring" as const;
 
 const routes: FastifyPluginAsync = async (app) => {
   // ---- Public careers page (no auth) ----
@@ -49,7 +52,7 @@ const routes: FastifyPluginAsync = async (app) => {
   // ---- Authenticated hiring management ----
   app.register(async (priv) => {
     priv.addHook("preHandler", authenticate);
-    priv.addHook("preHandler", requireRole("manager"));
+    priv.addHook("preHandler", requireRole("manager", AREA));
 
     priv.get("/jobs", async (req) =>
       db.select().from(jobs).where(eq(jobs.companyId, req.user.companyId)).orderBy(desc(jobs.createdAt)),
@@ -115,9 +118,9 @@ const routes: FastifyPluginAsync = async (app) => {
      * starts the chosen checklist, and emails them an invite to set up their
      * login. The response includes the invite link in case email isn't set up.
      */
-    priv.post<{ Params: { id: string } }>("/applicants/:id/hire", { preHandler: requireRole("admin") }, async (req) => {
+    priv.post<{ Params: { id: string } }>("/applicants/:id/hire", { preHandler: requireRole("admin", AREA) }, async (req) => {
       const body = parse(hireSchema, req.body ?? {});
-      if (!canManageAccount(req.user.role, body.role)) throw new HttpError(403, "Only the owner can hire someone as an admin");
+      if (!canManageAccount(roleIn(req, "people"), body.role)) throw new HttpError(403, "Only the owner can hire someone as an admin");
       const [applicant] = await db
         .select()
         .from(applicants)

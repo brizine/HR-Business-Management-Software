@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth";
 
 export function SettingsTabs() {
   const path = usePathname();
-  const { can } = useAuth();
+  const { me, can } = useAuth();
   const tab = (href: string, label: string) => (
     <Link href={href} className={`btn ${path === href ? "primary" : ""}`}>{label}</Link>
   );
@@ -14,7 +14,8 @@ export function SettingsTabs() {
       {tab("/settings/profile", "My info")}
       {tab("/settings/security", "Security")}
       {tab("/settings/notifications", "Notifications")}
-      {can("owner") && tab("/settings/company", "Company")}
+      {can("owner", "company") && tab("/settings/company", "Company")}
+      {(me?.user.role === "owner" || me?.access?.managesPermissions) && tab("/settings/permissions", "Permissions")}
     </div>
   );
 }

@@ -9,6 +9,9 @@ import { HttpError, notFound, parse } from "../lib/errors";
 import { approversFor, except, notify, staffWithRole } from "../lib/notify";
 import { fmtShift, localDate, localParts } from "../lib/tz";
 
+/** Which area of the Permissions page controls access here. */
+const AREA = "schedule" as const;
+
 type ShiftRow = typeof shifts.$inferSelect;
 const WEEK_MS = 7 * 86_400_000;
 
@@ -123,7 +126,7 @@ const routes: FastifyPluginAsync = async (app) => {
       lt(shifts.startsAt, new Date(q.to)),
     ];
     if (q.employeeId) filters.push(eq(shifts.employeeId, q.employeeId));
-    if (!isManager(req)) filters.push(eq(shifts.status, "published"));
+    if (!isManager(req, AREA)) filters.push(eq(shifts.status, "published"));
     return db
       .select({
         shift: shifts,
@@ -159,7 +162,7 @@ const routes: FastifyPluginAsync = async (app) => {
 
   // ---- Templates ----
 
-  app.get("/templates", { preHandler: requireRole("manager") }, async (req) =>
+  app.get("/templates", { preHandler: requireRole("manager", AREA) }, async (req) =>
     db.select().from(shiftTemplates).where(eq(shiftTemplates.companyId, req.user.companyId)).orderBy(asc(shiftTemplates.startTime)),
   );
 
@@ -169,14 +172,14 @@ const routes: FastifyPluginAsync = async (app) => {
     if (!a) notFound("Asset");
   }
 
-  app.post("/templates", { preHandler: requireRole("manager") }, async (req) => {
+  app.post("/templates", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const body = parse(shiftTemplateSchema, req.body);
     await checkTemplateAsset(req.user.companyId, body.assetId);
     const [row] = await db.insert(shiftTemplates).values({ ...body, companyId: req.user.companyId }).returning();
     return row;
   });
 
-  app.patch<{ Params: { id: string } }>("/templates/:id", { preHandler: requireRole("manager") }, async (req) => {
+  app.patch<{ Params: { id: string } }>("/templates/:id", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const body = parse(shiftTemplateSchema.partial(), req.body);
     await checkTemplateAsset(req.user.companyId, body.assetId);
     const [row] = await db
@@ -188,7 +191,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return row;
   });
 
-  app.delete<{ Params: { id: string } }>("/templates/:id", { preHandler: requireRole("manager") }, async (req) => {
+  app.delete<{ Params: { id: string } }>("/templates/:id", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const [row] = await db
       .delete(shiftTemplates)
       .where(and(eq(shiftTemplates.id, req.params.id), eq(shiftTemplates.companyId, req.user.companyId)))
@@ -198,7 +201,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Shifts whose employee asked to give them up, awaiting a manager. */
-  app.get("/drop-requests", { preHandler: requireRole("manager") }, async (req) =>
+  app.get("/drop-requests", { preHandler: requireRole("manager", AREA) }, async (req) =>
     db
       .select({ shift: shifts, employee: { id: employees.id, firstName: employees.firstName, lastName: employees.lastName } })
       .from(shifts)
@@ -207,7 +210,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .orderBy(asc(shifts.startsAt)),
   );
 
-  app.post("/", { preHandler: requireRole("manager") }, async (req) => {
+  app.post("/", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const body = parse(shiftSchema, req.body);
     const warnings = await check(req.user.companyId, body);
     const [shift] = await db
@@ -218,7 +221,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Edits a shift. Changes to a published shift are announced to whoever it affects. */
-  app.patch<{ Params: { id: string } }>("/:id", { preHandler: requireRole("manager") }, async (req) => {
+  app.patch<{ Params: { id: string } }>("/:id", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const existing = await loadShift(req.user.companyId, req.params.id);
     const merged = parse(shiftSchema, { ...toInput(existing), ...parse(shiftBaseSchema.partial(), req.body) });
     const warnings = await check(req.user.companyId, merged, existing.id);
@@ -251,7 +254,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return { shift, warnings };
   });
 
-  app.delete<{ Params: { id: string } }>("/:id", { preHandler: requireRole("manager") }, async (req) => {
+  app.delete<{ Params: { id: string } }>("/:id", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const existing = await loadShift(req.user.companyId, req.params.id);
     await db.delete(shifts).where(eq(shifts.id, existing.id));
     if (existing.status === "published") {
@@ -266,7 +269,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Publishes every draft in the range and tells each scheduled person once. */
-  app.post("/publish", { preHandler: requireRole("manager") }, async (req) => {
+  app.post("/publish", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const { from, to } = parse(shiftRangeSchema, req.body);
     const published = await db
       .update(shifts)
@@ -305,7 +308,7 @@ const routes: FastifyPluginAsync = async (app) => {
    * Copies the shifts in [from, to) forward one week as drafts, skipping any
    * that would overlap something already scheduled.
    */
-  app.post("/copy-week", { preHandler: requireRole("manager") }, async (req) => {
+  app.post("/copy-week", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const { from, to } = parse(shiftRangeSchema, req.body);
     const source = await db
       .select()
@@ -389,7 +392,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Approving turns the shift into an open shift for someone else to pick up. */
-  app.post<{ Params: { id: string } }>("/:id/drop-decision", { preHandler: requireRole("manager") }, async (req) => {
+  app.post<{ Params: { id: string } }>("/:id/drop-decision", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const { approve } = parse(z.object({ approve: z.boolean() }), req.body);
     const shift = await loadShift(req.user.companyId, req.params.id);
     if (!shift.dropRequestedAt || !shift.employeeId) throw new HttpError(409, "No pending drop request for this shift");

@@ -40,11 +40,11 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
   const { id } = use(params);
   const { me, can } = useAuth();
   const emp = useApi(`/employees/${id}`);
-  const all = useApi<any[]>(can("manager") ? "/employees" : null);
+  const all = useApi<any[]>(can("manager", "people") ? "/employees" : null);
   // Each person sees their own accrued time off here; managers and up see everyone's.
-  const balances = useApi<any[]>(can("manager") || id === me?.user.id ? `/pto/balances?employeeId=${id}` : null);
-  const tasks = useApi<any[]>(can("manager") ? `/onboarding/tasks?employeeId=${id}` : null);
-  const templates = useApi<any[]>(can("admin") ? "/onboarding/templates" : null);
+  const balances = useApi<any[]>(can("manager", "timeoff") || id === me?.user.id ? `/pto/balances?employeeId=${id}` : null);
+  const tasks = useApi<any[]>(can("manager", "onboarding") ? `/onboarding/tasks?employeeId=${id}` : null);
+  const templates = useApi<any[]>(can("admin", "onboarding") ? "/onboarding/templates" : null);
   const [editing, setEditing] = useState(false);
   const [invite, setInvite] = useState<{ emailed: boolean; link: string } | null>(null);
   const { busy, error, run } = useAction();
@@ -56,14 +56,14 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
   return (
     <>
       <PageHead title={`${e.firstName} ${e.lastName}`} sub={[e.title, e.department].filter(Boolean).join(" · ")}
-        before={<PhotoEditor e={e} canEdit={can("admin") || e.id === me?.user.id} onChange={emp.setData} />}>
+        before={<PhotoEditor e={e} canEdit={can("admin", "people") || e.id === me?.user.id} onChange={emp.setData} />}>
         <Badge value={e.status} />
-        {can("admin") && e.id !== me?.user.id && e.hasLogin && (
+        {can("admin", "people") && e.id !== me?.user.id && e.hasLogin && (
           <button className="btn" onClick={() => confirm(`Sign ${e.firstName} out of Crewdesk on every device?`)
             && api(`/employees/${id}/sign-out-everywhere`, { method: "POST" }).then(() => alert("Signed out everywhere."), (err) => alert(err.message))}>Sign out everywhere</button>
         )}
-        {can("admin") && <Link className="btn" href={`/settings/notifications?employeeId=${id}`}>Notifications</Link>}
-        {can("admin") && <button className="btn" onClick={() => setEditing(!editing)}>{editing ? "Close" : "Edit"}</button>}
+        {can("admin", "people") && <Link className="btn" href={`/settings/notifications?employeeId=${id}`}>Notifications</Link>}
+        {can("admin", "people") && <button className="btn" onClick={() => setEditing(!editing)}>{editing ? "Close" : "Edit"}</button>}
       </PageHead>
       {editing ? (
         <div className="card">
@@ -97,7 +97,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
           )}
         </div>
       )}
-      {can("admin") && !e.hasLogin && !isInactive(e.status) && (
+      {can("admin", "people") && !e.hasLogin && !isInactive(e.status) && (
         <div className="card stack">
           <div className="row">
             <strong style={{ marginRight: 8 }}>Account</strong>
@@ -109,7 +109,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
           {invite && <InviteResult invite={invite} name={e.firstName} email={e.email} />}
         </div>
       )}
-      {can("admin") && e.id !== me?.user.id && e.hasLogin && (e.twoFactorEnabled || e.locked) && (
+      {can("admin", "people") && e.id !== me?.user.id && e.hasLogin && (e.twoFactorEnabled || e.locked) && (
         <div className="card row">
           <strong style={{ marginRight: 8 }}>Account</strong>
           {e.twoFactorEnabled && (
@@ -135,10 +135,10 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
             ) : <Empty>No time off accrued yet.</Empty>}
           </div>
         )}
-        {(can("manager") || e.id === me?.user.id) && !isInactive(e.status) && (
+        {(can("manager", "people") || e.id === me?.user.id) && !isInactive(e.status) && (
           <TasksBox employeeId={e.id} firstName={e.firstName} isSelf={e.id === me?.user.id} />
         )}
-        {(can("manager") || e.id === me?.user.id) && !isInactive(e.status) && (
+        {(can("manager", "timeoff") || e.id === me?.user.id) && !isInactive(e.status) && (
           <RequestTimeOffBox employeeId={e.id} firstName={e.firstName} isSelf={e.id === me?.user.id} balances={balances.data} onChange={balances.reload} />
         )}
         {tasks.data && (
@@ -166,14 +166,14 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
         )}
       </div>
       {/* Availability is only tracked for part-time employees. */}
-      {can("manager") && e.employmentType === "part_time" && (
+      {can("manager", "schedule") && e.employmentType === "part_time" && (
         <div className="card">
           <h2>Availability</h2>
           <p className="muted" style={{ marginTop: 0 }}>Recurring times {e.firstName} can&apos;t work. These show on the schedule and warn you when scheduling.</p>
           <AvailabilityEditor employeeId={id} />
         </div>
       )}
-      {can("admin") && <EmployeeTaxForms employeeId={id} />}
+      {can("admin", "payroll") && <EmployeeTaxForms employeeId={id} />}
       <DocumentList employeeId={id} />
     </>
   );

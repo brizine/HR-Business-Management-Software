@@ -4,11 +4,14 @@ import { z } from "zod";
 import { hasRole, isInactive, payScheduleSchema, upcomingPeriods, type PayFrequency } from "@crewdesk/shared";
 import { db } from "../db";
 import { companies, employees, payPeriodApprovers, payPeriods } from "../db/schema";
-import { authenticate, requireRole } from "../lib/auth";
+import { authenticate, requireRole, roleIn } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { notify, staffWithRole } from "../lib/notify";
 import { buildPayrollLines } from "../lib/payroll";
 import { localParts } from "../lib/tz";
+
+/** Which area of the Permissions page controls access here. */
+const AREA = "payroll" as const;
 
 async function approverIds(companyId: string) {
   const rows = await db.select({ id: payPeriodApprovers.employeeId }).from(payPeriodApprovers).where(eq(payPeriodApprovers.companyId, companyId));
@@ -17,7 +20,7 @@ async function approverIds(companyId: string) {
 
 /** Admins see pay periods; approvers see the ones they're asked to approve. */
 async function canSeePeriods(req: FastifyRequest) {
-  return hasRole(req.user.role, "admin") || (await approverIds(req.user.companyId)).includes(req.user.sub);
+  return hasRole(roleIn(req, AREA), "admin") || (await approverIds(req.user.companyId)).includes(req.user.sub);
 }
 
 async function schedule(companyId: string) {
@@ -38,10 +41,10 @@ async function schedule(companyId: string) {
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
 
-  app.get("/schedule", { preHandler: requireRole("admin") }, async (req) => schedule(req.user.companyId));
+  app.get("/schedule", { preHandler: requireRole("admin", AREA) }, async (req) => schedule(req.user.companyId));
 
   /** The owner sets how often people are paid, when payday is, and who approves each period. */
-  app.put("/schedule", { preHandler: requireRole("owner") }, async (req) => {
+  app.put("/schedule", { preHandler: requireRole("owner", AREA) }, async (req) => {
     const body = parse(payScheduleSchema, req.body);
     const ids = [...new Set(body.approverIds)];
     const valid = ids.length
@@ -63,7 +66,7 @@ const routes: FastifyPluginAsync = async (app) => {
   /** For the sidebar: is this person an approver, and how many periods are waiting. */
   app.get("/me", async (req) => {
     const isApprover = (await approverIds(req.user.companyId)).includes(req.user.sub);
-    if (!isApprover && !hasRole(req.user.role, "owner")) return { isApprover: false, pending: 0 };
+    if (!isApprover && !hasRole(roleIn(req, AREA), "owner")) return { isApprover: false, pending: 0 };
     const waiting = await db.select({ id: payPeriods.id }).from(payPeriods).where(and(eq(payPeriods.companyId, req.user.companyId), eq(payPeriods.status, "pending")));
     return { isApprover, pending: waiting.length };
   });
@@ -80,7 +83,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .limit(26);
     const isApprover = (await approverIds(req.user.companyId)).includes(req.user.sub);
     return {
-      canApprove: isApprover || hasRole(req.user.role, "owner"),
+      canApprove: isApprover || hasRole(roleIn(req, AREA), "owner"),
       periods: rows.map((r) => ({ ...r.period, approvedBy: r.approver?.firstName ? `${r.approver.firstName} ${r.approver.lastName}` : null })),
     };
   });
@@ -99,7 +102,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return {
       ...row.period,
       approvedBy: row.approver?.firstName ? `${row.approver.firstName} ${row.approver.lastName}` : null,
-      canApprove: isApprover || hasRole(req.user.role, "owner"),
+      canApprove: isApprover || hasRole(roleIn(req, AREA), "owner"),
       lines: lines.filter((l) => l.totalHours > 0 || l.ptoHours > 0 || l.payType === "salary"),
     };
   });
@@ -108,7 +111,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { id: string } }>("/:id/approve", async (req) => {
     const { note } = parse(z.object({ note: z.string().trim().max(1000).optional() }), req.body ?? {});
     const isApprover = (await approverIds(req.user.companyId)).includes(req.user.sub);
-    if (!isApprover && !hasRole(req.user.role, "owner")) throw new HttpError(403, "You aren't an approver for pay periods");
+    if (!isApprover && !hasRole(roleIn(req, AREA), "owner")) throw new HttpError(403, "You aren't an approver for pay periods");
     const [period] = await db.select().from(payPeriods).where(and(eq(payPeriods.id, req.params.id), eq(payPeriods.companyId, req.user.companyId)));
     if (!period) notFound("Pay period");
     if (period.status === "approved") throw new HttpError(409, "This pay period is already approved");
@@ -129,7 +132,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Admins can reopen an approved period (e.g. hours were corrected) so it's approved again. */
-  app.post<{ Params: { id: string } }>("/:id/reopen", { preHandler: requireRole("admin") }, async (req) => {
+  app.post<{ Params: { id: string } }>("/:id/reopen", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const [updated] = await db
       .update(payPeriods)
       .set({ status: "pending", approvedById: null, approvedAt: null, approvalNote: null })

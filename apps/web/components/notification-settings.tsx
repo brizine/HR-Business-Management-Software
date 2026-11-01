@@ -119,14 +119,14 @@ export function NotificationSettings({ employeeId }: { employeeId?: string }) {
 /** Owner switch for company-wide texting, plus which providers the server has configured. */
 export function CompanyNotificationSettings() {
   const { can } = useAuth();
-  const { data, setData } = useApi(can("admin") ? "/notifications/company-settings" : null);
+  const { data, setData } = useApi(can("admin", "people") ? "/notifications/company-settings" : null);
   const { busy, error, run } = useAction();
   if (!data) return null;
   return (
     <div className="card">
       <h2>Company settings</h2>
       <label className="check">
-        <input type="checkbox" checked={data.smsEnabled} disabled={!can("owner") || busy}
+        <input type="checkbox" checked={data.smsEnabled} disabled={!can("owner", "company") || busy}
           onChange={(e) => run(async () => setData(await api("/notifications/company-settings", { method: "PUT", body: { smsEnabled: e.target.checked } })))} />
         Allow text messages (each text costs a few cents through your SMS provider)
       </label>
@@ -134,7 +134,7 @@ export function CompanyNotificationSettings() {
       <p className="muted">
         Email provider: {data.emailConfigured ? "connected" : "not configured (set SMTP_URL on the server)"} ·
         SMS provider: {data.smsConfigured ? "connected" : "not configured (set the TWILIO_* variables on the server)"}
-        {!can("owner") && " · Only the owner can change these."}
+        {!can("owner", "company") && " · Only the owner can change these."}
       </p>
     </div>
   );

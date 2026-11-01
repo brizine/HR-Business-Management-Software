@@ -34,7 +34,7 @@ export default function Fleet() {
           <option value="tool">Tools</option>
         </select>
         <Link className="btn" href="/fleet/labels">Print QR labels</Link>
-        {can("manager") && <button className="btn primary" onClick={() => setAdding(!adding)}>Add asset</button>}
+        {can("manager", "fleet") && <button className="btn primary" onClick={() => setAdding(!adding)}>Add asset</button>}
       </PageHead>
       {adding && (
         <div className="card">

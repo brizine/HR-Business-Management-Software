@@ -69,7 +69,7 @@ export default function Hiring() {
   const jobs = useApi<any[]>("/jobs");
   const [jobId, setJobId] = useState<string | null>(null);
   const applicants = useApi<any[]>(jobId ? `/applicants?jobId=${jobId}` : null);
-  const templates = useApi<any[]>(can("admin") ? "/onboarding/templates" : null);
+  const templates = useApi<any[]>(can("admin", "onboarding") ? "/onboarding/templates" : null);
   const [creating, setCreating] = useState(false);
   const [addingApplicant, setAddingApplicant] = useState(false);
   const jobAction = useAction();
@@ -78,7 +78,7 @@ export default function Hiring() {
 
   const [hiring, setHiring] = useState<any>(null);
   const [hired, setHired] = useState<any>(null);
-  const staff = useApi<any[]>(can("admin") ? "/employees" : null);
+  const staff = useApi<any[]>(can("admin", "people") ? "/employees" : null);
 
   return (
     <>
@@ -180,7 +180,7 @@ export default function Hiring() {
                           {APPLICANT_STAGES.filter((s) => s !== "hired").map((s) => <option key={s}>{s}</option>)}
                         </select>
                       )}
-                      {stage === "offer" && can("admin") && <button className="btn sm primary" onClick={() => { setHired(null); setHiring(a); }}>Hire</button>}
+                      {stage === "offer" && can("admin", "hiring") && <button className="btn sm primary" onClick={() => { setHired(null); setHiring(a); }}>Hire</button>}
                     </div>
                   </div>
                 ))}

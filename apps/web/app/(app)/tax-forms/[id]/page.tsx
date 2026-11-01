@@ -98,10 +98,10 @@ export default function ViewTaxForm({ params }: { params: Promise<{ id: string }
   const { id } = use(params);
   const { me, can } = useAuth();
   const { data, error, reload } = useApi(`/tax-forms/${id}`);
-  const employee = useApi(data && can("admin") ? `/employees/${data.form.employeeId}` : null);
+  const employee = useApi(data && can("admin", "payroll") ? `/employees/${data.form.employeeId}` : null);
   if (!data) return <ErrorBox error={error} />;
   const f = data.form;
-  const needsSection2 = f.type === "i9" && f.status !== "completed" && !f.supersededAt && can("admin") && f.employeeId !== me?.user.id;
+  const needsSection2 = f.type === "i9" && f.status !== "completed" && !f.supersededAt && can("admin", "payroll") && f.employeeId !== me?.user.id;
 
   return (
     <>
@@ -135,7 +135,7 @@ export default function ViewTaxForm({ params }: { params: Promise<{ id: string }
       )}
       {needsSection2 && <Section2 formId={f.id} startDate={employee.data?.startDate} onDone={reload} />}
       {f.processedAt && <p className="muted">Entered in payroll {fmtDate(f.processedAt)}.</p>}
-      {can("admin") && data.accessLog.length > 0 && (
+      {can("admin", "payroll") && data.accessLog.length > 0 && (
         <div className="card">
           <h2>Who has opened this</h2>
           <table><tbody>{data.accessLog.map((l: any, i: number) => (

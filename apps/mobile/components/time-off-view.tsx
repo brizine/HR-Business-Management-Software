@@ -10,7 +10,7 @@ export function TimeOffView() {
   const { can } = useAuth();
   const balances = useApi<any[]>("/pto/balances");
   const mine = useApi<any[]>("/pto/requests?mine=true");
-  const pending = useApi<any[]>(can("manager") ? "/pto/requests?status=pending" : null);
+  const pending = useApi<any[]>(can("manager", "timeoff") ? "/pto/requests?status=pending" : null);
   const reload = () => { balances.reload(); mine.reload(); pending.reload(); };
 
   const decide = (id: string, status: "approved" | "denied") =>
@@ -21,7 +21,7 @@ export function TimeOffView() {
       <AccruedTimeOffCard balances={balances.data} />
       <RequestTimeOffCard balances={balances.data} onSent={reload} showRecent={false} />
 
-      {can("manager") && !!pending.data?.length && (
+      {can("manager", "timeoff") && !!pending.data?.length && (
         <Card title="Needs your approval">
           {pending.data.map(({ request: r, employee, policyName }) => (
             <View key={r.id} style={{ gap: 6 }}>

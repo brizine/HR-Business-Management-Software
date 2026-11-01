@@ -5,10 +5,13 @@ import { hasRole, onboardingTemplateSchema, type Role } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
 import { documents, employees, onboardingTasks, onboardingTemplates } from "../db/schema";
-import { authenticate, isManager, requireRole } from "../lib/auth";
+import { authenticate, isManager, requireRole, roleIn } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { except, notify, staffWithRole } from "../lib/notify";
 import { storage } from "../lib/storage";
+
+/** Which area of the Permissions page controls access here. */
+const AREA = "onboarding" as const;
 
 type Task = typeof onboardingTasks.$inferSelect;
 type Employee = typeof employees.$inferSelect;
@@ -168,7 +171,7 @@ async function withDocuments(tasks: Task[]) {
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
 
-  app.get("/templates", { preHandler: requireRole("manager") }, async (req) =>
+  app.get("/templates", { preHandler: requireRole("manager", AREA) }, async (req) =>
     db.select().from(onboardingTemplates).where(eq(onboardingTemplates.companyId, req.user.companyId)),
   );
 
@@ -184,7 +187,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return body;
   }
 
-  app.post("/templates", { preHandler: requireRole("admin") }, async (req) => {
+  app.post("/templates", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const body = await validateTemplate(req);
     const [row] = await db
       .insert(onboardingTemplates)
@@ -193,7 +196,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return row;
   });
 
-  app.put<{ Params: { id: string } }>("/templates/:id", { preHandler: requireRole("admin") }, async (req) => {
+  app.put<{ Params: { id: string } }>("/templates/:id", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const body = await validateTemplate(req);
     const [row] = await db
       .update(onboardingTemplates)
@@ -204,7 +207,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return row;
   });
 
-  app.delete<{ Params: { id: string } }>("/templates/:id", { preHandler: requireRole("admin") }, async (req) => {
+  app.delete<{ Params: { id: string } }>("/templates/:id", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const [row] = await db
       .delete(onboardingTemplates)
       .where(and(eq(onboardingTemplates.id, req.params.id), eq(onboardingTemplates.companyId, req.user.companyId)))
@@ -213,7 +216,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return { ok: true };
   });
 
-  app.post("/assign", { preHandler: requireRole("admin") }, async (req) => {
+  app.post("/assign", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const body = parse(z.object({ employeeId: z.string().uuid(), templateId: z.string().uuid() }), req.body);
     const [emp] = await db
       .select()
@@ -225,7 +228,7 @@ const routes: FastifyPluginAsync = async (app) => {
 
   /** Tasks for one employee; employees can only see their own. */
   app.get<{ Querystring: { employeeId?: string; open?: string } }>("/tasks", async (req) => {
-    const employeeId = isManager(req) && req.query.employeeId ? req.query.employeeId : req.user.sub;
+    const employeeId = isManager(req, AREA) && req.query.employeeId ? req.query.employeeId : req.user.sub;
     const filters = [eq(onboardingTasks.companyId, req.user.companyId), eq(onboardingTasks.employeeId, employeeId)];
     if (req.query.open === "true") filters.push(isNull(onboardingTasks.completedAt));
     const tasks = await db
@@ -237,14 +240,14 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Open tasks waiting on the signed-in manager/admin, across all new hires. */
-  app.get("/assigned", { preHandler: requireRole("manager") }, async (req) => {
+  app.get("/assigned", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const rows = await db
       .select({ task: onboardingTasks, employee: employees })
       .from(onboardingTasks)
       .innerJoin(employees, eq(employees.id, onboardingTasks.employeeId))
       .where(and(eq(onboardingTasks.companyId, req.user.companyId), isNull(onboardingTasks.completedAt), inArray(onboardingTasks.assignee, ["manager", "admin"])))
       .orderBy(asc(onboardingTasks.dueDate));
-    const admin = hasRole(req.user.role, "admin");
+    const admin = hasRole(roleIn(req, AREA), "admin");
     return rows
       .filter(({ task, employee }) =>
         task.assignee === "admin" ? admin : employee.managerId ? employee.managerId === req.user.sub : admin,
@@ -253,7 +256,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Onboarding progress for everyone currently onboarding. */
-  app.get("/progress", { preHandler: requireRole("manager") }, async (req) => {
+  app.get("/progress", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const tasks = await db.select().from(onboardingTasks).where(eq(onboardingTasks.companyId, req.user.companyId));
     const staff = await db
       .select()
@@ -292,18 +295,18 @@ const routes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { id: string } }>("/tasks/:id/complete", async (req) => {
     const task = await loadTask(req, req.params.id);
     const ownTask = task.employeeId === req.user.sub && task.assignee === "employee";
-    if (!ownTask && !isManager(req)) throw new HttpError(403, "This task is assigned to someone else");
-    if (!isManager(req) && task.action === "upload") throw new HttpError(400, "Upload the document to finish this task");
-    if (!isManager(req) && task.action === "sign") throw new HttpError(400, "Sign the document to finish this task");
-    if (!isManager(req) && task.action === "form") throw new HttpError(400, "Fill out and sign the form to finish this task");
-    if (task.assignee === "admin" && !hasRole(req.user.role as Role, "admin")) throw new HttpError(403, "This task is for an admin");
+    if (!ownTask && !isManager(req, AREA)) throw new HttpError(403, "This task is assigned to someone else");
+    if (!isManager(req, AREA) && task.action === "upload") throw new HttpError(400, "Upload the document to finish this task");
+    if (!isManager(req, AREA) && task.action === "sign") throw new HttpError(400, "Sign the document to finish this task");
+    if (!isManager(req, AREA) && task.action === "form") throw new HttpError(400, "Fill out and sign the form to finish this task");
+    if (task.assignee === "admin" && !hasRole(roleIn(req, AREA), "admin")) throw new HttpError(403, "This task is for an admin");
     return completeTask(task, req.user.sub);
   });
 
   /** Finishes an upload task by uploading the file (multipart field "file"). */
   app.post<{ Params: { id: string } }>("/tasks/:id/upload", async (req) => {
     const task = await loadTask(req, req.params.id);
-    if (task.employeeId !== req.user.sub && !isManager(req)) throw new HttpError(403, "This task is assigned to someone else");
+    if (task.employeeId !== req.user.sub && !isManager(req, AREA)) throw new HttpError(403, "This task is assigned to someone else");
     if (task.action !== "upload") throw new HttpError(400, "This task doesn't take an upload");
     const file = await req.file();
     if (!file) throw new HttpError(400, "No file uploaded");

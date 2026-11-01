@@ -419,6 +419,21 @@ export const payrollRuns = pgTable("payroll_runs", {
   createdAt: createdAt(),
 });
 
+/**
+ * Access levels by area that differ from a person's role (see permissions in @crewdesk/shared).
+ * The "permissions" area holds "admin" for people allowed to manage everyone else's access.
+ */
+export const employeePermissions = pgTable(
+  "employee_permissions",
+  {
+    companyId: companyId(),
+    employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+    area: text("area").notNull(),
+    level: text("level").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.employeeId, t.area] })],
+);
+
 /** Who is asked to approve each pay period once it ends. */
 export const payPeriodApprovers = pgTable(
   "pay_period_approvers",

@@ -10,6 +10,9 @@ import { activeSites, checkPunch, locationPolicies, type PunchCheck } from "../l
 import { approversFor, except, notify } from "../lib/notify";
 import { localParts } from "../lib/tz";
 
+/** Which area of the Permissions page controls access here. */
+const AREA = "time" as const;
+
 const rangeQuery = z.object({
   employeeId: z.string().uuid().optional(),
   from: z.string().optional(),
@@ -38,7 +41,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return { ...(await locationPolicies(req.user.companyId)), activeSites: sites.length };
   });
 
-  app.put("/location-policy", { preHandler: requireRole("admin") }, async (req) => {
+  app.put("/location-policy", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const body = parse(locationPolicySchema, req.body);
     await db
       .update(companies)
@@ -138,7 +141,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.get("/entries", async (req) => {
     const q = parse(rangeQuery, req.query);
     const filters = [eq(timeEntries.companyId, req.user.companyId)];
-    const employeeId = isManager(req) ? q.employeeId : req.user.sub;
+    const employeeId = isManager(req, AREA) ? q.employeeId : req.user.sub;
     if (employeeId) filters.push(eq(timeEntries.employeeId, employeeId));
     if (q.from) filters.push(gte(timeEntries.clockIn, new Date(q.from)));
     if (q.to) filters.push(lt(timeEntries.clockIn, new Date(q.to)));
@@ -159,7 +162,7 @@ const routes: FastifyPluginAsync = async (app) => {
   }
 
   /** Per-employee regular/overtime totals for a range (timesheet view). */
-  app.get("/timesheets", { preHandler: requireRole("manager") }, async (req) => {
+  app.get("/timesheets", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const q = parse(rangeQuery, req.query);
     const filters = [eq(timeEntries.companyId, req.user.companyId)];
     if (q.from) filters.push(gte(timeEntries.clockIn, new Date(q.from)));
@@ -192,7 +195,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Managers correct missed punches. Editing clears prior approval. */
-  app.patch<{ Params: { id: string } }>("/entries/:id", { preHandler: requireRole("manager") }, async (req) => {
+  app.patch<{ Params: { id: string } }>("/entries/:id", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const body = parse(timeEntryEditSchema, req.body);
     if (body.clockOut && new Date(body.clockOut) <= new Date(body.clockIn)) {
       throw new HttpError(400, "Clock-out must be after clock-in");
@@ -212,7 +215,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return row;
   });
 
-  app.post("/entries/approve", { preHandler: requireRole("manager") }, async (req) => {
+  app.post("/entries/approve", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const { ids } = parse(z.object({ ids: z.array(z.string().uuid()).min(1) }), req.body);
     const rows = await db
       .update(timeEntries)
@@ -223,7 +226,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Who is on the clock right now. */
-  app.get("/who-is-in", { preHandler: requireRole("manager") }, async (req) => {
+  app.get("/who-is-in", { preHandler: requireRole("manager", AREA) }, async (req) => {
     return db
       .select({
         entryId: timeEntries.id,

@@ -8,7 +8,7 @@ export default function Home() {
   const router = useRouter();
   useEffect(() => {
     // The dashboard is for managers; everyone else starts on their schedule.
-    if (ready) router.replace(!me ? "/login" : can("manager") ? "/dashboard" : "/schedule");
+    if (ready) router.replace(!me ? "/login" : can("manager", "dashboard") ? "/dashboard" : "/schedule");
   }, [me, ready, router, can]);
   return null;
 }

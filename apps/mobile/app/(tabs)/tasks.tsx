@@ -9,7 +9,7 @@ export default function Tasks() {
   const onboarding = useApi<any[]>("/onboarding/tasks?open=true");
   const workOrders = useApi<any[]>("/work-orders?status=active&mine=true");
   const { can } = useAuth();
-  const waiting = useApi<any[]>(can("manager") ? "/onboarding/assigned" : null);
+  const waiting = useApi<any[]>(can("manager", "onboarding") ? "/onboarding/assigned" : null);
   const reload = () => { onboarding.reload(); workOrders.reload(); waiting.reload(); };
 
   const setStatus = (id: string, status: string) =>

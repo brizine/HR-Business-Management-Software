@@ -65,7 +65,7 @@ function People() {
   const titles = useMemo(() => distinct(all, "title"), [all]);
   const depts = useMemo(() => distinct(all, "department"), [all]);
   const rows = all.filter((e) => matches(e, filters));
-  const seesPay = can("manager");
+  const seesPay = can("manager", "people");
   // How many people have each status, given the other filters (so the numbers add up to what "All" shows).
   const byStatus = all.filter((e) => matches(e, { ...filters, status: "" })).reduce<Record<string, number>>((n, e) => ({ ...n, [e.status]: (n[e.status] ?? 0) + 1 }), {});
   const statusTotal = Object.values(byStatus).reduce((a, b) => a + b, 0);
@@ -141,7 +141,7 @@ function People() {
   return (
     <>
       <PageHead title="Team" sub={<span role="status">{summary}</span>}>
-        {can("admin") && <button className="btn primary" onClick={() => setAdding(!adding)}>Add employee</button>}
+        {can("admin", "people") && <button className="btn primary" onClick={() => setAdding(!adding)}>Add employee</button>}
       </PageHead>
       <form className="card filters" role="search" aria-label="Filter the team" onSubmit={(e) => e.preventDefault()}>
         {Object.entries(filterControls).map(([k, control]) => <Fragment key={k}>{control}</Fragment>)}

@@ -4,8 +4,11 @@ import { SPRAY_MIX_TEMPLATE, hasRole, mixProductSchema, mixSheetSchema, type Rol
 import { z } from "zod";
 import { db } from "../db";
 import { employees, mixChanges, mixEditors, mixProducts, mixSheets } from "../db/schema";
-import { authenticate, requireRole } from "../lib/auth";
+import { authenticate, requireRole, roleIn } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
+
+/** Which area of the Permissions page controls access here. */
+const AREA = "spray" as const;
 
 type Sheet = typeof mixSheets.$inferSelect;
 type Product = typeof mixProducts.$inferSelect;
@@ -39,7 +42,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
 
   async function canEdit(req: FastifyRequest) {
-    if (hasRole(req.user.role as Role, "admin")) return true;
+    if (hasRole(roleIn(req, AREA), "admin")) return true;
     const [row] = await db
       .select()
       .from(mixEditors)
@@ -100,7 +103,7 @@ const routes: FastifyPluginAsync = async (app) => {
       : new Map<string, string>();
     return {
       canEdit: await canEdit(req),
-      canManageEditors: hasRole(req.user.role as Role, "admin"),
+      canManageEditors: hasRole(roleIn(req, AREA), "admin"),
       sheets: sheets.map((s) => ({
         ...s,
         updatedBy: s.updatedById ? names.get(s.updatedById) ?? null : null,
@@ -111,11 +114,11 @@ const routes: FastifyPluginAsync = async (app) => {
 
   // ---- Editors (admins choose) ----
 
-  app.get("/editors", { preHandler: requireRole("admin") }, async (req) =>
+  app.get("/editors", { preHandler: requireRole("admin", AREA) }, async (req) =>
     (await db.select().from(mixEditors).where(eq(mixEditors.companyId, req.user.companyId))).map((e) => e.employeeId),
   );
 
-  app.put("/editors", { preHandler: requireRole("admin") }, async (req) => {
+  app.put("/editors", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const { employeeIds } = parse(z.object({ employeeIds: z.array(z.string().uuid()).max(500) }), req.body);
     const valid = employeeIds.length
       ? await db

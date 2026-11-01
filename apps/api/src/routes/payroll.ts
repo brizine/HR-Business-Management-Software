@@ -8,9 +8,12 @@ import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { buildPayrollLines, getProvider, payrollCsv } from "../lib/payroll";
 
+/** Which area of the Permissions page controls access here. */
+const AREA = "payroll" as const;
+
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
-  app.addHook("preHandler", requireRole("admin"));
+  app.addHook("preHandler", requireRole("admin", AREA));
 
   app.get("/settings", async (req) => {
     const [c] = await db.select().from(companies).where(eq(companies.id, req.user.companyId));
@@ -26,7 +29,7 @@ const routes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.put("/settings", { preHandler: requireRole("owner") }, async (req) => {
+  app.put("/settings", { preHandler: requireRole("owner", AREA) }, async (req) => {
     const body = parse(
       z
         .object({

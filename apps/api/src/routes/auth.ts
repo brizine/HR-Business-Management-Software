@@ -24,6 +24,9 @@ import { HttpError, parse } from "../lib/errors";
 import { newTotpSecret, otpauthUri, verifyTotp } from "../lib/totp";
 import { publicEmployee } from "./employees";
 
+/** Which area of the Permissions page controls access here. */
+const AREA = "company" as const;
+
 type EmployeeRow = typeof employees.$inferSelect;
 
 export const MAX_FAILED_ATTEMPTS = 5;
@@ -227,7 +230,8 @@ const routes: FastifyPluginAsync = async (app) => {
   app.get("/me", { preHandler: authenticate }, async (req) => {
     const [user] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
     const [company] = await db.select().from(companies).where(eq(companies.id, user.companyId));
-    return { user: publicEmployee(user), company };
+    // Access by area (Permissions page), so the website and app show only what this person can use.
+    return { user: publicEmployee(user), company, access: { areas: req.user.areas ?? {}, managesPermissions: !!req.user.managesPermissions } };
   });
 
   /** What the Security settings page shows. */
@@ -376,13 +380,13 @@ const routes: FastifyPluginAsync = async (app) => {
 
   // ---- Company policy ----
 
-  app.get("/policy", { preHandler: [authenticate, requireRole("admin")] }, async (req) => ({ twoFactorRequiredFor: await companyPolicy(req.user.companyId) }));
+  app.get("/policy", { preHandler: [authenticate, requireRole("admin", AREA)] }, async (req) => ({ twoFactorRequiredFor: await companyPolicy(req.user.companyId) }));
 
   /**
    * Sets who must use two-factor. People newly covered who haven't set it up
    * are signed out, so their next sign-in walks them through setup.
    */
-  app.put("/policy", { preHandler: [authenticate, requireRole("owner")] }, async (req: FastifyRequest) => {
+  app.put("/policy", { preHandler: [authenticate, requireRole("owner", AREA)] }, async (req: FastifyRequest) => {
     const { twoFactorRequiredFor } = parse(z.object({ twoFactorRequiredFor: z.enum(TWO_FACTOR_POLICIES) }), req.body);
     await db.update(companies).set({ twoFactorRequiredFor }).where(eq(companies.id, req.user.companyId));
     const staff = await db.select().from(employees).where(eq(employees.companyId, req.user.companyId));

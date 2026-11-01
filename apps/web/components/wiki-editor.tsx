@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { WIKI_LEVELS, WIKI_LEVEL_LABELS, hasRole, type Role, type WikiLevel } from "@crewdesk/shared";
+import { WIKI_LEVELS, WIKI_LEVEL_LABELS, hasRole, type Role, type WikiLevel, roleInArea } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -16,7 +16,8 @@ export function WikiEditor({ page, parentId }: { page?: any; parentId?: string |
   const { me } = useAuth();
   const router = useRouter();
   const pages = useApi<WikiListItem[]>("/wiki/pages");
-  const role = (me?.user.role ?? "employee") as Role;
+  // Their level in the wiki (their role, or what the Permissions page gives them there).
+  const role = (me ? roleInArea(me.user.role, me.access?.areas, "wiki") : "employee") as Role;
   const admin = hasRole(role, "admin");
   const creating = !page;
   const [title, setTitle] = useState(page?.title ?? "");

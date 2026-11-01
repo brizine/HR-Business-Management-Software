@@ -34,7 +34,7 @@ function Rules({ siteCount }: { siteCount: number }) {
         {(["clockIn", "clockOut"] as const).map((key) => (
           <div key={key} className="stack">
             <label>{key === "clockIn" ? "Clocking in" : "Clocking out"}
-              <select value={data[key]} disabled={!can("admin") || busy} onChange={(e) => set(key, e.target.value)} aria-describedby={`${key}-help`}>
+              <select value={data[key]} disabled={!can("admin", "time") || busy} onChange={(e) => set(key, e.target.value)} aria-describedby={`${key}-help`}>
                 {LOCATION_POLICIES.map((p) => <option key={p} value={p}>{LOCATION_POLICY_LABELS[p]}</option>)}
               </select>
             </label>
@@ -48,7 +48,7 @@ function Rules({ siteCount }: { siteCount: number }) {
       <ErrorBox error={error} />
       {saved && <p className="muted" role="status" style={{ margin: 0 }}>Saved. Applies to the next punch.</p>}
       <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-        {can("admin") ? "" : "Only admins can change these. "}Location is only recorded at the moment of each punch, never in between.
+        {can("admin", "time") ? "" : "Only admins can change these. "}Location is only recorded at the moment of each punch, never in between.
         Some states require telling employees in writing that you record location; check your state&apos;s rules.
         Managers can always fix or add time on the timesheet for someone who couldn&apos;t punch.
       </p>
@@ -130,7 +130,7 @@ export default function JobSites() {
               <tr key={s.id}>
                 <td><strong>{s.name}</strong><div className="muted">{s.address ? `${s.address} · ` : ""}<a href={`https://www.openstreetmap.org/?mlat=${s.lat}&mlon=${s.lng}#map=17/${s.lat}/${s.lng}`} target="_blank" rel="noreferrer">map</a></div></td>
                 <td>
-                  {can("manager") ? (
+                  {can("manager", "time") ? (
                     <select aria-label={`Radius for ${s.name}`} value={s.radiusMeters} onChange={(e) => api(`/job-sites/${s.id}`, { method: "PATCH", body: { radiusMeters: Number(e.target.value) } }).then(sites.reload)} style={{ width: 120 }}>
                       {[...new Set([50, 100, 150, 250, 500, 1000, 2000, s.radiusMeters])].sort((a, b) => a - b).map((m) => <option key={m} value={m}>{m >= 1000 ? `${m / 1000} km` : `${m} m`}</option>)}
                     </select>
@@ -138,8 +138,8 @@ export default function JobSites() {
                 </td>
                 <td>{s.active ? <Badge value="active" /> : <span className="badge">inactive</span>}</td>
                 <td className="row">
-                  {can("manager") && <button className="btn sm" onClick={() => api(`/job-sites/${s.id}`, { method: "PATCH", body: { active: !s.active } }).then(sites.reload)}>{s.active ? "Deactivate" : "Activate"}</button>}
-                  {can("manager") && <button className="btn sm danger" onClick={() => confirm(`Delete ${s.name}?`) && api(`/job-sites/${s.id}`, { method: "DELETE" }).then(sites.reload)}>Delete</button>}
+                  {can("manager", "time") && <button className="btn sm" onClick={() => api(`/job-sites/${s.id}`, { method: "PATCH", body: { active: !s.active } }).then(sites.reload)}>{s.active ? "Deactivate" : "Activate"}</button>}
+                  {can("manager", "time") && <button className="btn sm danger" onClick={() => confirm(`Delete ${s.name}?`) && api(`/job-sites/${s.id}`, { method: "DELETE" }).then(sites.reload)}>Delete</button>}
                 </td>
               </tr>
             ))}</tbody>
@@ -147,7 +147,7 @@ export default function JobSites() {
         ) : <Empty>No job sites yet.</Empty>}
         <p className="muted" style={{ fontSize: 13 }}>Deactivate a seasonal client site instead of deleting it. A punch counts as on site within the radius, plus up to 100 m for the phone&apos;s GPS uncertainty.</p>
       </div>
-      {can("manager") && <SiteForm onSaved={sites.reload} />}
+      {can("manager", "time") && <SiteForm onSaved={sites.reload} />}
     </>
   );
 }

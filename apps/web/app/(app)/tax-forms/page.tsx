@@ -83,7 +83,7 @@ export default function TaxForms() {
           })}
         </div>
       )}
-      {can("admin") && settings.data.enabled && <AdminQueue />}
+      {can("admin", "payroll") && settings.data.enabled && <AdminQueue />}
     </>
   );
 }

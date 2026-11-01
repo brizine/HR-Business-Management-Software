@@ -4,19 +4,22 @@ import { INACTIVE_STATUSES, TAX_FORM_LABELS, W4_AMOUNTS, directDepositSchema, ha
 import type { ZodType } from "zod";
 import { db } from "../db";
 import { companies, employees, onboardingTasks, sensitiveAccessLog, taxForms } from "../db/schema";
-import { authenticate, requireRole } from "../lib/auth";
+import { authenticate, requireRole, roleIn } from "../lib/auth";
 import { decrypt, encrypt } from "../lib/crypto";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { except, notify, staffWithRole } from "../lib/notify";
 import { directDepositPdf, i9Pdf, w4Pdf, type Employer } from "../lib/taxFormPdf";
 import { completeTask } from "./onboarding";
 
+/** Which area of the Permissions page controls access here. */
+const AREA = "payroll" as const;
+
 const PURPOSE = "tax-forms-v1";
 type Form = typeof taxForms.$inferSelect;
 
 const seal = (data: unknown) => encrypt(JSON.stringify(data), PURPOSE);
 const open = <T>(stored: string) => JSON.parse(decrypt(stored, PURPOSE)) as T;
-const isAdmin = (req: FastifyRequest) => hasRole(req.user.role as Role, "admin");
+const isAdmin = (req: FastifyRequest) => hasRole(roleIn(req, AREA), "admin");
 
 const CITIZENSHIP_LABELS: Record<I9Section1["citizenship"], string> = {
   citizen: "U.S. citizen",
@@ -177,7 +180,7 @@ const routes: FastifyPluginAsync = async (app) => {
   }
 
   /** Admin: forms to act on (W-4/direct deposit not yet entered in payroll; I-9s needing Section 2). */
-  app.get("/pending", { preHandler: requireRole("admin") }, async (req) => {
+  app.get("/pending", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const rows = await db
       .select({ form: taxForms, employee: employees })
       .from(taxForms)
@@ -190,7 +193,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Admin: everything on file for one employee, including superseded versions. */
-  app.get<{ Querystring: { employeeId: string } }>("/", { preHandler: requireRole("admin") }, async (req) => {
+  app.get<{ Querystring: { employeeId: string } }>("/", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const rows = await db
       .select()
       .from(taxForms)
@@ -242,7 +245,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Admin completes I-9 Section 2 after examining the employee's documents. */
-  app.post<{ Params: { id: string } }>("/:id/i9-section-2", { preHandler: requireRole("admin") }, async (req) => {
+  app.post<{ Params: { id: string } }>("/:id/i9-section-2", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const form = await loadForm(req, req.params.id);
     if (form.type !== "i9" || form.supersededAt) throw new HttpError(400, "This isn't the employee's current I-9");
     if (form.status === "completed") throw new HttpError(409, "Section 2 is already complete");
@@ -268,7 +271,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Manual payroll: mark a W-4 or direct deposit form as entered in the payroll system. */
-  app.post<{ Params: { id: string } }>("/:id/processed", { preHandler: requireRole("admin") }, async (req) => {
+  app.post<{ Params: { id: string } }>("/:id/processed", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const form = await loadForm(req, req.params.id);
     const [row] = await db
       .update(taxForms)

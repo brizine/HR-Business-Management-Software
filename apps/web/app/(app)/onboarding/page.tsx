@@ -115,14 +115,14 @@ function TemplateBuilder({ onSaved }: { onSaved: () => void }) {
 
 export default function Onboarding() {
   const { can } = useAuth();
-  const progress = useApi<any[]>(can("manager") ? "/onboarding/progress" : null);
-  const templates = useApi<any[]>(can("manager") ? "/onboarding/templates" : null);
+  const progress = useApi<any[]>(can("manager", "onboarding") ? "/onboarding/progress" : null);
+  const templates = useApi<any[]>(can("manager", "onboarding") ? "/onboarding/templates" : null);
 
   return (
     <>
       <PageHead title="Onboarding" sub="Checklists that take new hires from offer to first day" />
       <MyTasks />
-      {can("manager") && (
+      {can("manager", "onboarding") && (
         <>
           <WaitingOnMe />
           <div className="card">
@@ -152,11 +152,11 @@ export default function Onboarding() {
                 <ul>{t.tasks.map((x: any, i: number) => (
                   <li key={i}>{x.title} <span className="muted">· {x.assignee === "employee" ? "new hire" : x.assignee} · day {x.dueInDays}{x.action === "form" ? ` · ${FORM_LABELS[x.formType]}` : x.action && x.action !== "none" ? ` · ${ACTION_LABELS[x.action as TaskAction].toLowerCase()}` : ""}</span></li>
                 ))}</ul>
-                {can("admin") && <button className="btn sm danger" onClick={() => confirm(`Delete "${t.name}"? Checklists already started aren't affected.`) && api(`/onboarding/templates/${t.id}`, { method: "DELETE" }).then(templates.reload)}>Delete template</button>}
+                {can("admin", "onboarding") && <button className="btn sm danger" onClick={() => confirm(`Delete "${t.name}"? Checklists already started aren't affected.`) && api(`/onboarding/templates/${t.id}`, { method: "DELETE" }).then(templates.reload)}>Delete template</button>}
               </details>
             )) : <Empty>No templates yet.</Empty>}
           </div>
-          {can("admin") && <TemplateBuilder onSaved={templates.reload} />}
+          {can("admin", "onboarding") && <TemplateBuilder onSaved={templates.reload} />}
         </>
       )}
     </>

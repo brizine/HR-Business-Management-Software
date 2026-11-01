@@ -126,7 +126,7 @@ function SessionsCard() {
 
 function PolicyCard() {
   const { can } = useAuth();
-  const { data, setData } = useApi(can("admin") ? "/auth/policy" : null);
+  const { data, setData } = useApi(can("admin", "company") ? "/auth/policy" : null);
   const [note, setNote] = useState<string | null>(null);
   const { busy, error, run } = useAction();
   if (!data) return null;
@@ -134,7 +134,7 @@ function PolicyCard() {
     <div className="card">
       <h2>Company: who must use two-factor</h2>
       <div className="row">
-        <select value={data.twoFactorRequiredFor} disabled={!can("owner") || busy} style={{ width: 280 }} onChange={(e) => {
+        <select value={data.twoFactorRequiredFor} disabled={!can("owner", "company") || busy} style={{ width: 280 }} onChange={(e) => {
           const value = e.target.value;
           if (!confirm(`Require two-factor for: ${POLICY_LABELS[value]}? People newly covered who haven't set it up will be signed out and walked through setup next time they sign in.`)) return;
           run(async () => {
@@ -150,7 +150,7 @@ function PolicyCard() {
       <ErrorBox error={error} />
       <p className="muted">
         Anyone can turn it on for themselves. If someone loses their phone and backup codes, an admin can reset it from their profile.
-        {!can("owner") && " Only the owner can change this."}
+        {!can("owner", "company") && " Only the owner can change this."}
       </p>
     </div>
   );

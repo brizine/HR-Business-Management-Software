@@ -23,13 +23,13 @@ export default function PayPeriodApproval() {
     <>
       <PageHead title={`Pay period ${fmtDate(d.periodStart)} – ${fmtDate(d.periodEnd)}`} sub={`Payday ${fmtDate(d.payday)}`}>
         <Badge value={d.status === "approved" ? "approved" : "pending"} />
-        {can("admin") && <Link className="btn" href="/payroll">Payroll</Link>}
+        {can("admin", "payroll") && <Link className="btn" href="/payroll">Payroll</Link>}
       </PageHead>
       {d.status === "approved" ? (
         <div className="card">
           <strong>Approved</strong> by {d.approvedBy ?? "someone no longer here"} on {fmtDateTime(d.approvedAt)}.
           {d.approvalNote && <p style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>“{d.approvalNote}”</p>}
-          {can("admin") && (
+          {can("admin", "payroll") && (
             <div style={{ marginTop: 10 }}>
               <button className="btn sm" disabled={busy} onClick={() => confirm("Reopen this pay period so it has to be approved again?") && run(async () => { await api(`/pay-periods/${id}/reopen`, { method: "POST" }); await p.reload(); })}>Reopen for approval</button>
             </div>

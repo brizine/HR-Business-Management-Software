@@ -1,11 +1,13 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { hasRole, type Role } from "@crewdesk/shared";
+import { hasRole, roleInArea, type AreaLevels, type PermissionArea, type Role } from "@crewdesk/shared";
 import { api, loadToken, saveToken, setSessionEndedHandler } from "./api";
 import { registerForPush, unregisterForPush } from "./push";
 
 interface Me {
   user: { id: string; firstName: string; lastName: string; email: string; role: Role; employmentType?: string };
   company: { id: string; name: string };
+  /** Access by area from the Permissions page (levels that differ from their role). */
+  access?: { areas: AreaLevels; managesPermissions: boolean };
 }
 
 export type SignInStep = { kind: "done" } | { kind: "code"; mfaToken: string } | { kind: "setup"; setupToken: string };
@@ -18,7 +20,8 @@ interface AuthCtx {
   /** Finishes signing in with a session token from the two-factor steps. */
   completeSignIn: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
-  can: (min: Role) => boolean;
+  /** At least `min` — in `area` if given, which counts any level set on the Permissions page. */
+  can: (min: Role, area?: PermissionArea) => boolean;
 }
 
 const Ctx = createContext<AuthCtx>(null as never);
@@ -71,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ me, ready, signIn, completeSignIn, signOut, can: (min) => !!me && hasRole(me.user.role, min) }}>
+    <Ctx.Provider value={{ me, ready, signIn, completeSignIn, signOut, can: (min, area) => !!me && hasRole(roleInArea(me.user.role, me.access?.areas, area), min) }}>
       {children}
     </Ctx.Provider>
   );

@@ -10,6 +10,9 @@ import { storage } from "../lib/storage";
 import { except, notify } from "../lib/notify";
 import { completeSignTaskFor } from "./onboarding";
 
+/** Which area of the Permissions page controls access here. */
+const AREA = "documents" as const;
+
 /** Text files are served as UTF-8 so characters like "—" display correctly. */
 const contentType = (mime: string) => (mime.startsWith("text/") && !mime.includes("charset") ? `${mime}; charset=utf-8` : mime);
 
@@ -22,7 +25,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const filters = [eq(documents.companyId, companyId)];
     if (req.query.employeeId) filters.push(eq(documents.employeeId, req.query.employeeId));
     if (req.query.assetId) filters.push(eq(documents.assetId, req.query.assetId));
-    if (!isManager(req)) filters.push(or(eq(documents.employeeId, sub), isNull(documents.employeeId))!);
+    if (!isManager(req, AREA)) filters.push(or(eq(documents.employeeId, sub), isNull(documents.employeeId))!);
     return db
       .select()
       .from(documents)
@@ -42,7 +45,7 @@ const routes: FastifyPluginAsync = async (app) => {
       return f?.value || undefined;
     };
     let employeeId = field("employeeId") ?? null;
-    if (!isManager(req)) employeeId = req.user.sub;
+    if (!isManager(req, AREA)) employeeId = req.user.sub;
 
     const buf = await file.toBuffer();
     const key = `${req.user.companyId}/${randomUUID()}-${file.filename.replace(/[^\w.-]/g, "_")}`;
@@ -80,7 +83,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .from(documents)
       .where(and(eq(documents.id, id), eq(documents.companyId, req.user.companyId)));
     if (!doc) notFound("Document");
-    if (!isManager(req as never) && doc.employeeId && doc.employeeId !== req.user.sub) notFound("Document");
+    if (!isManager(req as never, AREA) && doc.employeeId && doc.employeeId !== req.user.sub) notFound("Document");
     return doc;
   }
 
@@ -126,7 +129,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   app.delete<{ Params: { id: string } }>("/:id", async (req) => {
-    if (!isManager(req)) throw new HttpError(403, "Only managers can delete documents");
+    if (!isManager(req, AREA)) throw new HttpError(403, "Only managers can delete documents");
     const [row] = await db
       .delete(documents)
       .where(and(eq(documents.id, req.params.id), eq(documents.companyId, req.user.companyId)))

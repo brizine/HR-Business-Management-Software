@@ -208,6 +208,14 @@ the payroll calendar, safety rules and so on.
   edits the choices under **Settings → Company**: add, rename (everyone who has the old name is
   updated), reorder and remove (people who have a removed choice keep it until it's changed). The lists
   start from the titles and departments already in use.
+- **Permissions (Settings → Permissions):** who can do what, by area: Team & employee records, Time
+  clock, Schedule, Time off, Documents, Hiring, Onboarding, Payroll & tax forms, Fleet & equipment,
+  Company wiki, Spray Mix Calculator, Dashboard and Company settings. Everyone starts with what their
+  role gives them; pick a person and give them a different level in any area (more or less), each
+  level described in plain words. Changes apply immediately. Owners always have full access and can't
+  be limited. The owner can give others **Permissions** access to manage everyone's access; they can't
+  give owner-level access, give Permissions access, or change their own access. Team access stops at
+  admin, so nobody but an owner can manage owners' accounts.
 - **Layout editor (owner):** **Settings → Company → Open layout editor** opens a working copy of Crewdesk in
   a new tab. On any page, drag the outlined boxes to move them on the page, and drag the items inside a
   box (fields, details, filters, buttons) to move them within it; a line shows where it will land.

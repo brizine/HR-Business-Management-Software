@@ -7,13 +7,16 @@ import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { approversFor, except, notify } from "../lib/notify";
 
+/** Which area of the Permissions page controls access here. */
+const AREA = "schedule" as const;
+
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
 
   /** Managers can list everyone's (for the schedule grid); employees see their own. */
   app.get<{ Querystring: { employeeId?: string } }>("/", async (req) => {
     const filters = [eq(availability.companyId, req.user.companyId)];
-    if (!isManager(req)) filters.push(eq(availability.employeeId, req.user.sub));
+    if (!isManager(req, AREA)) filters.push(eq(availability.employeeId, req.user.sub));
     else if (req.query.employeeId) filters.push(eq(availability.employeeId, req.query.employeeId));
     return db
       .select()
@@ -26,7 +29,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.put<{ Querystring: { employeeId?: string } }>("/", async (req) => {
     const { rules } = parse(availabilitySchema, req.body);
     const employeeId = req.query.employeeId ?? req.user.sub;
-    if (employeeId !== req.user.sub && !isManager(req)) throw new HttpError(403, "You can only change your own availability");
+    if (employeeId !== req.user.sub && !isManager(req, AREA)) throw new HttpError(403, "You can only change your own availability");
     const [emp] = await db
       .select()
       .from(employees)

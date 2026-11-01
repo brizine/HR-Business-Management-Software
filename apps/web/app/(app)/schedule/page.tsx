@@ -136,7 +136,7 @@ function ShiftEditor({ draft, employees, assets, templates, onClose, onSaved, on
 
 export default function Schedule() {
   const { me, can } = useAuth();
-  const manager = can("manager");
+  const manager = can("manager", "schedule");
   const [offset, setOffset] = useState(0);
   const from = weekStart(offset);
   const to = weekStart(offset + 1);

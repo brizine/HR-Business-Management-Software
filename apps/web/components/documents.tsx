@@ -46,7 +46,7 @@ export function DocumentList({ employeeId, assetId, title = "Documents" }: { emp
             <label>Name<input name="name" placeholder="Defaults to file name" /></label>
             <label>Category<select name="category">{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></label>
           </div>
-          {can("manager") && employeeId && <label className="check"><input type="checkbox" name="requiresSignature" /> Employee must sign</label>}
+          {can("manager", "documents") && employeeId && <label className="check"><input type="checkbox" name="requiresSignature" /> Employee must sign</label>}
           <ErrorBox error={error} />
           <div><button className="btn primary" disabled={busy}>Upload</button></div>
         </form>
@@ -71,7 +71,7 @@ export function DocumentList({ employeeId, assetId, title = "Documents" }: { emp
                 </td>
                 <td className="row">
                   <button className="btn sm" onClick={() => download(`/documents/${d.id}/download`, d.name)}>Download</button>
-                  {can("manager") && <button className="btn sm danger" onClick={() => confirm(`Delete ${d.name}?`) && api(`/documents/${d.id}`, { method: "DELETE" }).then(reload)}>Delete</button>}
+                  {can("manager", "documents") && <button className="btn sm danger" onClick={() => confirm(`Delete ${d.name}?`) && api(`/documents/${d.id}`, { method: "DELETE" }).then(reload)}>Delete</button>}
                 </td>
               </tr>
             ))}

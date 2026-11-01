@@ -1,8 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { eq, sql } from "drizzle-orm";
-import { ROLES, hasRole, isInactive, type Role } from "@crewdesk/shared";
+import { ROLES, hasRole, isInactive, roleInArea, type AreaLevels, type PermissionArea, type Role } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, employees, pushTokens } from "../db/schema";
+import { companies, employeePermissions, employees, pushTokens } from "../db/schema";
 import { HttpError } from "./errors";
 
 /**
@@ -22,6 +22,10 @@ export interface AuthUser {
   purpose?: TokenPurpose | "view";
   /** For "view" tokens: the one document it opens. */
   doc?: string;
+  /** Loaded per request (not in the token): access levels by area that differ from the role. */
+  areas?: AreaLevels;
+  /** Loaded per request: may this person manage permissions? (Owners always.) */
+  managesPermissions?: boolean;
 }
 
 declare module "@fastify/jwt" {
@@ -93,22 +97,31 @@ export async function verifyToken(req: FastifyRequest, allowed: TokenPurpose[]) 
     throw new HttpError(401, "Your session has ended. Please sign in again.");
   }
   req.user.role = row.role as Role;
+  // Access by area that differs from their role (set on the Permissions page).
+  const grants = await db.select({ area: employeePermissions.area, level: employeePermissions.level }).from(employeePermissions).where(eq(employeePermissions.employeeId, row.id));
+  req.user.areas = Object.fromEntries(grants.filter((g) => g.area !== "permissions").map((g) => [g.area, g.level as Role]));
+  req.user.managesPermissions = row.role === "owner" || grants.some((g) => g.area === "permissions");
   return row;
+}
+
+/** What this person can do in an area: their role, or the level set for them on the Permissions page. */
+export function roleIn(req: { user: AuthUser }, area?: PermissionArea): Role {
+  return roleInArea(req.user.role, req.user.areas, area);
 }
 
 export async function authenticate(req: FastifyRequest, _reply: FastifyReply) {
   await verifyToken(req, ["session"]);
 }
 
-/** preHandler that rejects users below `min`. Must run after `authenticate`. */
-export function requireRole(min: Role) {
+/** preHandler that rejects people below `min` (in `area`, if given). Must run after `authenticate`. */
+export function requireRole(min: Role, area?: PermissionArea) {
   return async (req: FastifyRequest) => {
-    if (!hasRole(req.user.role, min)) throw new HttpError(403, "You do not have permission to do that");
+    if (!hasRole(roleIn(req, area), min)) throw new HttpError(403, "You do not have permission to do that");
   };
 }
 
-export function isManager(req: FastifyRequest) {
-  return hasRole(req.user.role, "manager");
+export function isManager(req: FastifyRequest, area?: PermissionArea) {
+  return hasRole(roleIn(req, area), "manager");
 }
 
 export const TWO_FACTOR_POLICIES = ["none", ...ROLES] as const;

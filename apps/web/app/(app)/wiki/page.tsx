@@ -77,7 +77,7 @@ function WikiHome() {
               ))}</tbody></table>
             ) : <Empty>No pages yet.</Empty>}
           </section>
-          {can("admin") && <AdminSettings />}
+          {can("admin", "wiki") && <AdminSettings />}
         </>
       )}
     </WikiShell>

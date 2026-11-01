@@ -26,7 +26,7 @@ export function MyTasksCard({ documents }: { documents: any[] | null }) {
   const t = useTheme();
   const workOrders = useApi<any[]>("/work-orders?status=active&mine=true");
   const onboarding = useApi<any[]>("/onboarding/tasks?open=true");
-  const waitingOnMe = useApi<any[]>(can("manager") ? "/onboarding/assigned" : null);
+  const waitingOnMe = useApi<any[]>(can("manager", "onboarding") ? "/onboarding/assigned" : null);
   const payPeriods = useApi<{ canApprove: boolean; periods: any[] }>("/pay-periods");
 
   const tasks: Task[] = [

@@ -30,7 +30,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
     <>
       <PageHead title={a.name} sub={[a.year, a.make, a.model, a.licensePlate, a.vin].filter(Boolean).join(" · ")}>
         <Badge value={a.status} />
-        {can("manager") && <button className="btn" onClick={() => setEditing(!editing)}>{editing ? "Close" : "Edit"}</button>}
+        {can("manager", "fleet") && <button className="btn" onClick={() => setEditing(!editing)}>{editing ? "Close" : "Edit"}</button>}
       </PageHead>
       {editing && (
         <div className="card">
@@ -72,7 +72,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
       <div className="card">
         <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
           <h2 style={{ margin: 0 }}>Preventive maintenance schedules</h2>
-          {can("manager") && <button className="btn" onClick={() => setAddingSchedule(!addingSchedule)}>Add schedule</button>}
+          {can("manager", "fleet") && <button className="btn" onClick={() => setAddingSchedule(!addingSchedule)}>Add schedule</button>}
         </div>
         {addingSchedule && (
           <form className="stack card" onSubmit={(e) => {
@@ -105,8 +105,8 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
                 <td>{[s.due.nextDueOdometer && `${s.due.nextDueOdometer.toLocaleString()} mi`, s.due.nextDueHours && `${s.due.nextDueHours} hrs`, s.due.nextDueDate && fmtDate(s.due.nextDueDate)].filter(Boolean).join(" / ")}</td>
                 <td><Badge value={s.due.status} /><div className="muted">{s.due.reasons.join(", ")}</div></td>
                 <td className="row">
-                  {can("manager") && <button className="btn sm" onClick={() => createWorkOrder(s)}>Create work order</button>}
-                  {can("manager") && <button className="btn sm danger" onClick={() => confirm("Delete schedule?") && api(`/assets/schedules/${s.id}`, { method: "DELETE" }).then(asset.reload)}>×</button>}
+                  {can("manager", "fleet") && <button className="btn sm" onClick={() => createWorkOrder(s)}>Create work order</button>}
+                  {can("manager", "fleet") && <button className="btn sm danger" onClick={() => confirm("Delete schedule?") && api(`/assets/schedules/${s.id}`, { method: "DELETE" }).then(asset.reload)}>×</button>}
                 </td>
               </tr>
             ))}</tbody>
@@ -152,7 +152,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
               Object.assign(document.createElement("a"), { href: url, download: `${a.name}-qr.svg` }).click();
               URL.revokeObjectURL(url);
             }}>Download SVG</button>
-            {can("manager") && (
+            {can("manager", "fleet") && (
               <button className="btn danger" onClick={() => confirm("Issue a new code? The current label will stop working and you'll need to print a new one.")
                 && api(`/assets/${id}/regenerate-code`, { method: "POST" }).then(asset.reload)}>New code</button>
             )}

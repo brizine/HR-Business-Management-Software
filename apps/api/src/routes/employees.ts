@@ -5,7 +5,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, employeeContactSchema, employeeMenusSchema, employeeSchema, hasRole, isInactive, menuRenameSchema, pageLayoutsUpdateSchema, type Role } from "@crewdesk/shared";
 import { db } from "../db";
 import { companies, employees, jobs, recoveryCodes } from "../db/schema";
-import { authenticate, canManageAccount, requireRole, signOutEverywhere } from "../lib/auth";
+import { authenticate, canManageAccount, requireRole, signOutEverywhere, roleIn } from "../lib/auth";
 import { sendInvite } from "../lib/invites";
 import { storage } from "../lib/storage";
 
@@ -14,6 +14,9 @@ async function actorName(id: string) {
   return e ? `${e.f} ${e.l}` : undefined;
 }
 import { HttpError, notFound, parse } from "../lib/errors";
+
+/** Which area of the Permissions page controls access here. */
+const AREA = "people" as const;
 
 type EmployeeRow = typeof employees.$inferSelect;
 
@@ -75,7 +78,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .from(employees)
       .where(eq(employees.companyId, req.user.companyId))
       .orderBy(asc(employees.lastName), asc(employees.firstName));
-    return hasRole(req.user.role, "manager") ? rows.map(publicEmployee) : rows.map(directoryView);
+    return hasRole(roleIn(req, AREA), "manager") ? rows.map(publicEmployee) : rows.map(directoryView);
   });
 
   // ---- Job title and Department menus (owner edits; everyone can read) ----
@@ -90,14 +93,14 @@ const routes: FastifyPluginAsync = async (app) => {
   app.get("/menus", async (req) => menus(req.user.companyId));
 
   /** Replaces the lists (adding, removing, reordering). Removing an entry leaves people who have it as they are. */
-  app.put("/menus", { preHandler: requireRole("owner") }, async (req) => {
+  app.put("/menus", { preHandler: requireRole("owner", "company") }, async (req) => {
     const body = parse(employeeMenusSchema, req.body);
     await db.update(companies).set(body).where(eq(companies.id, req.user.companyId));
     return menus(req.user.companyId);
   });
 
   /** Renames an entry everywhere: the list, everyone who has it, and (for departments) job postings. */
-  app.post("/menus/rename", { preHandler: requireRole("owner") }, async (req) => {
+  app.post("/menus/rename", { preHandler: requireRole("owner", "company") }, async (req) => {
     const { kind, from, to } = parse(menuRenameSchema, req.body);
     const current = await menus(req.user.companyId);
     const list = current[kind];
@@ -119,7 +122,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Saves the pages sent (an empty or null page goes back to its default layout); other pages are kept. */
-  app.put("/layouts", { preHandler: requireRole("owner") }, async (req) => {
+  app.put("/layouts", { preHandler: requireRole("owner", "company") }, async (req) => {
     const { pages } = parse(pageLayoutsUpdateSchema, req.body);
     const [c] = await db.select({ pages: companies.pageLayouts }).from(companies).where(eq(companies.id, req.user.companyId));
     const next = { ...(c?.pages ?? {}) };
@@ -138,13 +141,13 @@ const routes: FastifyPluginAsync = async (app) => {
       .from(employees)
       .where(and(eq(employees.id, req.params.id), eq(employees.companyId, req.user.companyId)));
     if (!row) notFound("Employee");
-    if (hasRole(req.user.role, "manager")) return publicEmployee(row);
+    if (hasRole(roleIn(req, AREA), "manager")) return publicEmployee(row);
     return row.id === req.user.sub ? ownView(row) : directoryView(row);
   });
 
-  app.post("/", { preHandler: requireRole("admin") }, async (req) => {
+  app.post("/", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const body = parse(employeeSchema, req.body);
-    if (!canManageAccount(req.user.role, body.role)) throw new HttpError(403, "Only the owner can add admins and owners");
+    if (!canManageAccount(roleIn(req, "people"), body.role)) throw new HttpError(403, "Only the owner can add admins and owners");
     const { password, sendInvite: wantsInvite, statusReason, ...rest } = body;
     const [row] = await db
       .insert(employees)
@@ -165,7 +168,7 @@ const routes: FastifyPluginAsync = async (app) => {
    * (Re)sends the "set up your account" email. The response includes the link
    * so an admin can text it if email isn't set up or didn't arrive.
    */
-  app.post<{ Params: { id: string } }>("/:id/invite", { preHandler: requireRole("admin") }, async (req) => {
+  app.post<{ Params: { id: string } }>("/:id/invite", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const target = await manageable(req, req.params.id, false);
     if (target.passwordHash) throw new HttpError(409, `${target.firstName} already has a login. They can use "Forgot your password?" if needed.`);
     if (isInactive(target.status)) throw new HttpError(409, `This person is ${target.status}. Make them active first.`);
@@ -180,18 +183,18 @@ const routes: FastifyPluginAsync = async (app) => {
       .where(and(eq(employees.id, id), eq(employees.companyId, req.user.companyId)));
     if (!target) notFound("Employee");
     const self = target.id === req.user.sub;
-    if (self ? !allowSelf : !canManageAccount(req.user.role, target.role as Role)) {
+    if (self ? !allowSelf : !canManageAccount(roleIn(req, "people"), target.role as Role)) {
       throw new HttpError(403, self ? "Use your Security settings for your own account" : "Only the owner can change another admin's or the owner's account");
     }
     return target;
   }
 
-  app.patch<{ Params: { id: string } }>("/:id", { preHandler: requireRole("admin") }, async (req) => {
+  app.patch<{ Params: { id: string } }>("/:id", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const body = parse(employeeSchema.partial(), req.body);
     const target = await manageable(req, req.params.id);
     if (body.role && body.role !== target.role) {
       if (target.id === req.user.sub) throw new HttpError(403, "You can't change your own role");
-      if (!canManageAccount(req.user.role, body.role)) throw new HttpError(403, "Only the owner can make someone an admin or owner");
+      if (!canManageAccount(roleIn(req, "people"), body.role)) throw new HttpError(403, "Only the owner can make someone an admin or owner");
     }
     const { password, statusReason, ...rest } = body;
     const [row] = await db
@@ -215,7 +218,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Ends all of someone's sessions, e.g. a lost phone or the day they leave. */
-  app.post<{ Params: { id: string } }>("/:id/sign-out-everywhere", { preHandler: requireRole("admin") }, async (req) => {
+  app.post<{ Params: { id: string } }>("/:id/sign-out-everywhere", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const target = await manageable(req, req.params.id);
     await signOutEverywhere(target.id);
     return { ok: true };
@@ -226,7 +229,7 @@ const routes: FastifyPluginAsync = async (app) => {
    * and signs them out. If their role requires it, they'll set it up again at
    * their next sign-in. Unlocks the account too.
    */
-  app.post<{ Params: { id: string } }>("/:id/reset-two-factor", { preHandler: requireRole("admin") }, async (req) => {
+  app.post<{ Params: { id: string } }>("/:id/reset-two-factor", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const target = await manageable(req, req.params.id, false);
     await db
       .update(employees)
@@ -238,7 +241,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Unlocks an account locked by too many failed sign-in attempts. */
-  app.post<{ Params: { id: string } }>("/:id/unlock", { preHandler: requireRole("admin") }, async (req) => {
+  app.post<{ Params: { id: string } }>("/:id/unlock", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const target = await manageable(req, req.params.id);
     await db.update(employees).set({ failedLoginCount: 0, lockedUntil: null }).where(eq(employees.id, target.id));
     return { ok: true };
@@ -252,7 +255,7 @@ const routes: FastifyPluginAsync = async (app) => {
       const [me] = await db.select().from(employees).where(eq(employees.id, id));
       return me;
     }
-    if (!hasRole(req.user.role, "admin")) throw new HttpError(403, "You can only change your own photo");
+    if (!hasRole(roleIn(req, AREA), "admin")) throw new HttpError(403, "You can only change your own photo");
     return manageable(req, id);
   }
 

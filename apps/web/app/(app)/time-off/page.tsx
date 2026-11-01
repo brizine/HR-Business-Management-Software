@@ -12,8 +12,8 @@ export default function TimeOff() {
   const { me, can } = useAuth();
   const policies = useApi<any[]>("/pto/policies");
   const mine = useApi<any[]>("/pto/requests?mine=true");
-  const pending = useApi<any[]>(can("manager") ? "/pto/requests?status=pending" : null);
-  const employees = useApi<any[]>(can("admin") ? "/employees" : null);
+  const pending = useApi<any[]>(can("manager", "timeoff") ? "/pto/requests?status=pending" : null);
+  const employees = useApi<any[]>(can("admin", "timeoff") ? "/employees" : null);
   const [requesting, setRequesting] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<string | null>(null);
   const req = useAction();
@@ -46,7 +46,7 @@ export default function TimeOff() {
           </form>
         </div>
       )}
-      {can("manager") && (
+      {can("manager", "timeoff") && (
         <div className="card">
           <h2>Waiting for approval</h2>
           {pending.data?.length ? (
@@ -82,7 +82,7 @@ export default function TimeOff() {
           ))}</tbody></table>
         ) : <Empty>No requests yet.</Empty>}
       </div>
-      {can("admin") && (
+      {can("admin", "timeoff") && (
         <div className="grid cols-2">
           <div className="card">
             <h2>Policies</h2>

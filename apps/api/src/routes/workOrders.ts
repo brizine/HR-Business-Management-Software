@@ -8,6 +8,9 @@ import { HttpError, notFound, parse } from "../lib/errors";
 import { nextWorkOrderNumber, recordMeter } from "../lib/fleet";
 import { except, notify, staffWithRole } from "../lib/notify";
 
+/** Which area of the Permissions page controls access here. */
+const AREA = "fleet" as const;
+
 function notifyAssigned(wo: typeof workOrders.$inferSelect, assetName: string, actorId: string) {
   notify(wo.companyId, except([wo.assignedToId], actorId), {
     category: "fleet",
@@ -30,7 +33,7 @@ const routes: FastifyPluginAsync = async (app) => {
     if (req.query.assetId) filters.push(eq(workOrders.assetId, req.query.assetId));
     if (req.query.mine === "true") filters.push(eq(workOrders.assignedToId, req.user.sub));
     // Managers can list one person's work orders (their Tasks box on the employee page).
-    else if (req.query.assignedToId && isManager(req)) filters.push(eq(workOrders.assignedToId, req.query.assignedToId));
+    else if (req.query.assignedToId && isManager(req, AREA)) filters.push(eq(workOrders.assignedToId, req.query.assignedToId));
     return db
       .select({
         workOrder: workOrders,
@@ -52,7 +55,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .from(assets)
       .where(and(eq(assets.id, body.assetId), eq(assets.companyId, req.user.companyId)));
     if (!asset) notFound("Asset");
-    if (!isManager(req)) {
+    if (!isManager(req, AREA)) {
       body.assignedToId = null;
       body.scheduleId = null;
     }
@@ -75,7 +78,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const link = { screen: "work-order", id: created.id, assetId: asset.id } as const;
     if (created.assignedToId) notifyAssigned(created, asset.name, req.user.sub);
     // Field reports and urgent issues go to everyone who manages the fleet.
-    if (!isManager(req) || created.priority === "high" || created.priority === "critical") {
+    if (!isManager(req, AREA) || created.priority === "high" || created.priority === "critical") {
       notify(req.user.companyId, except(await staffWithRole(req.user.companyId, "manager"), req.user.sub), {
         category: "fleet",
         title: `${created.priority === "critical" ? "CRITICAL: " : ""}${asset.name}: ${created.title}`,
@@ -98,7 +101,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .from(workOrders)
       .where(and(eq(workOrders.id, req.params.id), eq(workOrders.companyId, req.user.companyId)));
     if (!wo) notFound("Work order");
-    if (!isManager(req)) {
+    if (!isManager(req, AREA)) {
       if (wo.assignedToId !== req.user.sub) throw new HttpError(403, "Only the assigned technician or a manager can update this");
       delete body.assignedToId;
     }

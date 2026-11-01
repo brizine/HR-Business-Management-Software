@@ -65,7 +65,7 @@ function WorkOrders() {
           <option value="all">All</option>
         </select>
         <label className="check"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Assigned to me</label>
-        <button className="btn primary" onClick={() => setCreating(!creating)}>{can("manager") ? "New work order" : "Report an issue"}</button>
+        <button className="btn primary" onClick={() => setCreating(!creating)}>{can("manager", "fleet") ? "New work order" : "Report an issue"}</button>
       </PageHead>
       {creating && (
         <div className="card">
@@ -78,7 +78,7 @@ function WorkOrders() {
               <label>Asset<select name="assetId" required>{assets.data?.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
               <label>Title<input name="title" required placeholder="e.g. Check engine light on" /></label>
               <label>Priority<select name="priority" defaultValue="medium">{["low", "medium", "high", "critical"].map((p) => <option key={p}>{p}</option>)}</select></label>
-              {can("manager") && (
+              {can("manager", "fleet") && (
                 <>
                   <label>Assign to<select name="assignedToId"><option value="">Unassigned</option>{employees.data?.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}</select></label>
                   <label>Due date<input name="dueDate" type="date" /></label>
@@ -97,7 +97,7 @@ function WorkOrders() {
           <table>
             <thead><tr><th>#</th><th>Work order</th><th>Asset</th><th>Priority</th><th>Assigned</th><th>Due</th><th>Status</th><th>Cost</th></tr></thead>
             <tbody>{list.data.map(({ workOrder: w, assetName, assignee }) => {
-              const editable = can("manager") || w.assignedToId === me?.user.id;
+              const editable = can("manager", "fleet") || w.assignedToId === me?.user.id;
               return [
                 <tr key={w.id} onClick={() => editable && setOpen(open === w.id ? null : w.id)} style={{ cursor: editable ? "pointer" : undefined, background: open === w.id ? "var(--info-bg)" : undefined }}>
                   <td>{w.number}</td>
@@ -111,7 +111,7 @@ function WorkOrders() {
                 </tr>,
                 open === w.id && (
                   <tr key={w.id + "-edit"}><td colSpan={8}>
-                    <WorkOrderEditor wo={w} employees={employees.data ?? []} canManage={can("manager")} onDone={() => { setOpen(null); list.reload(); }} />
+                    <WorkOrderEditor wo={w} employees={employees.data ?? []} canManage={can("manager", "fleet")} onDone={() => { setOpen(null); list.reload(); }} />
                   </td></tr>
                 ),
               ];

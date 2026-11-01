@@ -94,12 +94,12 @@ function MenuEditor({ kind, title, noun, data, onChange }: { kind: Kind; title: 
 
 export default function CompanySettings() {
   const { can } = useAuth();
-  const menus = useApi<Menus>(can("owner") ? "/employees/menus" : null);
+  const menus = useApi<Menus>(can("owner", "company") ? "/employees/menus" : null);
   return (
     <>
       <PageHead title="Company settings" sub="Owner only. Page layouts and the choices people pick from across Crewdesk." />
       <SettingsTabs />
-      {!can("owner") ? <p className="muted">Only the owner can change company settings.</p> : !menus.data ? <ErrorBox error={menus.error} /> : (
+      {!can("owner", "company") ? <p className="muted">Only the owner can change company settings.</p> : !menus.data ? <ErrorBox error={menus.error} /> : (
         <PageLayoutsCard>
           <div className="menu-sections">
             <MenuEditor kind="jobTitles" title="Job titles" noun="job title" data={menus.data} onChange={menus.setData} />

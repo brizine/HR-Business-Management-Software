@@ -5,10 +5,13 @@ import { db } from "../db";
 import { assets, employees, maintenanceSchedules, ptoRequests, timeEntries, workOrders } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 
+/** Which area of the Permissions page controls access here. */
+const AREA = "dashboard" as const;
+
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
 
-  app.get("/", { preHandler: requireRole("manager") }, async (req) => {
+  app.get("/", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const c = req.user.companyId;
     const in30 = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
     const [staff, clockedIn, pendingPto, openOrders, fleet, schedules] = await Promise.all([
