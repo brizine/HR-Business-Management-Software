@@ -30,7 +30,7 @@ export function PageLayoutsCard({ children }: { children?: ReactNode }) {
       <p className="muted" style={{ margin: 0 }}>
         Opens a working copy of Crewdesk in a new tab where you can rearrange any page: drag its boxes to move them on the page, and drag
         the items inside a box (fields, details, filters, buttons) to move them within it. Nobody else sees your changes until you click Save there,
-        and Reset this page in the editor puts a page back to its original layout.
+        and Reset this page in the editor puts a page back to its original layout. Edit drop-down menus there changes the choices in that page&apos;s menus.
       </p>
       <div className="row">
         <button className="btn primary" onClick={() => window.open("/dashboard?layout-editor=1", "_blank")}>Open layout editor</button>

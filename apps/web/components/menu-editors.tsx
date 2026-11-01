@@ -134,7 +134,7 @@ function LabelEditor({ menu, data, onChange }: { menu: Extract<(typeof MENU_LIST
   );
 }
 
-/** Editors for the given drop-down menus (all of them by default). */
+/** Editors for the given drop-down menus (the layout editor passes the current page's). */
 export function MenuEditors({ keys }: { keys?: readonly MenuKey[] }) {
   const { menus, setMenus } = useMenuData();
   const shown = MENU_LISTS.filter((m) => !keys || keys.includes(m.key));

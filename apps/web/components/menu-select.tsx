@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useMenuData } from "@/lib/menus";
 
-/** The owner's editable lists (Settings → Company, or Edit drop-down menus in the layout editor). */
+/** The owner's editable lists (Edit drop-down menus in the layout editor). */
 export const useMenus = () => useMenuData().menus;
 
 /**
@@ -18,7 +18,7 @@ export function MenuSelect({ name, label, options, current, required, blank = tr
         {options.map((o) => <option key={o} value={o}>{o.replace(/_/g, " ")}</option>)}
         {extra && <option value={extra}>{extra.replace(/_/g, " ")} (not on the list)</option>}
       </select>
-      {!options.length && <span className="muted" style={{ fontSize: 12 }}>No choices yet. The owner adds them in <Link href="/settings/company">Settings → Company</Link>.</span>}
+      {!options.length && <span className="muted" style={{ fontSize: 12 }}>No choices yet. The owner adds them with Edit drop-down menus in the <Link href="/settings/company">layout editor</Link>.</span>}
     </label>
   );
 }

@@ -205,7 +205,7 @@ the payroll calendar, safety rules and so on.
   for managers and up, pay type and pay range. Filters are kept in the page address, so a filtered
   list can be bookmarked or shared.
 - **Job titles and departments:** picked from drop-down menus on the employee and hiring forms. The owner
-  edits the choices under **Settings → Company**: add, rename (everyone who has the old name is
+  edits the choices with **Edit drop-down menus** in the layout editor: add, rename (everyone who has the old name is
   updated), reorder and remove (people who have a removed choice keep it until it's changed). The lists
   start from the titles and departments already in use.
 - **Permissions (Settings → Permissions):** who can do what, by area: Team & employee records, Time
@@ -234,7 +234,7 @@ the payroll calendar, safety rules and so on.
   (job titles, departments, document categories, Spray Mix measurements, asset types) can be added to,
   renamed (updating everything that uses them), reordered and trimmed; choices Crewdesk acts on
   (employee status, role, employment type, pay type, applicant stages, work order status and
-  priority, asset status) can be reworded. Settings → Company shows every menu. Saved layouts
+  priority, asset status) can be reworded. Saved layouts
   apply to everyone on the website.
   Pages with an id in the address (like each employee's page) share one layout.
 - **Photos:** a photo next to each person's name on their profile and on the Team list (initials when
