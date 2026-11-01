@@ -114,7 +114,8 @@ describe("time-off awards and service steps", () => {
     await runScheduledChecks(new Date("2027-01-01T20:00:00Z"));
     await flushNotifications();
     expect(await balance("nodate", ID.carry)).toBe(50);
+    // Removed quietly: no notification.
     const inbox = (await call("GET", "/notifications", "nodate")).body.items;
-    expect(inbox.some((n: any) => n.title === "50h of Carry PTO didn't carry over")).toBe(true);
+    expect(inbox.some((n: any) => n.title.includes("carry over"))).toBe(false);
   });
 });

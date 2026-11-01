@@ -151,8 +151,9 @@ export async function runScheduledChecks(now = new Date()) {
     sent++;
   }
 
-  // Carryover limits: when a policy year resets, hours above the limit are removed (keeping hours held
-  // by pending requests). Runs before awards, so an award on the reset date is added afterwards.
+  // Carryover limits: when a policy year resets, hours above the limit are removed quietly (keeping
+  // hours held by pending requests; the balance history shows it). Runs before awards, so an award on
+  // the reset date is added afterwards.
   const limited = await db
     .select({ policy: ptoPolicies, tz: companies.timezone })
     .from(ptoPolicies)
@@ -174,13 +175,6 @@ export async function runScheduledChecks(now = new Date()) {
       const forfeit = carryoverForfeit(balance, pending, policy.carryoverLimitHours!);
       if (forfeit <= 0) continue;
       await db.insert(ptoLedger).values({ companyId: policy.companyId, employeeId: emp.id, policyId: policy.id, hours: -forfeit, reason: `carryover limit (${policy.carryoverLimitHours}h) on ${date}` });
-      notify(policy.companyId, [emp.id], {
-        category: "pto",
-        title: `${forfeit}h of ${policy.name} didn't carry over`,
-        body: `${policy.name} carries over up to ${policy.carryoverLimitHours}h into the new year, so ${forfeit}h above that was removed on ${date}.`,
-        link: { screen: "pto" },
-      });
-      sent++;
     }
   }
 

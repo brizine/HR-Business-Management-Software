@@ -135,7 +135,7 @@ export function PtoPolicyForm({ policy, onSaved, onCancel }: { policy?: any; onS
         <p className="muted" style={{ margin: 0, fontSize: 13 }}>
           {carry.trim() === ""
             ? "Leave blank to let unused hours carry over without limit."
-            : `When the year starts, hours above ${carry || 0}h are removed and the person is notified (hours in pending requests are kept). Use 0 for "use it or lose it". Any award on the same date is added after.`}
+            : `When the year starts, hours above ${carry || 0}h are removed (hours in pending requests are kept; it shows in their balance history). Use 0 for "use it or lose it". Any award on the same date is added after.`}
         </p>
       </fieldset>
 
