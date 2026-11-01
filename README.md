@@ -229,7 +229,8 @@ the payroll calendar, safety rules and so on.
   to bring it back). Hiding only changes what the page shows; it isn't a permission, so don't rely on
   it to keep information private.
   Everything still works while editing. Nobody else sees the changes until you click **Save** in the
-  editor's top bar (**Reset this page**, **Discard** and **Exit editor** are there too). Saved layouts
+  editor's top bar (**Edit drop-down menus**, **Reset this page**, **Discard** and **Exit editor** are
+  there too; Edit drop-down menus opens the Job titles and Departments lists in a window). Saved layouts
   apply to everyone on the website.
   Pages with an id in the address (like each employee's page) share one layout.
 - **Photos:** a photo next to each person's name on their profile and on the Team list (initials when

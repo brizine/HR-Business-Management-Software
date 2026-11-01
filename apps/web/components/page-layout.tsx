@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { MenuEditors } from "./menu-editors";
 import { HIDDEN_KEY, WIDTHS, WIDTH_KEY, WIDTH_LABELS, applyLayout, besideWidths, boxDrop, dropsAfter, isEmptyLayout, moveWithin, pageKey, readWidths, writeWidths, type PageLayout, type PageLayouts } from "@/lib/layout-engine";
 
 const EDITOR_FLAG = "crewdesk.layoutEditor";
@@ -215,6 +216,15 @@ export function PageLayoutRoot({ children }: { children: ReactNode }) {
     requestAnimationFrame(() => setHovered((h) => (h ? { el: h.el, rect: h.el.getBoundingClientRect() } : null)));
   };
 
+  // "Edit drop-down menus": the Job title and Department choices, in a window over the page.
+  const [menusOpen, setMenusOpen] = useState(false);
+  useEffect(() => {
+    if (!menusOpen) return;
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setMenusOpen(false);
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, [menusOpen]);
+
   const save = async () => {
     setBusy(true);
     try {
@@ -245,6 +255,7 @@ export function PageLayoutRoot({ children }: { children: ReactNode }) {
             <button className="btn primary" disabled={busy || !dirtyPages.length} onClick={save}>
               {busy ? "Saving…" : `Save${dirtyPages.length ? ` (${dirtyPages.length} page${dirtyPages.length === 1 ? "" : "s"})` : ""}`}
             </button>
+            <button className="btn" onClick={() => setMenusOpen(true)}>Edit drop-down menus</button>
             <button className="btn" disabled={busy || (isEmptyLayout(layoutFor(page)))} onClick={() => { setDraft((d) => ({ ...d, [page]: {} })); setNote("This page is back to its default layout. Save to keep it."); }}>Reset this page</button>
             <button className="btn" disabled={busy || !dirtyPages.length} onClick={() => { setDraft({}); setNote("Changes discarded."); }}>Discard</button>
             <button className="btn" onClick={() => {
@@ -257,6 +268,21 @@ export function PageLayoutRoot({ children }: { children: ReactNode }) {
         </div>
       )}
       <div ref={root} className={`layout-page${editor.on ? " layout-editing" : ""}`}>{children}</div>
+      {editor.on && menusOpen && createPortal(
+        <div className="mix-window-backdrop" onClick={(e) => e.target === e.currentTarget && setMenusOpen(false)}>
+          <div className="mix-window menus-window" role="dialog" aria-modal="true" aria-labelledby="menus-window-title">
+            <div className="mix-window-head">
+              <div>
+                <h2 id="menus-window-title" style={{ margin: 0 }}>Drop-down menus</h2>
+                <div className="muted">The choices people pick from on the employee and hiring forms. Changes save as you make them.</div>
+              </div>
+              <button type="button" className="mix-window-close" onClick={() => setMenusOpen(false)} aria-label="Close" title="Close" autoFocus>×</button>
+            </div>
+            <MenuEditors />
+          </div>
+        </div>,
+        document.body,
+      )}
       {editor.on && hovered && hovered.el.isConnected && createPortal(
         <div
           className="layout-toolbar"
