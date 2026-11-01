@@ -141,13 +141,38 @@ export const timeEntryEditSchema = z.object({
   note: z.string().optional(),
 });
 
-export const ptoPolicySchema = z.object({
-  name: z.string().min(1),
-  /** Hours accrued per hour worked (e.g. 1/30 = 0.0333) or 0 for fixed grants. */
-  accrualRate: z.number().nonnegative().default(0),
-  annualGrantHours: z.number().nonnegative().default(0),
-  maxBalanceHours: z.number().nonnegative().nullable().optional(),
+/** When a policy awards hours by date (see ptoAccrual.ts). */
+export const PTO_GRANT_SCHEDULES = ["none", "yearly_date", "anniversary", "monthly"] as const;
+export type PtoGrantSchedule = (typeof PTO_GRANT_SCHEDULES)[number];
+
+/** A step up after some years of service: a new hourly accrual rate and/or award size. */
+export const ptoTierSchema = z.object({
+  afterYears: z.number().int().min(1).max(50),
+  /** Hours earned per hour worked from this point; null keeps the policy's base rate. */
+  accrualRate: z.number().nonnegative().max(1).nullable(),
+  /** Hours per award from this point; null keeps the policy's base award. */
+  grantHours: z.number().nonnegative().max(2000).nullable(),
 });
+export type PtoTier = z.infer<typeof ptoTierSchema>;
+
+export const ptoPolicySchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    /** Hours accrued per hour worked (e.g. 1/30 = 0.0333); 0 for none. */
+    accrualRate: z.number().nonnegative().max(1).default(0),
+    /** Hours given on each award date (see grantSchedule). */
+    annualGrantHours: z.number().nonnegative().max(2000).default(0),
+    grantSchedule: z.enum(PTO_GRANT_SCHEDULES).default("none"),
+    /** "MM-DD", for awards every year on a set date. */
+    grantDate: z.string().regex(/^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/, "Use MM-DD").nullable().optional(),
+    /** Day of the month (1–28), for monthly awards. */
+    grantDayOfMonth: z.number().int().min(1).max(28).nullable().optional(),
+    maxBalanceHours: z.number().nonnegative().nullable().optional(),
+    tiers: z.array(ptoTierSchema).max(20).default([]),
+  })
+  .refine((p) => p.grantSchedule !== "yearly_date" || !!p.grantDate, { message: "Pick the date to award hours each year", path: ["grantDate"] })
+  .refine((p) => p.grantSchedule !== "monthly" || !!p.grantDayOfMonth, { message: "Pick the day of the month", path: ["grantDayOfMonth"] })
+  .refine((p) => new Set(p.tiers.map((t) => t.afterYears)).size === p.tiers.length, { message: "Each step needs a different number of years", path: ["tiers"] });
 
 export const ptoRequestSchema = z.object({
   policyId: z.string().uuid(),

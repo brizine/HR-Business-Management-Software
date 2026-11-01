@@ -301,3 +301,46 @@ describe("pay periods", () => {
     expect(next.map((p) => p.start)).toEqual(["2026-11-02", "2026-11-09", "2026-11-16"]);
   });
 });
+
+import { describePto, effectivePto, lastGrantDate, yearsOfService } from "../src";
+
+describe("time-off accrual rules", () => {
+  const policy = {
+    accrualRate: 1 / 30,
+    annualGrantHours: 40,
+    grantSchedule: "anniversary",
+    tiers: [
+      { afterYears: 5, accrualRate: 1 / 20, grantHours: 80 },
+      { afterYears: 1, accrualRate: 1 / 25, grantHours: null },
+    ],
+    maxBalanceHours: 200,
+  };
+  it("counts whole years of service from the hire date", () => {
+    expect(yearsOfService("2021-11-01", "2026-10-31")).toBe(4);
+    expect(yearsOfService("2021-11-01", "2026-11-01")).toBe(5);
+    expect(yearsOfService("2024-02-29", "2025-02-28")).toBe(1);
+    expect(yearsOfService(null, "2026-11-01")).toBe(0);
+    expect(yearsOfService("2027-01-01", "2026-11-01")).toBe(0);
+  });
+  it("applies the highest step reached, keeping amounts a step leaves blank", () => {
+    expect(effectivePto(policy, 0)).toEqual({ accrualRate: 1 / 30, grantHours: 40, tier: null });
+    expect(effectivePto(policy, 3)).toEqual({ accrualRate: 1 / 25, grantHours: 40, tier: 1 });
+    expect(effectivePto(policy, 5)).toEqual({ accrualRate: 1 / 20, grantHours: 80, tier: 5 });
+  });
+  it("finds the latest award date for each schedule", () => {
+    expect(lastGrantDate(policy, "2021-11-01", "2026-11-01")).toBe("2026-11-01");
+    expect(lastGrantDate(policy, "2021-11-02", "2026-11-01")).toBe("2025-11-02");
+    expect(lastGrantDate(policy, "2026-03-01", "2026-11-01")).toBeNull(); // before the first anniversary
+    expect(lastGrantDate(policy, null, "2026-11-01")).toBeNull();
+    expect(lastGrantDate({ ...policy, grantSchedule: "anniversary" }, "2024-02-29", "2027-03-01")).toBe("2027-02-28");
+    const jan1 = { ...policy, grantSchedule: "yearly_date", grantDate: "01-01" };
+    expect(lastGrantDate(jan1, null, "2026-11-01")).toBe("2026-01-01");
+    const monthly = { ...policy, grantSchedule: "monthly", grantDayOfMonth: 15 };
+    expect(lastGrantDate(monthly, null, "2026-11-01")).toBe("2026-10-15");
+    expect(lastGrantDate(monthly, null, "2026-01-10")).toBe("2025-12-15");
+    expect(lastGrantDate({ ...policy, grantSchedule: "none" }, "2021-11-01", "2026-11-01")).toBeNull();
+  });
+  it("describes a policy in plain English", () => {
+    expect(describePto(policy)).toBe("Earns 1h per 30h worked · 40h on each hire anniversary · after 1 year: 1h per 25h worked · after 5 years: 1h per 20h worked, 80h awards · cap 200h");
+  });
+});

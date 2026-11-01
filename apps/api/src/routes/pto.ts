@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { ptoDecisionSchema, ptoPolicySchema, ptoRequestSchema } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
@@ -24,21 +24,42 @@ async function balances(companyId: string, employeeId: string) {
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
+
+/** Only the fields the chosen award schedule uses are kept. */
+function policyFields(p: z.infer<typeof ptoPolicySchema>) {
+  return {
+    ...p,
+    grantDate: p.grantSchedule === "yearly_date" ? p.grantDate ?? null : null,
+    grantDayOfMonth: p.grantSchedule === "monthly" ? p.grantDayOfMonth ?? null : null,
+    tiers: [...p.tiers].sort((a, b) => a.afterYears - b.afterYears),
+  };
+}
 const dateRange = (a: string, b: string) => (a === b ? a : `${a} to ${b}`);
 
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
 
   app.get("/policies", async (req) =>
-    db.select().from(ptoPolicies).where(eq(ptoPolicies.companyId, req.user.companyId)),
+    db.select().from(ptoPolicies).where(eq(ptoPolicies.companyId, req.user.companyId)).orderBy(asc(ptoPolicies.createdAt)),
   );
 
   app.post("/policies", { preHandler: requireRole("admin") }, async (req) => {
     const body = parse(ptoPolicySchema, req.body);
     const [row] = await db
       .insert(ptoPolicies)
-      .values({ ...body, companyId: req.user.companyId })
+      .values({ ...policyFields(body), companyId: req.user.companyId })
       .returning();
+    return row;
+  });
+
+  app.put<{ Params: { id: string } }>("/policies/:id", { preHandler: requireRole("admin") }, async (req) => {
+    const body = parse(ptoPolicySchema, req.body);
+    const [row] = await db
+      .update(ptoPolicies)
+      .set(policyFields(body))
+      .where(and(eq(ptoPolicies.id, req.params.id), eq(ptoPolicies.companyId, req.user.companyId)))
+      .returning();
+    if (!row) notFound("Policy");
     return row;
   });
 

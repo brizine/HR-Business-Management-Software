@@ -44,7 +44,7 @@ const [crew] = await db
   .returning();
 
 const [pto] = await db.insert(s.ptoPolicies).values({ companyId, name: "Paid Time Off", accrualRate: 1 / 30, maxBalanceHours: 80 }).returning();
-const [sick] = await db.insert(s.ptoPolicies).values({ companyId, name: "Sick Leave", annualGrantHours: 40 }).returning();
+const [sick] = await db.insert(s.ptoPolicies).values({ companyId, name: "Sick Leave", annualGrantHours: 40, grantSchedule: "yearly_date", grantDate: "01-01" }).returning();
 for (const e of [owner, mgr, tech, crew]) {
   await db.insert(s.ptoLedger).values([
     { companyId, employeeId: e.id, policyId: pto.id, hours: 24, reason: "starting balance" },

@@ -238,6 +238,9 @@ tr.openrow td { background: var(--bg); }
 .person-cell { display: flex; align-items: center; gap: 10px; }
 .menu-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
 .menu-list li { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap; }
+.pto-section { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 0; display: grid; gap: 8px; min-width: 0; }
+.pto-section legend { font-weight: 600; font-size: 14px; padding: 0 4px; }
+.pto-tier { align-items: flex-end; }
 .settings-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
 .contact-fieldset { border: 0; padding: 0; margin: 14px 0 0; min-width: 0; }
 .contact-fieldset legend { font-weight: 600; padding: 0; margin-bottom: 6px; }

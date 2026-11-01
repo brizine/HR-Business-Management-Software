@@ -1,7 +1,7 @@
-import { and, eq, gt, isNotNull, isNull, lt, lte, notInArray } from "drizzle-orm";
-import { INACTIVE_STATUSES, computeDue, lastEndedPeriod, type PayFrequency } from "@crewdesk/shared";
+import { and, eq, gt, isNotNull, isNull, lt, lte, ne, notInArray } from "drizzle-orm";
+import { INACTIVE_STATUSES, computeDue, effectivePto, lastEndedPeriod, lastGrantDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
 import { db } from "../db";
-import { assets, companies, employees, maintenanceSchedules, notificationLog, onboardingTasks, payPeriodApprovers, payPeriods, shifts, timeEntries } from "../db/schema";
+import { assets, companies, employees, maintenanceSchedules, notificationLog, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, shifts, timeEntries } from "../db/schema";
 import { taskOwners } from "../routes/onboarding";
 import { fmtTime, localParts } from "./tz";
 import { notify, staffWithRole } from "./notify";
@@ -149,6 +149,45 @@ export async function runScheduledChecks(now = new Date()) {
       link: { screen: "onboarding" },
     });
     sent++;
+  }
+
+  // Time off awarded by date (yearly on a date, each hire anniversary, or monthly). Each award date is
+  // given once per person, using the rate for their years of service on that date, up to the cap.
+  // Award dates before the policy existed aren't back-filled.
+  const awarding = await db
+    .select({ policy: ptoPolicies, tz: companies.timezone })
+    .from(ptoPolicies)
+    .innerJoin(companies, eq(companies.id, ptoPolicies.companyId))
+    .where(ne(ptoPolicies.grantSchedule, "none"));
+  for (const { policy, tz } of awarding) {
+    const today = localParts(now, tz).date;
+    const since = localParts(policy.createdAt, tz).date;
+    const staff = await db
+      .select()
+      .from(employees)
+      .where(and(eq(employees.companyId, policy.companyId), notInArray(employees.status, INACTIVE_STATUSES)));
+    for (const emp of staff) {
+      const date = lastGrantDate(policy, emp.startDate, today);
+      if (!date || date < since || (emp.startDate && emp.startDate > date)) continue;
+      const years = yearsOfService(emp.startDate, date);
+      let hours = effectivePto(policy, years).grantHours;
+      if (hours <= 0) continue;
+      if (!(await firstTime(policy.companyId, `ptogrant:${policy.id}:${emp.id}:${date}`))) continue;
+      if (policy.maxBalanceHours != null) {
+        const rows = await db.select({ hours: ptoLedger.hours }).from(ptoLedger).where(and(eq(ptoLedger.employeeId, emp.id), eq(ptoLedger.policyId, policy.id)));
+        hours = Math.min(hours, Math.max(0, policy.maxBalanceHours - rows.reduce((s, r) => s + r.hours, 0)));
+        if (hours <= 0) continue;
+      }
+      const why = policy.grantSchedule === "anniversary" ? `${years}-year anniversary` : `award for ${date}`;
+      await db.insert(ptoLedger).values({ companyId: policy.companyId, employeeId: emp.id, policyId: policy.id, hours, reason: `grant (${why})` });
+      notify(policy.companyId, [emp.id], {
+        category: "pto",
+        title: `You received ${Math.round(hours * 100) / 100}h of ${policy.name}`,
+        body: policy.grantSchedule === "anniversary" ? `Happy ${years}-year anniversary!` : `Your ${policy.name} for ${date} has been added to your balance.`,
+        link: { screen: "pto" },
+      });
+      sent++;
+    }
   }
 
   // Pay periods: once one ends, record it and ask the approvers (or, if none are picked, admins) to approve it.

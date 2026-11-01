@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import type { NotificationLink } from "@crewdesk/shared";
+import type { NotificationLink, PtoTier } from "@crewdesk/shared";
 import {
   boolean,
   primaryKey,
@@ -176,9 +176,17 @@ export const ptoPolicies = pgTable("pto_policies", {
   id: id(),
   companyId: companyId(),
   name: text("name").notNull(),
+  /** Hours earned per hour worked (0 = none). */
   accrualRate: doublePrecision("accrual_rate").notNull().default(0),
+  /** Hours given on each award date (see grantSchedule). */
   annualGrantHours: doublePrecision("annual_grant_hours").notNull().default(0),
+  /** none | yearly_date | anniversary | monthly (see ptoAccrual in @crewdesk/shared). */
+  grantSchedule: text("grant_schedule").notNull().default("none"),
+  grantDate: text("grant_date"),
+  grantDayOfMonth: integer("grant_day_of_month"),
   maxBalanceHours: doublePrecision("max_balance_hours"),
+  /** Higher accrual or awards after N years of service. */
+  tiers: jsonb("tiers").$type<PtoTier[]>().notNull().default([]),
   createdAt: createdAt(),
 });
 

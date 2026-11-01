@@ -176,6 +176,13 @@
       "when": 1793486616232,
       "tag": "0024_pay_periods",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793492111633,
+      "tag": "0025_pto_awards_and_tiers",
+      "breakpoints": true
     }
   ]
 }

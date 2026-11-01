@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { and, desc, eq, gte, inArray, isNull, lt } from "drizzle-orm";
-import { clockInSchema, entryHours, formatDistance, locationPolicySchema, summarizeHours, timeEntryEditSchema } from "@crewdesk/shared";
+import { clockInSchema, effectivePto, entryHours, formatDistance, locationPolicySchema, summarizeHours, timeEntryEditSchema, yearsOfService } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
 import { companies, employees, jobSites, ptoLedger, ptoPolicies, shifts, timeEntries } from "../db/schema";
@@ -8,6 +8,7 @@ import { authenticate, isManager, requireRole } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { activeSites, checkPunch, locationPolicies, type PunchCheck } from "../lib/geofence";
 import { approversFor, except, notify } from "../lib/notify";
+import { localParts } from "../lib/tz";
 
 const rangeQuery = z.object({
   employeeId: z.string().uuid().optional(),
@@ -108,8 +109,17 @@ const routes: FastifyPluginAsync = async (app) => {
   /** Adds hours-worked based accrual for every accruing policy, respecting caps. */
   async function accruePto(companyId: string, employeeId: string, hoursWorked: number) {
     const policies = await db.select().from(ptoPolicies).where(eq(ptoPolicies.companyId, companyId));
-    for (const p of policies.filter((p) => p.accrualRate > 0)) {
-      let hours = hoursWorked * p.accrualRate;
+    const [emp] = await db
+      .select({ startDate: employees.startDate, tz: companies.timezone })
+      .from(employees)
+      .innerJoin(companies, eq(companies.id, employees.companyId))
+      .where(eq(employees.id, employeeId));
+    const years = yearsOfService(emp?.startDate, localParts(new Date(), emp?.tz ?? "America/Chicago").date);
+    for (const p of policies) {
+      // The rate for their years of service (e.g. more after their 5-year anniversary).
+      const rate = effectivePto(p, years).accrualRate;
+      if (rate <= 0) continue;
+      let hours = hoursWorked * rate;
       if (p.maxBalanceHours != null) {
         const rows = await db
           .select()

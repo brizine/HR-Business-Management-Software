@@ -4,6 +4,8 @@ import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
+import { PtoPolicyForm } from "@/components/pto-policy-form";
+import { describePto } from "@crewdesk/shared";
 
 export default function TimeOff() {
   const { can } = useAuth();
@@ -13,8 +15,8 @@ export default function TimeOff() {
   const pending = useApi<any[]>(can("manager") ? "/pto/requests?status=pending" : null);
   const employees = useApi<any[]>(can("admin") ? "/employees" : null);
   const [requesting, setRequesting] = useState(false);
+  const [editingPolicy, setEditingPolicy] = useState<string | null>(null);
   const req = useAction();
-  const pol = useAction();
   const adj = useAction();
   const reloadAll = () => { balances.reload(); mine.reload(); pending.reload(); };
 
@@ -97,25 +99,17 @@ export default function TimeOff() {
           <div className="card">
             <h2>Policies</h2>
             <table><tbody>{policies.data?.map((p) => (
-              <tr key={p.id}><td>{p.name}</td><td className="muted">
-                {p.accrualRate ? `1h per ${Math.round(1 / p.accrualRate)}h worked` : "No accrual"}
-                {p.maxBalanceHours ? ` · cap ${p.maxBalanceHours}h` : ""}
-              </td></tr>
+              <tr key={p.id}>
+                <td style={{ verticalAlign: "top" }}><strong>{p.name}</strong><div className="muted" style={{ fontSize: 13 }}>{describePto(p)}</div></td>
+                <td style={{ textAlign: "right", verticalAlign: "top" }}><button className="btn sm" onClick={() => setEditingPolicy(editingPolicy === p.id ? null : p.id)}>{editingPolicy === p.id ? "Close" : "Edit"}</button></td>
+              </tr>
             ))}</tbody></table>
-            <form className="stack" style={{ marginTop: 12 }} onSubmit={(e) => {
-              e.preventDefault();
-              const form = e.currentTarget;
-              const { hoursPer, ...v } = formValues(form);
-              pol.run(async () => { await api("/pto/policies", { body: { ...v, accrualRate: hoursPer ? 1 / hoursPer : 0 } }); form.reset(); policies.reload(); balances.reload(); });
-            }}>
-              <div className="formgrid">
-                <label>Name<input name="name" required placeholder="e.g. Vacation" /></label>
-                <label>Accrue 1h per N hours worked<input name="hoursPer" type="number" min="1" placeholder="e.g. 30" /></label>
-                <label>Max balance (h)<input name="maxBalanceHours" type="number" min="0" /></label>
-              </div>
-              <ErrorBox error={pol.error} />
-              <div><button className="btn" disabled={pol.busy}>Add policy</button></div>
-            </form>
+            {editingPolicy ? (
+              <PtoPolicyForm key={editingPolicy} policy={policies.data?.find((p) => p.id === editingPolicy)} onCancel={() => setEditingPolicy(null)}
+                onSaved={() => { setEditingPolicy(null); policies.reload(); balances.reload(); }} />
+            ) : (
+              <PtoPolicyForm key={`new-${policies.data?.length ?? 0}`} onSaved={() => { policies.reload(); balances.reload(); }} />
+            )}
           </div>
           <div className="card">
             <h2>Adjust a balance</h2>
