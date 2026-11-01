@@ -31,6 +31,7 @@ function policyFields(p: z.infer<typeof ptoPolicySchema>) {
     ...p,
     grantDate: p.grantSchedule === "yearly_date" ? p.grantDate ?? null : null,
     grantDayOfMonth: p.grantSchedule === "monthly" ? p.grantDayOfMonth ?? null : null,
+    carryoverLimitHours: p.carryoverLimitHours ?? null,
     tiers: [...p.tiers].sort((a, b) => a.afterYears - b.afterYears),
   };
 }
@@ -54,9 +55,19 @@ const routes: FastifyPluginAsync = async (app) => {
 
   app.put<{ Params: { id: string } }>("/policies/:id", { preHandler: requireRole("admin") }, async (req) => {
     const body = parse(ptoPolicySchema, req.body);
+    const [before] = await db.select().from(ptoPolicies).where(and(eq(ptoPolicies.id, req.params.id), eq(ptoPolicies.companyId, req.user.companyId)));
+    if (!before) notFound("Policy");
+    const fields = policyFields(body);
+    // Changing when awards or resets happen starts from today, so past dates aren't applied retroactively.
+    const same = (keys: (keyof typeof fields)[]) => keys.every((k) => JSON.stringify(fields[k] ?? null) === JSON.stringify((before as Record<string, unknown>)[k] ?? null));
+    const now = new Date();
     const [row] = await db
       .update(ptoPolicies)
-      .set(policyFields(body))
+      .set({
+        ...fields,
+        ...(same(["grantSchedule", "grantDate", "grantDayOfMonth"]) ? {} : { grantRulesSince: now }),
+        ...(same(["carryoverLimitHours", "carryoverReset", "carryoverDate"]) ? {} : { carryoverRulesSince: now }),
+      })
       .where(and(eq(ptoPolicies.id, req.params.id), eq(ptoPolicies.companyId, req.user.companyId)))
       .returning();
     if (!row) notFound("Policy");

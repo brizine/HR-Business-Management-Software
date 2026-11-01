@@ -1,7 +1,7 @@
 import { and, eq, gt, isNotNull, isNull, lt, lte, ne, notInArray } from "drizzle-orm";
-import { INACTIVE_STATUSES, computeDue, effectivePto, lastEndedPeriod, lastGrantDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
+import { INACTIVE_STATUSES, carryoverForfeit, computeDue, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
 import { db } from "../db";
-import { assets, companies, employees, maintenanceSchedules, notificationLog, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, shifts, timeEntries } from "../db/schema";
+import { assets, companies, employees, maintenanceSchedules, notificationLog, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, ptoRequests, shifts, timeEntries } from "../db/schema";
 import { taskOwners } from "../routes/onboarding";
 import { fmtTime, localParts } from "./tz";
 import { notify, staffWithRole } from "./notify";
@@ -151,9 +151,42 @@ export async function runScheduledChecks(now = new Date()) {
     sent++;
   }
 
+  // Carryover limits: when a policy year resets, hours above the limit are removed (keeping hours held
+  // by pending requests). Runs before awards, so an award on the reset date is added afterwards.
+  const limited = await db
+    .select({ policy: ptoPolicies, tz: companies.timezone })
+    .from(ptoPolicies)
+    .innerJoin(companies, eq(companies.id, ptoPolicies.companyId))
+    .where(isNotNull(ptoPolicies.carryoverLimitHours));
+  for (const { policy, tz } of limited) {
+    const today = localParts(now, tz).date;
+    const since = localParts(policy.carryoverRulesSince, tz).date;
+    const staff = await db
+      .select()
+      .from(employees)
+      .where(and(eq(employees.companyId, policy.companyId), notInArray(employees.status, INACTIVE_STATUSES)));
+    for (const emp of staff) {
+      const date = lastResetDate(policy, emp.startDate, today);
+      if (!date || date < since) continue;
+      if (!(await firstTime(policy.companyId, `ptocarry:${policy.id}:${emp.id}:${date}`))) continue;
+      const balance = (await db.select({ hours: ptoLedger.hours }).from(ptoLedger).where(and(eq(ptoLedger.employeeId, emp.id), eq(ptoLedger.policyId, policy.id)))).reduce((s, r) => s + r.hours, 0);
+      const pending = (await db.select({ hours: ptoRequests.hours }).from(ptoRequests).where(and(eq(ptoRequests.employeeId, emp.id), eq(ptoRequests.policyId, policy.id), eq(ptoRequests.status, "pending")))).reduce((s, r) => s + r.hours, 0);
+      const forfeit = carryoverForfeit(balance, pending, policy.carryoverLimitHours!);
+      if (forfeit <= 0) continue;
+      await db.insert(ptoLedger).values({ companyId: policy.companyId, employeeId: emp.id, policyId: policy.id, hours: -forfeit, reason: `carryover limit (${policy.carryoverLimitHours}h) on ${date}` });
+      notify(policy.companyId, [emp.id], {
+        category: "pto",
+        title: `${forfeit}h of ${policy.name} didn't carry over`,
+        body: `${policy.name} carries over up to ${policy.carryoverLimitHours}h into the new year, so ${forfeit}h above that was removed on ${date}.`,
+        link: { screen: "pto" },
+      });
+      sent++;
+    }
+  }
+
   // Time off awarded by date (yearly on a date, each hire anniversary, or monthly). Each award date is
   // given once per person, using the rate for their years of service on that date, up to the cap.
-  // Award dates before the policy existed aren't back-filled.
+  // Award dates before the award settings were last changed aren't back-filled.
   const awarding = await db
     .select({ policy: ptoPolicies, tz: companies.timezone })
     .from(ptoPolicies)
@@ -161,7 +194,7 @@ export async function runScheduledChecks(now = new Date()) {
     .where(ne(ptoPolicies.grantSchedule, "none"));
   for (const { policy, tz } of awarding) {
     const today = localParts(now, tz).date;
-    const since = localParts(policy.createdAt, tz).date;
+    const since = localParts(policy.grantRulesSince, tz).date;
     const staff = await db
       .select()
       .from(employees)

@@ -21,6 +21,9 @@ export function PtoPolicyForm({ policy, onSaved, onCancel }: { policy?: any; onS
   const [grantDate, setGrantDate] = useState(policy?.grantDate ? `2000-${policy.grantDate}` : "2000-01-01");
   const [dayOfMonth, setDayOfMonth] = useState(String(policy?.grantDayOfMonth ?? 1));
   const [cap, setCap] = useState(policy?.maxBalanceHours != null ? String(policy.maxBalanceHours) : "");
+  const [carry, setCarry] = useState(policy?.carryoverLimitHours != null ? String(policy.carryoverLimitHours) : "");
+  const [resetOn, setResetOn] = useState<"yearly_date" | "anniversary">(policy?.carryoverReset ?? "yearly_date");
+  const [resetDate, setResetDate] = useState(policy?.carryoverDate ?? "01-01");
   const [tiers, setTiers] = useState<TierDraft[]>(
     (policy?.tiers ?? []).map((t: any) => ({ afterYears: String(t.afterYears), hoursPer: t.accrualRate == null ? "" : toHoursPer(t.accrualRate) || "0", grantHours: t.grantHours == null ? "" : String(t.grantHours) })),
   );
@@ -34,6 +37,9 @@ export function PtoPolicyForm({ policy, onSaved, onCancel }: { policy?: any; onS
     grantDate: schedule === "yearly_date" ? grantDate.slice(5) : null,
     grantDayOfMonth: schedule === "monthly" ? Number(dayOfMonth) : null,
     maxBalanceHours: num(cap),
+    carryoverLimitHours: num(carry),
+    carryoverReset: resetOn,
+    carryoverDate: resetDate,
     tiers: tiers
       .filter((t) => t.afterYears.trim() !== "")
       .map((t) => ({ afterYears: Number(t.afterYears), accrualRate: t.hoursPer.trim() === "" ? null : t.hoursPer === "0" ? 0 : toRate(t.hoursPer), grantHours: schedule === "none" ? null : num(t.grantHours) })),
@@ -97,6 +103,40 @@ export function PtoPolicyForm({ policy, onSaved, onCancel }: { policy?: any; onS
           )}
         </div>
         {schedule === "anniversary" && <p className="muted" style={{ margin: 0, fontSize: 13 }}>Uses each person&apos;s hire date; people without one don&apos;t get anniversary awards.</p>}
+      </fieldset>
+
+      <fieldset className="pto-section">
+        <legend>Carryover limit</legend>
+        <div className="formgrid">
+          <label>Most hours carried into the next year
+            <input type="number" min="0" step="any" value={carry} onChange={(e) => setCarry(e.target.value)} placeholder="No limit" />
+          </label>
+          {carry.trim() !== "" && (
+            <label>The year starts
+              <select value={resetOn} onChange={(e) => setResetOn(e.target.value as "yearly_date" | "anniversary")}>
+                <option value="yearly_date">On a set date</option>
+                <option value="anniversary">On each person&apos;s hire anniversary</option>
+              </select>
+            </label>
+          )}
+          {carry.trim() !== "" && resetOn === "yearly_date" && (
+            <label>Date
+              <span className="row" style={{ flexWrap: "nowrap" }}>
+                <select value={resetDate.slice(0, 2)} onChange={(e) => setResetDate(`${e.target.value}-${resetDate.slice(3)}`)} aria-label="Reset month">
+                  {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => <option key={m} value={String(i + 1).padStart(2, "0")}>{m}</option>)}
+                </select>
+                <select value={resetDate.slice(3)} onChange={(e) => setResetDate(`${resetDate.slice(0, 2)}-${e.target.value}`)} aria-label="Reset day">
+                  {Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0")).map((d) => <option key={d} value={d}>{Number(d)}</option>)}
+                </select>
+              </span>
+            </label>
+          )}
+        </div>
+        <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+          {carry.trim() === ""
+            ? "Leave blank to let unused hours carry over without limit."
+            : `When the year starts, hours above ${carry || 0}h are removed and the person is notified (hours in pending requests are kept). Use 0 for "use it or lose it". Any award on the same date is added after.`}
+        </p>
       </fieldset>
 
       <fieldset className="pto-section">

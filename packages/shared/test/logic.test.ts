@@ -344,3 +344,22 @@ describe("time-off accrual rules", () => {
     expect(describePto(policy)).toBe("Earns 1h per 30h worked · 40h on each hire anniversary · after 1 year: 1h per 25h worked · after 5 years: 1h per 20h worked, 80h awards · cap 200h");
   });
 });
+
+import { carryoverForfeit, lastResetDate } from "../src";
+
+describe("time-off carryover", () => {
+  const p = { accrualRate: 0, annualGrantHours: 0, grantSchedule: "none", carryoverLimitHours: 40, carryoverReset: "yearly_date", carryoverDate: "01-01" };
+  it("finds the latest reset and how much to remove", () => {
+    expect(lastResetDate(p, null, "2026-11-01")).toBe("2026-01-01");
+    expect(lastResetDate({ ...p, carryoverReset: "anniversary" }, "2021-11-02", "2026-11-01")).toBe("2025-11-02");
+    expect(lastResetDate({ ...p, carryoverLimitHours: null }, null, "2026-11-01")).toBeNull();
+    expect(carryoverForfeit(100, 0, 40)).toBe(60);
+    expect(carryoverForfeit(100, 10, 40)).toBe(50); // hours in pending requests are kept
+    expect(carryoverForfeit(30, 0, 40)).toBe(0);
+    expect(carryoverForfeit(25, 0, 0)).toBe(25); // use it or lose it
+  });
+  it("describes the limit", () => {
+    expect(describePto(p)).toBe("No automatic accrual · carry over up to 40h (resets every Jan 1)");
+    expect(describePto({ ...p, carryoverLimitHours: 0, carryoverReset: "anniversary" })).toBe("No automatic accrual · use it or lose it (resets each hire anniversary)");
+  });
+});

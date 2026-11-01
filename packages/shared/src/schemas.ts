@@ -145,6 +145,8 @@ export const timeEntryEditSchema = z.object({
 export const PTO_GRANT_SCHEDULES = ["none", "yearly_date", "anniversary", "monthly"] as const;
 export type PtoGrantSchedule = (typeof PTO_GRANT_SCHEDULES)[number];
 
+export const PTO_CARRYOVER_RESETS = ["yearly_date", "anniversary"] as const;
+
 /** A step up after some years of service: a new hourly accrual rate and/or award size. */
 export const ptoTierSchema = z.object({
   afterYears: z.number().int().min(1).max(50),
@@ -168,6 +170,11 @@ export const ptoPolicySchema = z
     /** Day of the month (1–28), for monthly awards. */
     grantDayOfMonth: z.number().int().min(1).max(28).nullable().optional(),
     maxBalanceHours: z.number().nonnegative().nullable().optional(),
+    /** Most hours that carry into the next policy year; anything above is removed on the reset date. Null = no limit. */
+    carryoverLimitHours: z.number().nonnegative().max(2000).nullable().optional(),
+    /** When the policy year resets: every year on carryoverDate, or on each hire anniversary. */
+    carryoverReset: z.enum(PTO_CARRYOVER_RESETS).default("yearly_date"),
+    carryoverDate: z.string().regex(/^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/, "Use MM-DD").default("01-01"),
     tiers: z.array(ptoTierSchema).max(20).default([]),
   })
   .refine((p) => p.grantSchedule !== "yearly_date" || !!p.grantDate, { message: "Pick the date to award hours each year", path: ["grantDate"] })

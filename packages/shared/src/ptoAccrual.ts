@@ -11,6 +11,9 @@ export interface PtoPolicyLike {
   grantDate?: string | null;
   grantDayOfMonth?: number | null;
   tiers?: PtoTier[] | null;
+  carryoverLimitHours?: number | null;
+  carryoverReset?: string | null;
+  carryoverDate?: string | null;
 }
 
 const parts = (iso: string) => iso.split("-").map(Number) as [number, number, number];
@@ -72,6 +75,17 @@ export function lastGrantDate(p: PtoPolicyLike, hireDate: string | null | undefi
   }
 }
 
+/** The most recent policy-year reset on or before `today` (for carryover limits), or null. */
+export function lastResetDate(p: PtoPolicyLike, hireDate: string | null | undefined, today: string) {
+  if (p.carryoverLimitHours == null) return null;
+  return lastGrantDate({ ...p, grantSchedule: p.carryoverReset === "anniversary" ? "anniversary" : "yearly_date", grantDate: p.carryoverDate ?? "01-01" }, hireDate, today);
+}
+
+/** Hours to remove at a reset: what's above the limit, keeping hours held by pending requests. */
+export function carryoverForfeit(balance: number, pending: number, limit: number) {
+  return Math.max(0, Math.round((balance - pending - limit) * 100) / 100);
+}
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
 const perHours = (rate: number) => `1h per ${Math.round((1 / rate) * 100) / 100}h worked`;
@@ -94,5 +108,9 @@ export function describePto(p: PtoPolicyLike & { maxBalanceHours?: number | null
     if (bits.length) parts.push(`after ${t.afterYears} year${t.afterYears === 1 ? "" : "s"}: ${bits.join(", ")}`);
   }
   if (p.maxBalanceHours != null) parts.push(`cap ${p.maxBalanceHours}h`);
+  if (p.carryoverLimitHours != null) {
+    const reset = p.carryoverReset === "anniversary" ? "each hire anniversary" : `every ${MONTHS[Number((p.carryoverDate ?? "01-01").slice(0, 2)) - 1]} ${Number((p.carryoverDate ?? "01-01").slice(3))}`;
+    parts.push(p.carryoverLimitHours === 0 ? `use it or lose it (resets ${reset})` : `carry over up to ${p.carryoverLimitHours}h (resets ${reset})`);
+  }
   return parts.join(" · ");
 }

@@ -185,6 +185,14 @@ export const ptoPolicies = pgTable("pto_policies", {
   grantDate: text("grant_date"),
   grantDayOfMonth: integer("grant_day_of_month"),
   maxBalanceHours: doublePrecision("max_balance_hours"),
+  /** Carryover limit: hours above this are removed when the policy year resets (null = no limit). */
+  carryoverLimitHours: doublePrecision("carryover_limit_hours"),
+  /** yearly_date (on carryoverDate, "MM-DD") | anniversary */
+  carryoverReset: text("carryover_reset").notNull().default("yearly_date"),
+  carryoverDate: text("carryover_date").notNull().default("01-01"),
+  /** When the award / carryover settings last changed; dates before these are never applied retroactively. */
+  grantRulesSince: timestamp("grant_rules_since", { withTimezone: true }).notNull().defaultNow(),
+  carryoverRulesSince: timestamp("carryover_rules_since", { withTimezone: true }).notNull().defaultNow(),
   /** Higher accrual or awards after N years of service. */
   tiers: jsonb("tiers").$type<PtoTier[]>().notNull().default([]),
   createdAt: createdAt(),

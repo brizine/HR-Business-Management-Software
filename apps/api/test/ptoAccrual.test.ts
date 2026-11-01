@@ -50,8 +50,8 @@ describe("time-off awards and service steps", () => {
     expect(p.body.tiers.map((t: any) => t.afterYears)).toEqual([1, 5]);
     ID.vacation = p.body.id;
     expect((await call("PUT", `/pto/policies/${ID.vacation}`, "veteran", { name: "Mine" })).status).toBe(403);
-    // Pretend the policy has existed for years, so this year's anniversaries count.
-    await db.update(ptoPolicies).set({ createdAt: new Date("2020-01-01T00:00:00Z") }).where(eq(ptoPolicies.id, ID.vacation));
+    // Pretend the award settings have been in place for years, so this year's anniversaries count.
+    await db.update(ptoPolicies).set({ grantRulesSince: new Date("2020-01-01T00:00:00Z") }).where(eq(ptoPolicies.id, ID.vacation));
   });
 
   it("awards on the hire anniversary at the right step, once, up to the cap", async () => {
@@ -91,5 +91,30 @@ describe("time-off awards and service steps", () => {
     }
     expect(await balance("newbie", ID.earned)).toBeCloseTo(10 / 40, 2);
     expect(await balance("veteran", ID.earned)).toBeCloseTo(10 / 20, 2);
+  });
+
+  it("adding an award to an existing policy doesn't give out past dates", async () => {
+    const p = await call("POST", "/pto/policies", "owner", { name: "Bonus days" });
+    await db.update(ptoPolicies).set({ createdAt: new Date("2020-01-01T00:00:00Z"), grantRulesSince: new Date("2020-01-01T00:00:00Z") }).where(eq(ptoPolicies.id, p.body.id));
+    expect((await call("PUT", `/pto/policies/${p.body.id}`, "owner", { name: "Bonus days", annualGrantHours: 8, grantSchedule: "yearly_date", grantDate: "01-01" })).status).toBe(200);
+    await runScheduledChecks(new Date());
+    expect(await balance("newbie", p.body.id)).toBe(0);
+  });
+
+  it("removes hours above the carryover limit when the year resets, keeping pending requests", async () => {
+    const p = await call("POST", "/pto/policies", "owner", { name: "Carry PTO", carryoverLimitHours: 40, carryoverReset: "yearly_date", carryoverDate: "01-01" });
+    expect(p.body.carryoverLimitHours).toBe(40);
+    ID.carry = p.body.id;
+    await call("POST", "/pto/adjustments", "owner", { employeeId: ID.nodate, policyId: ID.carry, hours: 100, reason: "starting balance" });
+    expect((await call("POST", "/pto/requests", "nodate", { policyId: ID.carry, startDate: "2027-02-01", endDate: "2027-02-01", hours: 10 })).status).toBe(200);
+    // Nothing happens for the Jan 1 that came before the limit was set.
+    await runScheduledChecks(new Date("2026-11-02T18:00:00Z"));
+    expect(await balance("nodate", ID.carry)).toBe(100);
+    await runScheduledChecks(new Date("2027-01-01T18:00:00Z"));
+    await runScheduledChecks(new Date("2027-01-01T20:00:00Z"));
+    await flushNotifications();
+    expect(await balance("nodate", ID.carry)).toBe(50);
+    const inbox = (await call("GET", "/notifications", "nodate")).body.items;
+    expect(inbox.some((n: any) => n.title === "50h of Carry PTO didn't carry over")).toBe(true);
   });
 });
