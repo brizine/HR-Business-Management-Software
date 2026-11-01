@@ -4,7 +4,7 @@ import { hasRole, type Role } from "@crewdesk/shared";
 import { api } from "./api";
 
 export interface Me {
-  user: { id: string; firstName: string; lastName: string; email: string; role: Role };
+  user: { id: string; firstName: string; lastName: string; email: string; role: Role; employmentType?: string };
   company: { id: string; name: string };
 }
 

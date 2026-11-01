@@ -4,7 +4,7 @@ import { api, loadToken, saveToken, setSessionEndedHandler } from "./api";
 import { registerForPush, unregisterForPush } from "./push";
 
 interface Me {
-  user: { id: string; firstName: string; lastName: string; email: string; role: Role };
+  user: { id: string; firstName: string; lastName: string; email: string; role: Role; employmentType?: string };
   company: { id: string; name: string };
 }
 

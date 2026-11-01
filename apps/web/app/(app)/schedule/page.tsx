@@ -148,6 +148,8 @@ export default function Schedule() {
   const templates = useApi<any[]>(manager ? "/shifts/templates" : null);
   const unavailable = useApi<any[]>("/availability");
   const [showAvailability, setShowAvailability] = useState(false);
+  // Availability is only tracked for part-time employees.
+  const partTime = me?.user.employmentType === "part_time";
   const [showTemplates, setShowTemplates] = useState(false);
   const [editing, setEditing] = useState<Draft | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -215,7 +217,7 @@ export default function Schedule() {
         <button className="btn sm" onClick={() => setOffset(offset - 1)}>← Prev</button>
         <button className="btn sm" onClick={() => setOffset(0)}>This week</button>
         <button className="btn sm" onClick={() => setOffset(offset + 1)}>Next →</button>
-        <button className="btn" onClick={() => setShowAvailability(!showAvailability)}>My availability</button>
+        {partTime && <button className="btn" onClick={() => setShowAvailability(!showAvailability)}>My availability</button>}
         {manager && <button className="btn" onClick={() => setShowTemplates(!showTemplates)}>Templates{templates.data?.length ? ` (${templates.data.length})` : ""}</button>}
         {manager && (
           <>
@@ -239,7 +241,7 @@ export default function Schedule() {
           templates={templates.data ?? []} onTemplatesChanged={() => { templates.reload(); setNotice("Template saved."); }} onClose={() => setEditing(null)}
           onSaved={(w) => { setEditing(null); setNotice(w.length ? `Saved with warnings: ${w.join("; ")}` : null); reload(); }} />
       )}
-      {showAvailability && (
+      {partTime && showAvailability && (
         <div className="card">
           <h2>When I can&apos;t work</h2>
           <p className="muted" style={{ marginTop: 0 }}>Recurring times you&apos;re unavailable. For specific days off, request time off instead.</p>

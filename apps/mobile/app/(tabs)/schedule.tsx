@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, Pressable, View } from "react-native";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
 import { shiftDay, shiftTimes } from "@/lib/shifts";
 import { Badge, Button, Card, Divider, Row, Screen, Txt, useTheme } from "@/components/ui";
@@ -22,6 +23,7 @@ function ShiftDetails({ shift, assetName }: { shift: any; assetName: string | nu
 
 /** Upcoming shifts, open shifts and availability. */
 function ShiftsView() {
+  const { me } = useAuth();
   const { data, loading, reload } = useApi<{ mine: any[]; open: any[] }>("/shifts/mine");
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -61,7 +63,8 @@ function ShiftsView() {
           </View>
         )) : <Txt muted>No shifts in the next two weeks.</Txt>}
       </Card>
-      <Button title="My availability" kind="secondary" onPress={() => router.push("/availability")} />
+      {/* Availability is only tracked for part-time employees. */}
+      {me?.user.employmentType === "part_time" && <Button title="My availability" kind="secondary" onPress={() => router.push("/availability")} />}
       <Card title="Open shifts">
         {data?.open.length ? data.open.map(({ shift, assetName }) => (
           <View key={shift.id} style={{ gap: 8 }}>
