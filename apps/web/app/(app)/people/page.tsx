@@ -37,7 +37,7 @@ function matches(e: any, f: Filters) {
 }
 
 function People() {
-  const { label } = useMenuData();
+  const { label, menus } = useMenuData();
   const { can } = useAuth();
   const { data, reload } = useApi<any[]>("/employees");
   const [adding, setAdding] = useState(false);
@@ -64,8 +64,10 @@ function People() {
   };
   const active = FILTER_KEYS.some((k) => filters[k]);
   const all = data ?? [];
-  const titles = useMemo(() => distinct(all, "title"), [all]);
-  const depts = useMemo(() => distinct(all, "department"), [all]);
+  // The menu's choices in its order, plus any value someone has that's no longer on the menu.
+  const withMenu = (menu: string[], inUse: string[]) => [...menu, ...inUse.filter((v) => !menu.includes(v))];
+  const titles = useMemo(() => withMenu(menus.jobTitles, distinct(all, "title")), [all, menus.jobTitles]);
+  const depts = useMemo(() => withMenu(menus.departments, distinct(all, "department")), [all, menus.departments]);
   const rows = all.filter((e) => matches(e, filters));
   const seesPay = can("manager", "people");
   // How many people have each status, given the other filters (so the numbers add up to what "All" shows).

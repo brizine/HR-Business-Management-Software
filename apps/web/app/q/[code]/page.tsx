@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { DEFAULT_INSPECTION_ITEMS } from "@crewdesk/shared";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useMenuData } from "@/lib/menus";
+
+const PRIORITY_HINTS = { low: "can wait", medium: "fix soon", high: "affects work today", critical: "unsafe, take out of service" };
 import { useAction } from "@/lib/hooks";
 import { Badge, ErrorBox } from "@/components/ui";
 
@@ -15,6 +18,7 @@ type Panel = "inspect" | "meter" | "issue" | null;
  * big buttons for the three things people do at the equipment.
  */
 export default function Scan({ params }: { params: Promise<{ code: string }> }) {
+  const { label } = useMenuData();
   const { code } = use(params);
   const { me, ready, can } = useAuth();
   const router = useRouter();
@@ -140,10 +144,10 @@ export default function Scan({ params }: { params: Promise<{ code: string }> }) 
           <label>Details<textarea name="description" /></label>
           <label>How urgent?
             <select name="priority" defaultValue="medium">
-              <option value="low">Low: can wait</option>
-              <option value="medium">Medium: fix soon</option>
-              <option value="high">High: affects work today</option>
-              <option value="critical">Critical: unsafe, take out of service</option>
+              {(["low", "medium", "high", "critical"] as const).map((p) => {
+                const l = label("workOrderPriority", p);
+                return <option key={p} value={p}>{l[0].toUpperCase() + l.slice(1)}: {PRIORITY_HINTS[p]}</option>;
+              })}
             </select>
           </label>
           <ErrorBox error={action.error} />
