@@ -231,7 +231,8 @@ const routes: FastifyPluginAsync = async (app) => {
     const [user] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
     const [company] = await db.select().from(companies).where(eq(companies.id, user.companyId));
     // Access by area (Permissions page), so the website and app show only what this person can use.
-    return { user: publicEmployee(user), company, access: { areas: req.user.areas ?? {}, managesPermissions: !!req.user.managesPermissions } };
+    const { logoKey, ...companyInfo } = company;
+    return { user: publicEmployee(user), company: { ...companyInfo, hasLogo: !!logoKey }, access: { areas: req.user.areas ?? {}, managesPermissions: !!req.user.managesPermissions } };
   });
 
   /** What the Security settings page shows. */

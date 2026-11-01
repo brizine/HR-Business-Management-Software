@@ -44,6 +44,9 @@ export const companies = pgTable("companies", {
   legalName: text("legal_name"),
   ein: text("ein"),
   address: text("address"),
+  /** Company logo in encrypted storage (see lib/storage); shown in the sidebar for everyone. */
+  logoKey: text("logo_key"),
+  logoUpdatedAt: timestamp("logo_updated_at", { withTimezone: true }),
   /** Contact details shown on Settings → Company info. */
   phone: text("phone"),
   email: text("email"),

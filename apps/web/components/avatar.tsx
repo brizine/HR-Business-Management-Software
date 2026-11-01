@@ -18,14 +18,14 @@ export function Avatar({ e, size = 32 }: { e: any; size?: number }) {
  * Shrinks a photo in the browser before upload (longest side 800px, JPEG), so a 6 MB phone
  * picture becomes ~100 KB. Browsers apply the photo's rotation (EXIF) when decoding it.
  */
-async function shrink(file: File): Promise<Blob> {
+export async function shrink(file: File, { max = 800, type = "image/jpeg" }: { max?: number; type?: "image/jpeg" | "image/png" } = {}): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 800 / Math.max(bitmap.width, bitmap.height));
+  const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
   canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Couldn't read that photo"))), "image/jpeg", 0.85));
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Couldn't read that image"))), type, 0.85));
 }
 
 /** Large photo with Add / Change / Remove, for the profile page. */

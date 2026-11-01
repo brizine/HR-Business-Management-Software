@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { API_URL, api } from "@/lib/api";
 import type { PermissionArea, Role } from "@crewdesk/shared";
 import { useAuth } from "@/lib/auth";
 import { PageLayoutRoot } from "@/components/page-layout";
@@ -72,6 +72,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="shell">
       <nav className="sidebar">
         <div className="brand">Crewdesk</div>
+        {me.company.hasLogo && (
+          <img className="sidebar-logo" src={`${API_URL}/company/logo${me.company.logoUpdatedAt ? `?v=${encodeURIComponent(me.company.logoUpdatedAt)}` : ""}`} alt={`${me.company.name} logo`} />
+        )}
         <div className="company">{me.company.name}</div>
         <Link href="/notifications" className={path.startsWith("/notifications") ? "active" : ""}>
           Notifications {unread > 0 && <span className="badge bad" style={{ marginLeft: 4 }}>{unread > 99 ? "99+" : unread}</span>}

@@ -67,4 +67,25 @@ describe("drop-down menus", () => {
     expect((await call("PUT", "/company", "owner", { name: "X", timezone: "Mars/Olympus" })).status).toBe(400);
     expect((await call("GET", "/auth/me", "owner")).body.company.name).toBe("Menu Co Inc");
   });
+
+  it("company logo: only the owner sets it; everyone in the company loads it", async () => {
+    const upload = (who: string, bytes: Buffer) => {
+      const boundary = "----crewdesklogo";
+      const payload = Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="logo.png"\r\nContent-Type: image/png\r\n\r\n`), bytes, Buffer.from(`\r\n--${boundary}--\r\n`)]);
+      return app.inject({ method: "PUT", url: "/company/logo", payload, headers: { authorization: `Bearer ${T[who]}`, "content-type": `multipart/form-data; boundary=${boundary}` } });
+    };
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32, 7)]);
+    expect((await upload("lead", png)).statusCode).toBe(403);
+    expect((await upload("owner", Buffer.from("<svg onload=alert(1)>"))).statusCode).toBe(400);
+    const ok = await upload("owner", png);
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().hasLogo).toBe(true);
+    const img = await app.inject({ method: "GET", url: "/company/logo", headers: { authorization: `Bearer ${T.lead}` } });
+    expect(img.headers["content-type"]).toBe("image/png");
+    expect(img.rawPayload.equals(png)).toBe(true);
+    const me = (await call("GET", "/auth/me", "lead")).body.company;
+    expect(me.hasLogo).toBe(true);
+    expect(me).not.toHaveProperty("logoKey");
+    expect((await call("DELETE", "/company/logo", "owner")).body.hasLogo).toBe(false);
+  });
 });
