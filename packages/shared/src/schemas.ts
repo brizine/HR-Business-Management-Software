@@ -269,7 +269,8 @@ export const ASSET_TYPES = ["vehicle", "trailer", "heavy_equipment", "small_equi
 
 export const assetSchema = z.object({
   name: z.string().min(1),
-  type: z.enum(ASSET_TYPES),
+  /** From the company's Asset types list (defaults to ASSET_TYPES). */
+  type: z.string().trim().min(1).max(80),
   make: z.string().optional(),
   model: z.string().optional(),
   year: z.number().int().min(1900).max(2100).optional(),

@@ -60,6 +60,10 @@ export const companies = pgTable("companies", {
   /** Choices for the Job title and Department menus, set by the owner (in their order). */
   jobTitles: jsonb("job_titles").$type<string[]>().notNull().default([]),
   departments: jsonb("departments").$type<string[]>().notNull().default([]),
+  /** Other editable drop-down lists (see STORED_LISTS); a missing key means the default list. */
+  menuLists: jsonb("menu_lists").$type<Record<string, string[]>>().notNull().default({}),
+  /** New wording for fixed choices: { menu: { value: label } } (see LABEL_MENUS). */
+  menuLabels: jsonb("menu_labels").$type<Record<string, Record<string, string>>>().notNull().default({}),
   createdAt: createdAt(),
 });
 

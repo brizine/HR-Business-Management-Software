@@ -1,11 +1,12 @@
 "use client";
-import { ASSET_TYPES } from "@crewdesk/shared";
+import { LabeledSelect, MenuSelect, useMenus } from "./menu-select";
 
 export function AssetFields({ initial = {} as any, employees = [] as any[] }) {
+  const menus = useMenus();
   return (
     <div className="formgrid">
       <label>Name<input name="name" defaultValue={initial.name} required placeholder="Truck 12" /></label>
-      <label>Type<select name="type" defaultValue={initial.type ?? "vehicle"}>{ASSET_TYPES.map((t) => <option key={t} value={t}>{t.replace("_", " ")}</option>)}</select></label>
+      <MenuSelect name="type" label="Type" options={menus.assetTypes} current={initial.type ?? menus.assetTypes[0]} blank={false} required />
       <label>Make<input name="make" defaultValue={initial.make ?? ""} /></label>
       <label>Model<input name="model" defaultValue={initial.model ?? ""} /></label>
       <label>Year<input name="year" type="number" defaultValue={initial.year ?? ""} /></label>
@@ -15,7 +16,7 @@ export function AssetFields({ initial = {} as any, employees = [] as any[] }) {
       <label>Odometer (mi)<input name="odometer" type="number" min="0" defaultValue={initial.odometer ?? 0} /></label>
       <label>Engine hours<input name="engineHours" type="number" min="0" step="0.1" defaultValue={initial.engineHours ?? 0} /></label>
       <label>Status
-        <select name="status" defaultValue={initial.status ?? "active"}>{["active", "in_shop", "out_of_service", "retired"].map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}</select>
+        <LabeledSelect menu="assetStatus" values={["active", "in_shop", "out_of_service", "retired"]} name="status" defaultValue={initial.status ?? "active"} />
       </label>
       <label>Assigned to
         <select name="assignedEmployeeId" defaultValue={initial.assignedEmployeeId ?? ""}>

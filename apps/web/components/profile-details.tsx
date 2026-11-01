@@ -2,18 +2,19 @@
 import { PROFILE_FIELDS, ageOn, type ProfileFieldKey } from "@crewdesk/shared";
 import { fmtDate, money } from "@/lib/api";
 import { Badge } from "./ui";
+import { useMenuData } from "@/lib/menus";
 
 const LABELS = Object.fromEntries(PROFILE_FIELDS.map((f) => [f.key, f.label])) as Record<ProfileFieldKey, string>;
 
 /** One detail's value, or null when this viewer can't see it (or it doesn't apply). */
-function value(key: ProfileFieldKey, e: any) {
+function value(key: ProfileFieldKey, e: any, label: ReturnType<typeof useMenuData>["label"]) {
   switch (key) {
     case "email": return e.email;
     case "phone": return e.phone ?? "—";
-    case "role": return e.role;
+    case "role": return label("role", e.role);
     case "hireDate": return fmtDate(e.startDate);
     case "pay": return "payRateCents" in e ? `${money(e.payRateCents)} ${e.payType === "hourly" ? "/hr" : "/yr"}` : null;
-    case "employment": return e.employmentType?.replace("_", " ");
+    case "employment": return label("employmentType", e.employmentType);
     case "login": return e.hasLogin ? "Yes" : "Not set";
     case "twoFactor": return "twoFactorEnabled" in e ? (e.twoFactorEnabled ? "On" : "Off") : null;
     case "signIn": return e.locked ? <Badge value="locked" /> : null;
@@ -37,10 +38,11 @@ function value(key: ProfileFieldKey, e: any) {
 
 /** The employee's details. (The owner can rearrange them with the layout editor.) */
 export function ProfileDetails({ e }: { e: any }) {
+  const { label } = useMenuData();
   return (
     <div className="formgrid">
       {PROFILE_FIELDS.map(({ key }) => {
-        const v = value(key, e);
+        const v = value(key, e, label);
         return v === null || v === undefined ? null : <div key={key}><div className="muted">{LABELS[key]}</div>{v}</div>;
       })}
     </div>

@@ -4,11 +4,12 @@ import { api, download, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox } from "./ui";
+import { MenuSelect, useMenus } from "./menu-select";
 
-const CATEGORIES = ["general", "tax", "id", "policy", "certification", "contract", "registration", "insurance", "manual"];
 
 /** Upload, download, sign and delete documents for an employee, an asset, or company-wide. */
 export function DocumentList({ employeeId, assetId, title = "Documents" }: { employeeId?: string; assetId?: string; title?: string }) {
+  const menus = useMenus();
   const { me, can } = useAuth();
   const qs = new URLSearchParams({ ...(employeeId ? { employeeId } : {}), ...(assetId ? { assetId } : {}) }).toString();
   const { data, reload } = useApi<any[]>(`/documents${qs ? `?${qs}` : ""}`);
@@ -44,7 +45,7 @@ export function DocumentList({ employeeId, assetId, title = "Documents" }: { emp
           <div className="formgrid">
             <label>File<input name="file" type="file" required /></label>
             <label>Name<input name="name" placeholder="Defaults to file name" /></label>
-            <label>Category<select name="category">{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></label>
+            <MenuSelect name="category" label="Category" options={menus.documentCategories} blank={false} />
           </div>
           {can("manager", "documents") && employeeId && <label className="check"><input type="checkbox" name="requiresSignature" /> Employee must sign</label>}
           <ErrorBox error={error} />

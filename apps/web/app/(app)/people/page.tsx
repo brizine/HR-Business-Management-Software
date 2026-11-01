@@ -10,6 +10,7 @@ import { Badge, ErrorBox, PageHead } from "@/components/ui";
 import { EmployeeFields, employeeBody } from "@/components/employee-form";
 import { InviteResult } from "@/components/invite-result";
 import { Avatar } from "@/components/avatar";
+import { useMenuData } from "@/lib/menus";
 
 const NONE = "__none";
 const FILTER_KEYS = ["q", "status", "title", "dept", "hiredFrom", "hiredTo", "payType", "payMin", "payMax"] as const;
@@ -36,6 +37,7 @@ function matches(e: any, f: Filters) {
 }
 
 function People() {
+  const { label } = useMenuData();
   const { can } = useAuth();
   const { data, reload } = useApi<any[]>("/employees");
   const [adding, setAdding] = useState(false);
@@ -85,7 +87,7 @@ function People() {
       <label>Status
         <select value={filters.status} onChange={(e) => setFilter({ status: e.target.value })}>
           <option value="">All ({statusTotal})</option>
-          {EMPLOYEE_STATUSES.map((s) => <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)} ({byStatus[s] ?? 0})</option>)}
+          {EMPLOYEE_STATUSES.map((s) => { const l = label("employeeStatus", s); return <option key={s} value={s}>{l[0].toUpperCase() + l.slice(1)} ({byStatus[s] ?? 0})</option>; })}
         </select>
       </label>
     ),
@@ -120,8 +122,8 @@ function People() {
         <label>Pay type
           <select value={filters.payType} onChange={(e) => setFilter({ payType: e.target.value })}>
             <option value="">All</option>
-            <option value="hourly">Hourly</option>
-            <option value="salary">Salaried</option>
+            <option value="hourly">{label("payType", "hourly")}</option>
+            <option value="salary">{label("payType", "salary")}</option>
           </select>
         </label>
         {filters.payType && (
@@ -199,7 +201,7 @@ function People() {
                 <td>{e.email}<div className="muted">{e.phone}</div></td>
                 {seesPay && <td>{money(e.payRateCents)}{e.payType === "hourly" ? "/hr" : "/yr"}</td>}
                 <td>
-                  <Badge value={e.status} />
+                  <Badge value={e.status} menu="employeeStatus" />
                   {e.statusReason && <div className="muted status-reason-short" title={e.statusReason}>{e.statusReason}</div>}
                 </td>
               </tr>

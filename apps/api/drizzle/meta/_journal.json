@@ -197,6 +197,13 @@
       "when": 1793539047284,
       "tag": "0027_employee_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1793572112666,
+      "tag": "0028_menu_lists_and_labels",
+      "breakpoints": true
     }
   ]
 }

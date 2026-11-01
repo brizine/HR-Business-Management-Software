@@ -57,7 +57,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
     <>
       <PageHead title={`${e.firstName} ${e.lastName}`} sub={[e.title, e.department].filter(Boolean).join(" · ")}
         before={<PhotoEditor e={e} canEdit={can("admin", "people") || e.id === me?.user.id} onChange={emp.setData} />}>
-        <Badge value={e.status} />
+        <Badge value={e.status} menu="employeeStatus" />
         {can("admin", "people") && e.id !== me?.user.id && e.hasLogin && (
           <button className="btn" onClick={() => confirm(`Sign ${e.firstName} out of Crewdesk on every device?`)
             && api(`/employees/${id}/sign-out-everywhere`, { method: "POST" }).then(() => alert("Signed out everywhere."), (err) => alert(err.message))}>Sign out everywhere</button>

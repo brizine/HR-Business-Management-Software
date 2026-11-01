@@ -25,6 +25,8 @@ function Chips<T extends string>({ options, value, onChange, label }: { options:
 
 /** Editors: one product's name, rate and unit. */
 function ProductEditor({ product, onSaved }: { product: any; onSaved: () => void }) {
+  // The company's Spray Mix measurements list (editable on the website).
+  const units = useApi<{ mixUnits: string[] }>("/employees/menus").data?.mixUnits ?? MIX_UNITS;
   const [name, setName] = useState(product.name);
   const [rate, setRate] = useState(String(product.ratePerAcre));
   const [unit, setUnit] = useState(product.unit);
@@ -44,7 +46,7 @@ function ProductEditor({ product, onSaved }: { product: any; onSaved: () => void
     <View style={{ gap: 8 }}>
       <Input label="Product" value={name} onChangeText={setName} />
       <Input label={`Rate per acre (${unit})`} value={rate} onChangeText={setRate} keyboardType="decimal-pad" />
-      <Chips label="Measurement" value={unit} onChange={setUnit} options={[...new Set([...MIX_UNITS, product.unit])].map((u) => ({ value: u, label: u }))} />
+      <Chips label="Measurement" value={unit} onChange={setUnit} options={[...new Set([...units, product.unit])].map((u) => ({ value: u, label: u }))} />
       <Row>
         <View style={{ flex: 1 }}><Button title="Save" busy={busy} onPress={save} disabled={!name.trim() || !(Number(rate) >= 0) || rate.trim() === ""} /></View>
         <View style={{ flex: 1 }}><Button title="Remove" kind="secondary" disabled={busy} onPress={() =>

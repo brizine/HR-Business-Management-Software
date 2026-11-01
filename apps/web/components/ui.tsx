@@ -1,5 +1,7 @@
 "use client";
 import type { ReactNode } from "react";
+import type { LabelMenu } from "@crewdesk/shared";
+import { useMenuData } from "@/lib/menus";
 
 export function PageHead({ title, sub, children, before }: { title: string; sub?: ReactNode; children?: ReactNode; before?: ReactNode }) {
   return (
@@ -34,9 +36,11 @@ const TONES: Record<string, string> = {
   rejected: "bad", failed: "bad", cancelled: "bad",
 };
 
-export function Badge({ value }: { value: string | null | undefined }) {
+/** A status pill. With `menu`, it reads the way the owner worded that choice (Edit drop-down menus). */
+export function Badge({ value, menu }: { value: string | null | undefined; menu?: LabelMenu }) {
+  const { label } = useMenuData();
   if (!value) return null;
-  return <span className={`badge ${TONES[value] ?? ""}`}>{value.replace(/_/g, " ")}</span>;
+  return <span className={`badge ${TONES[value] ?? ""}`}>{menu ? label(menu, value) : value.replace(/_/g, " ")}</span>;
 }
 
 export function ErrorBox({ error }: { error: string | null | undefined }) {

@@ -6,6 +6,8 @@ import { api, fmtDate, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
+import { LabeledSelect } from "@/components/menu-select";
+import { useMenuData } from "@/lib/menus";
 
 function WorkOrderEditor({ wo, employees, canManage, onDone }: { wo: any; employees: any[]; canManage: boolean; onDone: () => void }) {
   const { busy, error, run } = useAction();
@@ -20,7 +22,7 @@ function WorkOrderEditor({ wo, employees, canManage, onDone }: { wo: any; employ
     }}>
       {wo.description && <pre style={{ whiteSpace: "pre-wrap", margin: 0, font: "inherit" }} className="muted">{wo.description}</pre>}
       <div className="formgrid">
-        <label>Status<select name="status" defaultValue={wo.status}>{WORK_ORDER_STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}</select></label>
+        <label>Status<LabeledSelect menu="workOrderStatus" values={WORK_ORDER_STATUSES} name="status" defaultValue={wo.status} /></label>
         {canManage && (
           <label>Assigned to
             <select name="assignedToId" defaultValue={wo.assignedToId ?? ""}>
@@ -44,6 +46,7 @@ function WorkOrderEditor({ wo, employees, canManage, onDone }: { wo: any; employ
 }
 
 function WorkOrders() {
+  const { label } = useMenuData();
   const { me, can } = useAuth();
   const params = useSearchParams();
   const highlight = params.get("highlight");
@@ -61,7 +64,7 @@ function WorkOrders() {
       <PageHead title="Work orders" sub="Repairs and scheduled service">
         <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 150 }}>
           <option value="active">Active</option>
-          {WORK_ORDER_STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+          {WORK_ORDER_STATUSES.map((s) => <option key={s} value={s}>{label("workOrderStatus", s)}</option>)}
           <option value="all">All</option>
         </select>
         <label className="check"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Assigned to me</label>
@@ -77,7 +80,7 @@ function WorkOrders() {
             <div className="formgrid">
               <label>Asset<select name="assetId" required>{assets.data?.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
               <label>Title<input name="title" required placeholder="e.g. Check engine light on" /></label>
-              <label>Priority<select name="priority" defaultValue="medium">{["low", "medium", "high", "critical"].map((p) => <option key={p}>{p}</option>)}</select></label>
+              <label>Priority<LabeledSelect menu="workOrderPriority" values={["low", "medium", "high", "critical"]} name="priority" defaultValue="medium" /></label>
               {can("manager", "fleet") && (
                 <>
                   <label>Assign to<select name="assignedToId"><option value="">Unassigned</option>{employees.data?.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}</select></label>
@@ -103,10 +106,10 @@ function WorkOrders() {
                   <td>{w.number}</td>
                   <td><strong>{w.title}</strong></td>
                   <td>{assetName}</td>
-                  <td><Badge value={w.priority} /></td>
+                  <td><Badge value={w.priority} menu="workOrderPriority" /></td>
                   <td>{assignee?.id ? `${assignee.firstName} ${assignee.lastName}` : "—"}</td>
                   <td>{fmtDate(w.dueDate)}</td>
-                  <td><Badge value={w.status} /></td>
+                  <td><Badge value={w.status} menu="workOrderStatus" /></td>
                   <td>{w.partsCostCents + w.laborCostCents ? money(w.partsCostCents + w.laborCostCents) : "—"}</td>
                 </tr>,
                 open === w.id && (

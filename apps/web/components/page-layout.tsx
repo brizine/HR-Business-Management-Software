@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { MenuEditors } from "./menu-editors";
+import { menusForPage } from "@crewdesk/shared";
 import { HIDDEN_KEY, WIDTHS, WIDTH_KEY, WIDTH_LABELS, applyLayout, besideWidths, boxDrop, dropsAfter, isEmptyLayout, moveWithin, pageKey, readWidths, writeWidths, type PageLayout, type PageLayouts } from "@/lib/layout-engine";
 
 const EDITOR_FLAG = "crewdesk.layoutEditor";
@@ -240,6 +241,7 @@ export function PageLayoutRoot({ children }: { children: ReactNode }) {
     }
   };
   const pageName = (root.current?.querySelector(".pagehead h1")?.textContent ?? page).trim();
+  const pageMenus = menusForPage(page).map((m) => m.key);
 
   return (
     <Ctx.Provider value={{ saved, setSaved }}>
@@ -273,12 +275,16 @@ export function PageLayoutRoot({ children }: { children: ReactNode }) {
           <div className="mix-window menus-window" role="dialog" aria-modal="true" aria-labelledby="menus-window-title">
             <div className="mix-window-head">
               <div>
-                <h2 id="menus-window-title" style={{ margin: 0 }}>Drop-down menus</h2>
-                <div className="muted">The choices people pick from on the employee and hiring forms. Changes save as you make them.</div>
+                <h2 id="menus-window-title" style={{ margin: 0 }}>Drop-down menus on {pageName}</h2>
+                <div className="muted">The choices in this page&apos;s drop-down menus. Changes save as you make them and apply everywhere the menu is used.</div>
               </div>
               <button type="button" className="mix-window-close" onClick={() => setMenusOpen(false)} aria-label="Close" title="Close" autoFocus>×</button>
             </div>
-            <MenuEditors />
+            {pageMenus.length ? <MenuEditors keys={pageMenus} /> : (
+              <p className="muted" style={{ margin: 0 }}>
+                This page has no drop-down menus with editable choices. Menus that list your own records (people, assets, time-off types, checklists) change when you edit those records, and settings menus are fixed.
+              </p>
+            )}
           </div>
         </div>,
         document.body,

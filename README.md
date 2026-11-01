@@ -230,7 +230,11 @@ the payroll calendar, safety rules and so on.
   it to keep information private.
   Everything still works while editing. Nobody else sees the changes until you click **Save** in the
   editor's top bar (**Edit drop-down menus**, **Reset this page**, **Discard** and **Exit editor** are
-  there too; Edit drop-down menus opens the Job titles and Departments lists in a window). Saved layouts
+  there too). **Edit drop-down menus** opens the drop-down menus used on the page you're on: plain lists
+  (job titles, departments, document categories, Spray Mix measurements, asset types) can be added to,
+  renamed (updating everything that uses them), reordered and trimmed; choices Crewdesk acts on
+  (employee status, role, employment type, pay type, applicant stages, work order status and
+  priority, asset status) can be reworded. Settings → Company shows every menu. Saved layouts
   apply to everyone on the website.
   Pages with an id in the address (like each employee's page) share one layout.
 - **Photos:** a photo next to each person's name on their profile and on the Team list (initials when

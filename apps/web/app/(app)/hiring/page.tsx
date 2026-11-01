@@ -7,7 +7,8 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
 import { InviteResult } from "@/components/invite-result";
-import { MenuSelect, useMenus } from "@/components/menu-select";
+import { LabeledSelect, MenuSelect, useMenus } from "@/components/menu-select";
+import { useMenuData } from "@/lib/menus";
 
 /** Details for a new hire: start date, pay, manager, checklist and invite. */
 function HireForm({ applicant, job, templates, staff, onCancel, onHired }: {
@@ -41,10 +42,10 @@ function HireForm({ applicant, job, templates, staff, onCancel, onHired }: {
               {managers.map((m) => <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>)}
             </select>
           </label>
-          <label>Employment<select name="employmentType" defaultValue="full_time">{EMPLOYMENT_TYPES.map((t) => <option key={t} value={t}>{t.replace("_", " ")}</option>)}</select></label>
-          <label>Pay type<select name="payType" defaultValue="hourly">{PAY_TYPES.map((t) => <option key={t}>{t}</option>)}</select></label>
+          <label>Employment<LabeledSelect menu="employmentType" values={EMPLOYMENT_TYPES} name="employmentType" defaultValue="full_time" /></label>
+          <label>Pay type<LabeledSelect menu="payType" values={PAY_TYPES} name="payType" defaultValue="hourly" /></label>
           <label>Pay rate ($/hr or $/yr)<input name="payRate" type="number" step="0.01" min="0" required /></label>
-          <label>Role in Crewdesk<select name="role" defaultValue="employee"><option value="employee">employee</option><option value="manager">manager</option></select></label>
+          <label>Role in Crewdesk<LabeledSelect menu="role" values={["employee", "manager"]} name="role" defaultValue="employee" /></label>
           <label>Onboarding checklist
             <select name="onboardingTemplateId" defaultValue={templates[0]?.id ?? ""}>
               <option value="">None</option>
@@ -64,6 +65,7 @@ function HireForm({ applicant, job, templates, staff, onCancel, onHired }: {
 }
 
 export default function Hiring() {
+  const { label } = useMenuData();
   const menus = useMenus();
   const { me, can } = useAuth();
   const jobs = useApi<any[]>("/jobs");
@@ -167,7 +169,7 @@ export default function Hiring() {
           <div className="kanban">
             {APPLICANT_STAGES.map((stage) => (
               <div className="kcol" key={stage}>
-                <strong>{stage[0].toUpperCase() + stage.slice(1)}</strong>{" "}
+                <strong style={{ textTransform: "capitalize" }}>{label("applicantStage", stage)}</strong>{" "}
                 <span className="muted">{applicants.data?.filter((a) => a.stage === stage).length ?? 0}</span>
                 {applicants.data?.filter((a) => a.stage === stage).map((a) => (
                   <div className="kcard" key={a.id}>
@@ -177,7 +179,7 @@ export default function Hiring() {
                     <div className="row" style={{ marginTop: 6 }}>
                       {stage !== "hired" && (
                         <select value={a.stage} onChange={(e) => api(`/applicants/${a.id}/stage`, { method: "PATCH", body: { stage: e.target.value } }).then(applicants.reload)} style={{ width: "auto", padding: "3px 6px" }}>
-                          {APPLICANT_STAGES.filter((s) => s !== "hired").map((s) => <option key={s}>{s}</option>)}
+                          {APPLICANT_STAGES.filter((s) => s !== "hired").map((s) => <option key={s} value={s}>{label("applicantStage", s)}</option>)}
                         </select>
                       )}
                       {stage === "offer" && can("admin", "hiring") && <button className="btn sm primary" onClick={() => { setHired(null); setHiring(a); }}>Hire</button>}

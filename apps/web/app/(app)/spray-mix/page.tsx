@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
-import { MIX_UNITS, computeMix, formatAmount, formatEntered, isInactive, totalsByUnit } from "@crewdesk/shared";
+import { computeMix, formatAmount, formatEntered, isInactive, totalsByUnit } from "@crewdesk/shared";
 import { api, fmtDateTime } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
+import { useMenus } from "@/components/menu-select";
 
 const remembered = (sheetId: string) => {
   try {
@@ -68,10 +69,12 @@ function Editable({ value, display, label, canEdit, onSave, kind = "text", optio
   );
 }
 
-const units = MIX_UNITS as readonly string[];
+/** The Spray Mix measurements list (editable under Edit drop-down menus). */
+const useUnits = () => useMenus().mixUnits;
 
 /** Editors: a blank row at the bottom of the calculator for a new product. */
 function AddProductRow({ sheet, onChange, columns }: { sheet: any; onChange: () => void; columns: number }) {
+  const units = useUnits();
   const { busy, error, run } = useAction();
   return (
     <tr className="noprint mix-add-row">
@@ -147,6 +150,7 @@ function SelectedWindow({ sheet, gallons, rows, acres, squareFeet, onClose }: { 
 
 /** Everyone: enter tank gallons, Update total. Nothing here is saved to the server. */
 function Calculator({ sheet, canEdit, onChange }: { sheet: any; canEdit: boolean; onChange: () => void }) {
+  const units = useUnits();
   const [input, setInput] = useState("");
   const [applied, setApplied] = useState<number>(sheet.defaultTankGallons);
   useEffect(() => {
@@ -218,7 +222,7 @@ function Calculator({ sheet, canEdit, onChange }: { sheet: any; canEdit: boolean
                 </th>
                 <td><Editable canEdit={canEdit} kind="number" width={90} label={`${p.name} rate per acre`} value={p.ratePerAcre} display={formatEntered(p.ratePerAcre)} onSave={async (v) => saveProduct(p, { ratePerAcre: rateNumber(v) })} /></td>
                 <td>{formatAmount(ratePer1000)}</td>
-                <td><Editable canEdit={canEdit} kind="select" options={units as string[]} width={140} label={`${p.name} measurement`} value={p.unit} onSave={(v) => saveProduct(p, { unit: v })} /></td>
+                <td><Editable canEdit={canEdit} kind="select" options={units} width={140} label={`${p.name} measurement`} value={p.unit} onSave={(v) => saveProduct(p, { unit: v })} /></td>
                 <td>{formatEntered(applied)} gal</td>
                 <td><strong style={{ fontSize: 16 }}>{formatAmount(needed)}</strong> <span className="muted">{p.unit.split(" ")[0]}</span></td>
                 {canEdit && <td className="noprint"><button type="button" className="btn sm danger mix-remove" aria-label={`Remove ${p.name}`} title={`Remove ${p.name}`} onClick={() => remove(p)}>×</button></td>}
@@ -236,7 +240,7 @@ function Calculator({ sheet, canEdit, onChange }: { sheet: any; canEdit: boolean
             <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
               <strong><span className="noprint" style={{ marginRight: 8 }}>{pickBox(p)}</span><Editable canEdit={canEdit} label={`${p.name} name`} value={p.name} onSave={(v) => saveProduct(p, { name: v })} /></strong>
               <span><strong style={{ fontSize: 20 }}>{formatAmount(needed)}</strong> <span className="muted">
-                <Editable canEdit={canEdit} kind="select" options={units as string[]} width={140} label={`${p.name} measurement`} value={p.unit} onSave={(v) => saveProduct(p, { unit: v })} />
+                <Editable canEdit={canEdit} kind="select" options={units} width={140} label={`${p.name} measurement`} value={p.unit} onSave={(v) => saveProduct(p, { unit: v })} />
               </span></span>
             </div>
             <div className="muted" style={{ fontSize: 13 }}>
@@ -254,7 +258,8 @@ function Calculator({ sheet, canEdit, onChange }: { sheet: any; canEdit: boolean
 function Editor({ sheet, onChange }: { sheet: any; onChange: () => void }) {
   const { busy, error, run } = useAction();
   const num = (v: FormDataEntryValue | null) => Number(v);
-  const unitOptions = (current: string) => [...new Set([...MIX_UNITS, current])];
+  const mixUnits = useUnits();
+  const unitOptions = (current: string) => [...new Set([...mixUnits, current])];
 
   return (
     <div className="card stack noprint">
@@ -310,7 +315,7 @@ function Editor({ sheet, onChange }: { sheet: any; onChange: () => void }) {
               }}>
                 <input name="name" placeholder="New product" aria-label="New product name" required style={{ flex: 2, minWidth: 160 }} />
                 <input name="ratePerAcre" type="number" step="any" min="0" placeholder="Rate/acre" aria-label="New product rate per acre" required style={{ width: 110 }} />
-                <select name="unit" aria-label="New product measurement" style={{ width: 150 }}>{MIX_UNITS.map((u) => <option key={u}>{u}</option>)}</select>
+                <select name="unit" aria-label="New product measurement" style={{ width: 150 }}>{mixUnits.map((u) => <option key={u}>{u}</option>)}</select>
                 <button className="btn sm primary" disabled={busy}>Add product</button>
               </form>
             </td>

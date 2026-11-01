@@ -29,7 +29,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
   return (
     <>
       <PageHead title={a.name} sub={[a.year, a.make, a.model, a.licensePlate, a.vin].filter(Boolean).join(" · ")}>
-        <Badge value={a.status} />
+        <Badge value={a.status} menu="assetStatus" />
         {can("manager", "fleet") && <button className="btn" onClick={() => setEditing(!editing)}>{editing ? "Close" : "Edit"}</button>}
       </PageHead>
       {editing && (
@@ -120,8 +120,8 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
             <table><tbody>{a.workOrders.map((w: any) => (
               <tr key={w.id}>
                 <td><Link href={`/work-orders?highlight=${w.id}`}>#{w.number} {w.title}</Link><div className="muted">{fmtDate(w.createdAt)}</div></td>
-                <td><Badge value={w.status} /></td>
-                <td>{w.status === "completed" ? money(w.partsCostCents + w.laborCostCents) : <Badge value={w.priority} />}</td>
+                <td><Badge value={w.status} menu="workOrderStatus" /></td>
+                <td>{w.status === "completed" ? money(w.partsCostCents + w.laborCostCents) : <Badge value={w.priority} menu="workOrderPriority" />}</td>
               </tr>
             ))}</tbody></table>
           ) : <Empty>No work orders.</Empty>}
@@ -143,7 +143,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
         <QrCode value={assetQrUrl(a.qrCode)} size={128} />
         <div className="stack" style={{ flex: 1, minWidth: 220 }}>
           <h2 style={{ margin: 0 }}>QR label</h2>
-          <div className="muted">Scanning opens a page to inspect this {a.type.replace("_", " ")}, log a reading or report an issue. No app needed.</div>
+          <div className="muted">Scanning opens a page to inspect this {a.type.replace(/_/g, " ")}, log a reading or report an issue. No app needed.</div>
           <div>Code <code style={{ letterSpacing: ".05em" }}>{a.qrCode}</code></div>
           <div className="row">
             <Link className="btn" href={`/fleet/labels?ids=${a.id}`}>Print label</Link>

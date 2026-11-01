@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import bcrypt from "bcryptjs";
-import { and, asc, eq } from "drizzle-orm";
-import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, employeeContactSchema, employeeMenusSchema, employeeSchema, hasRole, isInactive, menuRenameSchema, pageLayoutsUpdateSchema, type Role } from "@crewdesk/shared";
+import { and, asc, eq, inArray } from "drizzle-orm";
+import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, employeeContactSchema, employeeMenusSchema, employeeSchema, hasRole, isInactive, menuRenameSchema, pageLayoutsUpdateSchema, MENU_LISTS, STORED_LISTS, defaultLabel, defaultList, menuLabelsSchema, menuListRenameSchema, menuListSchema, type Role, type StoredList } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, employees, jobs, recoveryCodes } from "../db/schema";
+import { assets, companies, documents, employees, jobs, mixProducts, mixSheets, recoveryCodes } from "../db/schema";
 import { authenticate, canManageAccount, requireRole, signOutEverywhere, roleIn } from "../lib/auth";
 import { sendInvite } from "../lib/invites";
 import { storage } from "../lib/storage";
@@ -69,6 +69,11 @@ function statusFields(body: { status?: string; statusReason?: string | null }, b
   return out;
 }
 
+function storedListKey(key: string): StoredList {
+  if (!(STORED_LISTS as readonly string[]).includes(key)) throw new HttpError(404, "Menu not found");
+  return key as StoredList;
+}
+
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
 
@@ -84,10 +89,26 @@ const routes: FastifyPluginAsync = async (app) => {
   // ---- Job title and Department menus (owner edits; everyone can read) ----
 
   async function menus(companyId: string) {
-    const [c] = await db.select({ jobTitles: companies.jobTitles, departments: companies.departments }).from(companies).where(eq(companies.id, companyId));
+    const [c] = await db.select({ jobTitles: companies.jobTitles, departments: companies.departments, menuLists: companies.menuLists, menuLabels: companies.menuLabels }).from(companies).where(eq(companies.id, companyId));
     const used = await db.select({ title: employees.title, department: employees.department }).from(employees).where(eq(employees.companyId, companyId));
+    const docs = await db.select({ v: documents.category }).from(documents).where(eq(documents.companyId, companyId));
+    const units = await db.select({ v: mixProducts.unit }).from(mixProducts).innerJoin(mixSheets, eq(mixSheets.id, mixProducts.sheetId)).where(eq(mixSheets.companyId, companyId));
+    const types = await db.select({ v: assets.type }).from(assets).where(eq(assets.companyId, companyId));
     const count = (vals: (string | null)[]) => vals.reduce<Record<string, number>>((n, v) => (v ? { ...n, [v]: (n[v] ?? 0) + 1 } : n), {});
-    return { jobTitles: c.jobTitles, departments: c.departments, usage: { jobTitles: count(used.map((u) => u.title)), departments: count(used.map((u) => u.department)) } };
+    const lists = Object.fromEntries(STORED_LISTS.map((k) => [k, c.menuLists[k] ?? defaultList(k)])) as Record<StoredList, string[]>;
+    return {
+      jobTitles: c.jobTitles,
+      departments: c.departments,
+      ...lists,
+      labels: c.menuLabels,
+      usage: {
+        jobTitles: count(used.map((u) => u.title)),
+        departments: count(used.map((u) => u.department)),
+        documentCategories: count(docs.map((d) => d.v)),
+        mixUnits: count(units.map((d) => d.v)),
+        assetTypes: count(types.map((d) => d.v)),
+      },
+    };
   }
 
   app.get("/menus", async (req) => menus(req.user.companyId));
@@ -112,6 +133,49 @@ const routes: FastifyPluginAsync = async (app) => {
       await tx.update(employees).set(kind === "jobTitles" ? { title: to } : { department: to }).where(and(eq(employees.companyId, req.user.companyId), eq(col, from)));
       if (kind === "departments") await tx.update(jobs).set({ department: to }).where(and(eq(jobs.companyId, req.user.companyId), eq(jobs.department, from)));
     });
+    return menus(req.user.companyId);
+  });
+
+  /** Replaces one of the other editable lists (document categories, Spray Mix measurements, asset types). */
+  app.put<{ Params: { key: string } }>("/menus/lists/:key", { preHandler: requireRole("owner", "company") }, async (req) => {
+    const key = storedListKey(req.params.key);
+    const { values } = parse(menuListSchema, req.body);
+    const [c] = await db.select({ menuLists: companies.menuLists }).from(companies).where(eq(companies.id, req.user.companyId));
+    await db.update(companies).set({ menuLists: { ...c.menuLists, [key]: values } }).where(eq(companies.id, req.user.companyId));
+    return menus(req.user.companyId);
+  });
+
+  /** Renames an entry in one of those lists, and everything that uses it. */
+  app.post<{ Params: { key: string } }>("/menus/lists/:key/rename", { preHandler: requireRole("owner", "company") }, async (req) => {
+    const key = storedListKey(req.params.key);
+    const { from, to } = parse(menuListRenameSchema, req.body);
+    const current = await menus(req.user.companyId);
+    const list = current[key];
+    if (!list.includes(from)) notFound("Menu entry");
+    if (from !== to && list.includes(to)) throw new HttpError(409, `"${to}" is already on the list`);
+    const [c] = await db.select({ menuLists: companies.menuLists }).from(companies).where(eq(companies.id, req.user.companyId));
+    const companyId = req.user.companyId;
+    await db.transaction(async (tx) => {
+      await tx.update(companies).set({ menuLists: { ...c.menuLists, [key]: list.map((v) => (v === from ? to : v)) } }).where(eq(companies.id, companyId));
+      if (key === "documentCategories") await tx.update(documents).set({ category: to }).where(and(eq(documents.companyId, companyId), eq(documents.category, from)));
+      if (key === "assetTypes") await tx.update(assets).set({ type: to }).where(and(eq(assets.companyId, companyId), eq(assets.type, from)));
+      if (key === "mixUnits") {
+        const sheetIds = (await tx.select({ id: mixSheets.id }).from(mixSheets).where(eq(mixSheets.companyId, companyId))).map((r) => r.id);
+        if (sheetIds.length) await tx.update(mixProducts).set({ unit: to }).where(and(inArray(mixProducts.sheetId, sheetIds), eq(mixProducts.unit, from)));
+      }
+    });
+    return menus(req.user.companyId);
+  });
+
+  /** New wording for fixed choices (e.g. "terminated" → "Separated"); blank puts back the default. */
+  app.put<{ Params: { key: string } }>("/menus/labels/:key", { preHandler: requireRole("owner", "company") }, async (req) => {
+    const menu = MENU_LISTS.find((m) => m.key === req.params.key && m.kind === "labels");
+    if (!menu || !("values" in menu)) notFound("Menu");
+    const { labels } = parse(menuLabelsSchema, req.body);
+    const values = menu.values as readonly string[];
+    const clean = Object.fromEntries(Object.entries(labels).filter(([v, l]) => values.includes(v) && l && l.trim() && l.trim() !== defaultLabel(v)).map(([v, l]) => [v, l!.trim()]));
+    const [c] = await db.select({ menuLabels: companies.menuLabels }).from(companies).where(eq(companies.id, req.user.companyId));
+    await db.update(companies).set({ menuLabels: { ...c.menuLabels, [menu.key]: clean } }).where(eq(companies.id, req.user.companyId));
     return menus(req.user.companyId);
   });
 
