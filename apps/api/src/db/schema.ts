@@ -44,6 +44,10 @@ export const companies = pgTable("companies", {
   legalName: text("legal_name"),
   ein: text("ein"),
   address: text("address"),
+  /** Contact details shown on Settings → Company info. */
+  phone: text("phone"),
+  email: text("email"),
+  website: text("website"),
   /** Collect W-4, I-9 and direct deposit in Crewdesk (off when a payroll provider collects them). */
   taxFormsInCrewdesk: boolean("tax_forms_in_crewdesk").notNull().default(true),
   /** Lowest role that can create wiki pages ("employee" = everyone). */

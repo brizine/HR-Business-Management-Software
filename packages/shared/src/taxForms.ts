@@ -182,3 +182,21 @@ export const companyPayrollInfoSchema = z.object({
     .or(z.literal("")),
   address: z.string().trim().max(300).optional(),
 });
+
+/** Settings → Company info. Legal name, EIN and address are the same fields Payroll settings edits. */
+export const companyInfoSchema = companyPayrollInfoSchema.extend({
+  name: z.string().trim().min(1, "Enter the company name").max(120),
+  phone: z.string().trim().max(40).optional(),
+  email: z.string().trim().email("Enter a valid email").max(200).optional().or(z.literal("")),
+  website: z.string().trim().max(200).optional(),
+  /** IANA time zone (e.g. America/Chicago): used for schedules, reminders and pay periods. */
+  timezone: z.string().trim().refine((tz) => {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: tz });
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Pick a time zone"),
+});
+export type CompanyInfo = z.infer<typeof companyInfoSchema>;

@@ -56,4 +56,15 @@ describe("drop-down menus", () => {
     expect((await call("PUT", "/employees/menus/labels/jobTitles", "owner", { labels: {} })).status).toBe(404);
     expect((await call("GET", "/employees/menus", "lead")).body.labels.employeeStatus.terminated).toBe("Separated");
   });
+
+  it("company info: everyone views (EIN for admins only); only the owner edits", async () => {
+    const saved = await call("PUT", "/company", "owner", { name: "Menu Co Inc", legalName: "Menu Co LLC", ein: "123456789", address: "1 Main St", phone: "555-0100", email: "office@menu.test", website: "menu.test", timezone: "America/Denver" });
+    expect(saved.status).toBe(200);
+    expect(saved.body).toMatchObject({ name: "Menu Co Inc", ein: "12-3456789", timezone: "America/Denver", canEdit: true });
+    const asLead = (await call("GET", "/company", "lead")).body;
+    expect(asLead).toMatchObject({ name: "Menu Co Inc", phone: "555-0100", ein: null, canEdit: false });
+    expect((await call("PUT", "/company", "lead", { name: "Hacked", timezone: "America/Denver" })).status).toBe(403);
+    expect((await call("PUT", "/company", "owner", { name: "X", timezone: "Mars/Olympus" })).status).toBe(400);
+    expect((await call("GET", "/auth/me", "owner")).body.company.name).toBe("Menu Co Inc");
+  });
 });

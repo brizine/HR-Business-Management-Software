@@ -208,6 +208,10 @@ the payroll calendar, safety rules and so on.
   edits the choices with **Edit drop-down menus** in the layout editor: add, rename (everyone who has the old name is
   updated), reorder and remove (people who have a removed choice keep it until it's changed). The lists
   start from the titles and departments already in use.
+- **Company info (Settings → Company info):** company name (shown in the sidebar), legal name, EIN and
+  business address (the same fields Payroll settings uses for tax forms), phone, email, website and
+  time zone (used for schedules, reminders, pay periods and time-off awards). Everyone can view it; the
+  EIN shows only to admins and people with payroll access; the owner edits.
 - **Permissions (Settings → Permissions):** who can do what, by area: Team & employee records, Time
   clock, Schedule, Time off, Documents, Hiring, Onboarding, Payroll & tax forms, Fleet & equipment,
   Company wiki, Spray Mix Calculator, Dashboard and Company settings. Everyone starts with what their
