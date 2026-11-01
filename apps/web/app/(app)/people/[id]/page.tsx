@@ -161,7 +161,8 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
           </div>
         )}
       </div>
-      {can("manager") && (
+      {/* Availability is only tracked for part-time employees. */}
+      {can("manager") && e.employmentType === "part_time" && (
         <div className="card">
           <h2>Availability</h2>
           <p className="muted" style={{ marginTop: 0 }}>Recurring times {e.firstName} can&apos;t work. These show on the schedule and warn you when scheduling.</p>
