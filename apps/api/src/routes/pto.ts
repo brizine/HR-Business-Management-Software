@@ -102,9 +102,10 @@ const routes: FastifyPluginAsync = async (app) => {
     return balances(req.user.companyId, employeeId);
   });
 
-  app.get<{ Querystring: { status?: string; mine?: string } }>("/requests", async (req) => {
+  app.get<{ Querystring: { status?: string; mine?: string; employeeId?: string } }>("/requests", async (req) => {
     const filters = [eq(ptoRequests.companyId, req.user.companyId)];
     if (!isManager(req) || req.query.mine === "true") filters.push(eq(ptoRequests.employeeId, req.user.sub));
+    else if (req.query.employeeId) filters.push(eq(ptoRequests.employeeId, req.query.employeeId));
     if (req.query.status) filters.push(eq(ptoRequests.status, req.query.status));
     return db
       .select({
@@ -120,24 +121,39 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/requests", async (req) => {
-    const body = parse(ptoRequestSchema, req.body);
+    const { employeeId, ...body } = parse(ptoRequestSchema, req.body);
     if (body.endDate < body.startDate) throw new HttpError(400, "End date must be on or after start date");
-    const bal = (await balances(req.user.companyId, req.user.sub)).find((b) => b.policyId === body.policyId);
+    // Your own request, or (managers and up) one entered for someone else.
+    const forId = employeeId && employeeId !== req.user.sub ? employeeId : req.user.sub;
+    const onBehalf = forId !== req.user.sub;
+    if (onBehalf && !isManager(req)) throw new HttpError(403, "Only managers can request time off for someone else");
+    const [who] = await db.select().from(employees).where(and(eq(employees.id, forId), eq(employees.companyId, req.user.companyId)));
+    if (!who) notFound("Employee");
+    const bal = (await balances(req.user.companyId, forId)).find((b) => b.policyId === body.policyId);
     if (!bal) notFound("Policy");
     if (body.hours > bal.balanceHours - bal.pendingHours) {
       throw new HttpError(400, `Not enough balance (${round(bal.balanceHours - bal.pendingHours)}h available)`);
     }
     const [row] = await db
       .insert(ptoRequests)
-      .values({ ...body, companyId: req.user.companyId, employeeId: req.user.sub })
+      .values({ ...body, companyId: req.user.companyId, employeeId: forId })
       .returning();
     const [me] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
-    notify(req.user.companyId, except(await approversFor(req.user.companyId, req.user.sub), req.user.sub), {
+    const what = `${bal.name}: ${body.hours}h, ${dateRange(body.startDate, body.endDate)}`;
+    notify(req.user.companyId, except(await approversFor(req.user.companyId, forId), req.user.sub), {
       category: "pto",
-      title: `Time-off request from ${me.firstName} ${me.lastName}`,
-      body: `${bal.name}: ${body.hours}h, ${dateRange(body.startDate, body.endDate)}`,
+      title: onBehalf ? `Time-off request for ${who.firstName} ${who.lastName} (entered by ${me.firstName} ${me.lastName})` : `Time-off request from ${me.firstName} ${me.lastName}`,
+      body: what,
       link: { screen: "pto" },
     });
+    if (onBehalf) {
+      notify(req.user.companyId, [forId], {
+        category: "pto",
+        title: `${me.firstName} ${me.lastName} requested time off for you`,
+        body: what,
+        link: { screen: "pto" },
+      });
+    }
     return row;
   });
 

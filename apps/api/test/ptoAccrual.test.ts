@@ -118,4 +118,20 @@ describe("time-off awards and service steps", () => {
     const inbox = (await call("GET", "/notifications", "nodate")).body.items;
     expect(inbox.some((n: any) => n.title.includes("carry over"))).toBe(false);
   });
+
+  it("managers can request time off for someone else; employees can't", async () => {
+    // The newbie has 8h of Floating holiday from the Jan 1 award above.
+    const req = { policyId: ID.float, startDate: "2027-03-01", endDate: "2027-03-01", hours: 4 };
+    expect((await call("POST", "/pto/requests", "veteran", { ...req, employeeId: ID.newbie })).status).toBe(403);
+    const made = await call("POST", "/pto/requests", "owner", { ...req, employeeId: ID.newbie, reason: "Called in sick" });
+    expect(made.status).toBe(200);
+    expect(made.body).toMatchObject({ employeeId: ID.newbie, status: "pending" });
+    expect((await call("POST", "/pto/requests", "owner", { ...req, hours: 6, employeeId: ID.newbie })).status).toBe(400); // only 4h left
+    await flushNotifications();
+    const inbox = (await call("GET", "/notifications", "newbie")).body.items;
+    expect(inbox.some((n: any) => n.title === "Al Owner requested time off for you")).toBe(true);
+    const listed = (await call("GET", `/pto/requests?employeeId=${ID.newbie}`, "owner")).body;
+    expect(listed.every((r: any) => r.request.employeeId === ID.newbie)).toBe(true);
+    expect(listed).toHaveLength(1);
+  });
 });

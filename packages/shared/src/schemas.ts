@@ -187,6 +187,8 @@ export const ptoRequestSchema = z.object({
   endDate: isoDate,
   hours: z.number().positive(),
   reason: z.string().optional(),
+  /** Managers and up can enter a request for someone else (e.g. they called in sick). */
+  employeeId: z.string().uuid().optional(),
 });
 
 export const ptoDecisionSchema = z.object({

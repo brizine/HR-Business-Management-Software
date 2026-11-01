@@ -13,6 +13,7 @@ import { AvailabilityEditor } from "@/components/availability-editor";
 import { EmployeeFields, employeeBody } from "@/components/employee-form";
 import { ProfileDetails } from "@/components/profile-details";
 import { PhotoEditor } from "@/components/avatar";
+import { RequestTimeOffBox } from "@/components/request-time-off";
 import { isInactive } from "@crewdesk/shared";
 
 /** Admins: the person's W-4, I-9 and direct deposit on file (current and earlier versions). */
@@ -132,6 +133,9 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
               </div>
             ) : <Empty>No time off accrued yet.</Empty>}
           </div>
+        )}
+        {(can("manager") || e.id === me?.user.id) && !isInactive(e.status) && (
+          <RequestTimeOffBox employeeId={e.id} firstName={e.firstName} isSelf={e.id === me?.user.id} balances={balances.data} onChange={balances.reload} />
         )}
         {tasks.data && (
           <div className="card">
