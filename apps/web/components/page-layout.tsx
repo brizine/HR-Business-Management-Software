@@ -21,7 +21,7 @@ const Ctx = createContext<LayoutCtx>({ saved: {}, setSaved: () => {} });
 export const useSavedLayouts = () => useContext(Ctx);
 
 /** Settings → Company: open the editor in a new tab, and see or reset the pages already arranged. */
-export function PageLayoutsCard() {
+export function PageLayoutsCard({ children }: { children?: ReactNode }) {
   const { saved, setSaved } = useSavedLayouts();
   const [error, setError] = useState<string | null>(null);
   const pages = Object.keys(saved).sort();
@@ -57,6 +57,7 @@ export function PageLayoutsCard() {
         </ul>
       ) : <p className="muted" style={{ margin: 0 }}>Every page uses its default layout.</p>}
       {error && <div className="error" role="alert">{error}</div>}
+      {children}
     </div>
   );
 }

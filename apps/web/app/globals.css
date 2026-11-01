@@ -236,6 +236,8 @@ tr.openrow td { background: var(--bg); }
 .photo-actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; max-width: 200px; }
 .photo-actions .error-text { color: var(--bad); font-size: 12px; width: 100%; text-align: center; }
 .person-cell { display: flex; align-items: center; gap: 10px; }
+.menu-sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; align-items: start; margin-top: 8px; padding-top: 14px; border-top: 1px solid var(--border); }
+.menu-section h3 { font-size: 15px; }
 .menu-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
 .menu-list li { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap; }
 .pto-section { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 0; display: grid; gap: 8px; min-width: 0; }

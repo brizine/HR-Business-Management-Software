@@ -37,8 +37,8 @@ function MenuEditor({ kind, title, noun, data, onChange }: { kind: Kind; title: 
   const unlisted = Object.keys(usage).filter((v) => !list.includes(v)).sort();
 
   return (
-    <div className="card stack">
-      <h2 style={{ margin: 0 }}>{title}</h2>
+    <section className="stack menu-section" aria-label={title}>
+      <h3 style={{ margin: 0 }}>{title}</h3>
       <p className="muted" style={{ margin: 0 }}>The choices in the {title.toLowerCase()} menu on the employee and hiring forms, in this order.</p>
       {list.length ? (
         <ol className="menu-list">
@@ -88,7 +88,7 @@ function MenuEditor({ kind, title, noun, data, onChange }: { kind: Kind; title: 
         </p>
       )}
       <ErrorBox error={error} />
-    </div>
+    </section>
   );
 }
 
@@ -100,13 +100,12 @@ export default function CompanySettings() {
       <PageHead title="Company settings" sub="Owner only. Page layouts and the choices people pick from across Crewdesk." />
       <SettingsTabs />
       {!can("owner") ? <p className="muted">Only the owner can change company settings.</p> : !menus.data ? <ErrorBox error={menus.error} /> : (
-        <>
-        <PageLayoutsCard />
-        <div className="grid cols-2" style={{ alignItems: "start" }}>
-          <MenuEditor kind="jobTitles" title="Job titles" noun="job title" data={menus.data} onChange={menus.setData} />
-          <MenuEditor kind="departments" title="Departments" noun="department" data={menus.data} onChange={menus.setData} />
-        </div>
-        </>
+        <PageLayoutsCard>
+          <div className="menu-sections">
+            <MenuEditor kind="jobTitles" title="Job titles" noun="job title" data={menus.data} onChange={menus.setData} />
+            <MenuEditor kind="departments" title="Departments" noun="department" data={menus.data} onChange={menus.setData} />
+          </div>
+        </PageLayoutsCard>
       )}
     </>
   );
