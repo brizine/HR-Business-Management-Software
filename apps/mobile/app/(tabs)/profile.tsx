@@ -5,11 +5,13 @@ import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
 import { Badge, Button, Card, Divider, Row, Screen, Txt } from "@/components/ui";
 import { MyPhoto } from "@/components/avatar";
+import { AccruedTimeOffCard, RequestTimeOffCard } from "@/components/time-off-boxes";
 
 export default function Profile() {
   const { me, signOut } = useAuth();
   const docs = useApi<any[]>("/documents");
   const mine = useApi<any>(me ? `/employees/${me.user.id}` : null);
+  const balances = useApi<any[]>("/pto/balances");
   const toSign = docs.data?.filter((d) => d.requiresSignature && !d.signedAt && d.employeeId === me?.user.id) ?? [];
 
   const sign = (doc: any) => {
@@ -21,7 +23,7 @@ export default function Profile() {
   };
 
   return (
-    <Screen refreshing={docs.loading} onRefresh={docs.reload}>
+    <Screen refreshing={docs.loading} onRefresh={() => { docs.reload(); balances.reload(); }}>
       <Card>
         <Row style={{ justifyContent: "flex-start", gap: 14 }}>
           {mine.data && <MyPhoto e={mine.data} onChange={mine.reload} />}
@@ -32,6 +34,8 @@ export default function Profile() {
           </View>
         </Row>
       </Card>
+      <AccruedTimeOffCard balances={balances.data} />
+      <RequestTimeOffCard balances={balances.data} onSent={balances.reload} />
       {toSign.length > 0 && (
         <Card title="Needs your signature">
           {toSign.map((d) => (

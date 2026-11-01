@@ -1,77 +1,25 @@
-import { useState } from "react";
-import { Alert, Pressable, View } from "react-native";
+import { Alert, View } from "react-native";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
-import { Badge, Button, Card, Divider, ErrorText, Input, Row, Screen, Txt, useTheme } from "./ui";
+import { Badge, Button, Card, Divider, Row, Screen, Txt } from "./ui";
+import { AccruedTimeOffCard, RequestTimeOffCard } from "./time-off-boxes";
 
 /** Time-off balances, requests and (for managers) approvals. Shown inside the Schedule tab. */
 export function TimeOffView() {
   const { can } = useAuth();
-  const t = useTheme();
   const balances = useApi<any[]>("/pto/balances");
   const mine = useApi<any[]>("/pto/requests?mine=true");
   const pending = useApi<any[]>(can("manager") ? "/pto/requests?status=pending" : null);
-  const [form, setForm] = useState<{ policyId?: string; startDate: string; endDate: string; hours: string; reason: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const reload = () => { balances.reload(); mine.reload(); pending.reload(); };
-
-  const submit = async () => {
-    if (!form) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await api("/pto/requests", { body: { ...form, hours: Number(form.hours), reason: form.reason || undefined } });
-      setForm(null);
-      reload();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const decide = (id: string, status: "approved" | "denied") =>
     api(`/pto/requests/${id}/decide`, { body: { status } }).then(reload, (e) => Alert.alert("Error", e.message));
 
   return (
     <Screen refreshing={balances.loading} onRefresh={reload}>
-      <Card title="Accrued Time Off">
-        {balances.data?.length ? (
-          <Row style={{ flexWrap: "wrap", justifyContent: "flex-start", gap: 8 }}>
-            {balances.data.map((b) => (
-              <View key={b.policyId} style={{ borderWidth: 1, borderColor: t.border, borderRadius: 10, padding: 12, minWidth: 130, flexGrow: 1 }}>
-                <Txt style={{ fontSize: 24, fontWeight: "800" }}>{b.balanceHours}h</Txt>
-                <Txt muted>{b.name}{b.pendingHours ? ` · ${b.pendingHours}h pending` : ""}</Txt>
-              </View>
-            ))}
-          </Row>
-        ) : balances.data ? <Txt muted>No time off accrued yet.</Txt> : null}
-      </Card>
-
-      {form ? (
-        <Card title="Request time off">
-          <Txt muted>Type</Txt>
-          <Row style={{ flexWrap: "wrap", justifyContent: "flex-start" }}>
-            {balances.data?.map((b) => (
-              <Pressable key={b.policyId} onPress={() => setForm({ ...form, policyId: b.policyId })}
-                style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: form.policyId === b.policyId ? t.primary : t.border }}>
-                <Txt>{b.name}</Txt>
-              </Pressable>
-            ))}
-          </Row>
-          <Input label="Start date (YYYY-MM-DD)" value={form.startDate} onChangeText={(v) => setForm({ ...form, startDate: v })} placeholder="2026-12-22" />
-          <Input label="End date (YYYY-MM-DD)" value={form.endDate} onChangeText={(v) => setForm({ ...form, endDate: v })} placeholder="2026-12-23" />
-          <Input label="Hours" value={form.hours} onChangeText={(v) => setForm({ ...form, hours: v })} keyboardType="decimal-pad" />
-          <Input label="Reason (optional)" value={form.reason} onChangeText={(v) => setForm({ ...form, reason: v })} />
-          <ErrorText error={error} />
-          <Button title="Submit request" onPress={submit} busy={busy} disabled={!form.policyId || !form.startDate || !form.endDate || !form.hours} />
-          <Button title="Cancel" kind="secondary" onPress={() => setForm(null)} />
-        </Card>
-      ) : (
-        <Button title="Request time off" onPress={() => setForm({ policyId: balances.data?.[0]?.policyId, startDate: "", endDate: "", hours: "8", reason: "" })} />
-      )}
+      <AccruedTimeOffCard balances={balances.data} />
+      <RequestTimeOffCard balances={balances.data} onSent={reload} showRecent={false} />
 
       {can("manager") && !!pending.data?.length && (
         <Card title="Needs your approval">
