@@ -39,7 +39,8 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
   const { me, can } = useAuth();
   const emp = useApi(`/employees/${id}`);
   const all = useApi<any[]>(can("manager") ? "/employees" : null);
-  const balances = useApi<any[]>(can("manager") ? `/pto/balances?employeeId=${id}` : null);
+  // Each person sees their own accrued time off here; managers and up see everyone's.
+  const balances = useApi<any[]>(can("manager") || id === me?.user.id ? `/pto/balances?employeeId=${id}` : null);
   const tasks = useApi<any[]>(can("manager") ? `/onboarding/tasks?employeeId=${id}` : null);
   const templates = useApi<any[]>(can("admin") ? "/onboarding/templates" : null);
   const [editing, setEditing] = useState(false);
@@ -119,12 +120,17 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
       <div className="grid cols-2">
         {balances.data && (
           <div className="card">
-            <h2>Time-off balances</h2>
-            {balances.data.length ? balances.data.map((b) => (
-              <div key={b.policyId} className="row" style={{ justifyContent: "space-between", padding: "4px 0" }}>
-                <span>{b.name}</span><strong>{b.balanceHours}h{b.pendingHours ? <span className="muted"> ({b.pendingHours}h pending)</span> : null}</strong>
+            <h2>Accrued Time Off</h2>
+            {balances.data.length ? (
+              <div className="stats" style={{ marginBottom: 0 }}>
+                {balances.data.map((b) => (
+                  <div className="stat" key={b.policyId}>
+                    <div className="v">{b.balanceHours}h</div>
+                    <div className="l">{b.name}{b.pendingHours ? ` · ${b.pendingHours}h pending` : ""}</div>
+                  </div>
+                ))}
               </div>
-            )) : <Empty>No policies set up.</Empty>}
+            ) : <Empty>No time off accrued yet.</Empty>}
           </div>
         )}
         {tasks.data && (

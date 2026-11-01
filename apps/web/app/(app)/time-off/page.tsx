@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -8,8 +9,7 @@ import { PtoPolicyForm } from "@/components/pto-policy-form";
 import { describePto } from "@crewdesk/shared";
 
 export default function TimeOff() {
-  const { can } = useAuth();
-  const balances = useApi<any[]>("/pto/balances");
+  const { me, can } = useAuth();
   const policies = useApi<any[]>("/pto/policies");
   const mine = useApi<any[]>("/pto/requests?mine=true");
   const pending = useApi<any[]>(can("manager") ? "/pto/requests?status=pending" : null);
@@ -18,26 +18,14 @@ export default function TimeOff() {
   const [editingPolicy, setEditingPolicy] = useState<string | null>(null);
   const req = useAction();
   const adj = useAction();
-  const reloadAll = () => { balances.reload(); mine.reload(); pending.reload(); };
+  const reloadAll = () => { mine.reload(); pending.reload(); };
 
   return (
     <>
       <PageHead title="Time off">
+        {me && <Link className="btn" href={`/people/${me.user.id}`}>My balance</Link>}
         <button className="btn primary" onClick={() => setRequesting(!requesting)}>Request time off</button>
       </PageHead>
-      <div className="card">
-        <h2>Accrued Time Off</h2>
-        {balances.data?.length ? (
-          <div className="stats" style={{ marginBottom: 0 }}>
-            {balances.data.map((b) => (
-              <div className="stat" key={b.policyId}>
-                <div className="v">{b.balanceHours}h</div>
-                <div className="l">{b.name}{b.pendingHours ? ` · ${b.pendingHours}h pending` : ""}</div>
-              </div>
-            ))}
-          </div>
-        ) : balances.data ? <p className="muted" style={{ margin: 0 }}>No time off accrued yet.</p> : null}
-      </div>
       {requesting && (
         <div className="card">
           <h2>New request</h2>
@@ -106,9 +94,9 @@ export default function TimeOff() {
             ))}</tbody></table>
             {editingPolicy ? (
               <PtoPolicyForm key={editingPolicy} policy={policies.data?.find((p) => p.id === editingPolicy)} onCancel={() => setEditingPolicy(null)}
-                onSaved={() => { setEditingPolicy(null); policies.reload(); balances.reload(); }} />
+                onSaved={() => { setEditingPolicy(null); policies.reload(); }} />
             ) : (
-              <PtoPolicyForm key={`new-${policies.data?.length ?? 0}`} onSaved={() => { policies.reload(); balances.reload(); }} />
+              <PtoPolicyForm key={`new-${policies.data?.length ?? 0}`} onSaved={() => policies.reload()} />
             )}
           </div>
           <div className="card">
@@ -118,7 +106,7 @@ export default function TimeOff() {
               e.preventDefault();
               const form = e.currentTarget;
               const body = formValues(form);
-              adj.run(async () => { await api("/pto/adjustments", { body }); form.reset(); balances.reload(); });
+              adj.run(async () => { await api("/pto/adjustments", { body }); form.reset(); });
             }}>
               <div className="formgrid">
                 <label>Employee<select name="employeeId" required>{employees.data?.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}</select></label>
