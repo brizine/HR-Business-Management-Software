@@ -20,43 +20,19 @@ interface LayoutCtx {
 const Ctx = createContext<LayoutCtx>({ saved: {}, setSaved: () => {} });
 export const useSavedLayouts = () => useContext(Ctx);
 
-/** Settings → Company: open the editor in a new tab, and see or reset the pages already arranged. */
+/** Settings → Company: open the editor in a new tab. */
 export function PageLayoutsCard({ children }: { children?: ReactNode }) {
-  const { saved, setSaved } = useSavedLayouts();
-  const [error, setError] = useState<string | null>(null);
-  const pages = Object.keys(saved).sort();
-  const reset = async (p: string | null) => {
-    setError(null);
-    try {
-      const body = { pages: Object.fromEntries((p ? [p] : pages).map((k) => [k, null])) };
-      setSaved((await api<{ pages: PageLayouts }>("/employees/layouts", { method: "PUT", body })).pages);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  const label = (p: string) => p.replace(/^\//, "").replace(/\/:id/g, " (each one)").replace(/\//g, " › ").replace(/-/g, " ") || "home";
   return (
     <div className="card stack">
       <h2 style={{ margin: 0 }}>Page layouts</h2>
       <p className="muted" style={{ margin: 0 }}>
         Opens a working copy of Crewdesk in a new tab where you can rearrange any page: drag its boxes to move them on the page, and drag
-        the items inside a box (fields, details, filters, buttons) to move them within it. Nobody else sees your changes until you click Save there.
+        the items inside a box (fields, details, filters, buttons) to move them within it. Nobody else sees your changes until you click Save there,
+        and Reset this page in the editor puts a page back to its original layout.
       </p>
       <div className="row">
         <button className="btn primary" onClick={() => window.open("/dashboard?layout-editor=1", "_blank")}>Open layout editor</button>
-        {pages.length > 1 && <button className="btn" onClick={() => confirm("Put every page back to its default layout?") && reset(null)}>Reset all pages</button>}
       </div>
-      {pages.length ? (
-        <ul className="menu-list">
-          {pages.map((p) => (
-            <li key={p}>
-              <span style={{ flex: 1, textTransform: "capitalize" }}>{label(p)}</span>
-              <button className="btn sm" onClick={() => confirm(`Put "${label(p)}" back to its default layout?`) && reset(p)}>Reset</button>
-            </li>
-          ))}
-        </ul>
-      ) : <p className="muted" style={{ margin: 0 }}>Every page uses its default layout.</p>}
-      {error && <div className="error" role="alert">{error}</div>}
       {children}
     </div>
   );

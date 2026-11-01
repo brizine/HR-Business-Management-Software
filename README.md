@@ -230,7 +230,7 @@ the payroll calendar, safety rules and so on.
   it to keep information private.
   Everything still works while editing. Nobody else sees the changes until you click **Save** in the
   editor's top bar (**Reset this page**, **Discard** and **Exit editor** are there too). Saved layouts
-  apply to everyone on the website; Settings → Company lists the pages you've arranged, each with Reset.
+  apply to everyone on the website.
   Pages with an id in the address (like each employee's page) share one layout.
 - **Photos:** a photo next to each person's name on their profile and on the Team list (initials when
   there's none). Admins add, change or remove anyone's photo from their profile; employees set their
