@@ -39,7 +39,7 @@ export default function Tasks() {
                 <Txt style={{ fontWeight: "600" }}>#{w.number} {w.title}</Txt>
                 <Txt muted>{assetName}{w.dueDate ? ` · due ${fmtDate(w.dueDate)}` : ""}</Txt>
               </View>
-              <View style={{ gap: 4, alignItems: "flex-end" }}><Badge value={w.priority} /><Badge value={w.status} /></View>
+              <View style={{ gap: 4, alignItems: "flex-end" }}><Badge value={w.priority} menu="workOrderPriority" /><Badge value={w.status} menu="workOrderStatus" /></View>
             </Row>
             {w.description ? <Txt muted>{w.description}</Txt> : null}
             <Row>

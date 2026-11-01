@@ -3,6 +3,7 @@ import { Alert, View } from "react-native";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
+import { useMenuLabel } from "@/lib/menus";
 import { Badge, Button, Card, Divider, Row, Screen, Txt } from "@/components/ui";
 import { MyPhoto } from "@/components/avatar";
 import { AccruedTimeOffCard, RequestTimeOffCard } from "@/components/time-off-boxes";
@@ -10,6 +11,7 @@ import { MyTasksCard } from "@/components/my-tasks";
 
 export default function Profile() {
   const { me, signOut } = useAuth();
+  const label = useMenuLabel();
   const docs = useApi<any[]>("/documents");
   const mine = useApi<any>(me ? `/employees/${me.user.id}` : null);
   const balances = useApi<any[]>("/pto/balances");
@@ -31,7 +33,7 @@ export default function Profile() {
           <View style={{ flex: 1 }}>
             <Txt style={{ fontSize: 20, fontWeight: "700" }}>{me?.user.firstName} {me?.user.lastName}</Txt>
             <Txt muted>{me?.user.email}</Txt>
-            <Txt muted>{me?.company.name} · {me?.user.role}</Txt>
+            <Txt muted>{me?.company.name} · {label("role", me?.user.role)}</Txt>
           </View>
         </Row>
       </Card>

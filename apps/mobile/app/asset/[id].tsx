@@ -3,9 +3,11 @@ import { useState } from "react";
 import { Alert, Pressable, View } from "react-native";
 import { api, fmtDate } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
+import { useMenuLabel } from "@/lib/menus";
 import { Badge, Button, Card, Divider, ErrorText, Input, Row, Screen, Txt, useTheme } from "@/components/ui";
 
 export default function Asset() {
+  const label = useMenuLabel();
   const { id } = useLocalSearchParams<{ id: string }>();
   const t = useTheme();
   const { data: a, loading, reload, error } = useApi(`/assets/${id}`);
@@ -45,7 +47,7 @@ export default function Asset() {
     <Screen refreshing={loading} onRefresh={reload}>
       <Stack.Screen options={{ title: a.name }} />
       <Card>
-        <Row><Txt style={{ fontSize: 20, fontWeight: "700" }}>{a.name}</Txt><Badge value={a.status} /></Row>
+        <Row><Txt style={{ fontSize: 20, fontWeight: "700" }}>{a.name}</Txt><Badge value={a.status} menu="assetStatus" /></Row>
         <Txt muted>{[a.year, a.make, a.model, a.licensePlate].filter(Boolean).join(" · ")}</Txt>
         <Row>
           <View><Txt muted>Odometer</Txt><Txt style={{ fontWeight: "700" }}>{a.odometer.toLocaleString()} mi</Txt></View>
@@ -71,7 +73,7 @@ export default function Asset() {
             {["low", "medium", "high", "critical"].map((p) => (
               <Pressable key={p} onPress={() => setIssue({ ...issue, priority: p })}
                 style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: issue.priority === p ? t.primary : t.border }}>
-                <Txt>{p}</Txt>
+                <Txt>{label("workOrderPriority", p)}</Txt>
               </Pressable>
             ))}
           </Row>
@@ -99,7 +101,7 @@ export default function Asset() {
         {a.workOrders.filter((w: any) => !["completed", "cancelled"].includes(w.status)).map((w: any) => (
           <View key={w.id}>
             <Divider />
-            <Row><Txt>#{w.number} {w.title}</Txt><Badge value={w.status} /></Row>
+            <Row><Txt>#{w.number} {w.title}</Txt><Badge value={w.status} menu="workOrderStatus" /></Row>
           </View>
         ))}
         {!a.workOrders.some((w: any) => !["completed", "cancelled"].includes(w.status)) && <Txt muted>None.</Txt>}

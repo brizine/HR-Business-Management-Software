@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import type { NotificationLink } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { MenusProvider } from "@/lib/menus";
 import { routeFor } from "@/lib/push";
 import { UnreadProvider, useUnread } from "@/lib/unread";
 
@@ -62,10 +63,12 @@ function Gate() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <UnreadProvider>
-        <StatusBar style="auto" />
-        <Gate />
-      </UnreadProvider>
+      <MenusProvider>
+        <UnreadProvider>
+          <StatusBar style="auto" />
+          <Gate />
+        </UnreadProvider>
+      </MenusProvider>
     </AuthProvider>
   );
 }

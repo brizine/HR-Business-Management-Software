@@ -12,6 +12,8 @@ import {
   type TextInputProps,
   type TextProps,
 } from "react-native";
+import type { LabelMenu } from "@crewdesk/shared";
+import { useMenuLabel } from "@/lib/menus";
 
 const light = { stripe: "#fff3b0", bg: "#f6f7f9", surface: "#fff", border: "#e3e6eb", text: "#1c2330", muted: "#667085", primary: "#1f6feb", ok: "#0f7b4b", okBg: "#e3f6ec", warn: "#9a6100", warnBg: "#fff3d6", bad: "#b42318", badBg: "#fde7e5" };
 const dark = { stripe: "#3d3510", bg: "#0d1117", surface: "#161b22", border: "#2b323c", text: "#e6edf3", muted: "#8b949e", primary: "#4c8dff", ok: "#4ad295", okBg: "#11301f", warn: "#f0b949", warnBg: "#3a2a07", bad: "#ff8a80", badBg: "#3d1210" };
@@ -89,14 +91,16 @@ const TONES: Record<string, "ok" | "warn" | "bad"> = {
   denied: "bad", overdue: "bad", out_of_service: "bad", critical: "bad", high: "bad", failed: "bad", cancelled: "bad",
 };
 
-export function Badge({ value }: { value: string }) {
+/** A status pill. With `menu`, it reads the way the owner worded that choice. */
+export function Badge({ value, menu }: { value: string; menu?: LabelMenu }) {
   const t = useTheme();
+  const label = useMenuLabel();
   const tone = TONES[value];
   const bg = tone === "ok" ? t.okBg : tone === "warn" ? t.warnBg : tone === "bad" ? t.badBg : t.border;
   const fg = tone ? t[tone] : t.text;
   return (
     <View style={{ backgroundColor: bg, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 99, alignSelf: "flex-start" }}>
-      <Text style={{ color: fg, fontSize: 12, fontWeight: "600" }}>{value.replace(/_/g, " ")}</Text>
+      <Text style={{ color: fg, fontSize: 12, fontWeight: "600" }}>{menu ? label(menu, value) : value.replace(/_/g, " ")}</Text>
     </View>
   );
 }

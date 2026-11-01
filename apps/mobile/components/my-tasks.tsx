@@ -3,6 +3,7 @@ import { Linking, Pressable, View } from "react-native";
 import { WEB_URL, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
+import type { LabelMenu } from "@crewdesk/shared";
 import { Badge, Card, Divider, Row, Txt, useTheme } from "./ui";
 
 interface Task {
@@ -10,6 +11,8 @@ interface Task {
   title: string;
   detail: string;
   badge?: string;
+  /** The menu whose wording the badge uses (e.g. work order status). */
+  badgeMenu?: LabelMenu;
   /** What tapping it does; none for things handled further down this screen. */
   open?: () => void;
 }
@@ -32,7 +35,7 @@ export function MyTasksCard({ documents }: { documents: any[] | null }) {
   const tasks: Task[] = [
     ...(workOrders.data ?? []).map(({ workOrder: w, assetName }) => ({
       key: `wo-${w.id}`, title: `${w.number ? `#${w.number} ` : ""}${w.title}`,
-      detail: `Work order · ${assetName}${w.dueDate ? ` · due ${fmtDate(w.dueDate)}` : ""}`, badge: w.status, open: () => router.push("/tasks"),
+      detail: `Work order · ${assetName}${w.dueDate ? ` · due ${fmtDate(w.dueDate)}` : ""}`, badge: w.status, badgeMenu: "workOrderStatus" as const, open: () => router.push("/tasks"),
     })),
     ...(onboarding.data ?? []).filter((x) => x.assignee === "employee").map((x) => ({
       key: `ob-${x.id}`, title: x.title, detail: `Onboarding${x.dueDate ? ` · due ${fmtDate(x.dueDate)}` : ""}`,
@@ -63,7 +66,7 @@ export function MyTasksCard({ documents }: { documents: any[] | null }) {
                 <Txt style={{ fontWeight: "600", color: task.open ? t.primary : t.text }}>{task.title}</Txt>
                 <Txt muted style={{ fontSize: 12 }}>{task.detail}</Txt>
               </View>
-              {task.badge && <Badge value={task.badge} />}
+              {task.badge && <Badge value={task.badge} menu={task.badgeMenu} />}
             </Row>
           </Pressable>
         </View>

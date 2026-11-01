@@ -36,7 +36,7 @@ export default function Fleet() {
                   <Txt muted>{[a.year, a.make, a.model].filter(Boolean).join(" ") || a.type.replace("_", " ")}</Txt>
                 </View>
                 <View style={{ alignItems: "flex-end", gap: 4 }}>
-                  <Badge value={a.status} />
+                  <Badge value={a.status} menu="assetStatus" />
                   {a.maintenanceStatus !== "ok" && <Badge value={a.maintenanceStatus} />}
                 </View>
               </Row>
