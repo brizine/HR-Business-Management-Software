@@ -20,7 +20,7 @@ function notifyAssigned(wo: typeof workOrders.$inferSelect, assetName: string, a
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
 
-  app.get<{ Querystring: { status?: string; assetId?: string; mine?: string } }>("/", async (req) => {
+  app.get<{ Querystring: { status?: string; assetId?: string; mine?: string; assignedToId?: string } }>("/", async (req) => {
     const filters = [eq(workOrders.companyId, req.user.companyId)];
     if (req.query.status === "active") {
       filters.push(inArray(workOrders.status, ["open", "in_progress", "waiting_parts"]));
@@ -29,6 +29,8 @@ const routes: FastifyPluginAsync = async (app) => {
     }
     if (req.query.assetId) filters.push(eq(workOrders.assetId, req.query.assetId));
     if (req.query.mine === "true") filters.push(eq(workOrders.assignedToId, req.user.sub));
+    // Managers can list one person's work orders (their Tasks box on the employee page).
+    else if (req.query.assignedToId && isManager(req)) filters.push(eq(workOrders.assignedToId, req.query.assignedToId));
     return db
       .select({
         workOrder: workOrders,
