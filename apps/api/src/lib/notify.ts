@@ -1,7 +1,7 @@
 import { and, eq, inArray, notInArray } from "drizzle-orm";
-import { INACTIVE_STATUSES, NOTIFICATION_CATEGORY_INFO, defaultPreference, hasRole, toE164, webPathFor, type DeliveryMode, type NotificationCategory, type NotificationLink, type NotificationPreference, type Role } from "@crewdesk/shared";
+import { INACTIVE_STATUSES, NOTIFICATION_CATEGORY_INFO, defaultPreference, hasRole, toE164, webPathFor, type DeliveryMode, type NotificationCategory, type NotificationLink, type NotificationPreference, type PermissionArea, type Role, roleInArea } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, employees, notificationPreferences, notifications, pushTokens } from "../db/schema";
+import { companies, employeePermissions, employees, notificationPreferences, notifications, pushTokens } from "../db/schema";
 import { SmsError, SMS_UNSUBSCRIBED, WEB_URL, PUBLIC_API_URL, emailTransport, smsTransport, unsubscribeToken } from "./channels";
 
 export interface PushMessage {
@@ -187,19 +187,42 @@ async function sendSms(p: Person, companyName: string, n: NotificationInput) {
 }
 
 /** Active staff at or above `min` role, e.g. everyone who manages the fleet. */
-export async function staffWithRole(companyId: string, min: Role) {
+/** Active staff with at least `min`, in `area` if given (counting levels set on the Permissions page). */
+export async function staffWithRole(companyId: string, min: Role, area?: PermissionArea) {
+  return (await staffAccess(companyId, area)).filter((r) => hasRole(r.level, min)).map((r) => r.id);
+}
+
+/** Each active person's level in an area, and whether it was set for them on the Permissions page. */
+async function staffAccess(companyId: string, area?: PermissionArea) {
   const rows = await db
     .select({ id: employees.id, role: employees.role })
     .from(employees)
     .where(and(eq(employees.companyId, companyId), notInArray(employees.status, INACTIVE_STATUSES)));
-  return rows.filter((r) => hasRole(r.role as Role, min)).map((r) => r.id);
+  const grants = area
+    ? await db.select({ employeeId: employeePermissions.employeeId, level: employeePermissions.level }).from(employeePermissions).where(and(eq(employeePermissions.companyId, companyId), eq(employeePermissions.area, area)))
+    : [];
+  const custom = new Map(grants.map((g) => [g.employeeId, g.level as Role]));
+  return rows.map((r) => ({
+    id: r.id,
+    level: roleInArea(r.role as Role, area && custom.has(r.id) ? { [area]: custom.get(r.id) } : undefined, area),
+    custom: custom.has(r.id),
+  }));
 }
 
 /** Who approves things for an employee: their manager, or the admins if none is set. */
-export async function approversFor(companyId: string, employeeId: string) {
+/**
+ * Who should approve something for this employee in an area: their own manager (if they can approve
+ * there) plus anyone given approval access in that area on the Permissions page; with neither,
+ * the area's admins.
+ */
+export async function approversFor(companyId: string, employeeId: string, area?: PermissionArea) {
   const [emp] = await db.select().from(employees).where(eq(employees.id, employeeId));
-  if (emp?.managerId) return [emp.managerId];
-  return staffWithRole(companyId, "admin");
+  const staff = (await staffAccess(companyId, area)).filter((s) => s.id !== employeeId);
+  const canApprove = (s: { level: Role }) => hasRole(s.level, "manager");
+  const manager = staff.find((s) => s.id === emp?.managerId && canApprove(s));
+  const granted = staff.filter((s) => s.custom && canApprove(s)).map((s) => s.id);
+  if (manager || granted.length) return [...new Set([...(manager ? [manager.id] : []), ...granted])];
+  return staff.filter((s) => hasRole(s.level, "admin")).map((s) => s.id);
 }
 
 /** Removes the person who triggered an event so nobody is notified of their own action. */

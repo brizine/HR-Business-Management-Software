@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";
 import { pool } from "../src/db";
+import { flushNotifications, setPushTransport } from "../src/lib/notify";
 
 let app: FastifyInstance;
 const suffix = Date.now();
@@ -17,6 +18,7 @@ async function call(method: string, url: string, who: string, payload?: unknown)
 const allDefault = { people: null, time: null, schedule: null, timeoff: null, documents: null, hiring: null, onboarding: null, payroll: null, fleet: null, wiki: null, spray: null, dashboard: null, company: null };
 
 beforeAll(async () => {
+  setPushTransport({ send: async (m) => m.map(() => ({ status: "ok" as const, id: "x" })) });
   app = await buildApp({ logger: false });
   const signup = await app.inject({ method: "POST", url: "/auth/signup", payload: { companyName: "Perm Co", firstName: "Pam", lastName: "Owner", email: email("owner"), password: "password123" } });
   T.owner = signup.json().token;
@@ -79,5 +81,39 @@ describe("permissions", () => {
     // Taking Permissions access away works immediately.
     await call("PUT", `/permissions/${ID.lead}`, "owner", { areas: allDefault, managesPermissions: false });
     expect((await call("GET", "/permissions", "lead")).status).toBe(403);
+  });
+
+  it("notifications follow the Permissions page", async () => {
+    const inbox = async (who: string) => (await call("GET", "/notifications", who)).body.items.map((n: any) => n.title) as string[];
+    const policy = await call("POST", "/pto/policies", "owner", { name: "PTO" });
+    await call("POST", "/pto/adjustments", "owner", { employeeId: ID.clerk, policyId: policy.body.id, hours: 40 });
+    await call("PATCH", `/employees/${ID.clerk}`, "owner", { managerId: ID.lead });
+    const ask = async (day: string) => {
+      expect((await call("POST", "/pto/requests", "clerk", { policyId: policy.body.id, startDate: day, endDate: day, hours: 1 })).status).toBe(200);
+      await flushNotifications();
+    };
+    const asked = (titles: string[]) => titles.filter((t) => t === "Time-off request from clerk Person").length;
+
+    // Default: the clerk's manager is asked.
+    await ask("2027-01-04");
+    expect(asked(await inbox("lead"))).toBe(1);
+    expect(asked(await inbox("crew"))).toBe(0);
+
+    // Give the crew member time-off approval access: they're asked too.
+    await call("PUT", `/permissions/${ID.crew}`, "owner", { areas: { ...allDefault, payroll: "admin", timeoff: "manager" } });
+    await ask("2027-01-05");
+    expect(asked(await inbox("crew"))).toBe(1);
+    expect(asked(await inbox("lead"))).toBe(2);
+
+    // Limit the manager in Time off: they stop being asked.
+    await call("PUT", `/permissions/${ID.lead}`, "owner", { areas: { ...allDefault, timeoff: "employee" } });
+    await ask("2027-01-06");
+    expect(asked(await inbox("lead"))).toBe(2);
+    expect(asked(await inbox("crew"))).toBe(2);
+
+    // With nobody else able to approve, the admins (here, the owner) are asked.
+    await call("PUT", `/permissions/${ID.crew}`, "owner", { areas: allDefault });
+    await ask("2027-01-07");
+    expect(asked(await inbox("owner"))).toBe(1);
   });
 });

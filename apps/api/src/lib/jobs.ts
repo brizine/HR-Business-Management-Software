@@ -40,7 +40,7 @@ export async function runScheduledChecks(now = new Date()) {
     // Keyed on the last service so the alert re-arms after the next service.
     const key = `maint:${s.id}:${due.status}:${s.lastServiceDate}:${s.lastServiceOdometer}:${s.lastServiceHours}`;
     if (!(await firstTime(s.companyId, key))) continue;
-    const managers = await staffWithRole(s.companyId, "manager");
+    const managers = await staffWithRole(s.companyId, "manager", "fleet");
     notify(s.companyId, [...managers, asset.assignedEmployeeId], {
       category: "fleet",
       title: `${asset.name}: ${s.name} ${due.status === "overdue" ? "overdue" : "due soon"}`,
@@ -61,7 +61,7 @@ export async function runScheduledChecks(now = new Date()) {
       if (!date || date > cutoff) continue;
       if (!(await firstTime(asset.companyId, `expiry:${asset.id}:${label}:${date}`))) continue;
       const expired = date < now.toISOString().slice(0, 10);
-      notify(asset.companyId, await staffWithRole(asset.companyId, "manager"), {
+      notify(asset.companyId, await staffWithRole(asset.companyId, "manager", "fleet"), {
         category: "fleet",
         title: `${asset.name}: ${label.toLowerCase()} ${expired ? "expired" : "expiring"}`,
         body: `${label} ${expired ? "expired" : "expires"} on ${date}.`,
@@ -229,7 +229,7 @@ export async function runScheduledChecks(now = new Date()) {
       .returning();
     if (!created) continue;
     const approvers = (await db.select({ id: payPeriodApprovers.employeeId }).from(payPeriodApprovers).where(eq(payPeriodApprovers.companyId, c.id))).map((r) => r.id);
-    notify(c.id, approvers.length ? approvers : await staffWithRole(c.id, "admin"), {
+    notify(c.id, approvers.length ? approvers : await staffWithRole(c.id, "admin", "payroll"), {
       category: "payroll",
       title: `Pay period ${period.start} – ${period.end} is ready to approve`,
       body: `Review everyone's hours and approve them before payday on ${period.payday}.`,

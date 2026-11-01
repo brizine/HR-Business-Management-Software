@@ -40,7 +40,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .where(and(eq(jobs.id, req.params.jobId), eq(jobs.status, "open")));
     if (!job) notFound("Job");
     await db.insert(applicants).values({ ...body, jobId: job.id, companyId: job.companyId });
-    notify(job.companyId, await staffWithRole(job.companyId, "manager"), {
+    notify(job.companyId, await staffWithRole(job.companyId, "manager", AREA), {
       category: "hiring",
       title: `New applicant: ${job.title}`,
       body: `${body.firstName} ${body.lastName} applied.`,

@@ -79,7 +79,7 @@ const routes: FastifyPluginAsync = async (app) => {
     if (created.assignedToId) notifyAssigned(created, asset.name, req.user.sub);
     // Field reports and urgent issues go to everyone who manages the fleet.
     if (!isManager(req, AREA) || created.priority === "high" || created.priority === "critical") {
-      notify(req.user.companyId, except(await staffWithRole(req.user.companyId, "manager"), req.user.sub), {
+      notify(req.user.companyId, except(await staffWithRole(req.user.companyId, "manager", AREA), req.user.sub), {
         category: "fleet",
         title: `${created.priority === "critical" ? "CRITICAL: " : ""}${asset.name}: ${created.title}`,
         body: created.priority === "critical" ? "Asset taken out of service." : `New ${created.priority}-priority work order #${created.number}.`,

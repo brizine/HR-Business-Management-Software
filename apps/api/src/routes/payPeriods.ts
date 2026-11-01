@@ -122,7 +122,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .returning();
     if (!updated) throw new HttpError(409, "This pay period is already approved");
     const [me] = await db.select({ f: employees.firstName, l: employees.lastName }).from(employees).where(eq(employees.id, req.user.sub));
-    notify(req.user.companyId, (await staffWithRole(req.user.companyId, "admin")).filter((id) => id !== req.user.sub), {
+    notify(req.user.companyId, (await staffWithRole(req.user.companyId, "admin", AREA)).filter((id) => id !== req.user.sub), {
       category: "payroll",
       title: `Pay period ${period.periodStart} – ${period.periodEnd} approved`,
       body: `${me.f} ${me.l} approved it${note ? `: "${note}"` : ""}. Payday is ${period.payday}.`,

@@ -49,7 +49,7 @@ const routes: FastifyPluginAsync = async (app) => {
       const summary = saved.length
         ? saved.map((r) => `${WEEKDAYS[r.weekday].slice(0, 3)} ${describeRule(r).toLowerCase()}`).join(", ")
         : "Available any time";
-      notify(req.user.companyId, except(await approversFor(req.user.companyId, emp.id), req.user.sub), {
+      notify(req.user.companyId, except(await approversFor(req.user.companyId, emp.id, AREA), req.user.sub), {
         category: "schedule",
         title: `${emp.firstName} ${emp.lastName} updated their availability`,
         body: `Can't work: ${summary}`.replace("Can't work: Available any time", "Now available any time"),

@@ -83,7 +83,7 @@ const routes: FastifyPluginAsync = async (app) => {
 
   async function announce(req: FastifyRequest, page: Page, created: boolean, note?: string) {
     const [me] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
-    notify(req.user.companyId, except(await staffWithRole(req.user.companyId, page.viewMin as Role), req.user.sub), {
+    notify(req.user.companyId, except(await staffWithRole(req.user.companyId, page.viewMin as Role, AREA), req.user.sub), {
       category: "wiki",
       title: `${created ? "New" : "Updated"} wiki page: ${page.title}`,
       body: note || `${created ? "Published" : "Updated"} by ${me.firstName} ${me.lastName}.`,

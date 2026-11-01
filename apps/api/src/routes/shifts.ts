@@ -358,7 +358,7 @@ const routes: FastifyPluginAsync = async (app) => {
     if (!claimed) throw new HttpError(409, "Someone else just picked up this shift");
 
     const [me] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
-    notify(req.user.companyId, except(await approversFor(req.user.companyId, req.user.sub), req.user.sub), {
+    notify(req.user.companyId, except(await approversFor(req.user.companyId, req.user.sub, AREA), req.user.sub), {
       category: "schedule",
       title: `${me.firstName} ${me.lastName} picked up an open shift`,
       body: fmtShift(claimed.startsAt, claimed.endsAt, await companyTz(req.user.companyId)),
@@ -382,7 +382,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .returning();
 
     const [me] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
-    notify(req.user.companyId, except(await approversFor(req.user.companyId, req.user.sub), req.user.sub), {
+    notify(req.user.companyId, except(await approversFor(req.user.companyId, req.user.sub, AREA), req.user.sub), {
       category: "schedule",
       title: `${me.firstName} ${me.lastName} wants to drop a shift`,
       body: `${fmtShift(shift.startsAt, shift.endsAt, await companyTz(req.user.companyId))}${reason ? `: ${reason}` : ""}`,
@@ -415,7 +415,7 @@ const routes: FastifyPluginAsync = async (app) => {
 
 /** Lets the team know there are shifts up for grabs. */
 async function announceOpenShifts(req: FastifyRequest, count: number, skip: string[] = []) {
-  const everyone = await staffWithRole(req.user.companyId, "employee");
+  const everyone = await staffWithRole(req.user.companyId, "employee", AREA);
   notify(req.user.companyId, except(everyone.filter((id) => !skip.includes(id)), req.user.sub), {
     category: "schedule",
     title: count > 1 ? `${count} open shifts available` : "An open shift is available",

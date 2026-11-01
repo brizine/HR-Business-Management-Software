@@ -143,7 +143,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .returning();
     const [me] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
     const what = `${bal.name}: ${body.hours}h, ${dateRange(body.startDate, body.endDate)}`;
-    notify(req.user.companyId, except(await approversFor(req.user.companyId, forId), req.user.sub), {
+    notify(req.user.companyId, except(await approversFor(req.user.companyId, forId, AREA), req.user.sub), {
       category: "pto",
       title: onBehalf ? `Time-off request for ${who.firstName} ${who.lastName} (entered by ${me.firstName} ${me.lastName})` : `Time-off request from ${me.firstName} ${me.lastName}`,
       body: what,

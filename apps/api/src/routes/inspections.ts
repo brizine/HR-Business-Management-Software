@@ -73,7 +73,7 @@ const routes: FastifyPluginAsync = async (app) => {
     });
 
     if (result.workOrder) {
-      notify(req.user.companyId, except(await staffWithRole(req.user.companyId, "manager"), req.user.sub), {
+      notify(req.user.companyId, except(await staffWithRole(req.user.companyId, "manager", "fleet"), req.user.sub), {
         category: "fleet",
         title: `${asset.name} failed inspection`,
         body: `${failed.map((f) => f.item).join(", ")}. Work order #${result.workOrder.number} opened.`,

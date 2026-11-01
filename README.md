@@ -215,7 +215,9 @@ the payroll calendar, safety rules and so on.
   level described in plain words. Changes apply immediately. Owners always have full access and can't
   be limited. The owner can give others **Permissions** access to manage everyone's access; they can't
   give owner-level access, give Permissions access, or change their own access. Team access stops at
-  admin, so nobody but an owner can manage owners' accounts.
+  admin, so nobody but an owner can manage owners' accounts. Notifications follow it too: alerts for an area go
+  to people with that level there, and approval requests go to the person's manager (if they can
+  approve in that area) plus anyone given approval access there, falling back to that area's admins.
 - **Layout editor (owner):** **Settings → Company → Open layout editor** opens a working copy of Crewdesk in
   a new tab. On any page, drag the outlined boxes to move them on the page, and drag the items inside a
   box (fields, details, filters, buttons) to move them within it; a line shows where it will land.

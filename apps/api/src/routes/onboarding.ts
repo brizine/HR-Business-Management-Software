@@ -20,7 +20,7 @@ type Employee = typeof employees.$inferSelect;
 export async function taskOwners(task: { assignee: string }, employee: Employee) {
   if (task.assignee === "employee") return [employee.id];
   if (task.assignee === "manager" && employee.managerId) return [employee.managerId];
-  return staffWithRole(employee.companyId, "admin");
+  return staffWithRole(employee.companyId, "admin", AREA);
 }
 
 const name = (e: Employee) => `${e.firstName} ${e.lastName}`;
@@ -125,14 +125,14 @@ export async function completeTask(task: Task, actorId: string) {
     .from(onboardingTasks)
     .where(and(eq(onboardingTasks.employeeId, task.employeeId), isNull(onboardingTasks.completedAt)));
   const [emp] = await db.select().from(employees).where(eq(employees.id, task.employeeId));
-  const managers = emp.managerId ? [emp.managerId] : await staffWithRole(emp.companyId, "admin");
+  const managers = emp.managerId ? [emp.managerId] : await staffWithRole(emp.companyId, "admin", AREA);
 
   if (remaining.length === 0) {
     await db
       .update(employees)
       .set({ status: "active" })
       .where(and(eq(employees.id, emp.id), eq(employees.status, "onboarding")));
-    notify(emp.companyId, except([...managers, ...(await staffWithRole(emp.companyId, "admin")), emp.id], actorId), {
+    notify(emp.companyId, except([...managers, ...(await staffWithRole(emp.companyId, "admin", AREA)), emp.id], actorId), {
       category: "onboarding",
       title: `${name(emp)} is fully onboarded`,
       body: "Every onboarding task is done. They're now active.",

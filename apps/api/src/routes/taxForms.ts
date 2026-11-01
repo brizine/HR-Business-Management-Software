@@ -163,7 +163,7 @@ const routes: FastifyPluginAsync = async (app) => {
 
       const [me] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
       const who = `${me.firstName} ${me.lastName}`;
-      notify(req.user.companyId, except(await staffWithRole(req.user.companyId, "admin"), req.user.sub), {
+      notify(req.user.companyId, except(await staffWithRole(req.user.companyId, "admin", AREA), req.user.sub), {
         category: "payroll",
         title:
           type === "i9"

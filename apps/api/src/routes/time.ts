@@ -54,7 +54,7 @@ const routes: FastifyPluginAsync = async (app) => {
   async function reportOffSite(req: FastifyRequest, action: "in" | "out", check: PunchCheck) {
     if (!check.flag) return;
     const [me] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
-    notify(req.user.companyId, except(await approversFor(req.user.companyId, req.user.sub), req.user.sub), {
+    notify(req.user.companyId, except(await approversFor(req.user.companyId, req.user.sub, AREA), req.user.sub), {
       category: "time",
       title: `${me.firstName} ${me.lastName} clocked ${action} away from a job site`,
       body: check.distance !== null ? `${formatDistance(check.distance)} from the nearest job site. Review it on the timesheet.` : "Review it on the timesheet.",
