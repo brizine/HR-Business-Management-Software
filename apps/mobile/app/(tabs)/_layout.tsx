@@ -2,6 +2,7 @@ import { Tabs, router } from "expo-router";
 import { Pressable, Text, View } from "react-native";
 import { useTheme } from "@/components/ui";
 import { useUnread } from "@/lib/unread";
+import { CompanyLogo } from "@/components/company-logo";
 
 const icon = (glyph: string) => ({ color }: { color: string }) => <Text style={{ color, fontSize: 18 }}>{glyph}</Text>;
 
@@ -23,7 +24,7 @@ function Bell() {
 export default function TabsLayout() {
   const t = useTheme();
   return (
-    <Tabs screenOptions={{ tabBarActiveTintColor: t.primary, headerStyle: { backgroundColor: t.surface }, headerTintColor: t.text, tabBarStyle: { backgroundColor: t.surface }, headerRight: () => <Bell /> }}>
+    <Tabs screenOptions={{ tabBarActiveTintColor: t.primary, headerStyle: { backgroundColor: t.surface }, headerTintColor: t.text, tabBarStyle: { backgroundColor: t.surface }, headerRight: () => <Bell />, headerLeft: () => <View style={{ marginLeft: 16 }}><CompanyLogo /></View> }}>
       <Tabs.Screen name="index" options={{ title: "Clock", tabBarIcon: icon("⏱") }} />
       <Tabs.Screen name="schedule" options={{ title: "Schedule", tabBarIcon: icon("📅") }} />
       <Tabs.Screen name="fleet" options={{ title: "Fleet", tabBarIcon: icon("🚚") }} />

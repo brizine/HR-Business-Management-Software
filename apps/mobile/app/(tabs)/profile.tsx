@@ -6,6 +6,7 @@ import { useApi } from "@/lib/hooks";
 import { useMenuLabel } from "@/lib/menus";
 import { Badge, Button, Card, Divider, Row, Screen, Txt } from "@/components/ui";
 import { MyPhoto } from "@/components/avatar";
+import { CompanyLogo } from "@/components/company-logo";
 import { AccruedTimeOffCard, RequestTimeOffCard } from "@/components/time-off-boxes";
 import { MyTasksCard } from "@/components/my-tasks";
 
@@ -34,6 +35,7 @@ export default function Profile() {
             <Txt style={{ fontSize: 20, fontWeight: "700" }}>{me?.user.firstName} {me?.user.lastName}</Txt>
             <Txt muted>{me?.user.email}</Txt>
             <Txt muted>{me?.company.name} · {label("role", me?.user.role)}</Txt>
+            <View style={{ marginTop: 6, alignSelf: "flex-start" }}><CompanyLogo height={36} maxWidth={160} /></View>
           </View>
         </Row>
       </Card>

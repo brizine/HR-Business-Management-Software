@@ -5,7 +5,7 @@ import { registerForPush, unregisterForPush } from "./push";
 
 interface Me {
   user: { id: string; firstName: string; lastName: string; email: string; role: Role; employmentType?: string };
-  company: { id: string; name: string };
+  company: { id: string; name: string; hasLogo?: boolean; logoUpdatedAt?: string | null };
   /** Access by area from the Permissions page (levels that differ from their role). */
   access?: { areas: AreaLevels; managesPermissions: boolean };
 }
