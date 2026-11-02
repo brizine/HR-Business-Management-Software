@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { hasRole, roleInArea, type AreaLevels, type PermissionArea, type Role } from "@crewdesk/shared";
 import { api } from "./api";
+import { saveLastCompanyName } from "./last-company";
 
 export interface Me {
   user: { id: string; firstName: string; lastName: string; email: string; role: Role; employmentType?: string };
@@ -38,6 +39,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Remember the company name for the sign-in page (it stays after signing out).
+  useEffect(() => {
+    if (me?.company.name) saveLastCompanyName(me.company.name);
+  }, [me?.company.name]);
 
   /** The API has just set the session cookie; load who's signed in. */
   const signIn = async () => {

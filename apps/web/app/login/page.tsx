@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction } from "@/lib/hooks";
+import { loadLastCompanyName } from "@/lib/last-company";
 import { ErrorBox, formValues } from "@/components/ui";
 import { TwoFactorSetup } from "@/components/two-factor-setup";
 
@@ -19,6 +20,23 @@ function Login() {
   const [step, setStep] = useState<Step>({ kind: "password" });
   const [useBackup, setUseBackup] = useState(false);
   const { busy, error, run, setError } = useAction();
+  // The company last signed in on this browser (read after mount, since the server can't see it).
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  useEffect(() => {
+    const name = loadLastCompanyName();
+    setCompanyName(name);
+  }, []);
+  // The browser tab too. Next swaps in its default title after the page loads, so keep re-applying it.
+  useEffect(() => {
+    if (!companyName) return;
+    const apply = () => {
+      if (document.title !== companyName) document.title = companyName;
+    };
+    apply();
+    const watcher = new MutationObserver(apply);
+    watcher.observe(document.head, { childList: true, subtree: true, characterData: true });
+    return () => watcher.disconnect();
+  }, [companyName]);
 
   /** The API has set the session cookie by now. */
   const finish = async () => {
@@ -31,7 +49,7 @@ function Login() {
       <div className="card authcard" style={step.kind === "setup" ? { maxWidth: 520 } : undefined}>
         {step.kind === "password" && (
           <>
-            <h1>Sign in to Crewdesk</h1>
+            <h1>{companyName ? `Sign in to ${companyName}` : "Sign in"}</h1>
             <p className="muted">HR, time, and fleet maintenance in one place.</p>
             <form className="stack" onSubmit={(e) => {
               e.preventDefault();
