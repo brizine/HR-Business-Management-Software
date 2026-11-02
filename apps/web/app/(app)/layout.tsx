@@ -63,6 +63,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (me) api<{ isApprover: boolean; pending: number }>("/pay-periods/me").then(setPayApprovals, () => {});
   }, [me?.user.id, path]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The browser tab shows the company's name (re-applied on navigation in case Next resets it).
+  const companyName = me?.company.name;
+  useEffect(() => {
+    if (companyName) document.title = companyName;
+  }, [companyName, path]);
+
   useEffect(() => {
     if (ready && !me) router.replace("/login");
   }, [ready, me, router]);
