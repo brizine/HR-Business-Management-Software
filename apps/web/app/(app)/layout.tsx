@@ -71,11 +71,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="shell">
       <nav className="sidebar">
-        <div className="brand">Crewdesk</div>
         {me.company.hasLogo && (
           <img className="sidebar-logo" src={`${API_URL}/company/logo${me.company.logoUpdatedAt ? `?v=${encodeURIComponent(me.company.logoUpdatedAt)}` : ""}`} alt={`${me.company.name} logo`} />
         )}
-        <div className="company">{me.company.name}</div>
+        <div className="brand sidebar-company">{me.company.name}</div>
         <Link href="/notifications" className={path.startsWith("/notifications") ? "active" : ""}>
           Notifications {unread > 0 && <span className="badge bad" style={{ marginLeft: 4 }}>{unread > 99 ? "99+" : unread}</span>}
         </Link>
