@@ -1,11 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Share, View } from "react-native";
 import { WEB_URL, api } from "@/lib/api";
 import { useAuth, type SignInStep } from "@/lib/auth";
+import { loadLastCompanyName } from "@/lib/last-company";
 import { Button, Card, ErrorText, Input, Txt, useTheme } from "@/components/ui";
 
 /** Sign in, including the two-factor code step and first-time two-factor setup. */
 export default function Login() {
+  // The company last signed in on this phone; a phone that's never signed in just says "Sign in".
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  useEffect(() => {
+    loadLastCompanyName().then(setCompanyName);
+  }, []);
   const { signIn, completeSignIn } = useAuth();
   const t = useTheme();
   const [email, setEmail] = useState("");
@@ -101,7 +107,7 @@ export default function Login() {
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: t.bg }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 20, gap: 16 }} keyboardShouldPersistTaps="handled">
         <View>
-          <Txt style={{ fontSize: 30, fontWeight: "800" }}>Crewdesk</Txt>
+          <Txt style={{ fontSize: 30, fontWeight: "800" }}>{companyName ?? "Sign in"}</Txt>
           <Txt muted>Clock in, request time off, and inspect equipment.</Txt>
         </View>
         {body}
