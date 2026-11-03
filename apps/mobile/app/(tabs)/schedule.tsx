@@ -5,7 +5,8 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
 import { shiftDay, shiftTimes } from "@/lib/shifts";
-import { Badge, Button, Card, Divider, Row, Screen, Txt, useTheme } from "@/components/ui";
+import { Badge, Button, Card, Divider, Input, Row, Screen, Txt, useTheme } from "@/components/ui";
+import { Chips } from "@/components/chips";
 import { TimeOffView } from "@/components/time-off-view";
 
 
@@ -21,11 +22,65 @@ function ShiftDetails({ shift, assetName }: { shift: any; assetName: string | nu
   );
 }
 
+const NO_FILTERS = { q: "", show: "", position: "", location: "", asset: "" };
+type Filters = typeof NO_FILTERS;
+type ShiftRow = { shift: any; assetName: string | null };
+
+/** Distinct non-empty values, sorted, for a filter. */
+const distinct = (values: (string | null | undefined)[]) => [...new Set(values.filter((v): v is string => !!v && v.trim() !== ""))].sort((a, b) => a.localeCompare(b));
+
+/** Search and filters for the shift lists (same as the website's Schedule page, minus the team-only ones). */
+function ShiftFilters({ rows, filters, onChange }: { rows: ShiftRow[]; filters: Filters; onChange: (f: Filters) => void }) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const set = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
+  const positions = distinct(rows.map((r) => r.shift.position));
+  const locations = distinct(rows.map((r) => r.shift.location));
+  const assets = distinct(rows.map((r) => r.shift.assetId)).map((id) => ({ value: id, label: rows.find((r) => r.shift.assetId === id)?.assetName ?? "Unknown" }));
+  const active = (["show", "position", "location", "asset"] as const).filter((k) => filters[k]).length;
+  const choices = (all: string, list: { value: string; label: string }[]) => [{ value: "", label: all }, ...list];
+  return (
+    <Card>
+      <Input label="Search" placeholder="Position, site, vehicle, notes…" value={filters.q} onChangeText={(q) => set({ q })} clearButtonMode="while-editing" autoCorrect={false} />
+      <Row>
+        <Pressable onPress={() => setOpen(!open)} accessibilityRole="button" accessibilityState={{ expanded: open }} hitSlop={8}>
+          <Txt style={{ color: t.primary, fontWeight: "600" }}>{open ? "Hide filters" : `Filters${active ? ` (${active})` : ""}`}</Txt>
+        </Pressable>
+        {(active > 0 || !!filters.q) && (
+          <Pressable onPress={() => onChange(NO_FILTERS)} accessibilityRole="button" hitSlop={8}>
+            <Txt style={{ color: t.primary }}>Clear filters</Txt>
+          </Pressable>
+        )}
+      </Row>
+      {open && (
+        <View style={{ gap: 10 }}>
+          <Txt muted>Show</Txt>
+          <Chips label="Show" value={filters.show} onChange={(show) => set({ show })} options={choices("All shifts", [{ value: "mine", label: "My shifts" }, { value: "open", label: "Open shifts" }])} />
+          {positions.length > 0 && <><Txt muted>Position</Txt><Chips label="Position" value={filters.position} onChange={(position) => set({ position })} options={choices("All", positions.map((v) => ({ value: v, label: v })))} /></>}
+          {locations.length > 0 && <><Txt muted>Location / job site</Txt><Chips label="Location" value={filters.location} onChange={(location) => set({ location })} options={choices("All", locations.map((v) => ({ value: v, label: v })))} /></>}
+          {assets.length > 0 && <><Txt muted>Vehicle / equipment</Txt><Chips label="Vehicle" value={filters.asset} onChange={(asset) => set({ asset })} options={choices("All", assets)} /></>}
+        </View>
+      )}
+    </Card>
+  );
+}
+
+const matches = (r: ShiftRow, f: Filters) => {
+  const s = r.shift;
+  const q = f.q.trim().toLowerCase();
+  return (!f.position || s.position === f.position) && (!f.location || s.location === f.location) && (!f.asset || s.assetId === f.asset) &&
+    (!q || `${s.position ?? ""} ${s.location ?? ""} ${r.assetName ?? ""} ${s.notes ?? ""} ${shiftDay(s.startsAt)}`.toLowerCase().includes(q));
+};
+
 /** Upcoming shifts, open shifts and availability. */
 function ShiftsView() {
   const { me } = useAuth();
   const { data, loading, reload } = useApi<{ mine: any[]; open: any[] }>("/shifts/mine");
   const [busy, setBusy] = useState<string | null>(null);
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  const filtering = Object.values(filters).some(Boolean);
+  const mine = (data?.mine ?? []).filter((r) => matches(r, filters));
+  const open = (data?.open ?? []).filter((r) => matches(r, filters));
 
   const act = async (id: string, fn: () => Promise<unknown>, done: string) => {
     setBusy(id);
@@ -49,8 +104,9 @@ function ShiftsView() {
 
   return (
     <Screen refreshing={loading} onRefresh={reload}>
-      <Card title="My upcoming shifts">
-        {data?.mine.length ? data.mine.map(({ shift, assetName }) => (
+      <ShiftFilters rows={[...(data?.mine ?? []), ...(data?.open ?? [])]} filters={filters} onChange={setFilters} />
+      {filters.show !== "open" && <Card title="My upcoming shifts">
+        {mine.length ? mine.map(({ shift, assetName }) => (
           <View key={shift.id} style={{ gap: 8 }}>
             <Divider />
             <Row style={{ alignItems: "flex-start" }}>
@@ -61,20 +117,20 @@ function ShiftsView() {
               <Button title="Ask to drop" kind="secondary" busy={busy === shift.id} onPress={() => drop(shift)} />
             )}
           </View>
-        )) : <Txt muted>No shifts in the next two weeks.</Txt>}
-      </Card>
+        )) : <Txt muted>{filtering && data?.mine.length ? "None of your shifts match your filters." : "No shifts in the next two weeks."}</Txt>}
+      </Card>}
       {/* Availability is only tracked for part-time employees. */}
       {me?.user.employmentType === "part_time" && <Button title="My availability" kind="secondary" onPress={() => router.push("/availability")} />}
-      <Card title="Open shifts">
-        {data?.open.length ? data.open.map(({ shift, assetName }) => (
+      {filters.show !== "mine" && <Card title="Open shifts">
+        {open.length ? open.map(({ shift, assetName }) => (
           <View key={shift.id} style={{ gap: 8 }}>
             <Divider />
             <ShiftDetails shift={shift} assetName={assetName} />
             <Button title="Pick up this shift" busy={busy === shift.id}
               onPress={() => act(shift.id, () => api(`/shifts/${shift.id}/claim`, { method: "POST" }), "It's yours! The shift is on your schedule.")} />
           </View>
-        )) : <Txt muted>No open shifts right now.</Txt>}
-      </Card>
+        )) : <Txt muted>{filtering && data?.open.length ? "No open shifts match your filters." : "No open shifts right now."}</Txt>}
+      </Card>}
     </Screen>
   );
 }
