@@ -8,7 +8,7 @@ export default function CompanySettings() {
   const { can } = useAuth();
   return (
     <>
-      <PageHead title="Company settings" sub="Owner only." />
+      <PageHead title="Layout editor" sub="Owner only." />
       <SettingsTabs />
       {!can("owner", "company") ? <p className="muted">Only the owner can change company settings.</p> : (
         <PageLayoutsCard />

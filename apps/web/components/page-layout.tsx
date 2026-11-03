@@ -22,7 +22,7 @@ interface LayoutCtx {
 const Ctx = createContext<LayoutCtx>({ saved: {}, setSaved: () => {} });
 export const useSavedLayouts = () => useContext(Ctx);
 
-/** Settings → Company: open the editor in a new tab. */
+/** Settings → Layout editor: open the editor in a new tab. */
 export function PageLayoutsCard({ children }: { children?: ReactNode }) {
   return (
     <div className="card stack">
@@ -40,7 +40,7 @@ export function PageLayoutsCard({ children }: { children?: ReactNode }) {
   );
 }
 
-/** Is this tab the owner's layout editor? (Opened from Settings → Company; only that tab.) */
+/** Is this tab the owner's layout editor? (Opened from Settings → Layout editor; only that tab.) */
 function useEditorMode(isOwner: boolean) {
   const [on, setOn] = useState(false);
   useEffect(() => {

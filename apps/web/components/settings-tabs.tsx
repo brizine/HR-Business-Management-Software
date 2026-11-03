@@ -15,7 +15,7 @@ export function SettingsTabs() {
       {tab("/settings/security", "Security")}
       {tab("/settings/notifications", "Notifications")}
       {tab("/settings/company-info", "Company info")}
-      {can("owner", "company") && tab("/settings/company", "Company")}
+      {can("owner", "company") && tab("/settings/company", "Layout editor")}
       {(me?.user.role === "owner" || me?.access?.managesPermissions) && tab("/settings/permissions", "Permissions")}
     </div>
   );
