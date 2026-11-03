@@ -14,6 +14,8 @@ import { EmployeeFields, employeeBody } from "@/components/employee-form";
 import { ProfileDetails } from "@/components/profile-details";
 import { PhotoEditor } from "@/components/avatar";
 import { RequestTimeOffBox } from "@/components/request-time-off";
+import { ClockCard } from "@/components/clock-card";
+import { ClockStatusBox } from "@/components/clock-status";
 import { TasksBox } from "@/components/tasks-box";
 import { isInactive } from "@crewdesk/shared";
 
@@ -120,6 +122,8 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
         </div>
       )}
       <div className="grid cols-2">
+        {/* Your own page: clock in or out. Someone else's (time clock managers): whether they're on the clock. */}
+        {!isInactive(e.status) && (e.id === me?.user.id ? <ClockCard title="Clock in" /> : can("manager", "time") && <ClockStatusBox employeeId={e.id} firstName={e.firstName} />)}
         {balances.data && (
           <div className="card">
             <h2>Accrued Time Off</h2>
