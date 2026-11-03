@@ -10,6 +10,9 @@ import { SettingsTabs } from "@/components/settings-tabs";
 type Area = { key: string; label: string; max?: Role; levels: Partial<Record<Role, string>> };
 type Person = { id: string; firstName: string; lastName: string; role: Role; title: string | null; areas: Record<string, Role>; managesPermissions: boolean };
 
+const NONE = "__none";
+const NO_FILTERS = { q: "", role: "", title: "", access: "", area: "" };
+
 const LEVEL_NAMES: Record<Role, string> = { employee: "Basic", manager: "Manager", admin: "Admin", owner: "Owner" };
 
 /** What a level allows in an area: its own description, or the nearest lower one ("Basic" if none). */
@@ -120,17 +123,66 @@ export default function Permissions() {
   const data = useApi<{ areas: Area[]; people: Person[] }>(allowed ? "/permissions" : null);
   const [selected, setSelected] = useState<string | null>(null);
   const people = data.data?.people ?? [];
-  const person = people.find((p) => p.id === selected) ?? people.find((p) => p.role !== "owner" && p.id !== me?.user.id) ?? people[0];
   const customCount = (p: Person) => Object.keys(p.areas).length + (p.managesPermissions && p.role !== "owner" ? 1 : 0);
+  const [filters, setFilters] = useState(NO_FILTERS);
+  const setFilter = (patch: Partial<typeof NO_FILTERS>) => setFilters((f) => ({ ...f, ...patch }));
+  const filtering = Object.values(filters).some(Boolean);
+  const q = filters.q.trim().toLowerCase();
+  const titles = [...new Set(people.map((p) => p.title).filter((t): t is string => !!t))].sort((a, b) => a.localeCompare(b));
+  const shown = people.filter((p) =>
+    (!q || `${p.firstName} ${p.lastName} ${p.title ?? ""}`.toLowerCase().includes(q)) &&
+    (!filters.role || p.role === filters.role) &&
+    (!filters.title || (filters.title === NONE ? !p.title : p.title === filters.title)) &&
+    (!filters.access ||
+      (filters.access === "custom" && p.role !== "owner" && customCount(p) > 0) ||
+      (filters.access === "role" && p.role !== "owner" && customCount(p) === 0) ||
+      (filters.access === "permissions" && (p.role === "owner" || p.managesPermissions))) &&
+    (!filters.area || !!p.areas[filters.area]));
+  const person = shown.find((p) => p.id === selected) ?? shown.find((p) => p.role !== "owner" && p.id !== me?.user.id) ?? shown[0];
 
   return (
     <>
       <PageHead title="Permissions" sub="Who can do what in Crewdesk. Everyone starts with what their role gives them; change any area for any person here." />
       <SettingsTabs />
       {!allowed ? <p className="muted">Only the owner, and people they give Permissions access, can see this page.</p> : !data.data ? <ErrorBox error={data.error} /> : (
+        <>
+        <form className="card filters" role="search" aria-label="Filter people" onSubmit={(e) => e.preventDefault()}>
+          <label>Search
+            <input type="search" placeholder="Name or job title…" value={filters.q} onChange={(e) => setFilter({ q: e.target.value })} />
+          </label>
+          <label>Role
+            <select value={filters.role} onChange={(e) => setFilter({ role: e.target.value })}>
+              <option value="">All roles</option>
+              {(["owner", "admin", "manager", "employee"] as Role[]).map((r) => <option key={r} value={r}>{LEVEL_NAMES[r]} ({people.filter((p) => p.role === r).length})</option>)}
+            </select>
+          </label>
+          <label>Job title
+            <select value={filters.title} onChange={(e) => setFilter({ title: e.target.value })}>
+              <option value="">All</option>
+              {titles.map((t) => <option key={t} value={t}>{t}</option>)}
+              <option value={NONE}>(no title)</option>
+            </select>
+          </label>
+          <label>Access
+            <select value={filters.access} onChange={(e) => setFilter({ access: e.target.value })}>
+              <option value="">Everyone</option>
+              <option value="custom">Custom access</option>
+              <option value="role">Same as their role</option>
+              <option value="permissions">Can manage Permissions</option>
+            </select>
+          </label>
+          <label>Custom access in
+            <select value={filters.area} onChange={(e) => setFilter({ area: e.target.value })}>
+              <option value="">Any area</option>
+              {data.data.areas.map((a) => <option key={a.key} value={a.key}>{a.label}</option>)}
+            </select>
+          </label>
+          {filtering && <button type="button" className="btn" onClick={() => setFilters(NO_FILTERS)}>Clear filters</button>}
+        </form>
         <div className="perm-layout">
           <nav className="card perm-people" aria-label="People">
-            {people.map((p) => (
+            {!shown.length && <p className="muted" style={{ padding: 8, margin: 0 }}>No one matches your filters.</p>}
+            {shown.map((p) => (
               <button key={p.id} type="button" className={`perm-person${person?.id === p.id ? " active" : ""}`} onClick={() => setSelected(p.id)} aria-current={person?.id === p.id}>
                 <span>{p.firstName} {p.lastName}<span className="muted" style={{ display: "block", fontSize: 12 }}>{LEVEL_NAMES[p.role]}{p.id === me?.user.id ? " · you" : ""}</span></span>
                 {p.role === "owner" ? <span className="muted" style={{ fontSize: 12 }}>Full</span> : customCount(p) > 0 ? <span className="badge warn">{customCount(p)} custom</span> : null}
@@ -139,6 +191,7 @@ export default function Permissions() {
           </nav>
           {person && <PersonEditor person={person} areas={data.data.areas} onSaved={(p) => data.setData({ ...data.data!, people: people.map((x) => (x.id === p.id ? p : x)) })} />}
         </div>
+        </>
       )}
     </>
   );
