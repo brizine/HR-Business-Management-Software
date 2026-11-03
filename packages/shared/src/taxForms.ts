@@ -171,6 +171,23 @@ export const directDepositSchema = z
   .refine((f) => f.accountNumber === f.accountNumberConfirm, { message: "The account numbers don't match", path: ["accountNumberConfirm"] });
 export type DirectDeposit = z.infer<typeof directDepositSchema>;
 
+const optionalText = (max: number) => z.string().trim().max(max).optional();
+const companyAddressFields = {
+  addressLine1: optionalText(200),
+  addressLine2: optionalText(200),
+  city: optionalText(100),
+  state: z.string().trim().toUpperCase().regex(/^([A-Z]{2})?$/, "Use the 2-letter state code").optional(),
+  zip: z.string().trim().regex(/^(\d{5}(-\d{4})?)?$/, "Enter a 5-digit ZIP code").optional(),
+};
+export const COMPANY_ADDRESS_FIELDS = ["addressLine1", "addressLine2", "city", "state", "zip"] as const;
+export type CompanyAddress = Partial<Record<(typeof COMPANY_ADDRESS_FIELDS)[number], string | null>>;
+
+/** The address on one line, e.g. "100 Congress Ave, Suite 200, Austin, TX 78701" (what tax forms print). */
+export function formatCompanyAddress(a: CompanyAddress): string {
+  const stateZip = [a.state, a.zip].filter(Boolean).join(" ");
+  return [a.addressLine1, a.addressLine2, a.city, stateZip].map((p) => p?.trim()).filter(Boolean).join(", ");
+}
+
 export const companyPayrollInfoSchema = z.object({
   legalName: z.string().trim().max(200).optional(),
   ein: z
@@ -180,7 +197,8 @@ export const companyPayrollInfoSchema = z.object({
     .transform((s) => s.replace(/^(\d{2})-?(\d{7})$/, "$1-$2"))
     .optional()
     .or(z.literal("")),
-  address: z.string().trim().max(300).optional(),
+  /** Business address, one box each. The API also keeps the whole address as one line for tax forms. */
+  ...companyAddressFields,
 });
 
 /** Settings → Company info. Legal name, EIN and address are the same fields Payroll settings edits. */

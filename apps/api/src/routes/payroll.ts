@@ -7,6 +7,7 @@ import { companies, payrollRuns } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { buildPayrollLines, getProvider, payrollCsv } from "../lib/payroll";
+import { companyAddressUpdate, companyAddressView, withoutAddress } from "../lib/companyAddress";
 
 /** Which area of the Permissions page controls access here. */
 const AREA = "payroll" as const;
@@ -24,7 +25,7 @@ const routes: FastifyPluginAsync = async (app) => {
       availableProviders: ["csv", "check"],
       legalName: c.legalName,
       ein: c.ein,
-      address: c.address,
+      ...companyAddressView(c),
       taxFormsInCrewdesk: c.taxFormsInCrewdesk,
     };
   });
@@ -43,14 +44,19 @@ const routes: FastifyPluginAsync = async (app) => {
         .merge(companyPayrollInfoSchema),
       req.body,
     );
-    const [c] = await db.update(companies).set(body).where(eq(companies.id, req.user.companyId)).returning();
+    const [current] = await db.select().from(companies).where(eq(companies.id, req.user.companyId));
+    const [c] = await db
+      .update(companies)
+      .set({ ...withoutAddress(body), ...companyAddressUpdate(body, current) })
+      .where(eq(companies.id, req.user.companyId))
+      .returning();
     return {
       payrollProvider: c.payrollProvider,
       payrollProviderCompanyId: c.payrollProviderCompanyId,
       weeklyOvertimeThreshold: c.weeklyOvertimeThreshold,
       legalName: c.legalName,
       ein: c.ein,
-      address: c.address,
+      ...companyAddressView(c),
       taxFormsInCrewdesk: c.taxFormsInCrewdesk,
     };
   });

@@ -51,7 +51,7 @@ beforeAll(async () => {
     ID[who] = e.body.id;
     T[who] = (await call("POST", "/auth/login", undefined, { email: email(who), password: "password123" })).body.token;
   }
-  await call("PUT", "/payroll/settings", "owner", { legalName: "Tax Co LLC", ein: "123456789", address: "1 Main St, Austin, TX 78701" });
+  await call("PUT", "/payroll/settings", "owner", { legalName: "Tax Co LLC", ein: "123456789", addressLine1: "1 Main St", city: "Austin", state: "TX", zip: "78701" });
 });
 
 beforeEach(async () => {

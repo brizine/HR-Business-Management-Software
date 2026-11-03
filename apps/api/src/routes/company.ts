@@ -8,6 +8,7 @@ import { authenticate, requireRole, roleIn } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { MAX_IMAGE_BYTES, imageType } from "../lib/images";
 import { storage } from "../lib/storage";
+import { companyAddressUpdate, companyAddressView } from "../lib/companyAddress";
 
 type Company = typeof companies.$inferSelect;
 
@@ -18,7 +19,7 @@ function view(c: Company, req: FastifyRequest) {
     name: c.name,
     legalName: c.legalName,
     ein: seesEin ? c.ein : null,
-    address: c.address,
+    ...companyAddressView(c),
     phone: c.phone,
     email: c.email,
     website: c.website,
@@ -70,13 +71,14 @@ const routes: FastifyPluginAsync = async (app) => {
   app.put("/", { preHandler: requireRole("owner", "company") }, async (req) => {
     const body = parse(companyInfoSchema, req.body);
     const blank = (v: string | undefined) => (v ? v : null);
+    const [current] = await db.select().from(companies).where(eq(companies.id, req.user.companyId));
     const [c] = await db
       .update(companies)
       .set({
         name: body.name,
         legalName: blank(body.legalName),
         ein: blank(body.ein),
-        address: blank(body.address),
+        ...companyAddressUpdate(body, current),
         phone: blank(body.phone),
         email: blank(body.email),
         website: blank(body.website),

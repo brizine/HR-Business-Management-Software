@@ -6,8 +6,9 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead, formValues } from "@/components/ui";
 import { SettingsTabs } from "@/components/settings-tabs";
+import { BusinessAddressFields, businessAddressValues } from "@/components/business-address-fields";
 
-type Info = { hasLogo: boolean; logoUpdatedAt: string | null; name: string; legalName: string | null; ein: string | null; address: string | null; phone: string | null; email: string | null; website: string | null; timezone: string; canEdit: boolean };
+type Info = { hasLogo: boolean; logoUpdatedAt: string | null; name: string; legalName: string | null; ein: string | null; address: string | null; addressLine1: string | null; addressLine2: string | null; city: string | null; state: string | null; zip: string | null; phone: string | null; email: string | null; website: string | null; timezone: string; canEdit: boolean };
 
 const US_ZONES = [
   ["America/New_York", "Eastern"], ["America/Chicago", "Central"], ["America/Denver", "Mountain"], ["America/Phoenix", "Arizona (no daylight saving)"],
@@ -81,7 +82,7 @@ export default function CompanyInfo() {
           const v = formValues(e.currentTarget);
           run(async () => {
             info.setData(await api<Info>("/company", { method: "PUT", body: {
-              name: v.name ?? "", legalName: v.legalName ?? "", ein: v.ein ?? "", address: v.address ?? "",
+              name: v.name ?? "", legalName: v.legalName ?? "", ein: v.ein ?? "", ...businessAddressValues((k) => v[k] ?? ""),
               phone: v.phone ?? "", email: v.email ?? "", website: v.website ?? "", timezone: v.timezone,
             } }));
             setSaved(true);
@@ -96,7 +97,7 @@ export default function CompanyInfo() {
                 <label>Employer ID number (EIN)<input name="ein" defaultValue={d.ein ?? ""} placeholder="12-3456789" /></label>
               ) : null}
             </div>
-            <label>Business address<textarea name="address" rows={2} maxLength={300} defaultValue={d.address ?? ""} placeholder={"Street\nCity, State ZIP"} /></label>
+            <BusinessAddressFields initial={d} />
             <div className="formgrid">
               <label>Phone<input name="phone" type="tel" maxLength={40} defaultValue={d.phone ?? ""} /></label>
               <label>Email<input name="email" type="email" maxLength={200} defaultValue={d.email ?? ""} placeholder="office@example.com" /></label>

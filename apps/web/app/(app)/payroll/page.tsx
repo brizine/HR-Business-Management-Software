@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { PayPeriodList, PaySchedule } from "@/components/pay-schedule";
+import { BusinessAddressFields, businessAddressValues } from "@/components/business-address-fields";
 
 function lastWeek() {
   const d = new Date();
@@ -34,7 +35,7 @@ function Settings({ settings, onSaved }: { settings: any; onSaved: () => void })
           taxFormsInCrewdesk: f.get("taxFormsInCrewdesk") === "on",
           legalName: str("legalName") || undefined,
           ein: str("ein"),
-          address: str("address") || undefined,
+          ...businessAddressValues(str),
         } });
         setSaved(true);
         onSaved();
@@ -62,9 +63,9 @@ function Settings({ settings, onSaved }: { settings: any; onSaved: () => void })
         <div className="formgrid">
           <label>Legal business name (for tax forms)<input name="legalName" defaultValue={settings.legalName ?? ""} /></label>
           <label>Employer ID number (EIN)<input name="ein" defaultValue={settings.ein ?? ""} placeholder="12-3456789" /></label>
-          <label>Business address<input name="address" defaultValue={settings.address ?? ""} /></label>
           <label>Weekly overtime after (hours)<input name="weeklyOvertimeThreshold" type="number" min="1" defaultValue={settings.weeklyOvertimeThreshold} /></label>
         </div>
+        <BusinessAddressFields initial={settings} />
       </fieldset>
       <ErrorBox error={error} />
       {owner ? (

@@ -43,7 +43,13 @@ export const companies = pgTable("companies", {
   /** Employer details printed on tax forms. */
   legalName: text("legal_name"),
   ein: text("ein"),
+  /** The business address on one line (printed on tax forms), kept in step with the boxes below. */
   address: text("address"),
+  addressLine1: text("address_line1"),
+  addressLine2: text("address_line2"),
+  city: text("city"),
+  state: text("state"),
+  zip: text("zip"),
   /** Company logo in encrypted storage (see lib/storage); shown in the sidebar for everyone. */
   logoKey: text("logo_key"),
   logoUpdatedAt: timestamp("logo_updated_at", { withTimezone: true }),

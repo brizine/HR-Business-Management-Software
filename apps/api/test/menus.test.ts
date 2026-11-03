@@ -58,9 +58,15 @@ describe("drop-down menus", () => {
   });
 
   it("company info: everyone views (EIN for admins only); only the owner edits", async () => {
-    const saved = await call("PUT", "/company", "owner", { name: "Menu Co Inc", legalName: "Menu Co LLC", ein: "123456789", address: "1 Main St", phone: "555-0100", email: "office@menu.test", website: "menu.test", timezone: "America/Denver" });
+    const saved = await call("PUT", "/company", "owner", { name: "Menu Co Inc", legalName: "Menu Co LLC", ein: "123456789", addressLine1: "1 Main St", addressLine2: "Suite 2", city: "Denver", state: "co", zip: "80202", phone: "555-0100", email: "office@menu.test", website: "menu.test", timezone: "America/Denver" });
     expect(saved.status).toBe(200);
     expect(saved.body).toMatchObject({ name: "Menu Co Inc", ein: "12-3456789", timezone: "America/Denver", canEdit: true });
+    // Each address box is saved, and the whole address is kept on one line for tax forms.
+    expect(saved.body).toMatchObject({ addressLine1: "1 Main St", addressLine2: "Suite 2", city: "Denver", state: "CO", zip: "80202", address: "1 Main St, Suite 2, Denver, CO 80202" });
+    // Payroll settings edit the same address; boxes it leaves out keep their value, an empty one clears.
+    await call("PUT", "/payroll/settings", "owner", { addressLine2: "" });
+    expect((await call("GET", "/company", "owner")).body).toMatchObject({ addressLine1: "1 Main St", addressLine2: null, address: "1 Main St, Denver, CO 80202" });
+    expect((await call("PUT", "/company", "owner", { name: "Menu Co Inc", timezone: "America/Denver", zip: "8020" })).status).toBe(400);
     const asLead = (await call("GET", "/company", "lead")).body;
     expect(asLead).toMatchObject({ name: "Menu Co Inc", phone: "555-0100", ein: null, canEdit: false });
     expect((await call("PUT", "/company", "lead", { name: "Hacked", timezone: "America/Denver" })).status).toBe(403);

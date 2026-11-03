@@ -218,6 +218,13 @@
       "when": 1793576089409,
       "tag": "0030_company_logo",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793749768926,
+      "tag": "0031_company_address_parts",
+      "breakpoints": true
     }
   ]
 }
