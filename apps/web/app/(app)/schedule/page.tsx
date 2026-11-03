@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
+import { useMenuData } from "@/lib/menus";
 import { AvailabilityEditor } from "@/components/availability-editor";
 
 const DAY = 86_400_000;
@@ -23,6 +24,12 @@ const hours = (s: any) => (Date.parse(s.endsAt) - Date.parse(s.startsAt)) / 3_60
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).replace(":00", "").replace(" ", "").toLowerCase();
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const hm = (iso: string) => { const d = new Date(iso); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+
+/** Distinct non-empty values, sorted, for a filter drop-down. */
+const distinct = (values: (string | null | undefined)[]) => [...new Set(values.filter((v): v is string => !!v && v.trim() !== ""))].sort((a, b) => a.localeCompare(b));
+
+const NO_FILTERS = { q: "", title: "", dept: "", position: "", location: "", asset: "", status: "", show: "" };
+type Filters = typeof NO_FILTERS;
 
 type Draft = { id?: string; employeeId: string; date: string; start: string; end: string; position?: string; location?: string; assetId?: string; notes?: string; status?: string };
 
@@ -154,10 +161,25 @@ export default function Schedule() {
   const [editing, setEditing] = useState<Draft | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const action = useAction();
+  const { menus } = useMenuData();
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  const setFilter = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
+  const filtering = Object.values(filters).some(Boolean);
 
   const staff = useMemo(() => (employees.data ?? []).filter((e) => !isInactive(e.status)), [employees.data]);
-  const shifts = (list.data ?? []).map((r) => ({ ...r.shift, assetName: r.assetName }));
-  const drafts = shifts.filter((s) => s.status === "draft").length;
+  const allShifts = (list.data ?? []).map((r) => ({ ...r.shift, assetName: r.assetName }));
+  const nameOf = (id: string | null) => { const e = id && staff.find((x) => x.id === id); return e ? `${e.firstName} ${e.lastName}` : ""; };
+  const q = filters.q.trim().toLowerCase();
+  // Filters on the shift itself (position, site, vehicle, draft/published) narrow the shifts shown.
+  const shiftFiltered = !!(filters.position || filters.location || filters.asset || filters.status);
+  const shifts = allShifts.filter((s) =>
+    (!filters.position || s.position === filters.position) &&
+    (!filters.location || s.location === filters.location) &&
+    (!filters.asset || s.assetId === filters.asset) &&
+    (!filters.status || s.status === filters.status) &&
+    // Search matches the person's name, or anything written on the shift.
+    (!q || `${nameOf(s.employeeId)} ${s.position ?? ""} ${s.location ?? ""} ${s.assetName ?? ""} ${s.notes ?? ""}`.toLowerCase().includes(q)));
+  const drafts = allShifts.filter((s) => s.status === "draft").length;
   const reload = () => { list.reload(); drops.reload(); };
 
   const openEditor = (s: any) =>
@@ -201,7 +223,7 @@ export default function Schedule() {
     return (
     <td key={day.toISOString()} className={`shiftcell ${blocked.length ? "unavail" : ""}`}>
       {blocked.map((r, i) => <div key={i} className="unavail-label" title={r.note ?? ""}>Can&apos;t work {describeRule(r).toLowerCase()}</div>)}
-      {shifts.filter((s) => (s.employeeId ?? null) === employeeId && sameDay(new Date(s.startsAt), day)).map((s) => <Chip key={s.id} s={s} />)}
+      {shownShifts(employeeId).filter((s) => sameDay(new Date(s.startsAt), day)).map((s) => <Chip key={s.id} s={s} />)}
       {manager && (
         <button className="addshift" title="Add shift" onClick={() => setEditing({ employeeId: employeeId ?? "", date: ymd(day), start: "08:00", end: "16:30" })}>+</button>
       )}
@@ -209,7 +231,35 @@ export default function Schedule() {
     );
   };
 
-  const rows = manager ? staff : [...staff.filter((e) => e.id === me?.user.id), ...staff.filter((e) => e.id !== me?.user.id && shifts.some((s) => s.employeeId === e.id))];
+  const everyone = manager ? staff : [...staff.filter((e) => e.id === me?.user.id), ...staff.filter((e) => e.id !== me?.user.id && allShifts.some((s) => s.employeeId === e.id))];
+  const hasShift = (id: string) => shifts.some((s) => s.employeeId === id);
+  const rows = everyone.filter((e) =>
+    (!filters.title || e.title === filters.title) &&
+    (!filters.dept || e.department === filters.dept) &&
+    (!filters.show || (filters.show === "scheduled" ? allShifts.some((s) => s.employeeId === e.id) : !allShifts.some((s) => s.employeeId === e.id))) &&
+    // With a shift filter on, only people who have a matching shift; a search also matches their name and title.
+    (!shiftFiltered || hasShift(e.id)) &&
+    (!q || hasShift(e.id) || `${e.firstName} ${e.lastName} ${e.title ?? ""}`.toLowerCase().includes(q)));
+  // Someone whose own name or title matches the search shows all their shifts, not just matching ones.
+  const nameHit = (id: string | null) => !!q && !!id && `${nameOf(id)} ${staff.find((x) => x.id === id)?.title ?? ""}`.toLowerCase().includes(q);
+  const shownShifts = (employeeId: string | null) =>
+    (nameHit(employeeId) ? allShifts.filter((s) => !shiftFiltered || shifts.includes(s)) : shifts).filter((s) => (s.employeeId ?? null) === employeeId);
+  const showOpenRow = !filters.title && !filters.dept && !filters.show && (!filtering || shifts.some((s) => !s.employeeId));
+  const withMenu = (menu: string[], inUse: string[]) => [...menu, ...inUse.filter((v) => !menu.includes(v))];
+  const titles = withMenu(menus.jobTitles, distinct(everyone.map((e) => e.title)));
+  const depts = withMenu(menus.departments, distinct(everyone.map((e) => e.department)));
+  const positions = distinct(allShifts.map((s) => s.position));
+  const locations = distinct(allShifts.map((s) => s.location));
+  const shiftAssets = distinct(allShifts.map((s) => s.assetId)).map((id) => ({ id, name: allShifts.find((s) => s.assetId === id)?.assetName ?? "Unknown" })).sort((a, b) => a.name.localeCompare(b.name));
+  const pick = (labelText: string, key: keyof Filters, options: { value: string; label: string }[], all = "All") => (
+    <label>{labelText}
+      <select value={filters[key]} onChange={(e) => setFilter({ [key]: e.target.value })}>
+        <option value="">{all}</option>
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </label>
+  );
+  const asOptions = (l: string[]) => l.map((v) => ({ value: v, label: v }));
 
   return (
     <>
@@ -234,6 +284,19 @@ export default function Schedule() {
           </>
         )}
       </PageHead>
+      <form className="card filters" role="search" aria-label="Filter the schedule" onSubmit={(e) => e.preventDefault()}>
+        <label>Search
+          <input type="search" placeholder="Name, position, site…" value={filters.q} onChange={(e) => setFilter({ q: e.target.value })} />
+        </label>
+        {pick("Job title", "title", asOptions(titles))}
+        {pick("Department", "dept", asOptions(depts))}
+        {pick("Position", "position", asOptions(positions))}
+        {pick("Location / job site", "location", asOptions(locations))}
+        {pick("Vehicle / equipment", "asset", shiftAssets.map((a) => ({ value: a.id, label: a.name })))}
+        {manager && pick("Shift status", "status", [{ value: "draft", label: "Drafts" }, { value: "published", label: "Published" }])}
+        {pick("Show", "show", [{ value: "scheduled", label: "People with shifts this week" }, { value: "unscheduled", label: "People with no shifts this week" }], "Everyone")}
+        {filtering && <button type="button" className="btn" onClick={() => setFilters(NO_FILTERS)}>Clear filters</button>}
+      </form>
       <ErrorBox error={action.error || list.error} />
       {notice && <div className="card row" style={{ justifyContent: "space-between" }}><span>{notice}</span><button className="btn sm" onClick={() => setNotice(null)}>×</button></div>}
       {editing && (
@@ -292,13 +355,13 @@ export default function Schedule() {
             </tr>
           </thead>
           <tbody>
-            <tr className="openrow">
+            {showOpenRow && <tr className="openrow">
               <td><strong>Open shifts</strong><div className="muted">{manager ? "Anyone can claim" : "Click to pick up"}</div></td>
               {days.map((d) => cell(null, d))}
               <td />
-            </tr>
+            </tr>}
             {rows.map((e) => {
-              const total = shifts.filter((s) => s.employeeId === e.id).reduce((h, s) => h + hours(s), 0);
+              const total = allShifts.filter((s) => s.employeeId === e.id).reduce((h, s) => h + hours(s), 0);
               return (
                 <tr key={e.id}>
                   <td><strong>{e.firstName} {e.lastName}</strong><div className="muted">{e.title ?? ""}</div></td>
@@ -309,6 +372,9 @@ export default function Schedule() {
                 </tr>
               );
             })}
+            {filtering && !rows.length && !showOpenRow && (
+              <tr><td colSpan={9} className="muted" style={{ textAlign: "center", padding: 20 }}>Nothing this week matches your filters.</td></tr>
+            )}
           </tbody>
         </table>
       </div>
