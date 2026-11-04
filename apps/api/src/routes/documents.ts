@@ -1,9 +1,9 @@
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, isNull, or } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
-import { documents } from "../db/schema";
+import { assets, documents, employees } from "../db/schema";
 import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { storage } from "../lib/storage";
@@ -26,9 +26,16 @@ const routes: FastifyPluginAsync = async (app) => {
     if (req.query.employeeId) filters.push(eq(documents.employeeId, req.query.employeeId));
     if (req.query.assetId) filters.push(eq(documents.assetId, req.query.assetId));
     if (!isManager(req, AREA)) filters.push(or(eq(documents.employeeId, sub), isNull(documents.employeeId))!);
+    // With whose file it's in and which asset it's for, so lists can show and search them.
     return db
-      .select()
+      .select({
+        ...getTableColumns(documents),
+        employeeName: sql<string | null>`case when ${employees.id} is null then null else ${employees.firstName} || ' ' || ${employees.lastName} end`,
+        assetName: assets.name,
+      })
       .from(documents)
+      .leftJoin(employees, eq(employees.id, documents.employeeId))
+      .leftJoin(assets, eq(assets.id, documents.assetId))
       .where(and(...filters))
       .orderBy(desc(documents.createdAt));
   });

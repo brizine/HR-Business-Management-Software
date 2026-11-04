@@ -8,7 +8,7 @@ export default function Documents() {
   return (
     <>
       <PageHead title="Documents" sub={can("manager", "documents") ? "All company and employee documents" : "Company documents and your personal file"} />
-      <DocumentList title="All documents" />
+      <DocumentList title="All documents" filterable />
     </>
   );
 }
