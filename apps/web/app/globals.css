@@ -362,3 +362,20 @@ tr.openrow td { background: var(--bg); }
 .filters .pay-range input { width: 90px; }
 .filters .date-range input { width: 150px; }
 @media (max-width: 700px) { .filters label, .filters label:has(input[type="search"]) { width: 100%; } }
+/* Week picker (Schedule) */
+.weekpicker { position: relative; display: inline-block; }
+.weekpicker-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 12px; width: 340px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 10px; }
+.weekpicker-head { display: flex; align-items: center; justify-content: space-between; }
+.weekpicker-grid { width: 100%; border-collapse: separate; border-spacing: 0 2px; }
+.weekpicker-grid th { font-size: 11px; color: var(--muted); font-weight: 600; text-align: center; padding: 2px 0; border: 0; }
+.weekpicker-grid td { padding: 0; border: 0; text-align: center; }
+.weekpicker-grid tr.hover td { background: rgba(127,127,127,.14); }
+.weekpicker-grid tr.selected td { background: var(--primary); }
+.weekpicker-grid tr td:first-child { border-radius: 8px 0 0 8px; }
+.weekpicker-grid tr td:last-child { border-radius: 0 8px 8px 0; }
+.weekpicker-grid button { all: unset; cursor: pointer; display: block; width: 100%; padding: 7px 0; font-size: 14px; border-radius: 8px; box-sizing: border-box; }
+.weekpicker-grid button:focus-visible { outline: 2px solid var(--primary); }
+.weekpicker-grid button.other { color: var(--muted); }
+.weekpicker-grid button.today { font-weight: 700; text-decoration: underline; }
+.weekpicker-grid tr.selected button { color: #fff; }
+@media (max-width: 700px) { .weekpicker-pop { right: auto; left: 0; } }

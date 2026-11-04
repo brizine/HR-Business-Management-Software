@@ -7,6 +7,7 @@ import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { useMenuData } from "@/lib/menus";
 import { AvailabilityEditor } from "@/components/availability-editor";
+import { WeekPicker } from "@/components/week-picker";
 
 const DAY = 86_400_000;
 
@@ -264,9 +265,7 @@ export default function Schedule() {
   return (
     <>
       <PageHead title="Schedule" sub={`Week of ${from.toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" })}`}>
-        <button className="btn sm" onClick={() => setOffset(offset - 1)}>← Prev</button>
-        <button className="btn sm" onClick={() => setOffset(0)}>This week</button>
-        <button className="btn sm" onClick={() => setOffset(offset + 1)}>Next →</button>
+        <WeekPicker week={from} onChange={(monday) => setOffset(Math.round((monday.getTime() - weekStart(0).getTime()) / (7 * DAY)))} />
         {partTime && <button className="btn" onClick={() => setShowAvailability(!showAvailability)}>My availability</button>}
         {manager && <button className="btn" onClick={() => setShowTemplates(!showTemplates)}>Templates{templates.data?.length ? ` (${templates.data.length})` : ""}</button>}
         {manager && (
