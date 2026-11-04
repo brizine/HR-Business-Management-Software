@@ -7,6 +7,11 @@ import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
 import { AssetFields } from "@/components/asset-form";
 import { useMenus } from "@/components/menu-select";
+import { useMenuData } from "@/lib/menus";
+
+const NO_FILTERS = { q: "", type: "", status: "", maintenance: "", assigned: "" };
+const NONE = "__none";
+const ASSET_STATUSES = ["active", "in_shop", "out_of_service", "retired"];
 
 export default function Fleet() {
   const menus = useMenus();
@@ -14,26 +19,68 @@ export default function Fleet() {
   const { data, reload } = useApi<any[]>("/assets");
   const employees = useApi<any[]>("/employees");
   const [adding, setAdding] = useState(false);
-  const [filter, setFilter] = useState("all");
+  const { label } = useMenuData();
+  const [filters, setFilters] = useState(NO_FILTERS);
+  const setFilter = (patch: Partial<typeof NO_FILTERS>) => setFilters((f) => ({ ...f, ...patch }));
+  const filtering = Object.values(filters).some(Boolean);
   const { busy, error, run } = useAction();
   const name = (id: string | null) => {
     const e = employees.data?.find((x) => x.id === id);
     return e ? `${e.firstName} ${e.lastName}` : "—";
   };
-  const rows = (data ?? []).filter((a) => filter === "all" || a.type === filter || a.maintenanceStatus === filter);
+  const all = data ?? [];
+  const q = filters.q.trim().toLowerCase();
+  const rows = all.filter((a) =>
+    // Search: name, year/make/model, VIN, serial number, plate, or who it's assigned to.
+    (!q || `${a.name} ${a.year ?? ""} ${a.make ?? ""} ${a.model ?? ""} ${a.vin ?? ""} ${a.serialNumber ?? ""} ${a.licensePlate ?? ""} ${a.assignedEmployeeId ? name(a.assignedEmployeeId) : ""}`.toLowerCase().includes(q)) &&
+    (!filters.type || a.type === filters.type) &&
+    (!filters.status || a.status === filters.status) &&
+    (!filters.maintenance || a.maintenanceStatus === filters.maintenance) &&
+    (!filters.assigned || (filters.assigned === NONE ? !a.assignedEmployeeId : a.assignedEmployeeId === filters.assigned)));
+  const types = [...new Set([...menus.assetTypes, ...all.map((a) => a.type)])];
+  const assignees = [...new Set(all.map((a) => a.assignedEmployeeId).filter(Boolean))].map((id) => ({ id, name: name(id) })).sort((a, b) => a.name.localeCompare(b.name));
+  const count = (pred: (a: any) => boolean) => all.filter(pred).length;
+  const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 
   return (
     <>
-      <PageHead title="Vehicles & equipment" sub={`${data?.length ?? 0} assets`}>
-        <select value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: 190 }}>
-          <option value="all">All assets</option>
-          <option value="overdue">Maintenance overdue</option>
-          <option value="due_soon">Maintenance due soon</option>
-          {menus.assetTypes.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
-        </select>
+      <PageHead title="Vehicles & equipment" sub={<span role="status">{filtering ? `Showing ${rows.length} of ${all.length} assets` : `${all.length} assets`}</span>}>
         <Link className="btn" href="/fleet/labels">Print QR labels</Link>
         {can("manager", "fleet") && <button className="btn primary" onClick={() => setAdding(!adding)}>Add asset</button>}
       </PageHead>
+      <form className="card filters" role="search" aria-label="Filter assets" onSubmit={(e) => e.preventDefault()}>
+        <label>Search
+          <input type="search" placeholder="Name, make, VIN, plate, person…" value={filters.q} onChange={(e) => setFilter({ q: e.target.value })} />
+        </label>
+        <label>Type
+          <select value={filters.type} onChange={(e) => setFilter({ type: e.target.value })}>
+            <option value="">All types</option>
+            {types.map((t) => <option key={t} value={t}>{cap(t.replace(/_/g, " "))} ({count((a) => a.type === t)})</option>)}
+          </select>
+        </label>
+        <label>Status
+          <select value={filters.status} onChange={(e) => setFilter({ status: e.target.value })}>
+            <option value="">All</option>
+            {ASSET_STATUSES.map((s) => <option key={s} value={s}>{cap(label("assetStatus", s))} ({count((a) => a.status === s)})</option>)}
+          </select>
+        </label>
+        <label>Maintenance
+          <select value={filters.maintenance} onChange={(e) => setFilter({ maintenance: e.target.value })}>
+            <option value="">Any</option>
+            <option value="overdue">Overdue ({count((a) => a.maintenanceStatus === "overdue")})</option>
+            <option value="due_soon">Due soon ({count((a) => a.maintenanceStatus === "due_soon")})</option>
+            <option value="ok">Up to date ({count((a) => a.maintenanceStatus === "ok")})</option>
+          </select>
+        </label>
+        <label>Assigned to
+          <select value={filters.assigned} onChange={(e) => setFilter({ assigned: e.target.value })}>
+            <option value="">Anyone</option>
+            {assignees.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            <option value={NONE}>Not assigned</option>
+          </select>
+        </label>
+        {filtering && <button type="button" className="btn" onClick={() => setFilters(NO_FILTERS)}>Clear filters</button>}
+      </form>
       {adding && (
         <div className="card">
           <form className="stack" onSubmit={(e) => {
@@ -64,7 +111,7 @@ export default function Fleet() {
               </tr>
             ))}</tbody>
           </table>
-        ) : <Empty>No assets match.</Empty>}
+        ) : <Empty>{filtering ? "No assets match your filters." : "No assets yet."}</Empty>}
       </div>
     </>
   );
