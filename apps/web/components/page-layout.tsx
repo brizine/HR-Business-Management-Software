@@ -111,48 +111,101 @@ export function PageLayoutRoot({ children }: { children: ReactNode }) {
   }, [apply]);
 
   // Dragging (editor only): a box moves among the page's boxes, an item among its box's items.
+  // A line shows where it will land; it moves on drop, to wherever the line was (even if the pointer
+  // ends up in a gap between boxes). Near the top or bottom of the window the page scrolls.
   useEffect(() => {
     const el = root.current;
     if (!el || !editor.on) return;
     const target = (e: Event) => (e.target as Element | null)?.closest?.("[data-ldrag='1']") as HTMLElement | null;
-    const onStart = (e: DragEvent) => {
-      const t = target(e);
-      if (!t) return;
-      e.stopPropagation();
-      dragging.current = t;
-      t.classList.add("layout-dragging");
-      e.dataTransfer?.setData("text/plain", t.dataset.lid ?? "");
-      if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
-    };
-    // While dragging, a line shows where it will land; it moves only on drop (no jumping around).
-    const marked = { el: null as HTMLElement | null };
-    const unmark = () => { marked.el?.classList.remove("layout-drop-before", "layout-drop-after", "layout-drop-left", "layout-drop-right"); marked.el = null; };
-    const overTarget = (e: DragEvent) => {
+    const marked = { el: null as HTMLElement | null, spot: null as null | "left" | "right" | "before" | "after" };
+    const unmark = () => { marked.el?.classList.remove("layout-drop-before", "layout-drop-after", "layout-drop-left", "layout-drop-right"); marked.el = null; marked.spot = null; };
+    const pointer = { x: 0, y: 0 };
+    let scrollFrame = 0;
+
+    /** The box (or item) to drop next to: the one under the pointer, else the nearest one in the same place. */
+    const findTarget = (x: number, y: number, under: Element | null) => {
       const moving = dragging.current;
       if (!moving) return null;
-      const over = (e.target as Element | null)?.closest?.(`[data-lparent="${CSS.escape(moving.dataset.lparent ?? "")}"]`) as HTMLElement | null;
-      return over && over !== moving ? over : null;
+      const parent = moving.dataset.lparent ?? "";
+      const hit = under?.closest?.(`[data-lparent="${CSS.escape(parent)}"]`) as HTMLElement | null;
+      if (hit && hit !== moving) return hit;
+      if (hit === moving) return null; // still over itself: no move
+      const siblings = (scanned.current?.containers.get(parent) ?? []).filter((s) => s !== moving && s.isConnected && s.getClientRects().length);
+      // Items only move within their own box, so only look for them while the pointer is near it.
+      if (moving.dataset.lkind !== "box") {
+        const box = moving.parentElement?.getBoundingClientRect();
+        if (!box || x < box.left - 40 || x > box.right + 40 || y < box.top - 40 || y > box.bottom + 40) return null;
+      }
+      let best: HTMLElement | null = null;
+      let bestDist = Infinity;
+      for (const s of siblings) {
+        const r = s.getBoundingClientRect();
+        const dx = Math.max(r.left - x, 0, x - r.right);
+        const dy = Math.max(r.top - y, 0, y - r.bottom);
+        const d = dx * dx + dy * dy;
+        if (d < bestDist) { bestDist = d; best = s; }
+      }
+      return best;
     };
-    const onOver = (e: DragEvent) => {
-      const over = overTarget(e);
-      if (!dragging.current) return;
-      e.preventDefault();
+    const spotFor = (over: HTMLElement, x: number, y: number) => {
+      // Outside the target (in a gap): above/below it, or beside it if level with it.
+      const r = over.getBoundingClientRect();
+      if (dragging.current?.dataset.lkind === "box") {
+        if (y >= r.top && y <= r.bottom && x < r.left) return "left";
+        if (y >= r.top && y <= r.bottom && x > r.right) return "right";
+        return boxDrop(over, Math.min(Math.max(x, r.left + r.width * 0.3), r.right - r.width * 0.3), y);
+      }
+      return dropsAfter(over, x, y) ? "after" : "before";
+    };
+    const mark = (x: number, y: number, under: Element | null) => {
+      const over = findTarget(x, y, under);
       if (!over) return unmark();
-      const spot = over.dataset.lkind === "box" ? boxDrop(over, e.clientX, e.clientY) : dropsAfter(over, e.clientX, e.clientY) ? "after" : "before";
+      const spot = spotFor(over, x, y) as typeof marked.spot;
       if (marked.el !== over) unmark();
       marked.el = over;
+      marked.spot = spot;
       for (const k of ["left", "right", "before", "after"]) over.classList.toggle(`layout-drop-${k}`, k === spot);
+    };
+
+    /** Scrolls the page while the pointer is near the top or bottom of the window. */
+    const autoScroll = () => {
+      if (!dragging.current) return;
+      const zone = Math.min(100, window.innerHeight / 5);
+      const y = pointer.y;
+      const speed = y < zone ? -Math.ceil(((zone - y) / zone) * 24) : y > window.innerHeight - zone ? Math.ceil(((y - (window.innerHeight - zone)) / zone) * 24) : 0;
+      if (speed) {
+        window.scrollBy(0, speed);
+        mark(pointer.x, pointer.y, document.elementFromPoint(pointer.x, pointer.y));
+      }
+      scrollFrame = requestAnimationFrame(autoScroll);
+    };
+
+    const onOver = (e: DragEvent) => {
+      if (!dragging.current) return;
+      e.preventDefault(); // allow dropping anywhere on the page
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      pointer.x = e.clientX;
+      pointer.y = e.clientY;
+      mark(e.clientX, e.clientY, e.target as Element | null);
+    };
+    const finish = () => {
+      cancelAnimationFrame(scrollFrame);
+      unmark();
+      dragging.current?.classList.remove("layout-dragging");
+      dragging.current = null;
+      document.removeEventListener("dragover", onOver);
+      document.removeEventListener("drop", onDrop);
     };
     const onDrop = (e: DragEvent) => {
       e.preventDefault();
       const moving = dragging.current;
-      const over = overTarget(e);
-      unmark();
-      if (!moving || !over) return;
+      const over = marked.el;
+      const spot = marked.spot;
+      finish();
+      if (!moving || !over || !spot) return;
       const visual = scanned.current?.containers.get(moving.dataset.lparent!);
       if (!visual) return;
       const isBox = moving.dataset.lkind === "box";
-      const spot = isBox ? boxDrop(over, e.clientX, e.clientY) : dropsAfter(over, e.clientX, e.clientY) ? "after" : "before";
       const order = moveWithin(visual, moving, over, spot === "after" || spot === "right");
       const beside = isBox && (spot === "left" || spot === "right");
       if (!order && !beside) return;
@@ -165,15 +218,29 @@ export function PageLayoutRoot({ children }: { children: ReactNode }) {
       });
       setNote(beside ? `“${moving.dataset.lname}” now sits beside “${over.dataset.lname}”. Point at a box to change its width.` : null);
     };
-    const onEnd = () => { unmark(); dragging.current?.classList.remove("layout-dragging"); dragging.current = null; };
+    const onStart = (e: DragEvent) => {
+      const t = target(e);
+      if (!t) return;
+      e.stopPropagation();
+      dragging.current = t;
+      t.classList.add("layout-dragging");
+      e.dataTransfer?.setData("text/plain", t.dataset.lid ?? "");
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+      pointer.x = e.clientX;
+      pointer.y = e.clientY;
+      // Listen on the whole document so a drop outside the boxes (in a gap, or by the header) still counts.
+      document.addEventListener("dragover", onOver);
+      document.addEventListener("drop", onDrop);
+      cancelAnimationFrame(scrollFrame);
+      scrollFrame = requestAnimationFrame(autoScroll);
+    };
+    // Dropped outside the window or cancelled with Escape: nothing moves.
+    const onEnd = () => finish();
     el.addEventListener("dragstart", onStart);
-    el.addEventListener("dragover", onOver);
-    el.addEventListener("drop", onDrop);
     el.addEventListener("dragend", onEnd);
     return () => {
+      finish();
       el.removeEventListener("dragstart", onStart);
-      el.removeEventListener("dragover", onOver);
-      el.removeEventListener("drop", onDrop);
       el.removeEventListener("dragend", onEnd);
     };
   }, [editor.on, page, saved, setDraft]);
