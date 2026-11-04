@@ -31,6 +31,27 @@ export const PERMISSION_AREA_KEYS = PERMISSION_AREAS.map((a) => a.key) as Permis
 /** Per-person levels by area, as stored. */
 export type AreaLevels = Partial<Record<PermissionArea, Role>>;
 
+/** Roles whose access by area the owner can set (owners always have full access). */
+export const CONFIGURABLE_ROLES = ["employee", "manager", "admin"] as const satisfies readonly Role[];
+export type ConfigurableRole = (typeof CONFIGURABLE_ROLES)[number];
+/** Access by area for each role, as the owner set it (Settings → Layout Editor); areas left out get the role itself. */
+export type RoleAccess = Partial<Record<ConfigurableRole, AreaLevels>>;
+
+/** What everyone with this role gets in an area: the owner's setting for the role, else the role itself (capped). */
+export function roleDefaultLevel(role: Role, roleAccess: RoleAccess | null | undefined, area: PermissionArea): Role {
+  if (role === "owner") return role;
+  return roleInArea(role, roleAccess?.[role as ConfigurableRole], area);
+}
+
+/**
+ * A person's access by area that differs from their role itself: their role's settings, with
+ * anything set for them personally on the Permissions page on top.
+ */
+export function effectiveAreaLevels(role: Role, roleAccess: RoleAccess | null | undefined, personal: AreaLevels | undefined): AreaLevels {
+  if (role === "owner") return {};
+  return { ...(roleAccess?.[role as ConfigurableRole] ?? {}), ...(personal ?? {}) };
+}
+
 /** The most a person can be given in an area (Team stops at admin, so nobody else can manage owners' accounts). */
 export function maxLevel(area: PermissionArea): Role {
   const a = PERMISSION_AREAS.find((x) => x.key === area);

@@ -1,0 +1,1 @@
+ALTER TABLE "companies" ADD COLUMN "role_access" jsonb DEFAULT '{}'::jsonb NOT NULL;

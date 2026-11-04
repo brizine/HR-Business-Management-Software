@@ -116,4 +116,27 @@ describe("permissions", () => {
     await ask("2027-01-07");
     expect(asked(await inbox("owner"))).toBe(1);
   });
+
+  it("the owner sets what each role can do; a person's own setting still wins", async () => {
+    // clerk is a plain employee with nothing set personally.
+    expect((await call("GET", "/dashboard", "clerk")).status).toBe(403);
+    const saved = await call("PUT", "/permissions/roles/employee", "owner", { areas: { dashboard: "manager", fleet: "employee", people: null } });
+    expect(saved.status).toBe(200);
+    expect(saved.body.roleAccess.employee).toEqual({ dashboard: "manager" });
+    // Every employee gets it right away, and the website/app learn it from /auth/me.
+    expect((await call("GET", "/dashboard", "clerk")).status).toBe(200);
+    expect((await call("GET", "/auth/me", "clerk")).body.access.areas).toMatchObject({ dashboard: "manager" });
+    // Personal settings on the Permissions page win over the role's.
+    expect((await call("PUT", `/permissions/${ID.clerk}`, "owner", { areas: { ...allDefault, dashboard: "employee" } })).body.areas).toEqual({ dashboard: "employee" });
+    expect((await call("GET", "/dashboard", "clerk")).status).toBe(403);
+    // Choosing what the role already gets stores nothing for the person.
+    expect((await call("PUT", `/permissions/${ID.clerk}`, "owner", { areas: { ...allDefault, dashboard: "manager" } })).body.areas).toEqual({});
+    // Only the owner changes roles; owners can't be limited; maximums still apply.
+    expect((await call("PUT", "/permissions/roles/employee", "lead", { areas: { payroll: "admin" } })).status).toBe(403);
+    expect((await call("PUT", "/permissions/roles/owner", "owner", { areas: { payroll: "employee" } })).status).toBe(400);
+    expect((await call("PUT", "/permissions/roles/manager", "owner", { areas: { people: "owner" } })).status).toBe(400);
+    // Back to defaults.
+    expect((await call("PUT", "/permissions/roles/employee", "owner", { areas: {} })).body.roleAccess.employee).toEqual({});
+    expect((await call("GET", "/dashboard", "clerk")).status).toBe(403);
+  });
 });

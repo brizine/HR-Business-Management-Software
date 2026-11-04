@@ -1,5 +1,5 @@
 import { and, eq, inArray, notInArray } from "drizzle-orm";
-import { INACTIVE_STATUSES, NOTIFICATION_CATEGORY_INFO, defaultPreference, hasRole, toE164, webPathFor, type DeliveryMode, type NotificationCategory, type NotificationLink, type NotificationPreference, type PermissionArea, type Role, roleInArea } from "@crewdesk/shared";
+import { INACTIVE_STATUSES, NOTIFICATION_CATEGORY_INFO, defaultPreference, hasRole, toE164, webPathFor, type DeliveryMode, type NotificationCategory, type NotificationLink, type NotificationPreference, type PermissionArea, type Role, roleDefaultLevel, roleInArea } from "@crewdesk/shared";
 import { db } from "../db";
 import { companies, employeePermissions, employees, notificationPreferences, notifications, pushTokens } from "../db/schema";
 import { SmsError, SMS_UNSUBSCRIBED, WEB_URL, PUBLIC_API_URL, emailTransport, smsTransport, unsubscribeToken } from "./channels";
@@ -202,9 +202,11 @@ async function staffAccess(companyId: string, area?: PermissionArea) {
     ? await db.select({ employeeId: employeePermissions.employeeId, level: employeePermissions.level }).from(employeePermissions).where(and(eq(employeePermissions.companyId, companyId), eq(employeePermissions.area, area)))
     : [];
   const custom = new Map(grants.map((g) => [g.employeeId, g.level as Role]));
+  const [company] = area ? await db.select({ roleAccess: companies.roleAccess }).from(companies).where(eq(companies.id, companyId)) : [];
   return rows.map((r) => ({
     id: r.id,
-    level: roleInArea(r.role as Role, area && custom.has(r.id) ? { [area]: custom.get(r.id) } : undefined, area),
+    // Set for them personally, else what their role gets in this area.
+    level: area && custom.has(r.id) ? roleInArea(r.role as Role, { [area]: custom.get(r.id) }, area) : area ? roleDefaultLevel(r.role as Role, company?.roleAccess, area) : (r.role as Role),
     custom: custom.has(r.id),
   }));
 }

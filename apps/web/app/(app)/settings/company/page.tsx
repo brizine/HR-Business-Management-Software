@@ -3,7 +3,7 @@ import { useAuth } from "@/lib/auth";
 import { PageHead } from "@/components/ui";
 import { SettingsTabs } from "@/components/settings-tabs";
 import { PageLayoutsCard } from "@/components/page-layout";
-import { MenuSettingsCard } from "@/components/menu-settings-card";
+import { RoleAccessCard } from "@/components/role-access-card";
 
 export default function CompanySettings() {
   const { can } = useAuth();
@@ -14,7 +14,7 @@ export default function CompanySettings() {
       {!can("owner", "company") ? <p className="muted">Only the owner can change company settings.</p> : (
         <>
           <PageLayoutsCard />
-          <MenuSettingsCard />
+          <RoleAccessCard />
         </>
       )}
     </>

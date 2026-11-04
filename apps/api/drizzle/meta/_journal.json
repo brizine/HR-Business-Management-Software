@@ -225,6 +225,13 @@
       "when": 1793749768926,
       "tag": "0031_company_address_parts",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1793751488739,
+      "tag": "0032_role_access",
+      "breakpoints": true
     }
   ]
 }

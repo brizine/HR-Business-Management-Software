@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { ROLES, hasRole, type Role } from "@crewdesk/shared";
+import { ROLES, hasRole, roleDefaultLevel, type PermissionArea, type Role, type RoleAccess } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -29,7 +29,7 @@ function levelsFor(area: Area): Role[] {
   return (["employee", "manager", "admin", "owner"] as Role[]).filter((r) => (r === "employee" || area.levels[r]) && hasRole(max, r));
 }
 
-function PersonEditor({ person, areas, onSaved }: { person: Person; areas: Area[]; onSaved: (p: Person) => void }) {
+function PersonEditor({ person, areas, roleAccess, onSaved }: { person: Person; areas: Area[]; roleAccess: RoleAccess; onSaved: (p: Person) => void }) {
   const { me, can } = useAuth();
   const isOwner = can("owner");
   const self = person.id === me?.user.id;
@@ -65,7 +65,9 @@ function PersonEditor({ person, areas, onSaved }: { person: Person; areas: Area[
         <tbody>
           {areas.map((a) => {
             const value = draft[a.key] ?? "";
-            const effective = (value || person.role) as Role;
+            // What their role gets here (Settings → Layout Editor → Role access), unless set for them.
+            const roleLevel = roleDefaultLevel(person.role, roleAccess, a.key as PermissionArea);
+            const effective = (value || roleLevel) as Role;
             const capped = hasRole(effective, a.max ?? "owner") ? (a.max ?? "owner") : effective;
             return (
               <tr key={a.key} className={value ? "perm-custom" : undefined}>
@@ -75,7 +77,7 @@ function PersonEditor({ person, areas, onSaved }: { person: Person; areas: Area[
                     <span>{person.role === "owner" ? "Full access" : `${LEVEL_NAMES[capped]}${value ? " (custom)" : ""}`}</span>
                   ) : (
                     <select value={value} onChange={(e) => { setDraft({ ...draft, [a.key]: e.target.value as Role | "" }); setSaved(false); }} aria-label={`${a.label} access for ${person.firstName}`}>
-                      <option value="">Same as their role ({LEVEL_NAMES[hasRole(person.role, a.max ?? "owner") ? (a.max ?? "owner") : person.role]})</option>
+                      <option value="">Same as their role ({LEVEL_NAMES[roleLevel]})</option>
                       {levelsFor(a).map((r) => (
                         <option key={r} value={r} disabled={r === "owner" && !isOwner}>{LEVEL_NAMES[r]}{r === "owner" && !isOwner ? " (owner only)" : ""}</option>
                       ))}
@@ -120,7 +122,7 @@ function PersonEditor({ person, areas, onSaved }: { person: Person; areas: Area[
 export default function Permissions() {
   const { me } = useAuth();
   const allowed = me?.user.role === "owner" || !!me?.access?.managesPermissions;
-  const data = useApi<{ areas: Area[]; people: Person[] }>(allowed ? "/permissions" : null);
+  const data = useApi<{ areas: Area[]; people: Person[]; roleAccess: RoleAccess }>(allowed ? "/permissions" : null);
   const [selected, setSelected] = useState<string | null>(null);
   const people = data.data?.people ?? [];
   const customCount = (p: Person) => Object.keys(p.areas).length + (p.managesPermissions && p.role !== "owner" ? 1 : 0);
@@ -189,7 +191,7 @@ export default function Permissions() {
               </button>
             ))}
           </nav>
-          {person && <PersonEditor person={person} areas={data.data.areas} onSaved={(p) => data.setData({ ...data.data!, people: people.map((x) => (x.id === p.id ? p : x)) })} />}
+          {person && <PersonEditor person={person} areas={data.data.areas} roleAccess={data.data.roleAccess} onSaved={(p) => data.setData({ ...data.data!, people: people.map((x) => (x.id === p.id ? p : x)) })} />}
         </div>
         </>
       )}

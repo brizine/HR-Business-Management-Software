@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { eq, sql } from "drizzle-orm";
-import { ROLES, hasRole, isInactive, roleInArea, type AreaLevels, type PermissionArea, type Role } from "@crewdesk/shared";
+import { ROLES, effectiveAreaLevels, hasRole, isInactive, roleInArea, type AreaLevels, type PermissionArea, type Role } from "@crewdesk/shared";
 import { db } from "../db";
 import { companies, employeePermissions, employees, pushTokens } from "../db/schema";
 import { HttpError } from "./errors";
@@ -97,9 +97,12 @@ export async function verifyToken(req: FastifyRequest, allowed: TokenPurpose[]) 
     throw new HttpError(401, "Your session has ended. Please sign in again.");
   }
   req.user.role = row.role as Role;
-  // Access by area that differs from their role (set on the Permissions page).
+  // Access by area that differs from their role: their role's settings (Layout Editor), then anything
+  // set for them personally on the Permissions page.
   const grants = await db.select({ area: employeePermissions.area, level: employeePermissions.level }).from(employeePermissions).where(eq(employeePermissions.employeeId, row.id));
-  req.user.areas = Object.fromEntries(grants.filter((g) => g.area !== "permissions").map((g) => [g.area, g.level as Role]));
+  const [company] = await db.select({ roleAccess: companies.roleAccess }).from(companies).where(eq(companies.id, row.companyId));
+  const personal = Object.fromEntries(grants.filter((g) => g.area !== "permissions").map((g) => [g.area, g.level as Role]));
+  req.user.areas = effectiveAreaLevels(row.role as Role, company?.roleAccess, personal);
   req.user.managesPermissions = row.role === "owner" || grants.some((g) => g.area === "permissions");
   return row;
 }

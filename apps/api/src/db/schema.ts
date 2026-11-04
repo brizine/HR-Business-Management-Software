@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import type { NotificationLink, PtoTier } from "@crewdesk/shared";
+import type { NotificationLink, PtoTier, RoleAccess } from "@crewdesk/shared";
 import {
   boolean,
   primaryKey,
@@ -43,6 +43,8 @@ export const companies = pgTable("companies", {
   /** Employer details printed on tax forms. */
   legalName: text("legal_name"),
   ein: text("ein"),
+  /** Access by area for each role (Settings → Layout Editor): { manager: { payroll: "admin" }, … }. */
+  roleAccess: jsonb("role_access").$type<RoleAccess>().notNull().default({}),
   /** The business address on one line (printed on tax forms), kept in step with the boxes below. */
   address: text("address"),
   addressLine1: text("address_line1"),
