@@ -110,9 +110,12 @@ export default function Payroll() {
     <>
       <PageHead title="Payroll" sub={usesProvider ? "Hours go to Check for you to approve there; you can still export a CSV any time." : "Export hours for each pay period and run payroll in your own system, or send the file to your accountant."} />
       {formsToEnter > 0 && !usesProvider && (
-        <div className="card row" style={{ justifyContent: "space-between" }}>
-          <span>{formsToEnter} new or updated W-4 / direct deposit form{formsToEnter > 1 ? "s" : ""} to enter in your payroll system.</span>
-          <Link className="btn sm primary" href="/tax-forms">Review</Link>
+        <div className="card stack">
+          <h2 style={{ margin: 0 }}>Tax forms to enter</h2>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <span>{formsToEnter} new or updated W-4 / direct deposit form{formsToEnter > 1 ? "s" : ""} to enter in your payroll system.</span>
+            <Link className="btn sm primary" href="/tax-forms">Review</Link>
+          </div>
         </div>
       )}
       <div className="card stack">
@@ -137,9 +140,12 @@ export default function Payroll() {
       </div>
       <ErrorBox error={action.error || preview.error} />
       {unapproved > 0 && (
-        <div className="card row" style={{ justifyContent: "space-between" }}>
-          <span><Badge value="pending" /> {unapproved} time entr{unapproved === 1 ? "y hasn't" : "ies haven't"} been approved yet{approvedOnly ? " and are left out of this export" : ""}.</span>
-          <Link className="btn sm" href="/time">Review timesheets</Link>
+        <div className="card stack">
+          <h2 style={{ margin: 0 }}>Timesheets to approve</h2>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <span><Badge value="pending" /> {unapproved} time entr{unapproved === 1 ? "y hasn't" : "ies haven't"} been approved yet{approvedOnly ? " and are left out of this export" : ""}.</span>
+            <Link className="btn sm" href="/time">Review timesheets</Link>
+          </div>
         </div>
       )}
       <div className="card tablewrap">
