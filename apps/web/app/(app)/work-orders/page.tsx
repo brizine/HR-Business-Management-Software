@@ -45,6 +45,12 @@ function WorkOrderEditor({ wo, employees, canManage, onDone }: { wo: any; employ
   );
 }
 
+const NO_FILTERS = { q: "", asset: "", priority: "", assigned: "", due: "" };
+const NONE = "__none";
+const PRIORITIES = ["low", "medium", "high", "critical"];
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const inDays = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+
 function WorkOrders() {
   const { label } = useMenuData();
   const { me, can } = useAuth();
@@ -58,18 +64,72 @@ function WorkOrders() {
   const [open, setOpen] = useState<string | null>(highlight);
   const [creating, setCreating] = useState(false);
   const create = useAction();
+  const [filters, setFilters] = useState(NO_FILTERS);
+  const setFilter = (patch: Partial<typeof NO_FILTERS>) => setFilters((f) => ({ ...f, ...patch }));
+  const filtering = Object.values(filters).some(Boolean) || mine || status !== "active";
+  const all = list.data ?? [];
+  const q = filters.q.trim().toLowerCase();
+  const done = (w: any) => w.status === "completed" || w.status === "cancelled";
+  const rows = all.filter(({ workOrder: w, assetName, assignee }) =>
+    // Search: number, title, description, asset, who it's assigned to, vendor and notes.
+    (!q || `#${w.number} ${w.number} ${w.title} ${w.description ?? ""} ${assetName ?? ""} ${assignee?.id ? `${assignee.firstName} ${assignee.lastName}` : ""} ${w.vendor ?? ""} ${w.resolutionNotes ?? ""}`.toLowerCase().includes(q)) &&
+    (!filters.asset || w.assetId === filters.asset) &&
+    (!filters.priority || w.priority === filters.priority) &&
+    (!filters.assigned || (filters.assigned === NONE ? !w.assignedToId : w.assignedToId === filters.assigned)) &&
+    (!filters.due ||
+      (filters.due === "overdue" && !!w.dueDate && w.dueDate < today() && !done(w)) ||
+      (filters.due === "week" && !!w.dueDate && w.dueDate >= today() && w.dueDate <= inDays(7)) ||
+      (filters.due === "none" && !w.dueDate)));
+  const assetsInList = [...new Map(all.map(({ workOrder: w, assetName }) => [w.assetId, assetName ?? "Unknown"])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const people = [...new Map(all.filter(({ assignee }) => assignee?.id).map(({ assignee }) => [assignee.id, `${assignee.firstName} ${assignee.lastName}`])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 
   return (
     <>
-      <PageHead title="Work orders" sub="Repairs and scheduled service">
-        <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 150 }}>
-          <option value="active">Active</option>
-          {WORK_ORDER_STATUSES.map((s) => <option key={s} value={s}>{label("workOrderStatus", s)}</option>)}
-          <option value="all">All</option>
-        </select>
-        <label className="check"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Assigned to me</label>
+      <PageHead title="Work orders" sub={<span role="status">{list.data ? (rows.length === all.length ? `Repairs and scheduled service · ${all.length} shown` : `Showing ${rows.length} of ${all.length}`) : "Repairs and scheduled service"}</span>}>
         <button className="btn primary" onClick={() => setCreating(!creating)}>{can("manager", "fleet") ? "New work order" : "Report an issue"}</button>
       </PageHead>
+      <form className="card filters" role="search" aria-label="Filter work orders" onSubmit={(e) => e.preventDefault()}>
+        <label>Search
+          <input type="search" placeholder="Number, title, asset, person…" value={filters.q} onChange={(e) => setFilter({ q: e.target.value })} />
+        </label>
+        <label>Status
+          <select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="active">Active</option>
+            {WORK_ORDER_STATUSES.map((s) => <option key={s} value={s}>{cap(label("workOrderStatus", s))}</option>)}
+            <option value="all">All</option>
+          </select>
+        </label>
+        <label>Asset
+          <select value={filters.asset} onChange={(e) => setFilter({ asset: e.target.value })}>
+            <option value="">All assets</option>
+            {assetsInList.map(([id, n]) => <option key={id} value={id}>{n}</option>)}
+          </select>
+        </label>
+        <label>Priority
+          <select value={filters.priority} onChange={(e) => setFilter({ priority: e.target.value })}>
+            <option value="">Any</option>
+            {PRIORITIES.map((p) => <option key={p} value={p}>{cap(label("workOrderPriority", p))}</option>)}
+          </select>
+        </label>
+        <label>Assigned to
+          <select value={filters.assigned} onChange={(e) => setFilter({ assigned: e.target.value })} disabled={mine}>
+            <option value="">Anyone</option>
+            {people.map(([id, n]) => <option key={id} value={id}>{n}</option>)}
+            <option value={NONE}>Unassigned</option>
+          </select>
+        </label>
+        <label>Due
+          <select value={filters.due} onChange={(e) => setFilter({ due: e.target.value })}>
+            <option value="">Any time</option>
+            <option value="overdue">Overdue</option>
+            <option value="week">Due in the next 7 days</option>
+            <option value="none">No due date</option>
+          </select>
+        </label>
+        <label className="check" style={{ width: "auto", alignSelf: "flex-end", paddingBottom: 9 }}><input type="checkbox" checked={mine} onChange={(e) => { setMine(e.target.checked); if (e.target.checked) setFilter({ assigned: "" }); }} /> Assigned to me</label>
+        {filtering && <button type="button" className="btn" onClick={() => { setFilters(NO_FILTERS); setMine(false); setStatus("active"); }}>Clear filters</button>}
+      </form>
       {creating && (
         <div className="card">
           <form className="stack" onSubmit={(e) => {
@@ -96,10 +156,10 @@ function WorkOrders() {
         </div>
       )}
       <div className="card tablewrap">
-        {list.data?.length ? (
+        {rows.length ? (
           <table>
             <thead><tr><th>#</th><th>Work order</th><th>Asset</th><th>Priority</th><th>Assigned</th><th>Due</th><th>Status</th><th>Cost</th></tr></thead>
-            <tbody>{list.data.map(({ workOrder: w, assetName, assignee }) => {
+            <tbody>{rows.map(({ workOrder: w, assetName, assignee }) => {
               const editable = can("manager", "fleet") || w.assignedToId === me?.user.id;
               return [
                 <tr key={w.id} onClick={() => editable && setOpen(open === w.id ? null : w.id)} style={{ cursor: editable ? "pointer" : undefined, background: open === w.id ? "var(--info-bg)" : undefined }}>
@@ -120,7 +180,7 @@ function WorkOrders() {
               ];
             })}</tbody>
           </table>
-        ) : <Empty>No work orders.</Empty>}
+        ) : <Empty>{all.length ? "No work orders match your filters." : "No work orders."}</Empty>}
       </div>
     </>
   );
