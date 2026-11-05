@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { PAY_FREQUENCIES, PAY_FREQUENCY_LABELS, isInactive, type PayFrequency } from "@crewdesk/shared";
+import { PAY_FREQUENCIES, PAY_FREQUENCY_LABELS, isInactive, upcomingPeriods, type PayFrequency } from "@crewdesk/shared";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -30,6 +30,17 @@ export function PaySchedule() {
   const people = staff.data.filter((e) => !isInactive(e.status) || s.approverIds.includes(e.id));
   const edit = (patch: Partial<Schedule>) => { setS({ ...s, ...patch }); setDone(false); };
 
+  // Live preview of the next periods from what's chosen (before saving).
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const ready = !!s.frequency && (!needsAnchor || !!s.anchorDate);
+  const preview = ready ? upcomingPeriods(todayIso, { frequency: s.frequency!, anchorDate: s.anchorDate, paydayOffsetDays: s.paydayOffsetDays || 0 }, 4) : [];
+  const short = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+  const long = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  const changed = JSON.stringify([s.frequency, needsAnchor ? s.anchorDate : null, s.paydayOffsetDays, [...s.approverIds].sort()]) !==
+    JSON.stringify([saved.data?.frequency ?? null, needsAnchor ? saved.data?.anchorDate ?? null : null, saved.data?.paydayOffsetDays, [...(saved.data?.approverIds ?? [])].sort()]);
+  let step = 0;
+
   return (
     <form className="card stack" onSubmit={(e) => {
       e.preventDefault();
@@ -38,60 +49,89 @@ export function PaySchedule() {
         setDone(true);
       });
     }}>
-      <h2 style={{ margin: 0 }}>Pay schedule</h2>
-      <fieldset disabled={!owner} className="stack" style={{ border: 0, padding: 0, margin: 0 }}>
-        <div className="formgrid">
-          <label>How often people are paid
-            <select value={s.frequency ?? ""} onChange={(e) => edit({ frequency: (e.target.value || null) as PayFrequency | null })}>
+      <div>
+        <h2 style={{ margin: 0 }}>Pay schedule</h2>
+        <p className="muted" style={{ margin: "4px 0 0" }}>Set how often you pay, when each pay period starts, and when payday is. The preview below updates as you choose.</p>
+      </div>
+      <fieldset disabled={!owner} className="setup-steps">
+        <div className="setup-step">
+          <div className="setup-step-label"><span className="setup-step-num">{++step}</span><div><strong>How often do you pay?</strong></div></div>
+          <div className="setup-step-control">
+            <select value={s.frequency ?? ""} onChange={(e) => edit({ frequency: (e.target.value || null) as PayFrequency | null })} aria-label="How often people are paid">
               <option value="">Not set up</option>
               {PAY_FREQUENCIES.map((f) => <option key={f} value={f}>{PAY_FREQUENCY_LABELS[f]}</option>)}
             </select>
-          </label>
-          {needsAnchor && (
-            <label>First day of a pay period
-              <input type="date" required value={s.anchorDate ?? ""} onChange={(e) => edit({ anchorDate: e.target.value || null })} />
-              <span className="muted" style={{ fontSize: 12 }}>Any period&apos;s start date; the rest are counted from it.</span>
-            </label>
-          )}
-          {s.frequency && (
-            <label>Payday
-              <span className="row" style={{ flexWrap: "nowrap" }}>
-                <input type="number" min={0} max={31} required value={s.paydayOffsetDays} onChange={(e) => edit({ paydayOffsetDays: Number(e.target.value) })} style={{ width: 80 }} />
-                <span className="muted">days after the period ends</span>
-              </span>
-            </label>
-          )}
+          </div>
         </div>
-        {s.frequency && (
-          <fieldset className="stack" style={{ border: 0, padding: 0, margin: 0 }}>
-            <legend style={{ fontWeight: 600, padding: 0 }}>Who approves each pay period</legend>
-            <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-              When a period ends, these people get a notification to review everyone&apos;s hours and approve them. Approvers can see each person&apos;s hours and estimated pay
-              for the period, so pick people who should. With nobody picked, admins are asked.
-            </p>
-            <div className="formgrid">
-              {people.map((e) => (
-                <label key={e.id} className="check">
-                  <input type="checkbox" checked={s.approverIds.includes(e.id)}
-                    onChange={(ev) => edit({ approverIds: ev.target.checked ? [...s.approverIds, e.id] : s.approverIds.filter((x) => x !== e.id) })} />
-                  {e.firstName} {e.lastName}<span className="muted"> · {e.role}</span>
-                </label>
-              ))}
+
+        {needsAnchor && (
+          <div className="setup-step">
+            <div className="setup-step-label"><span className="setup-step-num">{++step}</span><div><strong>When does a pay period start?</strong><div className="muted">Pick the first day of any pay period, past or future. The others are counted from it.</div></div></div>
+            <div className="setup-step-control">
+              <input type="date" required value={s.anchorDate ?? ""} onChange={(e) => edit({ anchorDate: e.target.value || null })} aria-label="First day of a pay period" />
+              {s.anchorDate && <div className="muted setup-step-hint">Periods start on a {new Date(`${s.anchorDate}T12:00:00`).toLocaleDateString([], { weekday: "long" })} and run {s.frequency === "weekly" ? "7" : "14"} days.</div>}
             </div>
-          </fieldset>
+          </div>
+        )}
+        {(s.frequency === "semimonthly" || s.frequency === "monthly") && (
+          <div className="setup-step">
+            <div className="setup-step-label"><span className="setup-step-num">{++step}</span><div><strong>Pay periods</strong></div></div>
+            <div className="setup-step-control"><div className="setup-step-hint" style={{ marginTop: 0 }}>{s.frequency === "monthly" ? "Each calendar month, the 1st to the last day." : "The 1st to the 15th, and the 16th to the end of the month."}</div></div>
+          </div>
+        )}
+
+        {s.frequency && (
+          <div className="setup-step">
+            <div className="setup-step-label"><span className="setup-step-num">{++step}</span><div><strong>When is payday?</strong><div className="muted">Days after a pay period ends. 0 pays on its last day.</div></div></div>
+            <div className="setup-step-control">
+              <div className="row" style={{ flexWrap: "nowrap", gap: 8 }}>
+                <input type="number" min={0} max={31} required value={s.paydayOffsetDays} onChange={(e) => edit({ paydayOffsetDays: Number(e.target.value) })} style={{ width: 90 }} aria-label="Payday, days after the period ends" />
+                <span className="muted">days after the period ends</span>
+              </div>
+              {preview[0] && <div className="muted setup-step-hint">This period ends {long(preview[0].end)}, so payday is {long(preview[0].payday)}.</div>}
+            </div>
+          </div>
+        )}
+
+        {s.frequency && (
+          <div className="setup-step">
+            <div className="setup-step-label">
+              <span className="setup-step-num">{++step}</span>
+              <div><strong>Who approves each pay period?</strong><div className="muted">They&apos;re notified when a period ends to review and approve everyone&apos;s hours, and can see hours and estimated pay. With nobody picked, admins are asked.</div></div>
+            </div>
+            <div className="setup-step-control">
+              <div className="approver-grid">
+                {people.map((e) => (
+                  <label key={e.id} className="check">
+                    <input type="checkbox" checked={s.approverIds.includes(e.id)}
+                      onChange={(ev) => edit({ approverIds: ev.target.checked ? [...s.approverIds, e.id] : s.approverIds.filter((x) => x !== e.id) })} />
+                    <span>{e.firstName} {e.lastName}<span className="muted"> · {e.role}</span></span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
         )}
       </fieldset>
-      {saved.data?.upcoming.length ? (
-        <div>
-          <strong style={{ fontSize: 14 }}>Coming up</strong>
-          <table><tbody>{saved.data.upcoming.map((p) => (
-            <tr key={p.start}><td>{fmtDate(p.start)} – {fmtDate(p.end)}</td><td className="muted">Payday {fmtDate(p.payday)}</td></tr>
-          ))}</tbody></table>
+
+      {preview.length > 0 && (
+        <div className="pay-preview">
+          <strong style={{ fontSize: 14 }}>{changed ? "Preview (not saved yet)" : "Coming up"}</strong>
+          <table>
+            <thead><tr><th>Pay period</th><th>Payday</th></tr></thead>
+            <tbody>{preview.map((p) => (
+              <tr key={p.start}><td>{short(p.start)} – {short(p.end)}{p.end.slice(0, 4) !== todayIso.slice(0, 4) || p.start.slice(0, 4) !== p.end.slice(0, 4) ? `, ${p.end.slice(0, 4)}` : ""}</td><td>{long(p.payday)}</td></tr>
+            ))}</tbody>
+          </table>
         </div>
-      ) : null}
+      )}
       <ErrorBox error={error} />
       {owner ? (
-        <div className="row"><button className="btn primary" disabled={busy}>Save pay schedule</button>{done && <span className="muted" role="status">Saved.</span>}</div>
+        <div className="row">
+          <button className="btn primary" disabled={busy || !changed}>Save pay schedule</button>
+          {done && !changed && <span className="muted" role="status">Saved.</span>}
+          {changed && <span className="muted">You have unsaved changes.</span>}
+        </div>
       ) : <p className="muted" style={{ margin: 0 }}>Only the owner can change the pay schedule.</p>}
     </form>
   );

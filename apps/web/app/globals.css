@@ -382,3 +382,21 @@ tr.openrow td { background: var(--bg); }
 /* Paid holidays */
 .holiday-tag { font-size: 11px; font-weight: 600; color: var(--primary); white-space: normal; line-height: 1.2; margin-top: 2px; }
 .holiday-form, .holiday-presets { border-top: 1px solid var(--border); padding-top: 12px; }
+/* Step-by-step setup forms (Pay schedule): numbered questions with their answers lined up under
+   them; side by side when the box is wide enough. */
+.setup-steps { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; container-type: inline-size; }
+.setup-step { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 14px 0; border-top: 1px solid var(--border); }
+.setup-step:first-child { border-top: 0; padding-top: 4px; }
+.setup-step-label { display: flex; gap: 10px; align-items: flex-start; }
+.setup-step-label .muted { font-size: 13px; margin-top: 2px; }
+.setup-step-num { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-top: 1px; }
+.setup-step-control { min-width: 0; padding-left: 34px; }
+.setup-step-control > select, .setup-step-control > input[type="date"] { width: 100%; max-width: 340px; }
+.setup-step-hint { font-size: 13px; margin-top: 6px; }
+.approver-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 16px; }
+@container (min-width: 720px) {
+  .setup-step { grid-template-columns: 300px minmax(0, 1fr); gap: 8px 24px; align-items: start; }
+  .setup-step-control { padding-left: 0; }
+}
+.pay-preview { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.pay-preview table { margin-top: 6px; }
