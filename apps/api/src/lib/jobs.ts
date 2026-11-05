@@ -1,8 +1,9 @@
 import { and, eq, gt, gte, isNotNull, isNull, lt, lte, ne, notInArray } from "drizzle-orm";
 import { INACTIVE_STATUSES, carryoverForfeit, computeDue, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
 import { db } from "../db";
-import { assets, attendanceOverrides, companies, employees, maintenanceSchedules, notificationLog, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, ptoRequests, shifts, timeEntries } from "../db/schema";
+import { assets, attendanceOverrides, companies, courseEnrollments, courses, employees, maintenanceSchedules, notificationLog, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, ptoRequests, shifts, timeEntries } from "../db/schema";
 import { attendanceRulesFor, computeAttendance } from "./attendance";
+import { assignCourse, autoAssignees, companyToday, describeEnrollments, latestEnrollments } from "./training";
 import { taskOwners } from "../routes/onboarding";
 import { fmtTime, localParts } from "./tz";
 import { notify, staffWithRole } from "./notify";
@@ -240,7 +241,50 @@ export async function runScheduledChecks(now = new Date()) {
   }
 
   sent += await attendanceAlerts(now);
+  sent += await trainingChecks(now);
   return { sent };
+}
+
+/**
+ * Training: assigns auto-assigned courses to new matches, reassigns expired completions, and
+ * reminds people about due dates and upcoming expiry.
+ */
+async function trainingChecks(now: Date) {
+  let sent = 0;
+  const all = await db.select().from(courses).where(eq(courses.published, true));
+  for (const course of all) {
+    const today = await companyToday(course.companyId, now);
+    // Auto-assigned courses go to everyone who matches (and again once a completion expires).
+    sent += (await assignCourse(course, await autoAssignees(course), { id: null, source: "auto" }, undefined, now)).length;
+    const latest = await describeEnrollments(await latestEnrollments(eq(courseEnrollments.courseId, course.id)), today);
+    const active = new Set((await db.select({ id: employees.id }).from(employees).where(and(eq(employees.companyId, course.companyId), notInArray(employees.status, INACTIVE_STATUSES)))).map((e) => e.id));
+    for (const e of latest) {
+      if (!active.has(e.employeeId)) continue;
+      const link = { screen: "training" as const, courseId: course.id };
+      if (!e.completedAt && e.dueDate) {
+        const soon = new Date(Date.parse(`${today}T00:00:00Z`) + 3 * 86_400_000).toISOString().slice(0, 10);
+        if (e.dueDate >= today && e.dueDate <= soon && (await firstTime(course.companyId, `traindue:${e.id}`))) {
+          notify(course.companyId, [e.employeeId], { category: "training", title: `Training due ${e.dueDate}: ${course.title}`, body: `You're ${e.percent}% done.`, link });
+          sent++;
+        }
+        if (e.dueDate < today && (await firstTime(course.companyId, `trainoverdue:${e.id}`))) {
+          notify(course.companyId, [e.employeeId], { category: "training", title: `Training overdue: ${course.title}`, body: `It was due ${e.dueDate}. Please finish it as soon as you can.`, link });
+          notify(course.companyId, [e.assignedById], { category: "training", title: `Training overdue: ${course.title}`, body: `Someone you assigned it to hasn't finished it (due ${e.dueDate}).`, link });
+          sent++;
+        }
+      }
+      if (e.completedAt && e.expiresAt) {
+        const warn = new Date(Date.parse(`${today}T00:00:00Z`) + 30 * 86_400_000).toISOString().slice(0, 10);
+        if (e.expiresAt > today && e.expiresAt <= warn && (await firstTime(course.companyId, `trainexpiring:${e.id}`))) {
+          notify(course.companyId, [e.employeeId], { category: "training", title: `Training expires ${e.expiresAt}: ${course.title}`, body: "You'll be asked to take it again then.", link });
+          sent++;
+        }
+        // Expired: assign it again (auto-assigned courses were handled above).
+        if (e.expiresAt <= today) sent += (await assignCourse(course, [e.employeeId], { id: e.assignedById, source: "auto" }, undefined, now)).length;
+      }
+    }
+  }
+  return sent;
 }
 
 /**

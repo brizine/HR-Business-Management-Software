@@ -173,7 +173,8 @@ export function applyLayout(root: HTMLElement, layout: PageLayout | undefined, e
   const boxes: HTMLElement[] = [];
   const gather = (container: Element, depth: number) => {
     for (const el of children(container) as HTMLElement[]) {
-      const wrapper = depth < 2 && !el.matches(".card, .pagehead, " + SKIP) && (el.matches(".grid") || !!el.querySelector(":scope > .card"));
+      // data-lkeep: a layout that must stay together (e.g. a lesson's side menu and content) is one box.
+      const wrapper = depth < 2 && !el.matches(".card, .pagehead, [data-lkeep], " + SKIP) && (el.matches(".grid") || !!el.querySelector(":scope > .card"));
       if (wrapper) {
         el.dataset.lflat = "1";
         delete el.dataset.lid;

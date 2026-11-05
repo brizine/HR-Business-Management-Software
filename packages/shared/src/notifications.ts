@@ -16,9 +16,10 @@ export type NotificationLink =
   | { screen: "work-order"; id: string; assetId: string }
   | { screen: "pay-period"; id: string }
   | { screen: "reviews"; id: string }
-  | { screen: "attendance"; employeeId: string };
+  | { screen: "attendance"; employeeId: string }
+  | { screen: "training"; courseId: string };
 
-export const NOTIFICATION_CATEGORIES = ["pto", "time", "schedule", "fleet", "documents", "onboarding", "hiring", "payroll", "wiki", "reviews"] as const;
+export const NOTIFICATION_CATEGORIES = ["pto", "time", "schedule", "fleet", "documents", "onboarding", "hiring", "payroll", "wiki", "reviews", "training"] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
 /** Expo push tokens look like ExponentPushToken[xxxx] or ExpoPushToken[xxxx]. */
@@ -33,6 +34,7 @@ export const NOTIFICATION_CATEGORY_INFO: Record<NotificationCategory, { label: s
   onboarding: { label: "Onboarding", description: "Your new-hire checklist" },
   hiring: { label: "Hiring", description: "New job applicants" },
   wiki: { label: "Company wiki", description: "Pages your company flags as important when they're published or updated" },
+  training: { label: "Training", description: "Courses assigned to you, reminders before they're due or expire, and (for managers) completions" },
   reviews: { label: "Reviews & discipline", description: "Reviews and disciplinary actions shared with you, and when one you wrote is acknowledged" },
   payroll: { label: "Payroll & tax forms", description: "Pay periods to approve, and new or updated W-4s and direct deposit details to enter in payroll" },
 };
@@ -74,6 +76,7 @@ export function webPathFor(link: NotificationLink | null | undefined): string | 
     case "pay-period": return `/pay-periods/${link.id}`;
     case "reviews": return `/reviews?open=${link.id}`;
     case "attendance": return `/attendance?employee=${link.employeeId}`;
+    case "training": return `/training/${link.courseId}`;
     default: return null;
   }
 }

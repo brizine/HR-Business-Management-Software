@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import type { AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, RoleAccess } from "@crewdesk/shared";
+import type { AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess } from "@crewdesk/shared";
 import {
   boolean,
   primaryKey,
@@ -588,6 +588,77 @@ export const availability = pgTable(
 );
 
 /** Saved shift presets, e.g. "Morning crew 7:00–15:30, Driver, Truck 12". */
+/** Training courses (see training.ts in @crewdesk/shared). */
+export const courses = pgTable("courses", {
+  id: id(),
+  companyId: companyId(),
+  title: text("title").notNull(),
+  description: text("description"),
+  category: text("category"),
+  published: boolean("published").notNull().default(false),
+  passingScore: integer("passing_score").notNull().default(80),
+  validityMonths: integer("validity_months"),
+  dueDays: integer("due_days"),
+  /** none | everyone | titles | departments */
+  autoAssign: text("auto_assign").notNull().default("none"),
+  autoAssignTo: jsonb("auto_assign_to").$type<string[]>().notNull().default([]),
+  selfEnroll: boolean("self_enroll").notNull().default(true),
+  createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const courseLessons = pgTable(
+  "course_lessons",
+  {
+    id: id(),
+    companyId: companyId(),
+    courseId: uuid("course_id").notNull().references(() => courses.id, { onDelete: "cascade" }),
+    position: integer("position").notNull().default(0),
+    chapter: text("chapter"),
+    title: text("title").notNull(),
+    content: text("content").notNull().default(""),
+    videoUrl: text("video_url"),
+    quiz: jsonb("quiz").$type<QuizQuestion[]>().notNull().default([]),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("course_lessons_course_idx").on(t.courseId, t.position)],
+);
+
+/** Someone taking a course. A new one is made each time they're assigned it again (e.g. yearly). */
+export const courseEnrollments = pgTable(
+  "course_enrollments",
+  {
+    id: id(),
+    companyId: companyId(),
+    courseId: uuid("course_id").notNull().references(() => courses.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+    assignedById: uuid("assigned_by_id").references(() => employees.id, { onDelete: "set null" }),
+    /** manager | auto | self */
+    source: text("source").notNull().default("manager"),
+    dueDate: date("due_date"),
+    enrolledAt: timestamp("enrolled_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    /** Completion lasts until this day (course validity). */
+    expiresAt: date("expires_at"),
+  },
+  (t) => [index("course_enrollments_employee_idx").on(t.employeeId), index("course_enrollments_course_idx").on(t.courseId)],
+);
+
+export const lessonProgress = pgTable(
+  "lesson_progress",
+  {
+    id: id(),
+    enrollmentId: uuid("enrollment_id").notNull().references(() => courseEnrollments.id, { onDelete: "cascade" }),
+    lessonId: uuid("lesson_id").notNull().references(() => courseLessons.id, { onDelete: "cascade" }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    quizScore: integer("quiz_score"),
+    attempts: integer("attempts").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("lesson_progress_enrollment_lesson_idx").on(t.enrollmentId, t.lessonId)],
+);
+
 /** Days an owner/admin set by hand on the attendance calendar (e.g. called in sick, excused). */
 export const attendanceOverrides = pgTable(
   "attendance_overrides",

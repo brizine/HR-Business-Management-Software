@@ -479,3 +479,36 @@ describe("attendance", () => {
     expect(p.nextExpiry).toBe("2026-11-30");
   });
 });
+
+import { completionExpiry, enrollmentStatus, gradeQuiz, quizQuestionSchema, videoEmbedUrl } from "../src/training";
+
+describe("training", () => {
+  const quiz = [
+    { kind: "single" as const, question: "PPE for spraying?", options: ["None", "Gloves and goggles"], correct: [1] },
+    { kind: "multiple" as const, question: "Pick the safe ones", options: ["A", "B", "C"], correct: [0, 2] },
+    { kind: "true_false" as const, question: "Read the label first", options: ["True", "False"], correct: [0] },
+  ];
+  it("grades quizzes: multi-answer needs exactly the right set", () => {
+    expect(gradeQuiz(quiz, [[1], [2, 0], [0]])).toMatchObject({ correct: 3, score: 100 });
+    expect(gradeQuiz(quiz, [[1], [0], [0]])).toMatchObject({ correct: 2, score: 67, results: [true, false, true] });
+    expect(gradeQuiz(quiz, []).score).toBe(0);
+    expect(gradeQuiz([], []).score).toBe(100);
+  });
+  it("validates questions", () => {
+    expect(quizQuestionSchema.safeParse({ kind: "single", question: "Q", options: ["a", "b"], correct: [0, 1] }).success).toBe(false);
+    expect(quizQuestionSchema.safeParse({ kind: "single", question: "Q", options: ["a", "b"], correct: [5] }).success).toBe(false);
+    expect(quizQuestionSchema.safeParse({ kind: "true_false", question: "Q", options: ["a", "b", "c"], correct: [0] }).success).toBe(false);
+  });
+  it("status, expiry and video links", () => {
+    expect(enrollmentStatus({ completedAt: null, expiresAt: null, dueDate: "2026-11-01", lessonsDone: 1 }, "2026-11-05")).toBe("overdue");
+    expect(enrollmentStatus({ completedAt: null, expiresAt: null, dueDate: null, lessonsDone: 0 }, "2026-11-05")).toBe("not_started");
+    expect(enrollmentStatus({ completedAt: "2025-11-01", expiresAt: "2026-11-01", dueDate: null, lessonsDone: 3 }, "2026-11-05")).toBe("expired");
+    expect(completionExpiry("2026-01-31", 1)).toBe("2026-02-28");
+    expect(completionExpiry("2026-11-05", 12)).toBe("2027-11-05");
+    expect(completionExpiry("2026-11-05", null)).toBeNull();
+    expect(videoEmbedUrl("https://www.youtube.com/watch?v=abc123")).toBe("https://www.youtube-nocookie.com/embed/abc123");
+    expect(videoEmbedUrl("https://youtu.be/xyz")).toBe("https://www.youtube-nocookie.com/embed/xyz");
+    expect(videoEmbedUrl("https://vimeo.com/12345")).toBe("https://player.vimeo.com/video/12345");
+    expect(videoEmbedUrl("https://example.com/video.mp4")).toBeNull();
+  });
+});

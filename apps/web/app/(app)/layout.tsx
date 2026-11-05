@@ -18,6 +18,7 @@ const NAV: { section: string; items: { href: string; label: string; min?: Role; 
       { href: "/attendance", label: "Attendance" },
       { href: "/time-off", label: "Time off" },
       { href: "/reviews", label: "Reviews & discipline" },
+      { href: "/training", label: "Training" },
       { href: "/documents", label: "Documents" },
       { href: "/tax-forms", label: "Pay & tax forms" },
       { href: "/onboarding", label: "Onboarding" },

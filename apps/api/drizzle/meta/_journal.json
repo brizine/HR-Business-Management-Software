@@ -253,6 +253,13 @@
       "when": 1793853881131,
       "tag": "0035_attendance",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793862164155,
+      "tag": "0036_training",
+      "breakpoints": true
     }
   ]
 }

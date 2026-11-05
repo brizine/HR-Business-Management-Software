@@ -66,6 +66,7 @@ export default function Profile() {
       </Card>
       <Button title="📖  Company wiki" onPress={() => router.push("/wiki")} />
       <Button title="My info: address & emergency contact" kind="secondary" onPress={() => router.push("/my-info")} />
+      <Button title="🎓  Training" onPress={() => router.push("/training")} />
       <Button title="My attendance" kind="secondary" onPress={() => router.push("/attendance")} />
       <Button title="My reviews" kind="secondary" onPress={() => router.push("/reviews")} />
       <Button title="Notification settings" kind="secondary" onPress={() => router.push("/notification-settings")} />
