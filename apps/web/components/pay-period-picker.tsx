@@ -32,11 +32,11 @@ export function rangeLabel(start: string, end: string) {
  * Payroll's date picker: a month calendar with each pay period shaded in alternating colours and
  * paydays marked. Clicking a day picks its whole pay period. "Custom dates" picks any range.
  */
-export function PayPeriodPicker({ start, end, schedule, onChange }: { start: string; end: string; schedule: Schedule | null; onChange: (start: string, end: string) => void }) {
+export function PayPeriodPicker({ start, end, schedule, onChange, placeholder = "Pick a pay period" }: { start: string; end: string; schedule: Schedule | null; onChange: (start: string, end: string) => void; placeholder?: string }) {
   const hasSchedule = !!schedule?.frequency && (!(schedule.frequency === "weekly" || schedule.frequency === "biweekly") || !!schedule.anchorDate);
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState(false);
-  const [month, setMonth] = useState(() => { const d = fromIso(start); return new Date(d.getFullYear(), d.getMonth(), 1); });
+  const [month, setMonth] = useState(() => { const d = start ? fromIso(start) : new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [hover, setHover] = useState<{ start: string; end: string } | null>(null);
   const [draft, setDraft] = useState({ start, end });
   const ref = useRef<HTMLDivElement>(null);
@@ -44,10 +44,11 @@ export function PayPeriodPicker({ start, end, schedule, onChange }: { start: str
 
   useEffect(() => {
     if (!open) return;
-    const d = fromIso(start);
+    const d = start ? fromIso(start) : new Date();
     setMonth(new Date(d.getFullYear(), d.getMonth(), 1));
     setDraft({ start, end });
     setCustom(!hasSchedule);
+    setHover(null);
     const click = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
     document.addEventListener("mousedown", click);
@@ -59,8 +60,9 @@ export function PayPeriodPicker({ start, end, schedule, onChange }: { start: str
   const pick = (p: { start: string; end: string }) => { onChange(p.start, p.end); setOpen(false); };
   /** The pay period before or after the one shown. */
   const step = (dir: -1 | 1) => {
-    const p = periodOf(start);
+    const p = periodOf(start || today);
     if (!p) return;
+    if (!start) return onChange(p.start, p.end);
     const next = periodOf(ymd(addDays(fromIso(dir < 0 ? p.start : p.end), dir)))!;
     onChange(next.start, next.end);
   };
@@ -73,7 +75,7 @@ export function PayPeriodPicker({ start, end, schedule, onChange }: { start: str
     // Paydays for periods that end around this month.
     for (let d = addDays(first, -40); d <= addDays(first, 42); d = addDays(d, 7)) paydays.add(periodOf(ymd(d))!.payday);
   }
-  const current = periodOf(start);
+  const current = start ? periodOf(start) : null;
   const isPeriod = !!current && current.start === start && current.end === end;
 
   return (
@@ -81,7 +83,7 @@ export function PayPeriodPicker({ start, end, schedule, onChange }: { start: str
       <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
         {hasSchedule && <button type="button" className="btn" aria-label="Previous pay period" onClick={() => step(-1)}>‹</button>}
         <button type="button" className="btn" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
-          📅 {rangeLabel(start, end)}{isPeriod && current && start <= today && today <= end ? " (current period)" : ""} ▾
+          📅 {start && end ? rangeLabel(start, end) : placeholder}{isPeriod && current && start <= today && today <= end ? " (current period)" : ""} ▾
         </button>
         {hasSchedule && <button type="button" className="btn" aria-label="Next pay period" onClick={() => step(1)}>›</button>}
       </div>
@@ -100,7 +102,7 @@ export function PayPeriodPicker({ start, end, schedule, onChange }: { start: str
                   const iso = ymd(d);
                   const p = periodOf(iso)!;
                   const alt = ((periodIndex(p.start, schedule!) % 2) + 2) % 2;
-                  const selected = iso >= start && iso <= end;
+                  const selected = !!start && iso >= start && iso <= end;
                   const hovered = hover && iso >= hover.start && iso <= hover.end;
                   return (
                     <button key={iso} type="button"

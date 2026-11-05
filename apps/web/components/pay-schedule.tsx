@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox } from "./ui";
 import { useMenuData } from "@/lib/menus";
+import { PayPeriodPicker, rangeLabel } from "./pay-period-picker";
 
 interface Schedule {
   frequency: PayFrequency | null;
@@ -152,21 +153,32 @@ export function PaySchedule() {
   );
 }
 
-/** Ended pay periods and whether they're approved. `onUse` fills the export dates. */
+/** Ended pay periods and whether they're approved. `onUse` fills the export dates. A calendar narrows the list to a period. */
 export function PayPeriodList({ onUse }: { onUse?: (start: string, end: string) => void }) {
-  const list = useApi<{ periods: any[] }>("/pay-periods");
+  const list = useApi<{ periods: any[]; schedule: { frequency: PayFrequency | null; anchorDate: string | null; paydayOffsetDays: number } }>("/pay-periods");
+  const [range, setRange] = useState<{ start: string; end: string } | null>(null);
   if (!list.data) return <ErrorBox error={list.error} />;
+  const all = list.data.periods;
+  const shown = range ? all.filter((p) => p.periodStart <= range.end && p.periodEnd >= range.start) : all;
   return (
     <div className="card">
-      <h2>Pay periods</h2>
-      {list.data.periods.length ? (
-        <table><tbody>{list.data.periods.map((p) => (
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+        <h2 style={{ margin: 0 }}>Pay periods</h2>
+        <div className="row" style={{ gap: 6 }}>
+          <div className="picker-right"><PayPeriodPicker start={range?.start ?? ""} end={range?.end ?? ""} schedule={list.data.schedule} onChange={(start, end) => setRange({ start, end })} /></div>
+          {range && <button type="button" className="btn sm" onClick={() => setRange(null)}>Show all</button>}
+        </div>
+      </div>
+      {shown.length ? (
+        <table><tbody>{shown.map((p) => (
           <tr key={p.id}>
             <td><Link href={`/pay-periods/${p.id}`}>{fmtDate(p.periodStart)} – {fmtDate(p.periodEnd)}</Link><div className="muted">Payday {fmtDate(p.payday)}</div></td>
             <td><Badge value={p.status === "approved" ? "approved" : "pending"} />{p.approvedBy && <div className="muted" style={{ fontSize: 12 }}>by {p.approvedBy}</div>}</td>
             <td style={{ textAlign: "right" }}>{onUse && <button className="btn sm" onClick={() => onUse(p.periodStart, p.periodEnd)}>Use dates</button>}</td>
           </tr>
         ))}</tbody></table>
+      ) : range ? (
+        <Empty>No pay period on record for {rangeLabel(range.start, range.end)}. Periods are recorded once they end.</Empty>
       ) : <Empty>Pay periods show up here once the first one ends.</Empty>}
     </div>
   );

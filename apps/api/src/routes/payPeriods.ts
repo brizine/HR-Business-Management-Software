@@ -89,8 +89,11 @@ const routes: FastifyPluginAsync = async (app) => {
       .orderBy(desc(payPeriods.periodStart))
       .limit(26);
     const isApprover = (await approverIds(req.user.companyId)).includes(req.user.sub);
+    const [c] = await db.select({ frequency: companies.payFrequency, anchorDate: companies.payPeriodAnchor, paydayOffsetDays: companies.paydayOffsetDays }).from(companies).where(eq(companies.id, req.user.companyId));
     return {
       canApprove: isApprover || hasRole(roleIn(req, AREA), "owner"),
+      /** For the calendar that shades each pay period. */
+      schedule: { frequency: c.frequency as PayFrequency | null, anchorDate: c.anchorDate, paydayOffsetDays: c.paydayOffsetDays },
       periods: rows.map((r) => ({ ...r.period, approvedBy: r.approver?.firstName ? `${r.approver.firstName} ${r.approver.lastName}` : null })),
     };
   });
