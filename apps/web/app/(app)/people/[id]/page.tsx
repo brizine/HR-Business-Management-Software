@@ -16,6 +16,7 @@ import { PhotoEditor } from "@/components/avatar";
 import { RequestTimeOffBox } from "@/components/request-time-off";
 import { ClockCard } from "@/components/clock-card";
 import { ClockStatusBox } from "@/components/clock-status";
+import { EmployeeRecordsBox } from "@/components/employee-records";
 import { TasksBox } from "@/components/tasks-box";
 import { isInactive } from "@crewdesk/shared";
 
@@ -169,6 +170,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
           </div>
         )}
       </div>
+      {(can("manager", "reviews") || e.id === me?.user.id) && <EmployeeRecordsBox employeeId={e.id} firstName={e.firstName} isSelf={e.id === me?.user.id} />}
       {/* Availability is only tracked for part-time employees. */}
       {can("manager", "schedule") && e.employmentType === "part_time" && (
         <div className="card">

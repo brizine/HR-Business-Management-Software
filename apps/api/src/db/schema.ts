@@ -586,6 +586,47 @@ export const availability = pgTable(
 );
 
 /** Saved shift presets, e.g. "Morning crew 7:00–15:30, Driver, Truck 12". */
+/**
+ * Performance reviews and disciplinary actions (Reviews & discipline). Drafts are managers-only;
+ * shared ones the employee can see and acknowledge. See reviews.ts in @crewdesk/shared.
+ */
+export const employeeRecords = pgTable(
+  "employee_records",
+  {
+    id: id(),
+    companyId: companyId(),
+    employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id").references(() => employees.id, { onDelete: "set null" }),
+    /** review | discipline */
+    kind: text("kind").notNull(),
+    /** Review type (annual, probation…) or disciplinary step (verbal_warning, written_warning…). */
+    type: text("type").notNull(),
+    date: date("date").notNull(),
+    /** Reviews */
+    periodStart: date("period_start"),
+    periodEnd: date("period_end"),
+    rating: integer("rating"),
+    strengths: text("strengths"),
+    improvements: text("improvements"),
+    goals: text("goals"),
+    /** Discipline */
+    reason: text("reason"),
+    incidentDate: date("incident_date"),
+    expectations: text("expectations"),
+    followUpDate: date("follow_up_date"),
+    /** Review summary, or what happened. */
+    summary: text("summary").notNull(),
+    /** draft | shared | acknowledged */
+    status: text("status").notNull().default("draft"),
+    sharedAt: timestamp("shared_at", { withTimezone: true }),
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+    employeeComment: text("employee_comment"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("employee_records_employee_idx").on(t.employeeId)],
+);
+
 /** Paid holidays (Time off page). The rule gives each year's date; see holidays.ts in @crewdesk/shared. */
 export const holidays = pgTable("holidays", {
   id: id(),

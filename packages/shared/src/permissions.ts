@@ -15,6 +15,10 @@ export const PERMISSION_AREAS = [
   { key: "schedule", label: "Schedule", levels: { manager: "Create, publish and change shifts and templates; see availability" } },
   { key: "timeoff", label: "Time off", levels: { manager: "Approve or deny requests, request for others, see balances", admin: "Edit policies and adjust balances" } },
   { key: "documents", label: "Documents", levels: { manager: "See and upload everyone's documents" } },
+  {
+    key: "reviews", label: "Reviews & discipline",
+    levels: { manager: "Write reviews and disciplinary actions, and see everyone's", admin: "Edit or delete shared records" },
+  },
   { key: "hiring", label: "Hiring", levels: { manager: "Post jobs, move applicants, hire" } },
   { key: "onboarding", label: "Onboarding", levels: { manager: "See new hires' checklists and do manager steps", admin: "Edit checklist templates and do admin steps" } },
   { key: "payroll", label: "Payroll & tax forms", levels: { admin: "Preview and export payroll, see tax forms, reopen pay periods", owner: "Payroll settings and pay schedule" } },

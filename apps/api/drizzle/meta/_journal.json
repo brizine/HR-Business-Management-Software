@@ -239,6 +239,13 @@
       "when": 1793840553100,
       "tag": "0033_paid_holidays",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1793847465579,
+      "tag": "0034_employee_records",
+      "breakpoints": true
     }
   ]
 }
