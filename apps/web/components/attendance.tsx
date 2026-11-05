@@ -88,7 +88,7 @@ function DayEditor({ employeeId, date, day, onSaved, onClose }: { employeeId: st
 }
 
 /** A month of one person's attendance: each day coloured; owners/admins click a day to change it. */
-export function AttendanceCalendar({ employeeId, compact = false }: { employeeId: string; compact?: boolean }) {
+export function AttendanceCalendar({ employeeId, compact = false, highlight = "" }: { employeeId: string; compact?: boolean; highlight?: string }) {
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [picked, setPicked] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -117,9 +117,11 @@ export function AttendanceCalendar({ employeeId, compact = false }: { employeeId
           const iso = ymd(d);
           const day = byDate.get(iso);
           const other = d.getMonth() !== month.getMonth();
+          // "Show days" filter: dim everything else.
+          const dim = !!highlight && !(day && (highlight === "points" ? day.points > 0 : highlight === "changed" ? day.overridden : highlight === "late" ? day.status === "tardy" || day.status === "early_leave" : day.status === highlight));
           return (
             <button key={iso} type="button" disabled={other}
-              className={`att-day ${day ? STATUS_CLASS[day.status] : ""}${other ? " other" : ""}${iso === today ? " today" : ""}${picked === iso ? " picked" : ""}`}
+              className={`att-day ${day ? STATUS_CLASS[day.status] : ""}${other ? " other" : ""}${dim ? " dim" : ""}${iso === today ? " today" : ""}${picked === iso ? " picked" : ""}`}
               onClick={() => { setPicked(picked === iso ? null : iso); setEditing(false); }}
               aria-label={`${longDay(iso)}: ${day ? ATTENDANCE_LABELS[day.status] : "nothing scheduled"}`}>
               <span className="att-date">{d.getDate()}</span>

@@ -473,3 +473,4 @@ tr.openrow td { background: var(--bg); }
 .att-legend i.att-blue { background: #60a5fa; border-color: #2563eb; }
 .att-legend i.att-grey { background: #9ca3af; border-color: #6b7280; }
 .att-legend i.att-green-outline { background: transparent; border: 2px dashed #16a34a; }
+.att-day.dim { opacity: .25; }
