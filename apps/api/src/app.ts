@@ -11,6 +11,7 @@ import employeeRoutes from "./routes/employees";
 import documentRoutes, { documentViewRoutes } from "./routes/documents";
 import timeRoutes from "./routes/time";
 import ptoRoutes from "./routes/pto";
+import holidayRoutes from "./routes/holidays";
 import hiringRoutes from "./routes/hiring";
 import onboardingRoutes from "./routes/onboarding";
 import assetRoutes from "./routes/assets";
@@ -76,6 +77,7 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(documentViewRoutes, { prefix: "/documents/view" });
   await app.register(timeRoutes, { prefix: "/time" });
   await app.register(ptoRoutes, { prefix: "/pto" });
+  await app.register(holidayRoutes, { prefix: "/holidays" });
   await app.register(hiringRoutes);
   await app.register(onboardingRoutes, { prefix: "/onboarding" });
   await app.register(assetRoutes, { prefix: "/assets" });

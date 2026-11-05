@@ -232,6 +232,13 @@
       "when": 1793751488739,
       "tag": "0032_role_access",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1793840553100,
+      "tag": "0033_paid_holidays",
+      "breakpoints": true
     }
   ]
 }

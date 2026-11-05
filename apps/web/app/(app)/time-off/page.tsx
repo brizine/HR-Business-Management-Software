@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
 import { PtoPolicyForm } from "@/components/pto-policy-form";
+import { PaidHolidays } from "@/components/paid-holidays";
 import { describePto } from "@crewdesk/shared";
 
 const STATUSES = ["pending", "approved", "denied", "cancelled"];
@@ -136,6 +137,7 @@ export default function TimeOff() {
           ))}</tbody></table>
         ) : <Empty>{filtering ? "No requests match your filters." : "No requests yet."}</Empty>}
       </div>
+      <PaidHolidays />
       {can("admin", "timeoff") && (
         <div className="grid cols-2">
           <div className="card">

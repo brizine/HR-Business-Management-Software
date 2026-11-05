@@ -86,7 +86,7 @@ export default function Payroll() {
   const runs = useApi<any[]>("/payroll/runs");
   const pending = useApi<any[]>("/tax-forms/pending");
   const action = useAction();
-  const rows = (preview.data ?? []).filter((l) => l.totalHours > 0 || l.ptoHours > 0 || l.payType === "salary");
+  const rows = (preview.data ?? []).filter((l) => l.totalHours > 0 || l.ptoHours > 0 || l.holidayHours > 0 || l.payType === "salary");
   const unapproved = (preview.data ?? []).reduce((n, l) => n + l.unapprovedEntries, 0);
   const s = settings.data;
   const usesProvider = s?.payrollProvider === "check";
@@ -128,7 +128,7 @@ export default function Payroll() {
         <h2>Pay period {fmtDate(start)} – {fmtDate(end)}</h2>
         {rows.length ? (
           <table>
-            <thead><tr><th>Employee</th><th>Rate</th><th>Regular</th><th>Overtime</th><th>Time off</th><th>Est. gross</th></tr></thead>
+            <thead><tr><th>Employee</th><th>Rate</th><th>Regular</th><th>Overtime</th><th>Time off</th><th>Holiday</th><th>Est. gross</th></tr></thead>
             <tbody>{rows.map((l) => (
               <tr key={l.employeeId}>
                 <td>{l.firstName} {l.lastName}{l.payType === "salary" && <div className="muted">Salaried</div>}{l.unapprovedEntries > 0 && <div className="muted">{l.unapprovedEntries} unapproved</div>}</td>
@@ -136,12 +136,13 @@ export default function Payroll() {
                 <td>{l.regularHours.toFixed(2)}</td>
                 <td>{l.overtimeHours.toFixed(2)}</td>
                 <td>{l.ptoHours ? l.ptoHours.toFixed(2) : "—"}</td>
+                <td title={l.holidayWorkedHours ? `${l.holidayWorkedHours.toFixed(2)}h worked on a holiday` : undefined}>{l.holidayHours ? l.holidayHours.toFixed(2) : "—"}{l.holidayWorkedHours ? <div className="muted" style={{ fontSize: 12 }}>+{l.holidayWorkedHours.toFixed(2)}h worked</div> : null}</td>
                 <td>{l.estimatedGrossCents == null ? <span className="muted">Salary</span> : money(l.estimatedGrossCents)}</td>
               </tr>
             ))}</tbody>
             <tfoot><tr>
               <th>Total</th><th />
-              <th>{sum("regularHours")}</th><th>{sum("overtimeHours")}</th><th>{sum("ptoHours")}</th>
+              <th>{sum("regularHours")}</th><th>{sum("overtimeHours")}</th><th>{sum("ptoHours")}</th><th>{sum("holidayHours")}</th>
               <th>{money(rows.reduce((t, l) => t + (l.estimatedGrossCents ?? 0), 0))}</th>
             </tr></tfoot>
           </table>

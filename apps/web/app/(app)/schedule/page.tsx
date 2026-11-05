@@ -155,6 +155,8 @@ export default function Schedule() {
   const drops = useApi<any[]>(manager ? "/shifts/drop-requests" : null);
   const templates = useApi<any[]>(manager ? "/shifts/templates" : null);
   const unavailable = useApi<any[]>("/availability");
+  // Paid holidays this week, shown in the day headers.
+  const weekHolidays = useApi<{ upcoming: { holidayId: string; name: string; observed: string; date: string }[] }>(`/holidays?from=${ymd(from)}&to=${ymd(addDays(from, 6))}`);
   const [showAvailability, setShowAvailability] = useState(false);
   // Availability is only tracked for part-time employees.
   const partTime = me?.user.employmentType === "part_time";
@@ -348,6 +350,9 @@ export default function Schedule() {
               {days.map((d) => (
                 <th key={d.toISOString()} className={sameDay(d, new Date()) ? "today" : ""}>
                   {d.toLocaleDateString([], { weekday: "short" })} <span className="muted">{d.getMonth() + 1}/{d.getDate()}</span>
+                  {weekHolidays.data?.upcoming.filter((h) => h.observed === ymd(d)).map((h) => (
+                    <div key={h.holidayId} className="holiday-tag" title={h.date !== h.observed ? `Observed for ${h.name} (${h.date})` : "Paid holiday"}>🎉 {h.name}</div>
+                  ))}
                 </th>
               ))}
               <th>Hours</th>

@@ -363,3 +363,47 @@ describe("time-off carryover", () => {
     expect(describePto({ ...p, carryoverLimitHours: 0, carryoverReset: "anniversary" })).toBe("No automatic accrual · use it or lose it (resets each hire anniversary)");
   });
 });
+
+import { DEFAULT_HOLIDAY_RULES, HOLIDAY_PRESETS, describeHolidayRule, holidayDate, holidayHoursFor, holidaysBetween, observedDate } from "../src/holidays";
+
+describe("paid holidays", () => {
+  const preset = (k: string) => HOLIDAY_PRESETS.find((p) => p.key === k)!.rule;
+  it("works out each year's date from the rule", () => {
+    expect(holidayDate(preset("thanksgiving"), 2026)).toBe("2026-11-26");
+    expect(holidayDate(preset("black_friday"), 2026)).toBe("2026-11-27");
+    expect(holidayDate(preset("memorial"), 2026)).toBe("2026-05-25");
+    expect(holidayDate(preset("labor"), 2027)).toBe("2027-09-06");
+    expect(holidayDate(preset("mlk"), 2027)).toBe("2027-01-18");
+    expect(holidayDate({ kind: "once", date: "2026-12-26" }, 2026)).toBe("2026-12-26");
+    expect(holidayDate({ kind: "once", date: "2026-12-26" }, 2027)).toBeNull();
+    expect(holidayDate({ kind: "fixed", month: 2, day: 30 }, 2027)).toBe("2027-02-28");
+  });
+  it("moves weekend holidays to Friday or Monday when observed", () => {
+    expect(observedDate("2026-07-04", "nearest")).toBe("2026-07-03"); // Saturday → Friday
+    expect(observedDate("2027-12-25", "nearest")).toBe("2027-12-24"); // Saturday
+    expect(observedDate("2028-12-25", "nearest")).toBe("2028-12-25"); // Monday
+    expect(observedDate("2022-12-25", "nearest")).toBe("2022-12-26"); // Sunday → Monday
+    expect(observedDate("2026-07-04", "none")).toBe("2026-07-04");
+  });
+  it("finds holidays in a range, including one observed in the year before", () => {
+    const list = [{ name: "New Year", rule: preset("new_year"), observe: "nearest" as const }, { name: "July 4", rule: preset("independence"), observe: "nearest" as const }];
+    // Jan 1, 2028 is a Saturday: observed Friday Dec 31, 2027.
+    expect(holidaysBetween(list, "2027-12-27", "2028-01-02").map((o) => [o.holiday.name, o.date, o.observed])).toEqual([["New Year", "2028-01-01", "2027-12-31"]]);
+    expect(holidaysBetween(list, "2026-07-01", "2026-07-07").map((o) => o.observed)).toEqual(["2026-07-03"]);
+    expect(holidaysBetween([{ ...list[0], active: false }], "2027-12-27", "2028-01-02")).toEqual([]);
+  });
+  it("pays eligible people: employment type, waiting period, part-time share", () => {
+    const rules = { ...DEFAULT_HOLIDAY_RULES, eligibleTypes: ["full_time", "part_time"] as never, waitingDays: 30, partTimeShare: 0.5 };
+    expect(holidayHoursFor({ employmentType: "full_time", hireDate: "2026-01-01" }, rules, 8, "2026-07-03")).toBe(8);
+    expect(holidayHoursFor({ employmentType: "part_time", hireDate: "2026-01-01" }, rules, 8, "2026-07-03")).toBe(4);
+    expect(holidayHoursFor({ employmentType: "seasonal", hireDate: "2026-01-01" }, rules, 8, "2026-07-03")).toBe(0);
+    expect(holidayHoursFor({ employmentType: "full_time", hireDate: "2026-06-20" }, rules, 8, "2026-07-03")).toBe(0); // still waiting
+    expect(holidayHoursFor({ employmentType: "full_time", hireDate: null }, rules, 8, "2026-07-03")).toBe(8);
+  });
+  it("describes rules", () => {
+    expect(describeHolidayRule(preset("thanksgiving"))).toBe("4th Thursday of November");
+    expect(describeHolidayRule(preset("black_friday"))).toBe("Day after the 4th Thursday of November");
+    expect(describeHolidayRule(preset("memorial"))).toBe("Last Monday of May");
+    expect(describeHolidayRule(preset("independence"))).toBe("July 4, every year");
+  });
+});

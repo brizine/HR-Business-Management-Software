@@ -198,7 +198,7 @@ describe("manual payroll export", () => {
     const csv = await call("GET", `/payroll/export.csv?${q}`, "owner");
     expect(csv.body.split("\n")[0]).toContain("Time Off Hours");
     expect(csv.body).toContain("Tess,Taxpayer");
-    expect(csv.body).toContain(",16.00,16.00,640.00");
+    expect(csv.body).toContain(",16.00,16.00,0.00,0.00,640.00");
     expect((await call("GET", "/payroll/preview?periodStart=2030-03-08&periodEnd=2030-03-04", "owner")).status).toBe(400);
   });
 });

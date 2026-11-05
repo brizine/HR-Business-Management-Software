@@ -23,7 +23,7 @@ export class CheckPayrollProvider implements PayrollProvider {
     }
 
     const items = lines
-      .filter((l) => l.providerEmployeeId && (l.totalHours > 0 || l.ptoHours > 0 || l.payType === "salary"))
+      .filter((l) => l.providerEmployeeId && (l.totalHours > 0 || l.ptoHours > 0 || l.holidayHours > 0 || l.payType === "salary"))
       .map((l) => ({
         employee: l.providerEmployeeId,
         earnings:
@@ -34,6 +34,7 @@ export class CheckPayrollProvider implements PayrollProvider {
                 ...(l.overtimeHours > 0 ? [{ type: "overtime", hours: l.overtimeHours }] : []),
                 // Earning type name per Check's docs; confirm before going live.
                 ...(l.ptoHours > 0 ? [{ type: "pto", hours: l.ptoHours }] : []),
+                ...(l.holidayHours > 0 ? [{ type: "holiday", hours: l.holidayHours }] : []),
               ],
       }));
 

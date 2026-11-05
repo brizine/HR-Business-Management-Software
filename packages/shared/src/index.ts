@@ -13,3 +13,4 @@ export * from "./payPeriods";
 export * from "./ptoAccrual";
 export * from "./permissions";
 export * from "./menus";
+export * from "./holidays";

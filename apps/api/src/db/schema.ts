@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import type { NotificationLink, PtoTier, RoleAccess } from "@crewdesk/shared";
+import type { HolidayRule, HolidayRules, NotificationLink, PtoTier, RoleAccess } from "@crewdesk/shared";
 import {
   boolean,
   primaryKey,
@@ -43,6 +43,8 @@ export const companies = pgTable("companies", {
   /** Employer details printed on tax forms. */
   legalName: text("legal_name"),
   ein: text("ein"),
+  /** Who gets paid holidays and what working one pays (see HolidayRules in @crewdesk/shared). */
+  holidayRules: jsonb("holiday_rules").$type<HolidayRules>(),
   /** Access by area for each role (Settings → Layout Editor): { manager: { payroll: "admin" }, … }. */
   roleAccess: jsonb("role_access").$type<RoleAccess>().notNull().default({}),
   /** The business address on one line (printed on tax forms), kept in step with the boxes below. */
@@ -584,6 +586,19 @@ export const availability = pgTable(
 );
 
 /** Saved shift presets, e.g. "Morning crew 7:00–15:30, Driver, Truck 12". */
+/** Paid holidays (Time off page). The rule gives each year's date; see holidays.ts in @crewdesk/shared. */
+export const holidays = pgTable("holidays", {
+  id: id(),
+  companyId: companyId(),
+  name: text("name").notNull(),
+  rule: jsonb("rule").$type<HolidayRule>().notNull(),
+  hours: doublePrecision("hours").notNull().default(8),
+  /** nearest (weekend → Friday/Monday) | none */
+  observe: text("observe").notNull().default("nearest"),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const shiftTemplates = pgTable("shift_templates", {
   id: id(),
   companyId: companyId(),

@@ -379,3 +379,6 @@ tr.openrow td { background: var(--bg); }
 .weekpicker-grid button.today { font-weight: 700; text-decoration: underline; }
 .weekpicker-grid tr.selected button { color: #fff; }
 @media (max-width: 700px) { .weekpicker-pop { right: auto; left: 0; } }
+/* Paid holidays */
+.holiday-tag { font-size: 11px; font-weight: 600; color: var(--primary); white-space: normal; line-height: 1.2; margin-top: 2px; }
+.holiday-form, .holiday-presets { border-top: 1px solid var(--border); padding-top: 12px; }

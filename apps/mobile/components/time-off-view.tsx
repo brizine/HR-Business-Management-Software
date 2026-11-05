@@ -11,7 +11,10 @@ export function TimeOffView() {
   const balances = useApi<any[]>("/pto/balances");
   const mine = useApi<any[]>("/pto/requests?mine=true");
   const pending = useApi<any[]>(can("manager", "timeoff") ? "/pto/requests?status=pending" : null);
-  const reload = () => { balances.reload(); mine.reload(); pending.reload(); };
+  // Paid holidays in the next year (set up on the website's Time off page).
+  const holidays = useApi<{ upcoming: { holidayId: string; name: string; hours: number; date: string; observed: string }[] }>("/holidays");
+  const reload = () => { balances.reload(); mine.reload(); pending.reload(); holidays.reload(); };
+  const day = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 
   const decide = (id: string, status: "approved" | "denied") =>
     api(`/pto/requests/${id}/decide`, { body: { status } }).then(reload, (e) => Alert.alert("Error", e.message));
@@ -51,6 +54,20 @@ export function TimeOffView() {
             </Row>
           </View>
         )) : <Txt muted>No requests yet.</Txt>}
+      </Card>
+      <Card title="Paid holidays">
+        {holidays.data?.upcoming.length ? holidays.data.upcoming.map((h) => (
+          <View key={`${h.holidayId}-${h.observed}`} style={{ gap: 2 }}>
+            <Divider />
+            <Row>
+              <View style={{ flex: 1 }}>
+                <Txt style={{ fontWeight: "600" }}>{h.name}</Txt>
+                <Txt muted>{day(h.observed)}{h.date !== h.observed ? " (observed)" : ""}</Txt>
+              </View>
+              <Txt muted>{h.hours}h</Txt>
+            </Row>
+          </View>
+        )) : <Txt muted>No paid holidays in the next year.</Txt>}
       </Card>
     </Screen>
   );
