@@ -10,7 +10,7 @@ type ShiftResult = { start: number; end: number; clockIn: number | null; clockOu
 export type AttendanceDay = { date: string; status: AttendanceStatus; auto: AttendanceStatus | null; overridden: boolean; note: string | null; points: number; shifts: ShiftResult[] };
 type Points = { total: number; highest: { points: number; label: string } | null; next: { points: number; label: string } | null; nextExpiry: string | null };
 export type PersonAttendance = {
-  employee: { id: string; firstName: string; lastName: string; title: string | null; active: boolean };
+  employee: { id: string; firstName: string; lastName: string; title: string | null; department: string | null; active: boolean };
   days: AttendanceDay[];
   summary: { scheduledDays: number; onTime: number; tardy: number; earlyLeave: number; noShow: number; sick: number; excused: number; unscheduled: number; onTimeRate: number | null; minutesLate: number };
   points: Points;
@@ -170,15 +170,45 @@ export function AttendanceReport({ onOpen }: { onOpen: (employeeId: string) => v
   const [to, setTo] = useState(ymd(today));
   const [q, setQ] = useState("");
   const [only, setOnly] = useState("");
+  const [title, setTitle] = useState("");
+  const [dept, setDept] = useState("");
+  const [minPoints, setMinPoints] = useState("");
+  const [sort, setSort] = useState("points");
+  const defaults = { from: ymd(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29)), to: ymd(today) };
+  const filtering = !!(q || only || title || dept || minPoints || sort !== "points" || from !== defaults.from || to !== defaults.to);
+  const clear = () => { setQ(""); setOnly(""); setTitle(""); setDept(""); setMinPoints(""); setSort("points"); setFrom(defaults.from); setTo(defaults.to); };
   const data = useApi<Response>(`/attendance?from=${from}&to=${to}`);
-  const rows = (data.data?.people ?? [])
-    .filter((p) => !q.trim() || `${p.employee.firstName} ${p.employee.lastName} ${p.employee.title ?? ""}`.toLowerCase().includes(q.trim().toLowerCase()))
-    .filter((p) => !only || (only === "issues" ? p.summary.tardy + p.summary.earlyLeave + p.summary.noShow > 0 : only === "points" ? p.points.total > 0 : only === "level" ? !!p.points.highest : true))
-    .sort((a, b) => b.points.total - a.points.total || a.employee.lastName.localeCompare(b.employee.lastName));
+  const all = data.data?.people ?? [];
+  const distinct = (k: "title" | "department") => [...new Set(all.map((p) => p.employee[k]).filter((v): v is string => !!v))].sort();
+  const name = (p: PersonAttendance) => `${p.employee.lastName} ${p.employee.firstName}`;
+  const sorters: Record<string, (a: PersonAttendance, b: PersonAttendance) => number> = {
+    points: (a, b) => b.points.total - a.points.total || name(a).localeCompare(name(b)),
+    name: (a, b) => name(a).localeCompare(name(b)),
+    rate: (a, b) => (a.summary.onTimeRate ?? 101) - (b.summary.onTimeRate ?? 101) || name(a).localeCompare(name(b)),
+    noshow: (a, b) => b.summary.noShow - a.summary.noShow || name(a).localeCompare(name(b)),
+    late: (a, b) => b.summary.tardy - a.summary.tardy || b.summary.minutesLate - a.summary.minutesLate || name(a).localeCompare(name(b)),
+  };
+  const rows = all
+    .filter((p) => !q.trim() || `${p.employee.firstName} ${p.employee.lastName} ${p.employee.title ?? ""} ${p.employee.department ?? ""}`.toLowerCase().includes(q.trim().toLowerCase()))
+    .filter((p) => (!title || p.employee.title === title) && (!dept || p.employee.department === dept) && (!minPoints || p.points.total >= Number(minPoints)))
+    .filter((p) => !only || (only === "issues" ? p.summary.tardy + p.summary.earlyLeave + p.summary.noShow > 0 : only === "noshow" ? p.summary.noShow > 0 : only === "late" ? p.summary.tardy + p.summary.earlyLeave > 0 : only === "sick" ? p.summary.sick > 0 : only === "level" ? !!p.points.highest : only === "perfect" ? p.summary.scheduledDays > 0 && p.summary.onTime === p.summary.scheduledDays : true))
+    .sort(sorters[sort]);
   return (
     <>
       <form className="card filters" role="search" aria-label="Attendance report" onSubmit={(e) => e.preventDefault()}>
-        <label>Search<input type="search" placeholder="Name or job title…" value={q} onChange={(e) => setQ(e.target.value)} /></label>
+        <label>Search<input type="search" placeholder="Name, job title, department…" value={q} onChange={(e) => setQ(e.target.value)} /></label>
+        <label>Job title
+          <select value={title} onChange={(e) => setTitle(e.target.value)}>
+            <option value="">All</option>
+            {distinct("title").map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </label>
+        <label>Department
+          <select value={dept} onChange={(e) => setDept(e.target.value)}>
+            <option value="">All</option>
+            {distinct("department").map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </label>
         <fieldset className="pay-range date-range">
           <legend>Dates</legend>
           <input type="date" aria-label="From" value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} />
@@ -189,13 +219,35 @@ export function AttendanceReport({ onOpen }: { onOpen: (employeeId: string) => v
           <select value={only} onChange={(e) => setOnly(e.target.value)}>
             <option value="">Everyone</option>
             <option value="issues">Late, left early or no-show</option>
-            <option value="points">Anyone with points</option>
+            <option value="late">Late or left early</option>
+            <option value="noshow">Had a no-show</option>
+            <option value="sick">Called in sick</option>
+            <option value="perfect">Perfect attendance</option>
             <option value="level">Reached a point level</option>
           </select>
         </label>
+        {data.data?.rules.pointsEnabled && (
+          <label>Points
+            <select value={minPoints} onChange={(e) => setMinPoints(e.target.value)}>
+              <option value="">Any</option>
+              {[0.5, 1, 2, 3, 5, 7].map((n) => <option key={n} value={n}>{n} or more</option>)}
+            </select>
+          </label>
+        )}
+        <label>Sort by
+          <select value={sort} onChange={(e) => setSort(e.target.value)}>
+            <option value="points">Most points</option>
+            <option value="noshow">Most no-shows</option>
+            <option value="late">Most late arrivals</option>
+            <option value="rate">Lowest on-time rate</option>
+            <option value="name">Name</option>
+          </select>
+        </label>
+        {filtering && <button type="button" className="btn" onClick={clear}>Clear filters</button>}
       </form>
       <div className="card tablewrap">
         <ErrorBox error={data.error} />
+        {data.data && <p className="muted" role="status" style={{ margin: "0 0 8px", fontSize: 13 }}>{rows.length === all.length ? `${all.length} people` : `Showing ${rows.length} of ${all.length} people`}</p>}
         {rows.length ? (
           <table className="att-report">
             <thead><tr><th>Employee</th><th>Scheduled</th><th className="att-c-green">On time</th><th className="att-c-yellow">Late</th><th className="att-c-yellow">Left early</th><th className="att-c-red">No-show</th><th className="att-c-blue">Sick</th><th>Excused</th><th>On-time rate</th>{data.data?.rules.pointsEnabled && <th>Points</th>}</tr></thead>

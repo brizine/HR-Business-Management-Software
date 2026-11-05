@@ -109,7 +109,7 @@ export async function computeAttendance(companyId: string, from: string, to: str
     const count = (s: AttendanceStatus) => inRange.filter((d) => d.status === s).length;
     const counted = count("on_time") + count("tardy") + count("early_leave") + count("no_show");
     return {
-      employee: { id: e.id, firstName: e.firstName, lastName: e.lastName, title: e.title, active: !isInactive(e.status) },
+      employee: { id: e.id, firstName: e.firstName, lastName: e.lastName, title: e.title, department: e.department, active: !isInactive(e.status) },
       days: inRange,
       summary: {
         scheduledDays: inRange.filter((d) => d.shifts.length).length,
