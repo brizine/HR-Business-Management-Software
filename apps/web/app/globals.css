@@ -431,3 +431,45 @@ tr.openrow td { background: var(--bg); }
 .record-table tr.record-open > td { background: var(--surface); padding: 12px 8px 16px; }
 .record-snippet { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rating-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Attendance calendar: green worked, yellow late/left early, red no-show, blue sick, grey excused. */
+.att-calendar { display: flex; flex-direction: column; gap: 10px; }
+.att-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.att-dow { font-size: 11px; font-weight: 600; color: var(--muted); text-align: center; }
+.att-day { all: unset; box-sizing: border-box; position: relative; min-height: 64px; border: 1px solid var(--border); border-radius: 8px; padding: 4px 6px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; background: var(--surface); }
+.att-calendar.compact .att-day { min-height: 38px; }
+.att-day:disabled { cursor: default; opacity: .35; }
+.att-day:focus-visible { outline: 2px solid var(--primary); }
+.att-day.today { box-shadow: inset 0 0 0 2px var(--primary); }
+.att-day.picked { box-shadow: inset 0 0 0 2px var(--text); }
+.att-date { font-size: 13px; font-weight: 600; }
+.att-label { font-size: 11px; line-height: 1.2; }
+.att-pts { position: absolute; right: 5px; top: 3px; font-size: 10px; font-weight: 700; }
+.att-edited { position: absolute; right: 5px; bottom: 3px; font-size: 11px; opacity: .7; }
+.att-green { background: #dcfce7; border-color: #86efac; color: #14532d; }
+.att-green-outline { border: 2px dashed #22c55e; }
+.att-yellow { background: #fef9c3; border-color: #fde047; color: #713f12; }
+.att-red { background: #fee2e2; border-color: #fca5a5; color: #7f1d1d; }
+.att-blue { background: #dbeafe; border-color: #93c5fd; color: #1e3a8a; }
+.att-grey { background: #f3f4f6; border-color: #d1d5db; color: #374151; }
+.att-pending { border-style: dashed; }
+.att-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+.att-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -2px; border: 1px solid; }
+.att-chip { display: inline-block; border: 1px solid; border-radius: 999px; padding: 1px 10px; font-size: 13px; font-weight: 600; }
+.att-points { border-top: 1px solid var(--border); padding-top: 10px; }
+.att-points-num { font-size: 22px; font-weight: 800; }
+.att-level { font-size: 11px; font-weight: 700; color: var(--bad); }
+.att-c-green { color: #15803d; } .att-c-yellow { color: #a16207; } .att-c-red { color: #b91c1c; } .att-c-blue { color: #1d4ed8; }
+.att-editor { max-width: 420px; }
+@media (prefers-color-scheme: dark) {
+  .att-green { background: #14532d; border-color: #166534; color: #dcfce7; }
+  .att-yellow { background: #713f12; border-color: #854d0e; color: #fef9c3; }
+  .att-red { background: #7f1d1d; border-color: #991b1b; color: #fee2e2; }
+  .att-blue { background: #1e3a8a; border-color: #1d4ed8; color: #dbeafe; }
+  .att-grey { background: #374151; border-color: #4b5563; color: #f3f4f6; }
+}
+.att-legend i.att-green { background: #4ade80; border-color: #16a34a; }
+.att-legend i.att-yellow { background: #facc15; border-color: #ca8a04; }
+.att-legend i.att-red { background: #f87171; border-color: #dc2626; }
+.att-legend i.att-blue { background: #60a5fa; border-color: #2563eb; }
+.att-legend i.att-grey { background: #9ca3af; border-color: #6b7280; }
+.att-legend i.att-green-outline { background: transparent; border: 2px dashed #16a34a; }

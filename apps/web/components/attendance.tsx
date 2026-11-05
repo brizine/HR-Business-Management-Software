@@ -1,0 +1,284 @@
+"use client";
+import { useEffect, useState } from "react";
+import { ATTENDANCE_LABELS, OVERRIDE_STATUSES, type AttendanceRules, type AttendanceStatus } from "@crewdesk/shared";
+import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { useAction, useApi } from "@/lib/hooks";
+import { Empty, ErrorBox } from "./ui";
+
+type ShiftResult = { start: number; end: number; clockIn: number | null; clockOut: number | null; minutesLate: number; minutesEarly: number; status: string };
+export type AttendanceDay = { date: string; status: AttendanceStatus; auto: AttendanceStatus | null; overridden: boolean; note: string | null; points: number; shifts: ShiftResult[] };
+type Points = { total: number; highest: { points: number; label: string } | null; next: { points: number; label: string } | null; nextExpiry: string | null };
+export type PersonAttendance = {
+  employee: { id: string; firstName: string; lastName: string; title: string | null; active: boolean };
+  days: AttendanceDay[];
+  summary: { scheduledDays: number; onTime: number; tardy: number; earlyLeave: number; noShow: number; sick: number; excused: number; unscheduled: number; onTimeRate: number | null; minutesLate: number };
+  points: Points;
+};
+type Response = { rules: AttendanceRules; today: string; people: PersonAttendance[]; canEdit: boolean };
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const fromIso = (s: string) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const time = (ms: number | null) => (ms == null ? "—" : new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+const longDay = (s: string) => fromIso(s).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+
+/** The colours: green worked, yellow late/left early, red no-show, blue sick, grey excused. */
+export const STATUS_CLASS: Record<AttendanceStatus, string> = {
+  on_time: "att-green", unscheduled: "att-green-outline", tardy: "att-yellow", early_leave: "att-yellow",
+  no_show: "att-red", sick: "att-blue", excused: "att-grey", pending: "att-pending",
+};
+
+export function AttendanceLegend() {
+  return (
+    <div className="att-legend">
+      {(["on_time", "tardy", "early_leave", "no_show", "sick", "excused", "unscheduled"] as AttendanceStatus[]).map((s) => (
+        <span key={s}><i className={STATUS_CLASS[s]} />{ATTENDANCE_LABELS[s]}</span>
+      ))}
+    </div>
+  );
+}
+
+export function PointsSummary({ points, rules }: { points: Points; rules: AttendanceRules }) {
+  if (!rules.pointsEnabled) return null;
+  return (
+    <div className="att-points">
+      <div><span className="att-points-num">{points.total}</span> attendance point{points.total === 1 ? "" : "s"}</div>
+      <div className="muted" style={{ fontSize: 13 }}>
+        {points.highest ? <>Reached <strong>{points.highest.label}</strong> ({points.highest.points}). </> : null}
+        {points.next ? <>Next level: {points.next.label} at {points.next.points}. </> : null}
+        {points.nextExpiry ? <>Oldest points drop off {fromIso(points.nextExpiry).toLocaleDateString([], { month: "short", day: "numeric" })}. </> : null}
+        Points last {rules.pointsExpireDays} days.
+      </div>
+    </div>
+  );
+}
+
+/** Owner/admin: change one day (or put it back to what the punches show). */
+function DayEditor({ employeeId, date, day, onSaved, onClose }: { employeeId: string; date: string; day: AttendanceDay | undefined; onSaved: () => void; onClose: () => void }) {
+  const [status, setStatus] = useState<string>(day?.overridden ? day.status : "");
+  const [note, setNote] = useState(day?.note ?? "");
+  const [points, setPoints] = useState("");
+  const { busy, error, run } = useAction();
+  return (
+    <form className="stack att-editor" onSubmit={(e) => {
+      e.preventDefault();
+      run(async () => {
+        await api("/attendance/override", { method: "PUT", body: { employeeId, date, status: status || null, note: note || undefined, points: points === "" ? null : Number(points) } });
+        onSaved();
+      });
+    }}>
+      <strong>Change {longDay(date)}</strong>
+      <label>Mark as
+        <select value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="">Automatic{day?.auto ? ` (${ATTENDANCE_LABELS[day.auto]})` : " (nothing)"}</option>
+          {OVERRIDE_STATUSES.map((s) => <option key={s} value={s}>{ATTENDANCE_LABELS[s]}</option>)}
+        </select>
+      </label>
+      {status && (
+        <>
+          <label>Note<input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="e.g. Called at 6:45am" /></label>
+          <label>Points for this day<input type="number" min={0} max={10} step={0.5} value={points} onChange={(e) => setPoints(e.target.value)} placeholder="Usual amount" /></label>
+        </>
+      )}
+      <ErrorBox error={error} />
+      <div className="row"><button className="btn primary sm" disabled={busy}>Save</button><button type="button" className="btn sm" onClick={onClose}>Cancel</button></div>
+    </form>
+  );
+}
+
+/** A month of one person's attendance: each day coloured; owners/admins click a day to change it. */
+export function AttendanceCalendar({ employeeId, compact = false }: { employeeId: string; compact?: boolean }) {
+  const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+  const [picked, setPicked] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const first = ymd(month);
+  const last = ymd(new Date(month.getFullYear(), month.getMonth() + 1, 0));
+  const data = useApi<Response>(`/attendance?from=${first}&to=${last}&employeeId=${employeeId}`);
+  useEffect(() => { setPicked(null); setEditing(false); }, [employeeId, first]);
+  const person = data.data?.people[0];
+  const byDate = new Map((person?.days ?? []).map((d) => [d.date, d]));
+  const start = new Date(month.getFullYear(), month.getMonth(), 1 - month.getDay());
+  const cells = Array.from({ length: 42 }, (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)).filter((d, i) => i < 35 || d.getMonth() === month.getMonth());
+  const today = data.data?.today ?? ymd(new Date());
+  const pickedDay = picked ? byDate.get(picked) : undefined;
+
+  return (
+    <div className={`att-calendar${compact ? " compact" : ""}`}>
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <button type="button" className="btn sm" aria-label="Previous month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>‹</button>
+        <strong>{month.toLocaleDateString([], { month: "long", year: "numeric" })}</strong>
+        <button type="button" className="btn sm" aria-label="Next month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>›</button>
+      </div>
+      <ErrorBox error={data.error} />
+      <div className="att-grid">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => <div key={d} className="att-dow">{d}</div>)}
+        {cells.map((d) => {
+          const iso = ymd(d);
+          const day = byDate.get(iso);
+          const other = d.getMonth() !== month.getMonth();
+          return (
+            <button key={iso} type="button" disabled={other}
+              className={`att-day ${day ? STATUS_CLASS[day.status] : ""}${other ? " other" : ""}${iso === today ? " today" : ""}${picked === iso ? " picked" : ""}`}
+              onClick={() => { setPicked(picked === iso ? null : iso); setEditing(false); }}
+              aria-label={`${longDay(iso)}: ${day ? ATTENDANCE_LABELS[day.status] : "nothing scheduled"}`}>
+              <span className="att-date">{d.getDate()}</span>
+              {!compact && day && <span className="att-label">{ATTENDANCE_LABELS[day.status]}</span>}
+              {day && day.points > 0 && <span className="att-pts">{day.points}</span>}
+              {day?.overridden && <span className="att-edited" title="Changed by an owner/admin">✎</span>}
+            </button>
+          );
+        })}
+      </div>
+      <AttendanceLegend />
+      {picked && (
+        <div className="card stack att-day-detail" style={{ margin: 0 }}>
+          {editing ? (
+            <DayEditor employeeId={employeeId} date={picked} day={pickedDay} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); data.reload(); }} />
+          ) : (
+            <>
+              <div className="row" style={{ justifyContent: "space-between" }}>
+                <strong>{longDay(picked)}</strong>
+                {data.data?.canEdit && <button className="btn sm" onClick={() => setEditing(true)}>Change this day</button>}
+              </div>
+              {pickedDay ? (
+                <>
+                  <div><span className={`att-chip ${STATUS_CLASS[pickedDay.status]}`}>{ATTENDANCE_LABELS[pickedDay.status]}</span>{pickedDay.points > 0 && <span className="muted"> · {pickedDay.points} point{pickedDay.points === 1 ? "" : "s"}</span>}</div>
+                  {pickedDay.overridden && <div className="muted" style={{ fontSize: 13 }}>Set by an owner/admin{pickedDay.auto ? ` (the punches show: ${ATTENDANCE_LABELS[pickedDay.auto]})` : ""}{pickedDay.note ? `. Note: ${pickedDay.note}` : ""}</div>}
+                  {pickedDay.shifts.map((s, i) => (
+                    <div key={i} className="muted" style={{ fontSize: 13 }}>
+                      Scheduled {time(s.start)}–{time(s.end)} · clocked in {time(s.clockIn)}{s.minutesLate ? ` (${s.minutesLate} min late)` : ""} · out {time(s.clockOut)}{s.minutesEarly ? ` (${s.minutesEarly} min early)` : ""}
+                    </div>
+                  ))}
+                </>
+              ) : <div className="muted">Nothing scheduled or recorded.</div>}
+            </>
+          )}
+        </div>
+      )}
+      {person && data.data && <PointsSummary points={person.points} rules={data.data.rules} />}
+    </div>
+  );
+}
+
+/** Everyone's attendance for a date range, with totals and points. */
+export function AttendanceReport({ onOpen }: { onOpen: (employeeId: string) => void }) {
+  const today = new Date();
+  const [from, setFrom] = useState(ymd(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29)));
+  const [to, setTo] = useState(ymd(today));
+  const [q, setQ] = useState("");
+  const [only, setOnly] = useState("");
+  const data = useApi<Response>(`/attendance?from=${from}&to=${to}`);
+  const rows = (data.data?.people ?? [])
+    .filter((p) => !q.trim() || `${p.employee.firstName} ${p.employee.lastName} ${p.employee.title ?? ""}`.toLowerCase().includes(q.trim().toLowerCase()))
+    .filter((p) => !only || (only === "issues" ? p.summary.tardy + p.summary.earlyLeave + p.summary.noShow > 0 : only === "points" ? p.points.total > 0 : only === "level" ? !!p.points.highest : true))
+    .sort((a, b) => b.points.total - a.points.total || a.employee.lastName.localeCompare(b.employee.lastName));
+  return (
+    <>
+      <form className="card filters" role="search" aria-label="Attendance report" onSubmit={(e) => e.preventDefault()}>
+        <label>Search<input type="search" placeholder="Name or job title…" value={q} onChange={(e) => setQ(e.target.value)} /></label>
+        <fieldset className="pay-range date-range">
+          <legend>Dates</legend>
+          <input type="date" aria-label="From" value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} />
+          <span className="muted">to</span>
+          <input type="date" aria-label="To" value={to} min={from} onChange={(e) => e.target.value && setTo(e.target.value)} />
+        </fieldset>
+        <label>Show
+          <select value={only} onChange={(e) => setOnly(e.target.value)}>
+            <option value="">Everyone</option>
+            <option value="issues">Late, left early or no-show</option>
+            <option value="points">Anyone with points</option>
+            <option value="level">Reached a point level</option>
+          </select>
+        </label>
+      </form>
+      <div className="card tablewrap">
+        <ErrorBox error={data.error} />
+        {rows.length ? (
+          <table className="att-report">
+            <thead><tr><th>Employee</th><th>Scheduled</th><th className="att-c-green">On time</th><th className="att-c-yellow">Late</th><th className="att-c-yellow">Left early</th><th className="att-c-red">No-show</th><th className="att-c-blue">Sick</th><th>Excused</th><th>On-time rate</th>{data.data?.rules.pointsEnabled && <th>Points</th>}</tr></thead>
+            <tbody>{rows.map((p) => (
+              <tr key={p.employee.id} onClick={() => onOpen(p.employee.id)} style={{ cursor: "pointer" }}>
+                <td><strong>{p.employee.firstName} {p.employee.lastName}</strong>{p.employee.title && <div className="muted" style={{ fontSize: 12 }}>{p.employee.title}</div>}</td>
+                <td>{p.summary.scheduledDays}</td>
+                <td>{p.summary.onTime}</td>
+                <td>{p.summary.tardy}{p.summary.minutesLate ? <div className="muted" style={{ fontSize: 12 }}>{p.summary.minutesLate} min</div> : null}</td>
+                <td>{p.summary.earlyLeave}</td>
+                <td>{p.summary.noShow}</td>
+                <td>{p.summary.sick}</td>
+                <td>{p.summary.excused}</td>
+                <td>{p.summary.onTimeRate == null ? "—" : `${p.summary.onTimeRate}%`}</td>
+                {data.data?.rules.pointsEnabled && <td><strong>{p.points.total}</strong>{p.points.highest && <div className={`att-level`}>{p.points.highest.label}</div>}</td>}
+              </tr>
+            ))}</tbody>
+          </table>
+        ) : data.data ? <Empty>No one matches.</Empty> : null}
+        <p className="muted" style={{ fontSize: 13 }}>Counts are for the dates above; points are everyone&apos;s current total (the last {data.data?.rules.pointsExpireDays ?? 90} days). Click someone to see their calendar.</p>
+      </div>
+    </>
+  );
+}
+
+/** Owner/admin settings: grace periods, alerts and points. */
+export function AttendanceRulesForm() {
+  const { can } = useAuth();
+  const admin = can("admin", "time");
+  const data = useApi<AttendanceRules>("/attendance/rules");
+  const [r, setR] = useState<AttendanceRules | null>(null);
+  const [saved, setSaved] = useState(false);
+  const { busy, error, run } = useAction();
+  useEffect(() => { if (data.data) setR(data.data); }, [data.data]);
+  if (!r) return <ErrorBox error={data.error} />;
+  const set = (patch: Partial<AttendanceRules>) => { setR({ ...r, ...patch }); setSaved(false); };
+  const num = (k: keyof AttendanceRules, label: string, hint: string, props: { min?: number; max?: number; step?: number } = {}) => (
+    <label>{label}
+      <input type="number" value={r[k] as number} onChange={(e) => set({ [k]: Number(e.target.value) } as Partial<AttendanceRules>)} min={props.min ?? 0} max={props.max} step={props.step ?? 1} />
+      <span className="muted" style={{ fontSize: 12 }}>{hint}</span>
+    </label>
+  );
+  return (
+    <form className="card stack" onSubmit={(e) => { e.preventDefault(); run(async () => { data.setData(await api<AttendanceRules>("/attendance/rules", { method: "PUT", body: r })); setSaved(true); }); }}>
+      <fieldset disabled={!admin} className="stack" style={{ border: 0, padding: 0, margin: 0 }}>
+        <h2 style={{ margin: 0 }}>Grace periods</h2>
+        <div className="formgrid">
+          {num("graceMinutes", "Late after (minutes)", "Clocking in this many minutes after a shift starts still counts as on time.", { max: 120 })}
+          {num("earlyLeaveGraceMinutes", "Left early before (minutes)", "Clocking out this many minutes before a shift ends still counts as on time.", { max: 240 })}
+          {num("noShowMinutes", "No-show after (minutes)", "Not clocked in this long after a shift starts: alert, and it counts as a no-show.", { min: 5, max: 720 })}
+        </div>
+        <label className="check"><input type="checkbox" checked={r.alertsEnabled} onChange={(e) => set({ alertsEnabled: e.target.checked })} /> Alert managers (and the employee) when someone hasn&apos;t clocked in by then</label>
+
+        <h2 style={{ margin: "8px 0 0" }}>Attendance points</h2>
+        <label className="check"><input type="checkbox" checked={r.pointsEnabled} onChange={(e) => set({ pointsEnabled: e.target.checked })} /> Use attendance points</label>
+        {r.pointsEnabled && (
+          <>
+            <div className="formgrid">
+              {num("tardyPoints", "Late", "Points per late arrival.", { max: 10, step: 0.25 })}
+              {num("earlyLeavePoints", "Left early", "Points per early departure.", { max: 10, step: 0.25 })}
+              {num("noShowPoints", "No-show", "Points per no-show.", { max: 10, step: 0.25 })}
+              {num("sickPoints", "Called in sick", "Points per sick day (0 for none).", { max: 10, step: 0.25 })}
+              {num("pointsExpireDays", "Points last (days)", "Each point drops off this many days after it's earned.", { min: 7, max: 730 })}
+            </div>
+            <div className="stack">
+              <strong>Point levels</strong>
+              <span className="muted" style={{ fontSize: 13 }}>Managers are alerted when someone reaches a level.</span>
+              {r.thresholds.map((t, i) => (
+                <div key={i} className="row" style={{ flexWrap: "nowrap" }}>
+                  <input type="number" min={0.5} max={100} step={0.5} value={t.points} aria-label="Points" style={{ width: 90 }}
+                    onChange={(e) => set({ thresholds: r.thresholds.map((x, j) => (j === i ? { ...x, points: Number(e.target.value) } : x)) })} />
+                  <span className="muted">points:</span>
+                  <input value={t.label} maxLength={80} aria-label="What it means" style={{ flex: 1 }} placeholder="e.g. Written warning"
+                    onChange={(e) => set({ thresholds: r.thresholds.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
+                  <button type="button" className="btn sm" aria-label="Remove level" onClick={() => set({ thresholds: r.thresholds.filter((_, j) => j !== i) })}>×</button>
+                </div>
+              ))}
+              {r.thresholds.length < 10 && <div><button type="button" className="btn sm" onClick={() => set({ thresholds: [...r.thresholds, { points: (r.thresholds.at(-1)?.points ?? 0) + 2, label: "" }] })}>Add a level</button></div>}
+            </div>
+          </>
+        )}
+      </fieldset>
+      <ErrorBox error={error} />
+      {admin ? <div className="row"><button className="btn primary" disabled={busy}>Save attendance settings</button>{saved && <span className="muted" role="status">Saved.</span>}</div>
+        : <p className="muted" style={{ margin: 0 }}>Only owners and admins can change these.</p>}
+    </form>
+  );
+}

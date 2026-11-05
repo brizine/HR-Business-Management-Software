@@ -15,7 +15,8 @@ export type NotificationLink =
   | { screen: "asset"; id: string }
   | { screen: "work-order"; id: string; assetId: string }
   | { screen: "pay-period"; id: string }
-  | { screen: "reviews"; id: string };
+  | { screen: "reviews"; id: string }
+  | { screen: "attendance"; employeeId: string };
 
 export const NOTIFICATION_CATEGORIES = ["pto", "time", "schedule", "fleet", "documents", "onboarding", "hiring", "payroll", "wiki", "reviews"] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
@@ -25,7 +26,7 @@ export const EXPO_PUSH_TOKEN_RE = /^Expo(nent)?PushToken\[[^\]]+\]$/;
 
 export const NOTIFICATION_CATEGORY_INFO: Record<NotificationCategory, { label: string; description: string }> = {
   pto: { label: "Time off", description: "Requests to approve and decisions on yours" },
-  time: { label: "Time clock", description: "Forgotten clock-outs" },
+  time: { label: "Time clock & attendance", description: "Forgotten clock-outs, people who haven't clocked in for their shift, and attendance point levels reached" },
   schedule: { label: "Schedule", description: "Published schedules, shift changes, open shifts, reminders" },
   fleet: { label: "Fleet & equipment", description: "Work orders, failed inspections, maintenance due, expiring registrations" },
   documents: { label: "Documents", description: "Documents waiting for your signature" },
@@ -72,6 +73,7 @@ export function webPathFor(link: NotificationLink | null | undefined): string | 
     case "work-order": return `/work-orders?highlight=${link.id}`;
     case "pay-period": return `/pay-periods/${link.id}`;
     case "reviews": return `/reviews?open=${link.id}`;
+    case "attendance": return `/attendance?employee=${link.employeeId}`;
     default: return null;
   }
 }

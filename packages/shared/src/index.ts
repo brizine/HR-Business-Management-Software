@@ -15,3 +15,4 @@ export * from "./permissions";
 export * from "./menus";
 export * from "./holidays";
 export * from "./reviews";
+export * from "./attendance";

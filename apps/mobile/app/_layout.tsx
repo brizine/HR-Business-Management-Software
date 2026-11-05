@@ -55,6 +55,7 @@ function Gate() {
       <Stack.Screen name="notification-settings" options={{ title: "Notification settings" }} />
       <Stack.Screen name="my-info" options={{ title: "My info" }} />
       <Stack.Screen name="reviews" options={{ title: "My reviews" }} />
+      <Stack.Screen name="attendance" options={{ title: "My attendance" }} />
       <Stack.Screen name="asset/[id]" options={{ title: "Asset" }} />
       <Stack.Screen name="inspect/[id]" options={{ title: "Inspection", presentation: "modal" }} />
     </Stack>

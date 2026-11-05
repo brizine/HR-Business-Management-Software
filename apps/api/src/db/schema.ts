@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import type { HolidayRule, HolidayRules, NotificationLink, PtoTier, RoleAccess } from "@crewdesk/shared";
+import type { AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, RoleAccess } from "@crewdesk/shared";
 import {
   boolean,
   primaryKey,
@@ -43,6 +43,8 @@ export const companies = pgTable("companies", {
   /** Employer details printed on tax forms. */
   legalName: text("legal_name"),
   ein: text("ein"),
+  /** Grace periods, alerts and points for attendance (see attendance.ts in @crewdesk/shared). */
+  attendanceRules: jsonb("attendance_rules").$type<AttendanceRules>(),
   /** Who gets paid holidays and what working one pays (see HolidayRules in @crewdesk/shared). */
   holidayRules: jsonb("holiday_rules").$type<HolidayRules>(),
   /** Access by area for each role (Settings → Layout Editor): { manager: { payroll: "admin" }, … }. */
@@ -586,6 +588,25 @@ export const availability = pgTable(
 );
 
 /** Saved shift presets, e.g. "Morning crew 7:00–15:30, Driver, Truck 12". */
+/** Days an owner/admin set by hand on the attendance calendar (e.g. called in sick, excused). */
+export const attendanceOverrides = pgTable(
+  "attendance_overrides",
+  {
+    id: id(),
+    companyId: companyId(),
+    employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    /** on_time | tardy | early_leave | no_show | sick | excused */
+    status: text("status").notNull(),
+    note: text("note"),
+    /** Points for this day instead of the usual amount. */
+    points: doublePrecision("points"),
+    setById: uuid("set_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("attendance_overrides_employee_date_idx").on(t.employeeId, t.date)],
+);
+
 /**
  * Performance reviews and disciplinary actions (Reviews & discipline). Drafts are managers-only;
  * shared ones the employee can see and acknowledge. See reviews.ts in @crewdesk/shared.

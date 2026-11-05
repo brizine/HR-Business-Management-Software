@@ -1,7 +1,8 @@
-import { and, eq, gt, isNotNull, isNull, lt, lte, ne, notInArray } from "drizzle-orm";
+import { and, eq, gt, gte, isNotNull, isNull, lt, lte, ne, notInArray } from "drizzle-orm";
 import { INACTIVE_STATUSES, carryoverForfeit, computeDue, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
 import { db } from "../db";
-import { assets, companies, employees, maintenanceSchedules, notificationLog, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, ptoRequests, shifts, timeEntries } from "../db/schema";
+import { assets, attendanceOverrides, companies, employees, maintenanceSchedules, notificationLog, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, ptoRequests, shifts, timeEntries } from "../db/schema";
+import { attendanceRulesFor, computeAttendance } from "./attendance";
 import { taskOwners } from "../routes/onboarding";
 import { fmtTime, localParts } from "./tz";
 import { notify, staffWithRole } from "./notify";
@@ -238,11 +239,83 @@ export async function runScheduledChecks(now = new Date()) {
     sent++;
   }
 
+  sent += await attendanceAlerts(now);
   return { sent };
 }
 
+/**
+ * Attendance: people who haven't clocked in a while after their shift started (no approved time
+ * off and no calendar change for that day), and people who reach an attendance point level.
+ */
+async function attendanceAlerts(now: Date) {
+  let sent = 0;
+  for (const c of await db.select().from(companies)) {
+    const rules = await attendanceRulesFor(c.id);
+    if (rules.alertsEnabled) {
+      const late = await db.select({ shift: shifts, employee: employees }).from(shifts)
+        .innerJoin(employees, eq(employees.id, shifts.employeeId))
+        .where(and(
+          eq(shifts.companyId, c.id), eq(shifts.status, "published"), isNotNull(shifts.employeeId),
+          lte(shifts.startsAt, new Date(now.getTime() - rules.noShowMinutes * 60_000)),
+          gt(shifts.startsAt, new Date(now.getTime() - 12 * 3_600_000)),
+          gt(shifts.endsAt, new Date(now.getTime() - 60 * 60_000)),
+          notInArray(employees.status, INACTIVE_STATUSES),
+        ));
+      for (const { shift, employee } of late) {
+        const day = localParts(shift.startsAt, c.timezone).date;
+        const punched = await db.select({ id: timeEntries.id }).from(timeEntries).where(and(
+          eq(timeEntries.employeeId, employee.id),
+          gte(timeEntries.clockIn, new Date(shift.startsAt.getTime() - 3 * 3_600_000)),
+          lt(timeEntries.clockIn, shift.endsAt),
+        )).limit(1);
+        if (punched.length) continue;
+        const off = await db.select({ id: ptoRequests.id }).from(ptoRequests).where(and(eq(ptoRequests.employeeId, employee.id), eq(ptoRequests.status, "approved"), lte(ptoRequests.startDate, day), gte(ptoRequests.endDate, day))).limit(1);
+        if (off.length) continue;
+        const marked = await db.select({ id: attendanceOverrides.id }).from(attendanceOverrides).where(and(eq(attendanceOverrides.employeeId, employee.id), eq(attendanceOverrides.date, day))).limit(1);
+        if (marked.length) continue;
+        if (!(await firstTime(c.id, `noshow:${shift.id}:${shift.startsAt.toISOString()}`))) continue;
+        const when = fmtTime(shift.startsAt, c.timezone);
+        notify(c.id, (await staffWithRole(c.id, "manager", "time")).filter((id) => id !== employee.id), {
+          category: "time",
+          title: `${employee.firstName} ${employee.lastName} hasn't clocked in`,
+          body: `Their shift started at ${when}. Call them, or mark the day on the attendance calendar (e.g. called in sick).`,
+          link: { screen: "attendance", employeeId: employee.id },
+        });
+        notify(c.id, [employee.id], {
+          category: "time",
+          title: "You haven't clocked in",
+          body: `Your shift started at ${when}. Clock in now, or let your manager know if you can't make it.`,
+          link: { screen: "time" },
+        });
+        sent++;
+      }
+    }
+
+    // Point levels: checked once an hour per company.
+    if (rules.pointsEnabled && rules.thresholds.length) {
+      const hour = localParts(now, c.timezone);
+      if (!(await firstTime(c.id, `pointscheck:${c.id}:${hour.date}:${Math.floor(hour.minutes / 60)}`))) continue;
+      const data = await computeAttendance(c.id, hour.date, hour.date, null, now);
+      for (const p of data.people) {
+        if (!p.employee.active) continue;
+        for (const level of p.points.reached) {
+          if (!(await firstTime(c.id, `points:${p.employee.id}:${level.points}:${level.crossedOn}`))) continue;
+          notify(c.id, (await staffWithRole(c.id, "manager", "time")).filter((id) => id !== p.employee.id), {
+            category: "time",
+            title: `${p.employee.firstName} ${p.employee.lastName} reached ${level.points} attendance points`,
+            body: `That's the "${level.label}" level (${p.points.total} points now). Consider a write-up in Reviews & discipline.`,
+            link: { screen: "attendance", employeeId: p.employee.id },
+          });
+          sent++;
+        }
+      }
+    }
+  }
+  return sent;
+}
+
 /** Runs the checks on an interval inside the API process. */
-export function startScheduler(intervalMs = 15 * 60_000) {
+export function startScheduler(intervalMs = 5 * 60_000) {
   const tick = () => runScheduledChecks().catch((err) => console.error("scheduled checks failed", err));
   tick();
   return setInterval(tick, intervalMs);

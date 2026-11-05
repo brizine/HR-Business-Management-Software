@@ -17,6 +17,7 @@ import { RequestTimeOffBox } from "@/components/request-time-off";
 import { ClockCard } from "@/components/clock-card";
 import { ClockStatusBox } from "@/components/clock-status";
 import { EmployeeRecordsBox } from "@/components/employee-records";
+import { AttendanceCalendar } from "@/components/attendance";
 import { TasksBox } from "@/components/tasks-box";
 import { isInactive } from "@crewdesk/shared";
 
@@ -170,6 +171,15 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
           </div>
         )}
       </div>
+      {(can("manager", "time") || e.id === me?.user.id) && (
+        <div className="card stack">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <h2 style={{ margin: 0 }}>Attendance</h2>
+            <a className="muted" style={{ fontSize: 13 }} href={can("manager", "time") ? `/attendance?employee=${e.id}` : "/attendance"}>Full attendance →</a>
+          </div>
+          <AttendanceCalendar employeeId={e.id} compact />
+        </div>
+      )}
       {(can("manager", "reviews") || e.id === me?.user.id) && <EmployeeRecordsBox employeeId={e.id} firstName={e.firstName} isSelf={e.id === me?.user.id} />}
       {/* Availability is only tracked for part-time employees. */}
       {can("manager", "schedule") && e.employmentType === "part_time" && (

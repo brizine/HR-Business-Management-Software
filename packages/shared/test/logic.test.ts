@@ -429,3 +429,53 @@ describe("holiday rule: work the scheduled day before and after", () => {
     expect(checkWorkAround({ ...base, workedDays: new Set(["2026-11-25"]), today: "2026-11-26" })).toMatchObject({ met: true, afterPending: true });
   });
 });
+
+import { DEFAULT_ATTENDANCE_RULES, classifyDay, currentPoints, pointsFor } from "../src/attendance";
+
+describe("attendance", () => {
+  const H = 3_600_000, M = 60_000;
+  const start = Date.parse("2026-11-02T14:00:00Z"); // 8am Central
+  const shift = { start, end: start + 8 * H };
+  const rules = DEFAULT_ATTENDANCE_RULES;
+  const after = start + 24 * H;
+  const day = (punches: { clockIn: number; clockOut: number | null }[], now = after, timeOff: { sick: boolean } | null = null) =>
+    classifyDay({ shifts: [shift], punches, timeOff, rules, now }).status;
+  it("on time within the grace period; late after it; left early", () => {
+    expect(day([{ clockIn: start + 4 * M, clockOut: shift.end }])).toBe("on_time");
+    expect(day([{ clockIn: start - 20 * M, clockOut: shift.end + 10 * M }])).toBe("on_time");
+    expect(day([{ clockIn: start + 6 * M, clockOut: shift.end }])).toBe("tardy");
+    expect(day([{ clockIn: start, clockOut: shift.end - 30 * M }])).toBe("early_leave");
+    // Late and early: late wins.
+    expect(day([{ clockIn: start + 20 * M, clockOut: shift.end - 30 * M }])).toBe("tardy");
+    // A lunch break (two punches) is fine.
+    expect(day([{ clockIn: start, clockOut: start + 4 * H }, { clockIn: start + 4.5 * H, clockOut: shift.end }])).toBe("on_time");
+  });
+  it("no-show once the no-show time passes; pending before; time off excuses it", () => {
+    expect(day([], start + 10 * M)).toBe("pending");
+    expect(day([], start + 31 * M)).toBe("no_show");
+    expect(day([], after, { sick: true })).toBe("sick");
+    expect(day([], after, { sick: false })).toBe("excused");
+    expect(classifyDay({ shifts: [], punches: [{ clockIn: start, clockOut: shift.end }], timeOff: null, rules, now: after }).status).toBe("unscheduled");
+    expect(classifyDay({ shifts: [], punches: [], timeOff: null, rules, now: after }).status).toBeNull();
+    // Still on the clock mid-shift: counts as worked.
+    expect(day([{ clockIn: start, clockOut: null }], start + 2 * H)).toBe("on_time");
+  });
+  it("points add up, drop off after the window, and cross thresholds once", () => {
+    expect(pointsFor("tardy", rules)).toBe(0.5);
+    expect(pointsFor("no_show", rules)).toBe(1);
+    expect(pointsFor("sick", rules)).toBe(0);
+    expect(pointsFor("no_show", { ...rules, pointsEnabled: false })).toBe(0);
+    const events = [
+      { date: "2026-06-01", points: 1 }, // older than 90 days on Nov 5: dropped
+      { date: "2026-09-01", points: 1 },
+      { date: "2026-10-01", points: 1 },
+      { date: "2026-11-02", points: 1 },
+      { date: "2026-11-03", points: 0.5 },
+    ];
+    const p = currentPoints(events, "2026-11-05", rules);
+    expect(p.total).toBe(3.5);
+    expect(p.highest).toMatchObject({ points: 3, label: "Verbal warning", crossedOn: "2026-11-02" });
+    expect(p.next).toMatchObject({ points: 5 });
+    expect(p.nextExpiry).toBe("2026-11-30");
+  });
+});
