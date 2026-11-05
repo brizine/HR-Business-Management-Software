@@ -28,6 +28,7 @@ function describeRules(r: HolidayRules, typeLabel: (t: string) => string) {
   return [
     `Paid to: ${who}`,
     r.waitingDays ? `after ${r.waitingDays} days from their hire date` : null,
+    r.requireWorkAround ? "must work the scheduled day before and after (approved time off counts)" : null,
     r.workedMultiplier > 1 ? `working on a holiday pays ${r.workedMultiplier}× for those hours, on top of holiday pay` : null,
   ].filter(Boolean).join(" · ");
 }
@@ -112,13 +113,14 @@ function RulesForm({ rules, onSaved }: { rules: HolidayRules; onSaved: () => voi
   const [waiting, setWaiting] = useState(String(rules.waitingDays));
   const [share, setShare] = useState(String(Math.round(rules.partTimeShare * 100)));
   const [multiplier, setMultiplier] = useState(String(rules.workedMultiplier));
+  const [workAround, setWorkAround] = useState(!!rules.requireWorkAround);
   const [saved, setSaved] = useState(false);
   const { busy, error, run } = useAction();
   return (
     <form className="stack" onChange={() => setSaved(false)} onSubmit={(e) => {
       e.preventDefault();
       run(async () => {
-        await api("/holidays/rules", { method: "PUT", body: { eligibleTypes: types, waitingDays: Number(waiting || 0), partTimeShare: Number(share || 0) / 100, workedMultiplier: Number(multiplier) } });
+        await api("/holidays/rules", { method: "PUT", body: { eligibleTypes: types, waitingDays: Number(waiting || 0), partTimeShare: Number(share || 0) / 100, workedMultiplier: Number(multiplier), requireWorkAround: workAround } });
         setSaved(true);
         onSaved();
       });
@@ -148,6 +150,15 @@ function RulesForm({ rules, onSaved }: { rules: HolidayRules; onSaved: () => voi
           </select>
         </label>
       </div>
+      <label className="check" style={{ alignItems: "flex-start" }}>
+        <input type="checkbox" checked={workAround} onChange={(e) => setWorkAround(e.target.checked)} />
+        <span>
+          Must work their scheduled day before and scheduled day after the holiday to get holiday pay
+          <span className="muted" style={{ display: "block", fontSize: 13 }}>
+            Uses each person&apos;s published shifts: their last scheduled day before the holiday and first one after. Approved time off on those days counts as worked. People with no shifts around the holiday aren&apos;t affected.
+          </span>
+        </span>
+      </label>
       <p className="muted" style={{ margin: 0, fontSize: 13 }}>Holiday hours and the extra pay for working a holiday show on Payroll and in the export. Salaried employees&apos; holiday hours are listed for your records.</p>
       <ErrorBox error={error} />
       <div className="row"><button className="btn primary" disabled={busy}>Save rules</button>{saved && <span className="muted" role="status">Saved.</span>}</div>

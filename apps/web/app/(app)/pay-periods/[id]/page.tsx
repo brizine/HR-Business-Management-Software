@@ -59,7 +59,7 @@ export default function PayPeriodApproval() {
                 <td>{l.regularHours.toFixed(2)}</td>
                 <td>{l.overtimeHours.toFixed(2)}</td>
                 <td>{l.ptoHours ? l.ptoHours.toFixed(2) : "—"}</td>
-                <td>{l.holidayHours ? l.holidayHours.toFixed(2) : "—"}{l.holidayWorkedHours ? <div className="muted" style={{ fontSize: 12 }}>+{l.holidayWorkedHours.toFixed(2)}h worked</div> : null}</td>
+                <td>{l.holidayHours ? l.holidayHours.toFixed(2) : "—"}{l.holidayWorkedHours ? <div className="muted" style={{ fontSize: 12 }}>+{l.holidayWorkedHours.toFixed(2)}h worked</div> : null}{l.holidayNotes?.map((n: string) => <div key={n} className="muted" style={{ fontSize: 12, maxWidth: 260 }}>⚠ {n}</div>)}</td>
                 <td>{l.estimatedGrossCents == null ? <span className="muted">Salary</span> : money(l.estimatedGrossCents)}</td>
               </tr>
             ))}</tbody>

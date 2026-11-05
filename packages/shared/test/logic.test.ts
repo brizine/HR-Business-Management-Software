@@ -407,3 +407,25 @@ describe("paid holidays", () => {
     expect(describeHolidayRule(preset("independence"))).toBe("July 4, every year");
   });
 });
+
+import { checkWorkAround } from "../src/holidays";
+
+describe("holiday rule: work the scheduled day before and after", () => {
+  // Thanksgiving Thu 2026-11-26; scheduled Mon–Wed and Fri.
+  const scheduledDays = ["2026-11-23", "2026-11-24", "2026-11-25", "2026-11-27", "2026-11-30"];
+  const base = { observed: "2026-11-26", scheduledDays, timeOff: [], today: "2026-12-15" };
+  it("pays when both scheduled days were worked", () => {
+    expect(checkWorkAround({ ...base, workedDays: new Set(["2026-11-25", "2026-11-27"]) })).toMatchObject({ met: true, before: "2026-11-25", after: "2026-11-27", missed: [] });
+  });
+  it("doesn't pay when a scheduled day was missed", () => {
+    expect(checkWorkAround({ ...base, workedDays: new Set(["2026-11-25"]) })).toMatchObject({ met: false, missed: ["after"] });
+    expect(checkWorkAround({ ...base, workedDays: new Set(["2026-11-24", "2026-11-27"]) })).toMatchObject({ met: false, missed: ["before"] });
+  });
+  it("counts approved time off as worked", () => {
+    expect(checkWorkAround({ ...base, workedDays: new Set(["2026-11-25"]), timeOff: [{ startDate: "2026-11-27", endDate: "2026-11-30" }] }).met).toBe(true);
+  });
+  it("doesn't block people with nothing scheduled, and counts a day after that hasn't come yet", () => {
+    expect(checkWorkAround({ ...base, scheduledDays: [], workedDays: new Set() }).met).toBe(true);
+    expect(checkWorkAround({ ...base, workedDays: new Set(["2026-11-25"]), today: "2026-11-26" })).toMatchObject({ met: true, afterPending: true });
+  });
+});

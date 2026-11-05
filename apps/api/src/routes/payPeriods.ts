@@ -103,7 +103,7 @@ const routes: FastifyPluginAsync = async (app) => {
       ...row.period,
       approvedBy: row.approver?.firstName ? `${row.approver.firstName} ${row.approver.lastName}` : null,
       canApprove: isApprover || hasRole(roleIn(req, AREA), "owner"),
-      lines: lines.filter((l) => l.totalHours > 0 || l.ptoHours > 0 || l.holidayHours > 0 || l.payType === "salary"),
+      lines: lines.filter((l) => l.totalHours > 0 || l.ptoHours > 0 || l.holidayHours > 0 || l.holidayNotes.length > 0 || l.payType === "salary"),
     };
   });
 

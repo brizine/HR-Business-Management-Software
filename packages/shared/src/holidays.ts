@@ -55,9 +55,56 @@ export const holidayRulesSchema = z.object({
   partTimeShare: z.number().min(0).max(1),
   /** Pay for hours worked on a holiday, as a multiple of their rate (1 = normal pay, 1.5 = time and a half). Paid on top of holiday pay. */
   workedMultiplier: z.number().min(1).max(3),
+  /**
+   * Holiday pay only if they work their last scheduled day before the holiday and their first
+   * scheduled day after it. Approved time off on those days counts as worked.
+   */
+  requireWorkAround: z.boolean().default(false),
 });
 export type HolidayRules = z.infer<typeof holidayRulesSchema>;
-export const DEFAULT_HOLIDAY_RULES: HolidayRules = { eligibleTypes: ["full_time"], waitingDays: 0, partTimeShare: 0.5, workedMultiplier: 1 };
+export const DEFAULT_HOLIDAY_RULES: HolidayRules = { eligibleTypes: ["full_time"], waitingDays: 0, partTimeShare: 0.5, workedMultiplier: 1, requireWorkAround: false };
+
+/** How far before and after a holiday to look for someone's scheduled days. */
+export const WORK_AROUND_WINDOW_DAYS = 14;
+
+export interface WorkAroundCheck {
+  met: boolean;
+  /** Their last scheduled day before the holiday, and first after (null if none in the window). */
+  before: string | null;
+  after: string | null;
+  /** Which scheduled day they missed (no hours worked and no approved time off). */
+  missed: ("before" | "after")[];
+  /** The scheduled day after hasn't happened yet, so it's counted for now. */
+  afterPending: boolean;
+}
+
+/**
+ * The "work the scheduled day before and after" rule for one person and one holiday.
+ * `scheduledDays` are the days they have published shifts; `workedDays` the days they clocked in;
+ * `timeOff` their approved time off. A scheduled day counts if they worked or had approved time
+ * off. With no scheduled day on a side (within WORK_AROUND_WINDOW_DAYS), that side doesn't block
+ * pay; a day after that's still in the future counts for now.
+ */
+export function checkWorkAround(input: {
+  observed: string;
+  scheduledDays: Iterable<string>;
+  workedDays: Set<string>;
+  timeOff: { startDate: string; endDate: string }[];
+  today: string;
+}): WorkAroundCheck {
+  const { observed, workedDays, timeOff, today } = input;
+  const days = [...new Set(input.scheduledDays)].sort();
+  const lo = addDays(observed, -WORK_AROUND_WINDOW_DAYS);
+  const hi = addDays(observed, WORK_AROUND_WINDOW_DAYS);
+  const before = days.filter((d) => d < observed && d >= lo).pop() ?? null;
+  const after = days.find((d) => d > observed && d <= hi) ?? null;
+  const covered = (d: string) => workedDays.has(d) || timeOff.some((t) => t.startDate <= d && d <= t.endDate);
+  const missed: ("before" | "after")[] = [];
+  if (before && !covered(before)) missed.push("before");
+  const afterPending = !!after && after >= today && !covered(after);
+  if (after && !afterPending && !covered(after)) missed.push("after");
+  return { met: missed.length === 0, before, after, missed, afterPending };
+}
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const iso = (y: number, m: number, d: number) => `${y}-${pad(m)}-${pad(d)}`;

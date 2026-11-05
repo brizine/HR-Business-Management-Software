@@ -96,4 +96,41 @@ describe("paid holidays", () => {
     const csv = await call("GET", "/payroll/export.csv?periodStart=2026-06-29&periodEnd=2026-07-05", "owner");
     expect(csv.body).toContain("Holiday Hours");
   });
+
+  it("with the rule on: pays only if they worked (or had approved time off) the scheduled day before and after", async () => {
+    await call("PUT", "/holidays/rules", "owner", { eligibleTypes: ["full_time", "part_time"], waitingDays: 30, partTimeShare: 0.5, workedMultiplier: 1.5, requireWorkAround: true });
+    // Both are scheduled Thursday July 2 and Monday July 6, around the Friday July 3 holiday.
+    for (const who of ["full", "part"]) {
+      for (const [s, e] of [["2026-07-02T13:00:00.000Z", "2026-07-02T21:00:00.000Z"], ["2026-07-06T13:00:00.000Z", "2026-07-06T21:00:00.000Z"]]) {
+        expect((await call("POST", "/shifts", "owner", { employeeId: ID[who], startsAt: s, endsAt: e })).status).toBe(200);
+      }
+    }
+    await call("POST", "/shifts/publish", "owner", { from: "2026-06-29T00:00:00.000Z", to: "2026-07-13T00:00:00.000Z" });
+
+    // "part" works both days.
+    for (const [s, e] of [["2026-07-02T13:00:00.000Z", "2026-07-02T17:00:00.000Z"], ["2026-07-06T13:00:00.000Z", "2026-07-06T17:00:00.000Z"]]) {
+      await call("POST", "/time/clock-in", "part", {});
+      await call("POST", "/time/clock-out", "part", {});
+      const entry = ((await call("GET", "/time/entries", "part")).body as any[]).find((x: any) => !x.clockIn.startsWith("2026-07"));
+      await call("PATCH", `/time/entries/${entry.id}`, "owner", { clockIn: s, clockOut: e });
+    }
+    const period = "/payroll/preview?periodStart=2026-06-29&periodEnd=2026-07-05";
+    let preview = (await call("GET", period, "owner")).body as any[];
+    const line = (who: string) => preview.find((l) => l.employeeId === ID[who]);
+    expect(line("part")).toMatchObject({ holidayHours: 4, holidayNotes: [] });
+    // "full" worked the holiday itself but neither scheduled day around it.
+    expect(line("full").holidayHours).toBe(0);
+    expect(line("full").holidayNotes[0]).toMatch(/No holiday pay for Independence Day: didn't work the scheduled day before \(Thu, Jul 2\) and the scheduled day after \(Mon, Jul 6\)/);
+
+    // Approved time off on those days counts.
+    const policy = await call("POST", "/pto/policies", "owner", { name: "PTO" });
+    await call("POST", "/pto/adjustments", "owner", { employeeId: ID.full, policyId: policy.body.id, hours: 40, reason: "grant" });
+    for (const d of ["2026-07-02", "2026-07-06"]) {
+      const r = await call("POST", "/pto/requests", "full", { policyId: policy.body.id, startDate: d, endDate: d, hours: 8 });
+      expect(r.status).toBe(200);
+      await call("POST", `/pto/requests/${r.body.id}/decide`, "owner", { status: "approved" });
+    }
+    preview = (await call("GET", period, "owner")).body as any[];
+    expect(line("full")).toMatchObject({ holidayHours: 8, holidayNotes: [] });
+  });
 });

@@ -86,7 +86,7 @@ export default function Payroll() {
   const runs = useApi<any[]>("/payroll/runs");
   const pending = useApi<any[]>("/tax-forms/pending");
   const action = useAction();
-  const rows = (preview.data ?? []).filter((l) => l.totalHours > 0 || l.ptoHours > 0 || l.holidayHours > 0 || l.payType === "salary");
+  const rows = (preview.data ?? []).filter((l) => l.totalHours > 0 || l.ptoHours > 0 || l.holidayHours > 0 || l.holidayNotes?.length > 0 || l.payType === "salary");
   const unapproved = (preview.data ?? []).reduce((n, l) => n + l.unapprovedEntries, 0);
   const s = settings.data;
   const usesProvider = s?.payrollProvider === "check";
@@ -136,7 +136,7 @@ export default function Payroll() {
                 <td>{l.regularHours.toFixed(2)}</td>
                 <td>{l.overtimeHours.toFixed(2)}</td>
                 <td>{l.ptoHours ? l.ptoHours.toFixed(2) : "—"}</td>
-                <td title={l.holidayWorkedHours ? `${l.holidayWorkedHours.toFixed(2)}h worked on a holiday` : undefined}>{l.holidayHours ? l.holidayHours.toFixed(2) : "—"}{l.holidayWorkedHours ? <div className="muted" style={{ fontSize: 12 }}>+{l.holidayWorkedHours.toFixed(2)}h worked</div> : null}</td>
+                <td title={l.holidayWorkedHours ? `${l.holidayWorkedHours.toFixed(2)}h worked on a holiday` : undefined}>{l.holidayHours ? l.holidayHours.toFixed(2) : "—"}{l.holidayWorkedHours ? <div className="muted" style={{ fontSize: 12 }}>+{l.holidayWorkedHours.toFixed(2)}h worked</div> : null}{l.holidayNotes?.map((n: string) => <div key={n} className="muted" style={{ fontSize: 12, maxWidth: 260 }}>⚠ {n}</div>)}</td>
                 <td>{l.estimatedGrossCents == null ? <span className="muted">Salary</span> : money(l.estimatedGrossCents)}</td>
               </tr>
             ))}</tbody>

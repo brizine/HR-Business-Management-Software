@@ -1,7 +1,7 @@
 import { and, eq, gte, lt, lte, isNotNull } from "drizzle-orm";
-import { DEFAULT_HOLIDAY_RULES, entryHours, holidayHoursFor, holidaysBetween, isInactive, summarizeHours, type HolidayObserve } from "@crewdesk/shared";
+import { DEFAULT_HOLIDAY_RULES, WORK_AROUND_WINDOW_DAYS, checkWorkAround, entryHours, holidayHoursFor, holidaysBetween, isInactive, summarizeHours, type HolidayObserve } from "@crewdesk/shared";
 import type { DB } from "../../db";
-import { companies, employees, holidays, ptoRequests, timeEntries } from "../../db/schema";
+import { companies, employees, holidays, ptoRequests, shifts, timeEntries } from "../../db/schema";
 import { localParts } from "../tz";
 import { CheckPayrollProvider } from "./check";
 
@@ -23,6 +23,8 @@ export interface PayrollLine {
   holidayHours: number;
   /** Hours worked on a paid holiday (already in regular/overtime; the holiday premium is paid on top). */
   holidayWorkedHours: number;
+  /** Why a holiday wasn't paid, or is paid provisionally (the "work the day before and after" rule). */
+  holidayNotes: string[];
   /** Completed time entries in the period that a manager hasn't approved yet. */
   unapprovedEntries: number;
   /** Gross for hourly staff (regular + 1.5x overtime + time off + holidays + holiday-work premium); salaried staff are left to the payroll system. */
@@ -105,6 +107,29 @@ export async function buildPayrollLines(db: DB, companyId: string, period: Payro
   const holidayDays = new Set(inPeriod.map((o) => o.observed));
   const tz = company?.timezone ?? "America/Chicago";
 
+  // "Work the scheduled day before and after": published shifts, punches and approved time off
+  // around each holiday in the period.
+  const shiftDays = new Map<string, Set<string>>();
+  const workedDays = new Map<string, Set<string>>();
+  let aroundTimeOff: { employeeId: string; startDate: string; endDate: string }[] = [];
+  const today = localParts(new Date(), tz).date;
+  if (rules.requireWorkAround && inPeriod.length) {
+    const lo = new Date(start.getTime() - (WORK_AROUND_WINDOW_DAYS + 1) * DAY);
+    const hi = new Date(end.getTime() + (WORK_AROUND_WINDOW_DAYS + 1) * DAY);
+    const add = (m: Map<string, Set<string>>, id: string, day: string) => (m.get(id) ?? m.set(id, new Set()).get(id)!).add(day);
+    const nearShifts = await db.select({ employeeId: shifts.employeeId, startsAt: shifts.startsAt }).from(shifts)
+      .where(and(eq(shifts.companyId, companyId), eq(shifts.status, "published"), isNotNull(shifts.employeeId), gte(shifts.startsAt, lo), lt(shifts.startsAt, hi)));
+    for (const sh of nearShifts) add(shiftDays, sh.employeeId!, localParts(sh.startsAt, tz).date);
+    const nearEntries = await db.select({ employeeId: timeEntries.employeeId, clockIn: timeEntries.clockIn }).from(timeEntries)
+      .where(and(eq(timeEntries.companyId, companyId), gte(timeEntries.clockIn, lo), lt(timeEntries.clockIn, hi)));
+    for (const t of nearEntries) add(workedDays, t.employeeId, localParts(t.clockIn, tz).date);
+    const loDay = lo.toISOString().slice(0, 10);
+    const hiDay = hi.toISOString().slice(0, 10);
+    aroundTimeOff = await db.select({ employeeId: ptoRequests.employeeId, startDate: ptoRequests.startDate, endDate: ptoRequests.endDate }).from(ptoRequests)
+      .where(and(eq(ptoRequests.companyId, companyId), eq(ptoRequests.status, "approved"), lte(ptoRequests.startDate, hiDay), gte(ptoRequests.endDate, loDay)));
+  }
+  const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+
   return staff
     .filter((e) => !isInactive(e.status) || entries.some((t) => t.employeeId === e.id))
     .map((e) => {
@@ -112,7 +137,25 @@ export async function buildPayrollLines(db: DB, companyId: string, period: Payro
       const counted = period.approvedOnly ? all.filter((t) => t.approvedAt) : all;
       const hours = summarizeHours(counted, company?.weeklyOvertimeThreshold ?? 40);
       const ptoHours = round(timeOff.filter((r) => r.employeeId === e.id).reduce((sum, r) => sum + ptoHoursInPeriod(r, period), 0));
-      const holidayHours = round(inPeriod.reduce((sum, o) => sum + holidayHoursFor({ employmentType: e.employmentType, hireDate: e.startDate }, rules, o.holiday.hours, o.observed), 0));
+      const holidayNotes: string[] = [];
+      const holidayHours = round(inPeriod.reduce((sum, o) => {
+        const hrs = holidayHoursFor({ employmentType: e.employmentType, hireDate: e.startDate }, rules, o.holiday.hours, o.observed);
+        if (!hrs || !rules.requireWorkAround) return sum + hrs;
+        const check = checkWorkAround({
+          observed: o.observed,
+          scheduledDays: shiftDays.get(e.id) ?? [],
+          workedDays: workedDays.get(e.id) ?? new Set(),
+          timeOff: aroundTimeOff.filter((t) => t.employeeId === e.id),
+          today,
+        });
+        if (!check.met) {
+          const days = check.missed.map((m) => `the scheduled day ${m} (${fmtDay(m === "before" ? check.before! : check.after!)})`).join(" and ");
+          holidayNotes.push(`No holiday pay for ${o.holiday.name}: didn't work ${days}`);
+          return sum;
+        }
+        if (check.afterPending) holidayNotes.push(`${o.holiday.name}: paid as long as they work the scheduled day after (${fmtDay(check.after!)})`);
+        return sum + hrs;
+      }, 0));
       // Hours on shifts that started on an observed holiday (company time zone).
       const holidayWorkedHours = round(
         counted
@@ -136,6 +179,7 @@ export async function buildPayrollLines(db: DB, companyId: string, period: Payro
         ptoHours,
         holidayHours,
         holidayWorkedHours,
+        holidayNotes,
         unapprovedEntries: all.filter((t) => !t.approvedAt).length,
         estimatedGrossCents: gross,
       };
