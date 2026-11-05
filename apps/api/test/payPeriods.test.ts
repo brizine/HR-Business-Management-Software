@@ -23,7 +23,10 @@ beforeAll(async () => {
   app = await buildApp({ logger: false });
   const signup = await app.inject({ method: "POST", url: "/auth/signup", payload: { companyName: "Pay Co", firstName: "Pat", lastName: "Owner", email: email("owner"), password: "password123" } });
   T.owner = signup.json().token;
-  for (const [who, role] of [["lead", "manager"], ["crew", "employee"], ["book", "employee"]]) {
+  ID.owner = (await call("GET", "/auth/me", "owner")).body.user.id;
+  // Let the admin sign in without setting up two-factor (this test isn't about sign-in).
+  await call("PUT", "/auth/policy", "owner", { twoFactorRequiredFor: "none" });
+  for (const [who, role] of [["lead", "manager"], ["crew", "employee"], ["book", "admin"]]) {
     const e = await call("POST", "/employees", "owner", { firstName: who, lastName: "Person", email: email(who), password: "password123", role });
     ID[who] = e.body.id;
     T[who] = (await app.inject({ method: "POST", url: "/auth/login", payload: { email: email(who), password: "password123" } })).json().token;
@@ -39,9 +42,14 @@ describe("pay periods", () => {
   it("only the owner sets the schedule; weekly needs a start date", async () => {
     expect((await call("PUT", "/pay-periods/schedule", "lead", { frequency: "weekly", anchorDate: "2026-01-05", paydayOffsetDays: 5, approverIds: [] })).status).toBe(403);
     expect((await call("PUT", "/pay-periods/schedule", "owner", { frequency: "weekly", paydayOffsetDays: 5, approverIds: [] })).status).toBe(400);
-    const set = await call("PUT", "/pay-periods/schedule", "owner", { frequency: "weekly", anchorDate: "2026-01-05", paydayOffsetDays: 5, approverIds: [ID.lead, ID.book] });
+    // Only owners and admins can approve payroll.
+    const notAdmin = await call("PUT", "/pay-periods/schedule", "owner", { frequency: "weekly", anchorDate: "2026-01-05", paydayOffsetDays: 5, approverIds: [ID.lead, ID.book] });
+    expect(notAdmin.status).toBe(400);
+    expect(notAdmin.body.error ?? notAdmin.body.message).toMatch(/owners and admins/i);
+    const set = await call("PUT", "/pay-periods/schedule", "owner", { frequency: "weekly", anchorDate: "2026-01-05", paydayOffsetDays: 5, approverIds: [ID.owner, ID.book] });
     expect(set.status).toBe(200);
-    expect(set.body.approverIds.sort()).toEqual([ID.lead, ID.book].sort());
+    expect(set.body.approverIds.sort()).toEqual([ID.owner, ID.book].sort());
+    expect(set.body.approverChoices.map((c: any) => c.id).sort()).toEqual([ID.owner, ID.book].sort());
     expect(set.body.upcoming).toHaveLength(4);
     expect((await call("GET", "/pay-periods/me", "book")).body.isApprover).toBe(true);
     expect((await call("GET", "/pay-periods/me", "crew")).body.isApprover).toBe(false);
@@ -69,7 +77,8 @@ describe("pay periods", () => {
     expect((await call("POST", `/pay-periods/${ID.period}/approve`, "crew", {})).status).toBe(403);
     const ok = await call("POST", `/pay-periods/${ID.period}/approve`, "book", { note: "Looks right" });
     expect(ok.body).toMatchObject({ status: "approved", approvedById: ID.book, approvalNote: "Looks right" });
-    expect((await call("POST", `/pay-periods/${ID.period}/approve`, "lead", {})).status).toBe(409);
+    expect((await call("POST", `/pay-periods/${ID.period}/approve`, "lead", {})).status).toBe(403);
+    expect((await call("POST", `/pay-periods/${ID.period}/approve`, "owner", {})).status).toBe(409);
     await flushNotifications();
     expect((await inbox("owner")).some((n: any) => n.title.includes("approved"))).toBe(true);
     expect((await call("POST", `/pay-periods/${ID.period}/reopen`, "lead")).status).toBe(403);

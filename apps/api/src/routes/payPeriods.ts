@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, notInArray } from "drizzle-orm";
 import { z } from "zod";
-import { hasRole, isInactive, payScheduleSchema, upcomingPeriods, type PayFrequency } from "@crewdesk/shared";
+import { INACTIVE_STATUSES, hasRole, isInactive, payScheduleSchema, upcomingPeriods, type PayFrequency } from "@crewdesk/shared";
 import { db } from "../db";
 import { companies, employees, payPeriodApprovers, payPeriods } from "../db/schema";
 import { authenticate, requireRole, roleIn } from "../lib/auth";
@@ -33,6 +33,12 @@ async function schedule(companyId: string) {
     anchorDate: c.payPeriodAnchor,
     paydayOffsetDays: c.paydayOffsetDays,
     approverIds: approvers,
+    /** Who can be picked: active owners and admins. */
+    approverChoices: await db
+      .select({ id: employees.id, firstName: employees.firstName, lastName: employees.lastName, role: employees.role })
+      .from(employees)
+      .where(and(eq(employees.companyId, companyId), inArray(employees.role, ["owner", "admin"]), notInArray(employees.status, INACTIVE_STATUSES)))
+      .orderBy(employees.firstName, employees.lastName),
     timezone: c.timezone,
     upcoming: s ? upcomingPeriods(today, s, 4) : [],
   };
@@ -48,10 +54,11 @@ const routes: FastifyPluginAsync = async (app) => {
     const body = parse(payScheduleSchema, req.body);
     const ids = [...new Set(body.approverIds)];
     const valid = ids.length
-      ? await db.select({ id: employees.id, status: employees.status }).from(employees).where(and(eq(employees.companyId, req.user.companyId), inArray(employees.id, ids)))
+      ? await db.select({ id: employees.id, status: employees.status, role: employees.role }).from(employees).where(and(eq(employees.companyId, req.user.companyId), inArray(employees.id, ids)))
       : [];
     if (valid.length !== ids.length) notFound("Employee");
     if (valid.some((v) => isInactive(v.status))) throw new HttpError(400, "Inactive or terminated people can't approve pay periods");
+    if (valid.some((v) => v.role !== "owner" && v.role !== "admin")) throw new HttpError(400, "Only owners and admins can approve payroll");
     await db.transaction(async (tx) => {
       await tx
         .update(companies)

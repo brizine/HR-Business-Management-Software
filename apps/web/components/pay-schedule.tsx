@@ -6,18 +6,22 @@ import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox } from "./ui";
+import { useMenuData } from "@/lib/menus";
 
 interface Schedule {
   frequency: PayFrequency | null;
   anchorDate: string | null;
   paydayOffsetDays: number;
   approverIds: string[];
+  /** Active owners and admins: the only people who can approve payroll. */
+  approverChoices: { id: string; firstName: string; lastName: string; role: string }[];
   upcoming: { start: string; end: string; payday: string }[];
 }
 
 /** Payroll page: how often people are paid, payday, and who approves each period (the owner edits). */
 export function PaySchedule() {
   const { can } = useAuth();
+  const { label } = useMenuData();
   const owner = can("owner", "payroll");
   const saved = useApi<Schedule>("/pay-periods/schedule");
   const staff = useApi<any[]>("/employees");
@@ -29,6 +33,8 @@ export function PaySchedule() {
   const needsAnchor = s.frequency === "weekly" || s.frequency === "biweekly";
   const people = staff.data.filter((e) => !isInactive(e.status) || s.approverIds.includes(e.id));
   const edit = (patch: Partial<Schedule>) => { setS({ ...s, ...patch }); setDone(false); };
+  const choices = (s.approverChoices ?? []).filter((c) => !s.approverIds.includes(c.id));
+  const roleName = (r: string) => { const l = label("role", r); return l[0].toUpperCase() + l.slice(1); };
 
   // Live preview of the next periods from what's chosen (before saving).
   const today = new Date();
@@ -97,18 +103,27 @@ export function PaySchedule() {
           <div className="setup-step">
             <div className="setup-step-label">
               <span className="setup-step-num">{++step}</span>
-              <div><strong>Who approves each pay period?</strong><div className="muted">They&apos;re notified when a period ends to review and approve everyone&apos;s hours, and can see hours and estimated pay. With nobody picked, admins are asked.</div></div>
+              <div><strong>Who approves each pay period?</strong><div className="muted">Owners and admins only. They&apos;re notified when a period ends to review and approve everyone&apos;s hours. With nobody picked, all admins are asked.</div></div>
             </div>
             <div className="setup-step-control">
-              <div className="approver-grid">
-                {people.map((e) => (
-                  <label key={e.id} className="check">
-                    <input type="checkbox" checked={s.approverIds.includes(e.id)}
-                      onChange={(ev) => edit({ approverIds: ev.target.checked ? [...s.approverIds, e.id] : s.approverIds.filter((x) => x !== e.id) })} />
-                    <span>{e.firstName} {e.lastName}<span className="muted"> · {e.role}</span></span>
-                  </label>
-                ))}
-              </div>
+              <select value="" onChange={(e) => e.target.value && edit({ approverIds: [...s.approverIds, e.target.value] })} aria-label="Add an approver" style={{ width: "100%", maxWidth: 340 }}>
+                <option value="">{choices.length ? "Add an approver…" : "Everyone eligible is already added"}</option>
+                {choices.map((c) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName} · {roleName(c.role)}</option>)}
+              </select>
+              {s.approverIds.length > 0 && (
+                <div className="approver-chips" aria-label="Approvers">
+                  {s.approverIds.map((id) => {
+                    const p = s.approverChoices.find((c) => c.id === id) ?? people.find((e) => e.id === id);
+                    const ok = s.approverChoices.some((c) => c.id === id);
+                    return (
+                      <span key={id} className={`approver-chip${ok ? "" : " bad"}`} title={ok ? undefined : "Not an owner or admin. Remove to save."}>
+                        {p ? `${p.firstName} ${p.lastName}` : "Unknown"}<span className="muted"> · {ok ? roleName(p!.role) : "not an owner or admin"}</span>
+                        <button type="button" aria-label={`Remove ${p?.firstName ?? "approver"}`} onClick={() => edit({ approverIds: s.approverIds.filter((x) => x !== id) })}>×</button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}
