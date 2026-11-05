@@ -406,3 +406,22 @@ tr.openrow td { background: var(--bg); }
 .approver-chip button { all: unset; cursor: pointer; width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; color: var(--muted); }
 .approver-chip button:hover { background: var(--border); color: var(--text); }
 .approver-chip button:focus-visible { outline: 2px solid var(--primary); }
+/* Pay period picker (Payroll): each pay period shaded, alternating colours. */
+.payperiod-pop { left: 0; right: auto; width: 360px; }
+.pp-grid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 3px; }
+.pp-dow { font-size: 11px; color: var(--muted); font-weight: 600; text-align: center; padding: 2px 0; }
+.pp-day { all: unset; box-sizing: border-box; position: relative; cursor: pointer; text-align: center; padding: 8px 0; font-size: 14px; }
+.pp-day.pp-a { background: rgba(37, 99, 235, .10); }
+.pp-day.pp-b { background: rgba(16, 185, 129, .16); }
+.pp-day.first, .pp-grid > .pp-day:nth-child(7n + 1) { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+.pp-day.last, .pp-grid > .pp-day:nth-child(7n) { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
+.pp-day.first { box-shadow: inset 2px 0 0 rgba(0, 0, 0, .12); }
+.pp-day.hover:not(.selected) { background: rgba(37, 99, 235, .30); }
+.pp-day.selected { background: var(--primary); color: #fff; }
+.pp-day.other { opacity: .55; }
+.pp-day.today { font-weight: 700; text-decoration: underline; }
+.pp-day:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.pp-payday { position: absolute; top: 1px; right: 4px; font-size: 10px; font-weight: 700; color: #15803d; }
+.pp-day.selected .pp-payday { color: #fff; }
+.pp-payday-inline { font-weight: 700; color: #15803d; }
+@media (prefers-color-scheme: dark) { .pp-day.pp-a { background: rgba(96, 165, 250, .16); } .pp-day.pp-b { background: rgba(52, 211, 153, .18); } .pp-payday, .pp-payday-inline { color: #4ade80; } }

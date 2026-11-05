@@ -1,12 +1,14 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { lastEndedPeriod, type PayFrequency } from "@crewdesk/shared";
 import { api, download, fmtDate, fmtDateTime, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { PayPeriodList, PaySchedule } from "@/components/pay-schedule";
 import { BusinessAddressFields, businessAddressValues } from "@/components/business-address-fields";
+import { PayPeriodPicker, rangeLabel } from "@/components/pay-period-picker";
 
 function lastWeek() {
   const d = new Date();
@@ -81,6 +83,17 @@ export default function Payroll() {
   const [end, setEnd] = useState(initial.end);
   const [approvedOnly, setApprovedOnly] = useState(false);
   const settings = useApi("/payroll/settings");
+  // With a pay schedule, open on the last pay period that has ended (unless a period was already picked).
+  const schedule = useApi<{ frequency: PayFrequency | null; anchorDate: string | null; paydayOffsetDays: number }>("/pay-periods/schedule");
+  const picked = useRef(false);
+  useEffect(() => {
+    const sc = schedule.data;
+    if (picked.current || !sc?.frequency || ((sc.frequency === "weekly" || sc.frequency === "biweekly") && !sc.anchorDate)) return;
+    const t = new Date();
+    const p = lastEndedPeriod(`${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`, { frequency: sc.frequency, anchorDate: sc.anchorDate, paydayOffsetDays: sc.paydayOffsetDays });
+    setStart(p.start);
+    setEnd(p.end);
+  }, [schedule.data]);
   const q = `periodStart=${start}&periodEnd=${end}${approvedOnly ? "&approvedOnly=true" : ""}`;
   const preview = useApi<any[]>(`/payroll/preview?${q}`);
   const runs = useApi<any[]>("/payroll/runs");
@@ -102,10 +115,14 @@ export default function Payroll() {
           <Link className="btn sm primary" href="/tax-forms">Review</Link>
         </div>
       )}
-      <div className="card row">
-        <label>Period start<input type="date" value={start} onChange={(e) => setStart(e.target.value)} /></label>
-        <label>Period end<input type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></label>
-        <label className="check" style={{ alignSelf: "end", marginBottom: 8 }}><input type="checkbox" checked={approvedOnly} onChange={(e) => setApprovedOnly(e.target.checked)} /> Approved time only</label>
+      <div className="card stack">
+      <div>
+        <h2 style={{ margin: 0 }}>Export hours</h2>
+        <p className="muted" style={{ margin: "4px 0 0" }}>Pick a pay period to see everyone&apos;s hours below, then export them{usesProvider ? " or send them to Check" : ""}.</p>
+      </div>
+      <div className="row">
+        <PayPeriodPicker start={start} end={end} schedule={schedule.data ?? null} onChange={(a, b) => { setStart(a); setEnd(b); picked.current = true; }} />
+        <label className="check"><input type="checkbox" checked={approvedOnly} onChange={(e) => setApprovedOnly(e.target.checked)} /> Approved time only</label>
         <div style={{ flex: 1 }} />
         <button className="btn primary" disabled={action.busy} onClick={() => action.run(async () => { await download(`/payroll/export.csv?${q}`, `payroll-${start}-to-${end}.csv`); runs.reload(); })}>
           Export CSV
@@ -117,6 +134,7 @@ export default function Payroll() {
           </button>
         )}
       </div>
+      </div>
       <ErrorBox error={action.error || preview.error} />
       {unapproved > 0 && (
         <div className="card row" style={{ justifyContent: "space-between" }}>
@@ -125,7 +143,7 @@ export default function Payroll() {
         </div>
       )}
       <div className="card tablewrap">
-        <h2>Pay period {fmtDate(start)} – {fmtDate(end)}</h2>
+        <h2>Hours for {rangeLabel(start, end)}</h2>
         {rows.length ? (
           <table>
             <thead><tr><th>Employee</th><th>Rate</th><th>Regular</th><th>Overtime</th><th>Time off</th><th>Holiday</th><th>Est. gross</th></tr></thead>
@@ -154,7 +172,7 @@ export default function Payroll() {
       </div>
       <div className="grid cols-2">
         <PaySchedule />
-        <PayPeriodList onUse={(a, b) => { setStart(a); setEnd(b); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+        <PayPeriodList onUse={(a, b) => { setStart(a); setEnd(b); picked.current = true; window.scrollTo({ top: 0, behavior: "smooth" }); }} />
       </div>
       <div className="grid cols-2">
         {s && <Settings settings={s} onSaved={settings.reload} />}
