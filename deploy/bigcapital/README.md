@@ -16,7 +16,7 @@ This folder installs it with Bigcapital's **official** Docker setup, and adds
 - **A small Linux server (VPS)** running Ubuntu 22.04 or 24.04, with 4 GB of memory and 2 CPUs (8 GB if
   you'll have many users), and 40 GB+ of disk. Examples: DigitalOcean, Hetzner, Linode, or Amazon
   Lightsail, at roughly $15–25 a month. SiteGround shared hosting can't run it (no Docker).
-- **A web address** for it, e.g. `books.prospray.biz`. You can keep the domain at SiteGround.
+- **A web address** for it, e.g. `books.prospray.net`. You can keep the domain at SiteGround.
 - **The email address** you'll sign up with. Only this address can create an account; you invite
   everyone else from inside Bigcapital.
 - **(Optional) An outgoing email account (SMTP)** so Bigcapital can send invoices and invitations,
@@ -39,14 +39,14 @@ This folder installs it with Bigcapital's **official** Docker setup, and adds
    (or copy just this folder over with `scp -r deploy/bigcapital root@your-server-ip:`).
 5. **Run the installer** with your web address and email:
    ```bash
-   sudo ./install.sh --domain books.prospray.biz --admin-email you@prospray.biz
+   sudo ./install.sh --domain books.prospray.net --admin-email you@prospray.net
    ```
    To add outgoing email now, add for example
-   `--smtp-host smtp.gmail.com --smtp-port 587 --smtp-user you@prospray.biz --smtp-pass 'app-password'`.
+   `--smtp-host smtp.gmail.com --smtp-port 587 --smtp-user you@prospray.net --smtp-pass 'app-password'`.
 
    It takes about 5–10 minutes. It installs Docker if needed, downloads Bigcapital's official setup,
    creates strong passwords, starts everything, sets up file storage, and starts HTTPS.
-6. **Open `https://books.prospray.biz`** and sign up with the email you gave. Then set up your
+6. **Open `https://books.prospray.net`** and sign up with the email you gave. Then set up your
    company, chart of accounts and opening balances, and invite your bookkeeper or accountant.
 
 ## Everyday use

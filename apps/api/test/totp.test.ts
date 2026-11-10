@@ -32,8 +32,8 @@ describe("TOTP", () => {
   });
 
   it("builds an otpauth link", () => {
-    expect(otpauthUri("ABC", "pia@prospray.biz", "Crewdesk (ProSpray)")).toBe(
-      "otpauth://totp/Crewdesk%20(ProSpray)%3Apia%40prospray.biz?secret=ABC&issuer=Crewdesk%20(ProSpray)&algorithm=SHA1&digits=6&period=30",
+    expect(otpauthUri("ABC", "pia@prospray.net", "Crewdesk (ProSpray)")).toBe(
+      "otpauth://totp/Crewdesk%20(ProSpray)%3Apia%40prospray.net?secret=ABC&issuer=Crewdesk%20(ProSpray)&algorithm=SHA1&digits=6&period=30",
     );
   });
 });
