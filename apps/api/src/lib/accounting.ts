@@ -19,7 +19,7 @@ export const ACCOUNTING_KEY_PURPOSE = PURPOSE;
 /** A client for the company's Bigcapital, or an error saying what's missing. */
 export async function clientFor(companyId: string) {
   const cfg = await accountingConfig(companyId);
-  if (!cfg.settings.enabled || !cfg.settings.baseUrl || !cfg.key) throw new BigcapitalError("Connect Bigcapital first (Payroll → Accounting).");
+  if (!cfg.settings.enabled || !cfg.settings.baseUrl || !cfg.key) throw new BigcapitalError("Connect Bigcapital first (the Accounting page).");
   return { cfg, bc: bigcapital(cfg.settings.baseUrl, cfg.key) };
 }
 
@@ -44,7 +44,7 @@ export async function postPayPeriod(companyId: string, periodId: string, by: str
   try {
     if (period.status !== "approved") throw new BigcapitalError("Approve the pay period first");
     const { cfg, bc } = await clientFor(companyId);
-    if (!cfg.settings.wagesAccountId || !cfg.settings.payrollLiabilityAccountId) throw new BigcapitalError("Choose the wages and payroll liability accounts first (Payroll → Accounting).");
+    if (!cfg.settings.wagesAccountId || !cfg.settings.payrollLiabilityAccountId) throw new BigcapitalError("Choose the wages and payroll liability accounts first (the Accounting page).");
     const lines = await buildPayrollLines(db, companyId, { periodStart: period.periodStart, periodEnd: period.periodEnd });
     const j = payrollJournalLines(lines, cfg.settings);
     amount = j.totalCents;
@@ -76,7 +76,7 @@ export async function postWorkOrder(companyId: string, workOrderId: string, by: 
     if (!amount) throw new BigcapitalError("This work order has no parts or labor cost");
     const { cfg, bc } = await clientFor(companyId);
     const s = cfg.settings;
-    if (!s.partsAccountId || !s.workOrderPaymentAccountId) throw new BigcapitalError("Choose the work order expense and payment accounts first (Payroll → Accounting).");
+    if (!s.partsAccountId || !s.workOrderPaymentAccountId) throw new BigcapitalError("Choose the work order expense and payment accounts first (the Accounting page).");
     const date = localParts(wo.completedAt ?? new Date(), cfg.timezone).date;
     const label = `Work order #${wo.number}: ${row.assetName}, ${wo.title}`;
     const externalId = await bc.createExpense({
@@ -96,7 +96,7 @@ export async function postWorkOrder(companyId: string, workOrderId: string, by: 
   }
 }
 
-/** Fire-and-forget for automatic posting (failures are recorded and shown on Payroll → Accounting). */
+/** Fire-and-forget for automatic posting (failures are recorded and shown on the Accounting page). */
 const pending = new Set<Promise<void>>();
 export function autoPost(fn: () => Promise<unknown>) {
   const p: Promise<void> = fn().then(() => {}, () => {}).finally(() => pending.delete(p));

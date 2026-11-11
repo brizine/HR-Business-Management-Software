@@ -9,7 +9,6 @@ import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { PayPeriodList, PaySchedule } from "@/components/pay-schedule";
 import { BusinessAddressFields, businessAddressValues } from "@/components/business-address-fields";
 import { PayPeriodPicker, rangeLabel } from "@/components/pay-period-picker";
-import { AccountingCard } from "@/components/accounting";
 
 function lastWeek() {
   const d = new Date();
@@ -181,7 +180,6 @@ export default function Payroll() {
         <PaySchedule />
         <PayPeriodList onUse={(a, b) => { setStart(a); setEnd(b); picked.current = true; window.scrollTo({ top: 0, behavior: "smooth" }); }} />
       </div>
-      <AccountingCard />
       <div className="grid cols-2">
         {s && <Settings settings={s} onSaved={settings.reload} />}
         <div className="card">
