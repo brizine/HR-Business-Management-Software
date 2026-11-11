@@ -49,6 +49,22 @@ This folder installs it with Bigcapital's **official** Docker setup, and adds
 6. **Open `https://books.prospray.net`** and sign up with the email you gave. Then set up your
    company, chart of accounts and opening balances, and invite your bookkeeper or accountant.
 
+## If something doesn't work
+
+- **"This site can't be reached" / NXDOMAIN / "can't find the server":** the web address isn't
+  found yet. On your computer, `nslookup books.prospray.net 8.8.8.8` should show the server's IP.
+  If it does but your browser still fails, your router or internet provider is remembering the old
+  "doesn't exist" answer: restart the router, or on a Mac add `8.8.8.8` and `1.1.1.1` under
+  *System Settings → Wi-Fi (or Ethernet) → Details → DNS*. Phones on mobile data are a quick
+  way to check the site itself is up.
+- **Can't log in:** make sure you signed up first, with exactly the `--admin-email` address (it's
+  the only one allowed; see `SIGNUP_ALLOWED_EMAILS` in `.env`). To list accounts:
+  `docker exec bigcapital-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" bigcapital_system -e "SELECT EMAIL, ACTIVE FROM USERS;"'`
+  (table names are in capitals). Password-reset emails need outgoing email (`MAIL_…`) set up.
+- **Sign-up or pages show errors:** `docker logs --tail 40 bigcapital-server`.
+- **After signing up, lock sign-ups:** set `SIGNUP_DISABLED=true` in `.env`, then
+  `./bigcapital.sh restart`. Invite everyone else from inside Bigcapital.
+
 ## Everyday use
 
 From the install folder (`/opt/bigcapital`):
