@@ -123,11 +123,17 @@ if ! grep -qE '^S3_ACCESS_KEY_ID=.+' .env || ! grep -qE '^S3_SECRET_ACCESS_KEY=.
   $G layout apply --version 1 >/dev/null 2>&1 || true
   for _ in $(seq 1 30); do $G status 2>/dev/null | grep -q "HEALTHY\|Healthy\|NO ROLE ASSIGNED" && break; sleep 2; done
   $G bucket create bigcapital >/dev/null 2>&1 || true
-  OUT="$($G key create bigcapital-app 2>/dev/null || $G key create --name bigcapital-app)"
+  # Reuse the key if an earlier run already made it; otherwise create it.
+  if $G key info bigcapital-app >/dev/null 2>&1; then
+    OUT="$($G key info bigcapital-app --show-secret 2>&1)"
+  else
+    OUT="$($G key create bigcapital-app 2>&1)"
+  fi
   KEY_ID="$(echo "$OUT" | awk '/Key ID/{print $NF}' | head -1)"
   SECRET="$(echo "$OUT" | awk '/Secret key/{print $NF}' | head -1)"
-  [ -n "$KEY_ID" ] && [ -n "$SECRET" ] || { echo "Couldn't create the storage key. Output was:"; echo "$OUT"; exit 1; } >&2
-  $G bucket allow --read --write --owner --bucket bigcapital --key "$KEY_ID" >/dev/null
+  [ -n "$KEY_ID" ] && [ -n "$SECRET" ] || { echo "Couldn't get the storage key. Output was:"; echo "$OUT" | grep -v -i secret; exit 1; } >&2
+  # Garage's syntax: bucket allow <bucket> --key <key> --read --write --owner
+  $G bucket allow bigcapital --key "$KEY_ID" --read --write --owner >/dev/null
   set_env S3_ACCESS_KEY_ID "$KEY_ID"
   set_env S3_SECRET_ACCESS_KEY "$SECRET"
   $COMPOSE up -d server
