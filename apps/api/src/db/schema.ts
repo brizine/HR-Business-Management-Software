@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import type { AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess } from "@crewdesk/shared";
+import type { AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess } from "@crewdesk/shared";
 import {
   boolean,
   primaryKey,
@@ -43,6 +43,9 @@ export const companies = pgTable("companies", {
   /** Employer details printed on tax forms. */
   legalName: text("legal_name"),
   ein: text("ein"),
+  /** Bigcapital connection (see accounting.ts in @crewdesk/shared); the API key is kept encrypted, apart. */
+  accounting: jsonb("accounting").$type<AccountingSettings>(),
+  accountingKey: text("accounting_key"),
   /** Grace periods, alerts and points for attendance (see attendance.ts in @crewdesk/shared). */
   attendanceRules: jsonb("attendance_rules").$type<AttendanceRules>(),
   /** Who gets paid holidays and what working one pays (see HolidayRules in @crewdesk/shared). */
@@ -588,6 +591,27 @@ export const availability = pgTable(
 );
 
 /** Saved shift presets, e.g. "Morning crew 7:00–15:30, Driver, Truck 12". */
+/** What was sent to Bigcapital (one per pay period / work order), so nothing is posted twice. */
+export const accountingPostings = pgTable(
+  "accounting_postings",
+  {
+    id: id(),
+    companyId: companyId(),
+    /** payroll | work_order */
+    kind: text("kind").notNull(),
+    sourceId: uuid("source_id").notNull(),
+    /** posted | failed */
+    status: text("status").notNull(),
+    /** Bigcapital's id for the journal / expense. */
+    externalId: text("external_id"),
+    amountCents: integer("amount_cents").notNull().default(0),
+    error: text("error"),
+    postedById: uuid("posted_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("accounting_postings_source_idx").on(t.companyId, t.kind, t.sourceId)],
+);
+
 /** Training courses (see training.ts in @crewdesk/shared). */
 export const courses = pgTable("courses", {
   id: id(),

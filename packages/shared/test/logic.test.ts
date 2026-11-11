@@ -512,3 +512,35 @@ describe("training", () => {
     expect(videoEmbedUrl("https://example.com/video.mp4")).toBeNull();
   });
 });
+
+import { accountingSettingsSchema, payrollJournalLines } from "../src/accounting";
+
+describe("accounting (Bigcapital)", () => {
+  const accounts = { wagesAccountId: 10, timeOffAccountId: null, payrollLiabilityAccountId: 20 };
+  const lines = [
+    { payType: "hourly", payRateCents: 2000, ptoHours: 8, holidayHours: 8, estimatedGrossCents: 120000 },
+    { payType: "hourly", payRateCents: 2500, ptoHours: 0, holidayHours: 0, estimatedGrossCents: 100000 },
+    { payType: "salary", payRateCents: 6000000, ptoHours: 0, holidayHours: 0, estimatedGrossCents: null },
+  ];
+  it("balances wages against the liability", () => {
+    const j = payrollJournalLines(lines, accounts);
+    expect(j).toMatchObject({ totalCents: 220000, salaried: 1 });
+    expect(j.lines).toEqual([
+      { accountId: 10, debitCents: 220000, note: expect.any(String) },
+      { accountId: 20, creditCents: 220000, note: expect.any(String) },
+    ]);
+  });
+  it("splits time off when it has its own account", () => {
+    const j = payrollJournalLines(lines, { ...accounts, timeOffAccountId: 11 });
+    expect(j.lines.map((l) => [l.accountId, l.debitCents ?? -l.creditCents!])).toEqual([[10, 188000], [11, 32000], [20, -220000]]);
+  });
+  it("needs both accounts and something to post", () => {
+    expect(payrollJournalLines(lines, { ...accounts, wagesAccountId: null }).lines).toEqual([]);
+    expect(payrollJournalLines([], accounts).lines).toEqual([]);
+  });
+  it("cleans the address", () => {
+    const base = { enabled: true, wagesAccountId: null, timeOffAccountId: null, payrollLiabilityAccountId: null, partsAccountId: null, laborAccountId: null, workOrderPaymentAccountId: null, autoPostPayroll: false, autoPostWorkOrders: false };
+    expect(accountingSettingsSchema.parse({ ...base, baseUrl: "https://books.example.com/api/" }).baseUrl).toBe("https://books.example.com");
+    expect(accountingSettingsSchema.safeParse({ ...base, baseUrl: "books.example.com" }).success).toBe(false);
+  });
+});

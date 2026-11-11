@@ -72,6 +72,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (companyName) document.title = companyName;
   }, [companyName, path]);
 
+  // Bigcapital, for payroll admins once it's connected (opens in a new tab).
+  const [accountingUrl, setAccountingUrl] = useState<string | null>(null);
+  const seesAccounting = !!me && can("admin", "payroll");
+  useEffect(() => {
+    if (seesAccounting) api<{ enabled: boolean; baseUrl: string; hasKey: boolean }>("/accounting/settings").then((r) => setAccountingUrl(r.enabled && r.hasKey && r.baseUrl ? r.baseUrl : null), () => setAccountingUrl(null));
+    else setAccountingUrl(null);
+  }, [seesAccounting, me?.company.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (ready && !me) router.replace("/login");
   }, [ready, me, router]);
@@ -101,6 +109,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               ))}
           </div>
         ))}
+        {accountingUrl && (
+          <a href={accountingUrl} target="_blank" rel="noopener noreferrer">Accounting ↗</a>
+        )}
         {payApprovals?.isApprover && (
           <Link href="/pay-periods" className={path.startsWith("/pay-periods") ? "active" : ""}>
             Pay approvals {payApprovals.pending > 0 && <span className="badge warn" style={{ marginLeft: 4 }}>{payApprovals.pending}</span>}

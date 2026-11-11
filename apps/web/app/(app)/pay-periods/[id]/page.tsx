@@ -6,6 +6,7 @@ import { api, fmtDate, fmtDateTime, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
+import { PayPeriodAccounting } from "@/components/accounting";
 
 /** Where approvers land from the "ready to approve" notification. */
 export default function PayPeriodApproval() {
@@ -48,6 +49,7 @@ export default function PayPeriodApproval() {
         <div className="card muted">Waiting for approval.</div>
       )}
       <ErrorBox error={error} />
+      <PayPeriodAccounting periodId={id} approved={d.status === "approved"} />
       <div className="card tablewrap">
         <h2>Hours</h2>
         {d.lines.length ? (

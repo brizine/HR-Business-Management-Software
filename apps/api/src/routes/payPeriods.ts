@@ -9,6 +9,7 @@ import { HttpError, notFound, parse } from "../lib/errors";
 import { notify, staffWithRole } from "../lib/notify";
 import { buildPayrollLines } from "../lib/payroll";
 import { localParts } from "../lib/tz";
+import { accountingConfig, autoPost, postPayPeriod } from "../lib/accounting";
 
 /** Which area of the Permissions page controls access here. */
 const AREA = "payroll" as const;
@@ -138,6 +139,9 @@ const routes: FastifyPluginAsync = async (app) => {
       body: `${me.f} ${me.l} approved it${note ? `: "${note}"` : ""}. Payday is ${period.payday}.`,
       link: { screen: "pay-period", id: period.id },
     });
+    // Send it to Bigcapital if the company asked for that.
+    const acct = await accountingConfig(req.user.companyId);
+    if (acct.settings.enabled && acct.settings.autoPostPayroll && acct.hasKey) autoPost(() => postPayPeriod(req.user.companyId, period.id, req.user.sub));
     return updated;
   });
 

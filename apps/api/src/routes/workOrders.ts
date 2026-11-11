@@ -7,6 +7,7 @@ import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { nextWorkOrderNumber, recordMeter } from "../lib/fleet";
 import { except, notify, staffWithRole } from "../lib/notify";
+import { accountingConfig, autoPost, postWorkOrder } from "../lib/accounting";
 
 /** Which area of the Permissions page controls access here. */
 const AREA = "fleet" as const;
@@ -156,6 +157,11 @@ const routes: FastifyPluginAsync = async (app) => {
         body: `${asset.name}: ${wo.title}`,
         link: { screen: "work-order", id: wo.id, assetId: wo.assetId },
       });
+      // Send its parts and labor to Bigcapital as an expense, if the company asked for that.
+      if (updated.partsCostCents + updated.laborCostCents > 0) {
+        const acct = await accountingConfig(req.user.companyId);
+        if (acct.settings.enabled && acct.settings.autoPostWorkOrders && acct.hasKey) autoPost(() => postWorkOrder(req.user.companyId, wo.id, req.user.sub));
+      }
     }
     return updated;
   });

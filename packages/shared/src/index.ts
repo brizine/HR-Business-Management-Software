@@ -17,3 +17,4 @@ export * from "./holidays";
 export * from "./reviews";
 export * from "./attendance";
 export * from "./training";
+export * from "./accounting";
