@@ -73,7 +73,7 @@ try {
   if ((err as NodeJS.ErrnoException).code !== "EADDRINUSE") throw err;
   // Usually Crewdesk is already running in another terminal (Codespaces starts one by itself).
   console.error(`\n✖ Port ${port} is already in use, so Crewdesk is probably already running in another terminal.`);
-  console.error(`  Use that one, or stop every copy with:  pkill -f apps/api/dist/main.js   and start again.\n`);
+  console.error(`  Use that one, or stop every copy with:  pkill -f apps/api/dist/   and start again.\n`);
   process.exit(1);
 }
 // Where files are kept, so the deployment log shows the full path of the uploads folder.

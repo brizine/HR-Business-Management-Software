@@ -1,6 +1,7 @@
 {
   "name": "crewdesk",
   "private": true,
+  "main": "apps/api/dist/start.js",
   "packageManager": "pnpm@10.28.0",
   "scripts": {
     "dev:api": "pnpm --filter @crewdesk/api dev",
@@ -11,11 +12,11 @@
     "build": "pnpm --filter @crewdesk/web build:prod && pnpm --filter @crewdesk/api build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "start": "NODE_ENV=production node --env-file-if-exists=apps/api/.env apps/api/dist/main.js",
+    "start": "node apps/api/dist/start.js",
     "backup:keygen": "node apps/api/dist/backup-cli.js keygen",
     "backup:run": "node --env-file-if-exists=apps/api/.env apps/api/dist/backup-cli.js run",
     "backup:decrypt": "node apps/api/dist/backup-cli.js decrypt",
-    "demo": "node scripts/wait-for-db.mjs && pnpm db:migrate && pnpm db:seed && echo '\u2026 Building Crewdesk (1\u20133 minutes). Until it says it is running, the web address shows \"unable to handle this request\".' && pnpm build && NODE_ENV=production node apps/api/dist/main.js"
+    "demo": "node scripts/wait-for-db.mjs && pnpm db:migrate && pnpm db:seed && echo '… Building Crewdesk (1–3 minutes). Until it says it is running, the web address shows \"unable to handle this request\".' && pnpm build && NODE_ENV=production node apps/api/dist/main.js"
   },
   "engines": {
     "node": ">=22"

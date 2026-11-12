@@ -59,7 +59,7 @@ Crewdesk is already running in another terminal (the codespace starts one by its
 **crewdesk** terminal). Use that one, or stop every copy and start one:
 
 ```
-pkill -f apps/api/dist/main.js
+pkill -f apps/api/dist/
 pnpm demo
 ```
 

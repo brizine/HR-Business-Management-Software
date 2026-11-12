@@ -56,6 +56,8 @@ Everything from here on, until step 5, happens in this project's Site Tools. Und
 | Build command | `pnpm build` |
 | Start command (if asked) | `pnpm start` |
 
+SiteGround usually has no start-command field; it runs `npm start` by itself, which starts Crewdesk.
+
 ## 3. Create the database
 
 In the project's Site Tools: **Site → PostgreSQL**.
@@ -232,6 +234,12 @@ e.g. by SiteGround's own backups. Restoring them needs the same `ENCRYPTION_KEY`
 
 ## Troubleshooting
 
+- **502 Bad Gateway**: the website is up but Crewdesk didn't start. SiteGround doesn't show what a
+  running app prints, so Crewdesk writes it to a file: in **Site Tools → Site → File Manager**, open
+  your home folder (the one that holds `crewdesk-uploads`) and open **`crewdesk-startup.log`**. The
+  last block shows how far it got, and lines starting with **✖** say what to fix. If the file isn't
+  there at all, Crewdesk never started: check **Site Tools → Statistics → Error Log**. The log holds
+  setting names only, never passwords, and you can put it elsewhere with `LOG_FILE`.
 - **The build fails**: open the deployment log in Site Tools → Node.js. Make sure the package manager
   is pnpm and the Node version is 22+.
 - **"No web build found"**: the build command didn't run `pnpm build`.
