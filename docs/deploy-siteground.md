@@ -137,8 +137,8 @@ In the project's Site Tools, look under **Domain** for adding (or parking) a dom
 `manage.prospray.net`. Then check **Security → SSL Manager** has a Let's Encrypt certificate for it:
 Crewdesk must be served over HTTPS (phones and camera scanning need it).
 
-If you already created `app` as a subdomain under the prospray.net website, delete it there first,
-or the two may conflict. If prospray.net's DNS isn't at SiteGround, point `app` at the address
+If you already created `manage` as a subdomain under the prospray.net website, delete it there first,
+or the two may conflict. If prospray.net's DNS isn't at SiteGround, point `manage` at the address
 SiteGround shows for the project.
 
 ## 8. Check it and create your account
