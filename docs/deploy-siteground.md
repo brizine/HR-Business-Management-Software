@@ -9,24 +9,56 @@ https://app.prospray.net          → website (staff, managers, QR scan pages, c
 https://app.prospray.net/api/...  → API (used by the website and the phone app)
 ```
 
-Plan for about 30–45 minutes the first time.
+Plan for about 45 minutes the first time. SiteGround's Node.js screens are new, so a few labels may
+differ slightly from these steps.
 
 ## 0. What you need
 
-- ProSpray's **GoGeek** plan (up to 10 Node.js projects; Crewdesk uses one).
+- ProSpray's **GoGeek** plan (Node.js projects need GrowBig or GoGeek; GoGeek allows up to 10).
 - The address **`app.prospray.net`**. The main website at `prospray.net` is untouched. QR labels
   point to this address, so print them after it's live.
 - Admin access to the GitHub repo `brizine/HR-Business-Management-Software`.
+- **Three secrets.** On any Mac (Terminal), run this three times and keep the results in your
+  password manager. They become `JWT_SECRET`, `ENCRYPTION_KEY` and `JOBS_SECRET` in step 6:
+  ```
+  openssl rand -hex 32
+  ```
+  **Never lose or change `ENCRYPTION_KEY`:** uploaded documents can't be opened without it. Keep a
+  printed copy somewhere safe too.
 
-## 1. Add the domain
+## 1. Create the Node.js project
 
-In **Site Tools → Domain → Subdomains** (for the prospray.net site) create the subdomain `app`,
-and make sure **Security → SSL Manager** has a Let's Encrypt certificate for it. Crewdesk must be
-served over HTTPS: phones and camera scanning need it.
+A Node.js app is **its own project** on SiteGround, not a menu inside an existing website's Site
+Tools:
 
-## 2. Create the database
+1. Log in to SiteGround, click **Websites** at the top, open the **Node.js Projects** tab and click
+   **New Project**.
+2. Choose **Import from GitHub** (not the ZIP upload), connect your GitHub account and pick
+   `brizine/HR-Business-Management-Software`, branch **`production`**. With GitHub, every update to
+   that branch redeploys the app automatically.
+3. The project starts on a free temporary web address. That's fine: you'll attach `app.prospray.net`
+   in step 7.
 
-**Site Tools → Site → PostgreSQL**:
+**About the `production` branch:** the repo's GitHub Action runs all tests on every push to `main`
+and, if they pass, moves `production` forward to that commit. Deploying from `production` means a
+broken commit never reaches the live site.
+
+## 2. Build settings
+
+Open the project's **own Site Tools** (Websites → Node.js Projects → your project → **Site Tools**).
+Everything from here on, until step 5, happens in this project's Site Tools. Under **Node.js**, set:
+
+| Setting | Value |
+| --- | --- |
+| Node.js version | 22 (or newer) |
+| Package manager | pnpm |
+| Framework preset | None / Custom Node.js |
+| Build command | `pnpm build` |
+| Start command (if asked) | `pnpm start` |
+
+## 3. Create the database
+
+In the project's Site Tools: **Site → PostgreSQL**.
 
 1. Create a database (e.g. `crewdesk`) and a user with a strong password, and give the user all
    privileges on the database.
@@ -38,76 +70,76 @@ Your `DATABASE_URL` will be:
 postgres://USER:PASSWORD@localhost:5432/DATABASE
 ```
 
-If the password contains characters like `@`, `:` or `/`, URL-encode them (`@` → `%40`).
+If the password contains `@`, `:` or `/`, replace them with `%40`, `%3A` and `%2F`.
 
 Crewdesk creates and updates its tables automatically every time it starts, so there's nothing to
 import.
 
-## 3. Create a mailbox for sending email
-
-**Site Tools → Email → Accounts**: create `no-reply@prospray.net`. Open its **Mail Configuration**
-to see the outgoing (SMTP) server and port. Then:
-
-```
-SMTP_URL=smtps://no-reply%40prospray.net:MAILBOX_PASSWORD@SMTP_SERVER:465
-EMAIL_FROM="Crewdesk <no-reply@prospray.net>"
-```
-
-Use the server name and port SiteGround shows. With port 587, use `smtp://` instead of `smtps://`.
-
-## 4. Choose where uploaded documents live
+## 4. A folder for uploaded documents
 
 Pick one:
 
-- **Simplest:** a folder in your SiteGround account outside the app's code, e.g.
-  `/home/customer/crewdesk-uploads` (use the File Manager to find your account's real home path). Set
-  `UPLOAD_DIR` to that absolute path. Include the folder in your backups.
+- **Simplest:** in the project's Site Tools, open **Site → File Manager**. At the top level (where you
+  see the `www` folder, **not inside it**), click **New Folder** and name it `crewdesk-uploads`.
+  Outside `www`, nobody can download the files from the web and a redeploy won't erase them.
+  You need its **full path** for `UPLOAD_DIR` (something like `/home/customer/crewdesk-uploads`, but
+  check yours): look for **Info**/**Properties** on the folder or a path at the top of the File
+  Manager, or with SSH (**Devs → SSH Keys Manager**) run `cd ~/crewdesk-uploads && pwd`. SiteGround
+  support can also tell you the home folder path. Include this folder in your backups.
 - **Sturdier:** a Cloudflare R2 bucket (free up to 10 GB). Create a bucket and an API token with
   read/write access to it, then set `S3_BUCKET`, `S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com`,
   `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`.
 
-Don't leave `UPLOAD_DIR` at its default (`./uploads`), because that's inside the deployed code and may be
+Don't leave `UPLOAD_DIR` at its default (`./uploads`): that's inside the deployed code and may be
 replaced on redeploy.
 
-## 5. Create the Node.js project
+## 5. A mailbox for sending email
 
-**Site Tools → Node.js** (it may be under **Devs**) → create a project for your Crewdesk domain:
+Use a mailbox on a domain whose email SiteGround hosts, e.g. `no-reply@prospraylawns.com`. In **that
+website's** Site Tools: **Email → Accounts**, create the mailbox, then open its **Mail Configuration**
+to see the outgoing (SMTP) server and port. Then:
 
-| Setting | Value |
-| --- | --- |
-| Source | GitHub: connect your account and pick `brizine/HR-Business-Management-Software` |
-| Branch | `production` (updated automatically when tests pass; see below), or `main` |
-| Node.js version | 22 (or newer) |
-| Package manager | pnpm |
-| Framework preset | None / Custom Node.js |
-| Build command | `pnpm build` |
-| Start command (if asked) | `pnpm start` |
+```
+SMTP_URL=smtps://no-reply%40prospraylawns.com:MAILBOX_PASSWORD@SMTP_SERVER:465
+EMAIL_FROM="Crewdesk <no-reply@prospraylawns.com>"
+```
 
-**Environment variables** (set them in the project's settings, not in a file):
+Use the server name and port SiteGround shows. With port 587, use `smtp://` instead of `smtps://`.
+(SiteGround doesn't block email ports, unlike some cloud servers.)
+
+## 6. Environment variables, then deploy
+
+Back in the **project's** Site Tools → **Node.js**, add these environment variables (in the project's
+settings, not in a file):
 
 | Name | Value |
 | --- | --- |
-| `DATABASE_URL` | From step 2 |
-| `JWT_SECRET` | A long random string (e.g. 64 random letters/numbers). Keep it secret. |
-| `ENCRYPTION_KEY` | Another long random string. Encrypts uploaded documents and two-factor secrets. **Never change it after launch, and keep a copy offline** (see step 10): without it, uploaded documents can't be opened |
-| `JOBS_SECRET` | Another long random string (used by the cron job in step 7) |
+| `DATABASE_URL` | From step 3 |
+| `JWT_SECRET` | Secret 1 from step 0 |
+| `ENCRYPTION_KEY` | Secret 2 from step 0. Encrypts uploaded documents and two-factor secrets. **Never change it after launch, and keep a copy offline** (see step 12) |
+| `JOBS_SECRET` | Secret 3 from step 0 (used by the cron job in step 9) |
 | `WEB_URL` | `https://app.prospray.net` |
 | `PUBLIC_API_URL` | `https://app.prospray.net/api` |
 | `CORS_ORIGINS` | `https://app.prospray.net` |
 | `UPLOAD_DIR` *or* `S3_*` | From step 4 |
-| `BACKUP_PUBLIC_KEY`, `BACKUP_DIR` | From step 10 |
-| `SMTP_URL`, `EMAIL_FROM` | From step 3 |
+| `SMTP_URL`, `EMAIL_FROM` | From step 5 |
+| `BACKUP_PUBLIC_KEY`, `BACKUP_DIR` | From step 12 (can be added later) |
 | `TWILIO_*` | Optional, for text messages (see README) |
 
-Don't set `PORT`; SiteGround provides it. Deploy, and watch the deployment log until the build
+Don't set `PORT`; SiteGround provides it. Deploy, and watch the **deployment log** until the build
 finishes.
 
-**About the `production` branch:** the repo's GitHub Action runs all tests on every push to `main`
-and, if they pass, moves `production` forward to that commit. Deploying from `production` means a
-broken commit never reaches the live site. Until the Action has run once, `production` won't exist:
-push any commit to `main`, or deploy from `main` at first and switch later.
+## 7. Attach app.prospray.net
 
-## 6. Check it and create your account
+In the project's Site Tools, look under **Domain** for adding (or parking) a domain, and connect
+`app.prospray.net`. Then check **Security → SSL Manager** has a Let's Encrypt certificate for it:
+Crewdesk must be served over HTTPS (phones and camera scanning need it).
+
+If you already created `app` as a subdomain under the prospray.net website, delete it there first,
+or the two may conflict. If prospray.net's DNS isn't at SiteGround, point `app` at the address
+SiteGround shows for the project.
+
+## 8. Check it and create your account
 
 1. Open `https://app.prospray.net/api/health`. It should say `{"ok":true}`.
 2. Open `https://app.prospray.net/signup` and create your company and owner login.
@@ -118,7 +150,7 @@ push any commit to `main`, or deploy from `main` at first and switch later.
    **Settings → Security**.
 5. Test **Forgot your password?** on the sign-in page once email is set up, so you know reset emails arrive.
 
-## 7. Add the scheduled-checks cron job
+## 9. Add the scheduled-checks cron job
 
 Crewdesk checks every 5 minutes for people who haven't clocked in for their shift, attendance point
 levels, maintenance coming due, expiring registrations, forgotten clock-outs, upcoming shifts, training
@@ -132,14 +164,14 @@ curl -s -X POST -H "X-Jobs-Secret: YOUR_JOBS_SECRET" https://app.prospray.net/ap
 
 Running it twice is harmless; each alert is only sent once.
 
-## 8. Connect your accounting (optional)
+## 10. Connect your accounting (optional)
 
 If you run Bigcapital (see `deploy/bigcapital/README.md`), open **Accounting** in Crewdesk's sidebar,
 enter its address (e.g. `https://books.prospray.net`) and an API key from Bigcapital
 (**Preferences → API keys**), test the connection and choose accounts. Approved pay periods and
 completed work orders can then be sent to your books.
 
-## 9. Phone app
+## 11. Phone app
 
 Push notifications and the camera scanner need the Crewdesk app built for your server:
 
@@ -151,7 +183,7 @@ Push notifications and the camera scanner need the Crewdesk app built for your s
 Everything except push and the in-app scanner also works in the phone's browser at your Crewdesk
 address. QR labels open in the browser without the app.
 
-## 10. Encrypted backups
+## 12. Encrypted backups
 
 Crewdesk makes a nightly, encrypted copy of the database. Backups are locked with a **public key**;
 only the matching **private key**, which never goes on the server, can open them. So a leaked backup,
