@@ -19,17 +19,26 @@ import { folderPath } from "./lib/paths";
 const apiDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const webDir = resolve(apiDir, "../web");
 
+console.log("Starting Crewdesk: connecting to the database…");
 // IDs use gen_random_uuid(), built into PostgreSQL 13+. Older servers need pgcrypto for it.
-const { rows } = await pool.query<{ v: string }>("SHOW server_version_num");
+const { rows } = await pool.query<{ v: string }>("SELECT current_setting('server_version_num') AS v").catch((err: NodeJS.ErrnoException) => {
+  // Say plainly what to check; the full error follows.
+  const where = (() => { try { const u = new URL(process.env.DATABASE_URL ?? ""); return `${u.hostname}:${u.port || 5432}, database "${u.pathname.slice(1)}", user "${decodeURIComponent(u.username)}"`; } catch { return "the DATABASE_URL setting (it doesn't look like postgres://USER:PASSWORD@HOST:5432/DATABASE)"; } })();
+  console.error(`\n✖ Couldn't connect to the database at ${where}.`);
+  console.error(err.code === "28P01" ? "  The password was refused: check the password in DATABASE_URL (write @ : / as %40 %3A %2F)." : err.code === "3D000" ? "  That database doesn't exist: check its name in DATABASE_URL." : err.code === "ECONNREFUSED" ? "  Nothing answered there: check the host and port in DATABASE_URL (SiteGround shows them under PostgreSQL)." : "  Check DATABASE_URL.");
+  throw err;
+});
 if (Number(rows[0].v) < 130000) {
   await pool.query("CREATE EXTENSION IF NOT EXISTS pgcrypto").catch((err) => {
     throw new Error(`PostgreSQL ${rows[0].v} needs the pgcrypto extension; ask your host to enable it (${err.message})`);
   });
 }
 
+console.log(`Connected to PostgreSQL ${Math.floor(Number(rows[0].v) / 10000)}. Updating database tables…`);
 // Bring the database schema up to date on every start, so deploys need no shell access.
 await migrate(db, { migrationsFolder: resolve(apiDir, "drizzle") });
 
+console.log("Database is up to date. Starting the website…");
 const app = await buildApp({ prefix: "/api" });
 
 if (!existsSync(resolve(webDir, ".next/BUILD_ID"))) {
@@ -53,9 +62,13 @@ await app.register(async (site: FastifyInstance) => {
   } });
 });
 
-const port = Number(process.env.PORT ?? 3000);
+// PORT is normally a number; some hosts hand the app a socket file path instead, so accept both.
+const rawPort = (process.env.PORT ?? "3000").trim();
+const socketPath = /^\d+$/.test(rawPort) ? null : rawPort;
+const port = socketPath ? 0 : Number(rawPort);
+console.log(socketPath ? `Listening on socket ${socketPath}` : `Listening on port ${port}`);
 try {
-  await app.listen({ port, host: process.env.HOST ?? "0.0.0.0" });
+  await app.listen(socketPath ? { path: socketPath } : { port, host: process.env.HOST ?? "0.0.0.0" });
 } catch (err) {
   if ((err as NodeJS.ErrnoException).code !== "EADDRINUSE") throw err;
   // Usually Crewdesk is already running in another terminal (Codespaces starts one by itself).
@@ -65,7 +78,7 @@ try {
 }
 // Where files are kept, so the deployment log shows the full path of the uploads folder.
 console.log(process.env.S3_BUCKET ? `Uploaded documents are stored in the "${process.env.S3_BUCKET}" bucket.` : `Uploaded documents are stored in ${folderPath(process.env.UPLOAD_DIR ?? "./uploads")}`);
-console.log(`\n✔ Crewdesk is running on port ${port}.${process.env.CODESPACES ? " Open the Ports tab and click the globe next to port " + port + "." : ""}\n`);
+console.log(`\n✔ Crewdesk is running on ${socketPath ? `socket ${socketPath}` : `port ${port}`}.${process.env.CODESPACES ? " Open the Ports tab and click the globe next to port " + port + "." : ""}\n`);
 
 const timer = process.env.DISABLE_SCHEDULER === "true" ? null : startScheduler();
 
