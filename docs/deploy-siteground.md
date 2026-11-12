@@ -237,8 +237,10 @@ e.g. by SiteGround's own backups. Restoring them needs the same `ENCRYPTION_KEY`
 - **502 Bad Gateway**: the website is up but Crewdesk didn't start. SiteGround doesn't show what a
   running app prints, so Crewdesk writes it to a file: in **Site Tools → Site → File Manager**, open
   your home folder (the one that holds `crewdesk-uploads`) and open **`crewdesk-startup.log`**. The
-  last block shows how far it got, and lines starting with **✖** say what to fix. If the file isn't
-  there at all, Crewdesk never started: check **Site Tools → Statistics → Error Log**. The log holds
+  last block shows how far it got, and lines starting with **✖** say what to fix. A copy is also
+  written to `www/<your domain>/public_html/.nodeapp/latest/app_source/crewdesk-startup.log`. If
+  neither file exists, Crewdesk never started: check **Site Tools → Statistics → Error Log**, and
+  check that **Node.js → Logs** shows the newest deploy as completed. The log holds
   setting names only, never passwords, and you can put it elsewhere with `LOG_FILE`.
 - **The build fails**: open the deployment log in Site Tools → Node.js. Make sure the package manager
   is pnpm and the Node version is 22+.

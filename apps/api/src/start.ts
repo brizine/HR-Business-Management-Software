@@ -1,7 +1,7 @@
 /**
  * What `pnpm start` / `npm start` runs in production. Before starting Crewdesk (main.ts) it:
- *   - copies everything Crewdesk prints into a log file (~/crewdesk-startup.log by default, or
- *     LOG_FILE), because some hosts (SiteGround) don't show a running app's output anywhere;
+ *   - copies everything Crewdesk prints into ~/crewdesk-startup.log (or LOG_FILE) and a copy in
+ *     the app's own folder, because some hosts (SiteGround) don't show a running app's output anywhere;
  *   - loads settings from apps/api/.env, and from the host's .env-local if the host didn't pass
  *     them to the app;
  *   - records why it stopped if it crashes.
@@ -14,23 +14,28 @@ import { fileURLToPath } from "node:url";
 import { format } from "node:util";
 import { folderPath } from "./lib/paths";
 
-const logFile = folderPath(process.env.LOG_FILE || "~/crewdesk-startup.log");
-let logging = true;
-try {
-  // Keep the file small: start over once it passes 1 MB.
-  if (existsSync(logFile) && statSync(logFile).size > 1_000_000) writeFileSync(logFile, "");
-  appendFileSync(logFile, `\n===== ${new Date().toISOString()} =====\n`);
-} catch {
-  logging = false;
-}
+// The home folder, plus a copy next to the code (SiteGround: .nodeapp/<build>/app_source), in case
+// the home folder isn't writable or isn't where you're looking.
+const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+const logFiles = [...new Set([folderPath(process.env.LOG_FILE || "~/crewdesk-startup.log"), resolve(appRoot, "crewdesk-startup.log")])].filter((file) => {
+  try {
+    // Keep each file small: start over once it passes 1 MB.
+    if (existsSync(file) && statSync(file).size > 1_000_000) writeFileSync(file, "");
+    appendFileSync(file, `\n===== ${new Date().toISOString()} =====\n`);
+    return true;
+  } catch {
+    return false;
+  }
+});
 for (const level of ["log", "info", "warn", "error"] as const) {
   const original = console[level].bind(console);
   console[level] = (...args: unknown[]) => {
     original(...args);
-    if (logging) try { appendFileSync(logFile, `${new Date().toISOString().slice(11, 19)} ${format(...args)}\n`); } catch { logging = false; }
+    const line = `${new Date().toISOString().slice(11, 19)} ${format(...args)}\n`;
+    for (const file of logFiles) try { appendFileSync(file, line); } catch { /* keep going */ }
   };
 }
-if (logging) console.log(`Writing this log to ${logFile}`);
+if (logFiles.length) console.log(`Writing this log to ${logFiles.join(" and ")}`);
 
 /** KEY=value lines (optionally "export KEY=value", optionally quoted). Doesn't replace settings already set. */
 export function loadSettingsFile(path: string): string[] {
