@@ -14,6 +14,7 @@ import { buildApp } from "./app";
 import { db, pool } from "./db";
 import { startScheduler } from "./lib/jobs";
 import { flushNotifications } from "./lib/notify";
+import { folderPath } from "./lib/paths";
 
 const apiDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const webDir = resolve(apiDir, "../web");
@@ -62,6 +63,8 @@ try {
   console.error(`  Use that one, or stop every copy with:  pkill -f apps/api/dist/main.js   and start again.\n`);
   process.exit(1);
 }
+// Where files are kept, so the deployment log shows the full path of the uploads folder.
+console.log(process.env.S3_BUCKET ? `Uploaded documents are stored in the "${process.env.S3_BUCKET}" bucket.` : `Uploaded documents are stored in ${folderPath(process.env.UPLOAD_DIR ?? "./uploads")}`);
 console.log(`\n✔ Crewdesk is running on port ${port}.${process.env.CODESPACES ? " Open the Ports tab and click the globe next to port " + port + "." : ""}\n`);
 
 const timer = process.env.DISABLE_SCHEDULER === "true" ? null : startScheduler();

@@ -18,6 +18,7 @@ import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
 import { DATABASE_URL } from "../db";
 import { DeleteObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { folderPath } from "./paths";
 
 /**
  * Encrypted database backups.
@@ -129,7 +130,7 @@ const BACKUP_RE = /^crewdesk-.*\.dump\.enc$/;
  */
 export async function runBackup() {
   const publicKey = loadPublicKey();
-  const dir = resolve(process.env.BACKUP_DIR ?? "./backups");
+  const dir = folderPath(process.env.BACKUP_DIR ?? "./backups");
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const name = `crewdesk-${stamp()}.dump.enc`;
   const path = join(dir, name);

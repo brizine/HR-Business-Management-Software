@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { decryptFile, encryptFile } from "./crypto";
+import { folderPath } from "./paths";
 
 /** Raw byte storage for uploaded documents (encryption is layered on top; see `storage` below). */
 export interface BlobStore {
@@ -11,13 +12,13 @@ export interface BlobStore {
 
 /**
  * Files on the server's disk. In production, point UPLOAD_DIR outside the
- * deployed code (e.g. /home/customer/crewdesk-uploads on SiteGround) so
+ * deployed code (e.g. ~/crewdesk-uploads on SiteGround: "~" is the account's home folder) so
  * redeploys don't wipe it, and include that folder in your backups.
  */
 export class LocalStore implements BlobStore {
   private root: string;
   constructor(root: string) {
-    this.root = resolve(root);
+    this.root = folderPath(root);
   }
   private path(key: string) {
     const p = resolve(join(this.root, key));

@@ -82,10 +82,10 @@ Pick one:
 - **Simplest:** in the project's Site Tools, open **Site → File Manager**. At the top level (where you
   see the `www` folder, **not inside it**), click **New Folder** and name it `crewdesk-uploads`.
   Outside `www`, nobody can download the files from the web and a redeploy won't erase them.
-  You need its **full path** for `UPLOAD_DIR` (something like `/home/customer/crewdesk-uploads`, but
-  check yours): look for **Info**/**Properties** on the folder or a path at the top of the File
-  Manager, or with SSH (**Devs → SSH Keys Manager**) run `cd ~/crewdesk-uploads && pwd`. SiteGround
-  support can also tell you the home folder path. Include this folder in your backups.
+  Then set `UPLOAD_DIR` to **`~/crewdesk-uploads`**: the `~` means "this account's home folder", so
+  you don't need to look up the full path. When Crewdesk starts, its deployment log shows the full
+  path it's using ("Uploaded documents are stored in /home/…/crewdesk-uploads"): check that it's
+  the folder you made. Include this folder in your backups.
 - **Sturdier:** a Cloudflare R2 bucket (free up to 10 GB). Create a bucket and an API token with
   read/write access to it, then set `S3_BUCKET`, `S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com`,
   `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`.
@@ -208,7 +208,7 @@ documents after a full restore. Nobody, including SiteGround, can recover these 
 | Name | Value |
 | --- | --- |
 | `BACKUP_PUBLIC_KEY` | The long line from step a |
-| `BACKUP_DIR` | A folder outside the app's code, e.g. `/home/customer/crewdesk-backups` (or use the R2 bucket from step 4; backups then go under `backups/`) |
+| `BACKUP_DIR` | A folder outside the app's code, e.g. `~/crewdesk-backups` (made the same way as the uploads folder in step 4) (or use the R2 bucket from step 4; backups then go under `backups/`) |
 
 **d. Add a nightly cron job** (Devs → Cron Jobs, e.g. 2:15 AM):
 
