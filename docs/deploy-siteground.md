@@ -89,13 +89,13 @@ replaced on redeploy.
 | --- | --- |
 | `DATABASE_URL` | From step 2 |
 | `JWT_SECRET` | A long random string (e.g. 64 random letters/numbers). Keep it secret. |
-| `ENCRYPTION_KEY` | Another long random string. Encrypts uploaded documents and two-factor secrets. **Never change it after launch, and keep a copy offline** (see step 9): without it, uploaded documents can't be opened |
+| `ENCRYPTION_KEY` | Another long random string. Encrypts uploaded documents and two-factor secrets. **Never change it after launch, and keep a copy offline** (see step 10): without it, uploaded documents can't be opened |
 | `JOBS_SECRET` | Another long random string (used by the cron job in step 7) |
 | `WEB_URL` | `https://app.prospray.net` |
 | `PUBLIC_API_URL` | `https://app.prospray.net/api` |
 | `CORS_ORIGINS` | `https://app.prospray.net` |
 | `UPLOAD_DIR` *or* `S3_*` | From step 4 |
-| `BACKUP_PUBLIC_KEY`, `BACKUP_DIR` | From step 9 |
+| `BACKUP_PUBLIC_KEY`, `BACKUP_DIR` | From step 10 |
 | `SMTP_URL`, `EMAIL_FROM` | From step 3 |
 | `TWILIO_*` | Optional, for text messages (see README) |
 
@@ -120,9 +120,11 @@ push any commit to `main`, or deploy from `main` at first and switch later.
 
 ## 7. Add the scheduled-checks cron job
 
-Crewdesk checks every 15 minutes for maintenance coming due, expiring registrations, forgotten
-clock-outs and upcoming shifts. It does this inside the app, but in case SiteGround restarts or
-pauses the app, also add **Site Tools → Devs → Cron Jobs**, every 15 minutes:
+Crewdesk checks every 5 minutes for people who haven't clocked in for their shift, attendance point
+levels, maintenance coming due, expiring registrations, forgotten clock-outs, upcoming shifts, training
+due dates and pay periods that have ended. It does this inside the app, but in case SiteGround restarts
+or pauses the app, also add **Site Tools → Devs → Cron Jobs**, every 5 minutes (or the shortest
+interval SiteGround offers):
 
 ```
 curl -s -X POST -H "X-Jobs-Secret: YOUR_JOBS_SECRET" https://app.prospray.net/api/jobs/run > /dev/null
@@ -130,7 +132,14 @@ curl -s -X POST -H "X-Jobs-Secret: YOUR_JOBS_SECRET" https://app.prospray.net/ap
 
 Running it twice is harmless; each alert is only sent once.
 
-## 8. Phone app
+## 8. Connect your accounting (optional)
+
+If you run Bigcapital (see `deploy/bigcapital/README.md`), open **Accounting** in Crewdesk's sidebar,
+enter its address (e.g. `https://books.prospray.net`) and an API key from Bigcapital
+(**Preferences → API keys**), test the connection and choose accounts. Approved pay periods and
+completed work orders can then be sent to your books.
+
+## 9. Phone app
 
 Push notifications and the camera scanner need the Crewdesk app built for your server:
 
@@ -142,7 +151,7 @@ Push notifications and the camera scanner need the Crewdesk app built for your s
 Everything except push and the in-app scanner also works in the phone's browser at your Crewdesk
 address. QR labels open in the browser without the app.
 
-## 9. Encrypted backups
+## 10. Encrypted backups
 
 Crewdesk makes a nightly, encrypted copy of the database. Backups are locked with a **public key**;
 only the matching **private key**, which never goes on the server, can open them. So a leaked backup,
