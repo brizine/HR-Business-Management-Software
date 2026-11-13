@@ -228,9 +228,14 @@ const routes: FastifyPluginAsync = async (app) => {
   /**
    * Adds several shifts at once (e.g. the same hours on each day of a week). All are checked first;
    * if any can't be added (overlap, inactive person…) nothing is saved and the error names the day.
+   * With skipOverlaps (repeating over weeks), days that would double-book someone are left out instead.
    */
   app.post("/bulk", { preHandler: requireRole("manager", AREA) }, async (req) => {
-    const { shifts: list } = parse(z.object({ shifts: z.array(shiftSchema).min(1).max(31) }), req.body);
+    const { shifts: list, skipOverlaps } = parse(z.object({
+      shifts: z.array(shiftSchema).min(1).max(100),
+      /** For repeating over weeks: leave out days the person already has a shift, instead of failing. */
+      skipOverlaps: z.boolean().optional(),
+    }), req.body);
     const tz = await companyTz(req.user.companyId);
     const day = (s: ShiftInput) => fmtDayMdy(new Date(s.startsAt), tz);
     const sorted = [...list].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
@@ -241,16 +246,20 @@ const routes: FastifyPluginAsync = async (app) => {
       }
     }
     const warnings = new Set<string>();
+    const keep: ShiftInput[] = [];
+    const skipped: string[] = [];
     for (const s of sorted) {
       try {
         for (const w of await check(req.user.companyId, s)) warnings.add(w);
+        keep.push(s);
       } catch (e) {
+        if (e instanceof HttpError && e.statusCode === 409 && skipOverlaps) { skipped.push(day(s)); continue; }
         if (e instanceof HttpError) throw new HttpError(e.statusCode, `${day(s)}: ${e.message}`);
         throw e;
       }
     }
-    const rows = await db.insert(shifts).values(sorted.map((s) => ({ ...toRow(s), companyId: req.user.companyId }))).returning();
-    return { shifts: rows, warnings: [...warnings] };
+    const rows = keep.length ? await db.insert(shifts).values(keep.map((s) => ({ ...toRow(s), companyId: req.user.companyId }))).returning() : [];
+    return { shifts: rows, skipped, warnings: [...warnings] };
   });
 
   /** Edits a shift. Changes to a published shift are announced to whoever it affects. */

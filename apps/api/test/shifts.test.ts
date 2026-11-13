@@ -209,4 +209,14 @@ describe("adding several days at once", () => {
     expect(res.status).toBe(200);
     expect(res.body.shifts.every((s: any) => s.employeeId === null)).toBe(true);
   });
+
+  it("repeating over weeks can skip days the person is already booked", async () => {
+    // Ben works day 0 (Monday) 8–4 from the first test; copy a Monday 9–12 shift onto that week and the next two.
+    const shifts = [0, 7, 14].map((w) => ({ employeeId: people.ben.id, startsAt: d(w, 9), endsAt: d(w, 12) }));
+    expect((await call("POST", "/shifts/bulk", "owner", { shifts })).status).toBe(409);
+    const res = await call("POST", "/shifts/bulk", "owner", { shifts, skipOverlaps: true });
+    expect(res.status).toBe(200);
+    expect(res.body.shifts).toHaveLength(2);
+    expect(res.body.skipped).toEqual(["Mon 1/28/2030"]);
+  });
 });

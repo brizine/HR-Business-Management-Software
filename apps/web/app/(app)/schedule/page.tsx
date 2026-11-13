@@ -25,6 +25,9 @@ const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
 const hours = (s: any) => (Date.parse(s.endsAt) - Date.parse(s.startsAt)) / 3_600_000;
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).replace(":00", "").replace(" ", "").toLowerCase();
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** The same calendar day `n` weeks later (local dates, so daylight saving doesn't move it). */
+const plusWeeks = (date: string, n: number) => { const [y, m, d] = date.split("-").map(Number); return ymd(new Date(y, m - 1, d + 7 * n)); };
+const WEEK_CHOICES = [1, 2, 3, 4, 5, 6, 8, 10, 12, 26];
 const hm = (iso: string) => { const d = new Date(iso); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 
 /** Distinct non-empty values, sorted, for a filter drop-down. */
@@ -44,6 +47,9 @@ function ShiftEditor({ draft, weekDays, employees, assets, templates, onClose, o
   // New shifts can go on several days of the week shown at once.
   const [picked, setPicked] = useState<string[]>([draft.date]);
   const toggle = (d: string) => setPicked((p) => (p.includes(d) ? p.filter((x) => x !== d) : [...p, d]));
+  // How many weeks to repeat a new shift for (1 = this week only), and how many weeks to copy an existing one to.
+  const [weeks, setWeeks] = useState(1);
+  const [copyWeeks, setCopyWeeks] = useState(4);
 
   /** Fills the form from a saved template, keeping the chosen person and date. */
   const applyTemplate = (id: string) => {
@@ -90,14 +96,41 @@ function ShiftEditor({ draft, weekDays, employees, assets, templates, onClose, o
         notes: str("notes"),
       };
     };
+    /** Adds shifts on these dates; when repeating, days the person is already booked are skipped and listed. */
+    const addOn = async (dates: string[], skipOverlaps: boolean) => {
+      const res = await api("/shifts/bulk", { body: { shifts: dates.sort().map(shiftOn), skipOverlaps } });
+      const skipped: string[] = res.skipped ?? [];
+      return [...res.warnings, ...(skipped.length ? [`skipped ${skipped.join(", ")} (already has a shift then)`] : [])];
+    };
     run(async () => {
       if (draft.id) {
         const res = await api(`/shifts/${draft.id}`, { method: "PATCH", body: shiftOn(f.get("date") as string) });
         return onSaved(res.warnings);
       }
       if (!picked.length) throw new Error("Pick at least one day");
-      const res = await api("/shifts/bulk", { body: { shifts: [...picked].sort().map(shiftOn) } });
-      onSaved(res.warnings);
+      const dates = Array.from({ length: weeks }, (_, w) => picked.map((d) => plusWeeks(d, w))).flat();
+      onSaved(await addOn(dates, weeks > 1));
+    });
+  };
+
+  /** Copies the shift being edited (as it is in the form) to the same day in each of the next weeks. */
+  const copyToWeeks = () => {
+    const form = formRef.current!;
+    if (!form.reportValidity()) return;
+    const f = new FormData(form);
+    const date = f.get("date") as string;
+    const str = (k: string) => (f.get(k) as string) || undefined;
+    run(async () => {
+      const shiftsToAdd = Array.from({ length: copyWeeks }, (_, i) => {
+        const day = plusWeeks(date, i + 1);
+        const startsAt = new Date(`${day}T${f.get("start")}`);
+        let endsAt = new Date(`${day}T${f.get("end")}`);
+        if (endsAt <= startsAt) endsAt = new Date(endsAt.getTime() + DAY);
+        return { employeeId: str("employeeId") ?? null, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), position: str("position"), location: str("location"), assetId: str("assetId") ?? null, notes: str("notes") };
+      });
+      const res = await api("/shifts/bulk", { body: { shifts: shiftsToAdd, skipOverlaps: true } });
+      const skipped: string[] = res.skipped ?? [];
+      onSaved([`copied to ${res.shifts.length} more week${res.shifts.length === 1 ? "" : "s"} as drafts`, ...res.warnings, ...(skipped.length ? [`skipped ${skipped.join(", ")} (already has a shift then)`] : [])]);
     });
   };
 
@@ -133,8 +166,14 @@ function ShiftEditor({ draft, weekDays, employees, assets, templates, onClose, o
               <button type="button" className="btn sm" onClick={() => setPicked(weekDays.map(ymd))}>Every day</button>
               <button type="button" className="btn sm" onClick={() => setPicked([])}>Clear</button>
             </div>
+            <div className="row" style={{ gap: 8, marginTop: 8, alignItems: "center" }}>
+              <span style={{ fontSize: 13, color: "var(--muted)" }}>Repeat</span>
+              <select value={weeks} onChange={(e) => setWeeks(Number(e.target.value))} style={{ width: "auto" }} aria-label="Repeat for how many weeks">
+                {WEEK_CHOICES.map((n) => <option key={n} value={n}>{n === 1 ? "This week only" : `For ${n} weeks (this week and the next ${n - 1})`}</option>)}
+              </select>
+            </div>
             <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-              The same hours go on each day you tick. For another week, change the week at the top of the page.
+              The same hours go on each day you tick{weeks > 1 ? `, every week for ${weeks} weeks. Days someone is already booked are skipped` : ""}. To start in another week, change the week at the top of the page.
             </div>
           </fieldset>
         )}
@@ -160,7 +199,7 @@ function ShiftEditor({ draft, weekDays, employees, assets, templates, onClose, o
         </div>
         <ErrorBox error={error} />
         <div className="row">
-          <button className="btn primary" disabled={busy || (!draft.id && !picked.length)}>{draft.id || picked.length <= 1 ? "Save" : `Save ${picked.length} shifts`}</button>
+          <button className="btn primary" disabled={busy || (!draft.id && !picked.length)}>{draft.id || picked.length * weeks <= 1 ? "Save" : `Save ${picked.length * weeks} shifts`}</button>
           {draft.id && (
             <button type="button" className="btn danger" disabled={busy} onClick={() => confirm("Delete this shift?") && run(async () => { await api(`/shifts/${draft.id}`, { method: "DELETE" }); onSaved([]); })}>
               Delete
@@ -169,6 +208,16 @@ function ShiftEditor({ draft, weekDays, employees, assets, templates, onClose, o
           <button type="button" className="btn" disabled={busy} onClick={saveAsTemplate}>Save as template</button>
           {draft.status === "published" && <span className="muted">The employee will be notified of changes.</span>}
         </div>
+        {draft.id && (
+          <div className="row" style={{ gap: 8, alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+            <span>Copy this shift to the same day for the next</span>
+            <select value={copyWeeks} onChange={(e) => setCopyWeeks(Number(e.target.value))} style={{ width: "auto" }} aria-label="Number of weeks to copy to">
+              {WEEK_CHOICES.map((n) => <option key={n} value={n}>{n} week{n === 1 ? "" : "s"}</option>)}
+            </select>
+            <button type="button" className="btn" disabled={busy} onClick={copyToWeeks}>Copy</button>
+            <span className="muted" style={{ fontSize: 12 }}>Copies are drafts until you publish each week. Weeks the person is already booked are skipped.</span>
+          </div>
+        )}
       </form>
     </div>
   );
@@ -341,7 +390,7 @@ export default function Schedule() {
       {editing && (
         <ShiftEditor key={editing.id ?? `${editing.employeeId}-${editing.date}`} draft={editing} weekDays={days} employees={staff} assets={assets.data ?? []}
           templates={templates.data ?? []} onTemplatesChanged={() => { templates.reload(); setNotice("Template saved."); }} onClose={() => setEditing(null)}
-          onSaved={(w) => { setEditing(null); setNotice(w.length ? `Saved with warnings: ${w.join("; ")}` : null); reload(); }} />
+          onSaved={(w) => { setEditing(null); setNotice(w.length ? `Saved. ${w.map((x) => x[0].toUpperCase() + x.slice(1)).join(". ")}.` : null); reload(); }} />
       )}
       {manager && !editing && list.data && !allShifts.length && !filtering && (
         <div className="card">
