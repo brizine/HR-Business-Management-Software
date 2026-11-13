@@ -231,7 +231,8 @@ const routes: FastifyPluginAsync = async (app) => {
   app.post("/bulk", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const { shifts: list } = parse(z.object({ shifts: z.array(shiftSchema).min(1).max(31) }), req.body);
     const tz = await companyTz(req.user.companyId);
-    const day = (s: ShiftInput) => localDate(new Date(s.startsAt), tz);
+    // e.g. "Mon, Nov 9, 2026": the month spelled out, so the date can't be misread.
+    const day = (s: ShiftInput) => new Date(s.startsAt).toLocaleDateString("en-US", { timeZone: tz, weekday: "short", month: "short", day: "numeric", year: "numeric" });
     const sorted = [...list].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
     for (let i = 1; i < sorted.length; i++) {
       const [a, b] = [sorted[i - 1], sorted[i]];
