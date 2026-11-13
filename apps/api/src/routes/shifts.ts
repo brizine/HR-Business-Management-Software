@@ -38,7 +38,11 @@ async function assertNoOverlap(employeeId: string, start: Date, end: Date, ignor
     .from(shifts)
     .where(and(...filters))
     .limit(1);
-  if (clash) throw new HttpError(409, "This person already has a shift that overlaps that time");
+  if (clash) {
+    // Say which shift, so it can be found (it may be a draft, or start the day before).
+    const when = fmtShift(clash.startsAt, clash.endsAt, await companyTz(clash.companyId));
+    throw new HttpError(409, `This person already has a shift that overlaps that time: ${when}${clash.status === "draft" ? " (draft)" : ""}`);
+  }
 }
 
 /** Validates references and returns non-blocking warnings (e.g. approved time off that day). */
