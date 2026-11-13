@@ -3,11 +3,11 @@
   "build": {
     "preview": {
       "distribution": "internal",
-      "env": { "EXPO_PUBLIC_API_URL": "https://manage.prospray.net/api" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://management.prospray.net/api" }
     },
     "production": {
       "autoIncrement": true,
-      "env": { "EXPO_PUBLIC_API_URL": "https://manage.prospray.net/api" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://management.prospray.net/api" }
     }
   },
   "submit": { "production": {} }

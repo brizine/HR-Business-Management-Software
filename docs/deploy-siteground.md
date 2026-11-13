@@ -5,8 +5,8 @@ Crewdesk runs on SiteGround as **one Node.js app** that serves both the website 
 automatically.
 
 ```
-https://manage.prospray.net          → website (staff, managers, QR scan pages, careers page)
-https://manage.prospray.net/api/...  → API (used by the website and the phone app)
+https://management.prospray.net          → website (staff, managers, QR scan pages, careers page)
+https://management.prospray.net/api/...  → API (used by the website and the phone app)
 ```
 
 Plan for about 45 minutes the first time. SiteGround's Node.js screens are new, so a few labels may
@@ -15,7 +15,7 @@ differ slightly from these steps.
 ## 0. What you need
 
 - ProSpray's **GoGeek** plan (Node.js projects need GrowBig or GoGeek; GoGeek allows up to 10).
-- The address **`manage.prospray.net`**. The main website at `prospray.net` is untouched. QR labels
+- The address **`management.prospray.net`**. The main website at `prospray.net` is untouched. QR labels
   point to this address, so print them after it's live.
 - Admin access to the GitHub repo `brizine/HR-Business-Management-Software`.
 - **Three secrets.** On any Mac (Terminal), run this three times and keep the results in your
@@ -36,7 +36,7 @@ Tools:
 2. Choose **Import from GitHub** (not the ZIP upload), connect your GitHub account and pick
    `brizine/HR-Business-Management-Software`, branch **`production`**. With GitHub, every update to
    that branch redeploys the app automatically.
-3. The project starts on a free temporary web address. That's fine: you'll attach `manage.prospray.net`
+3. The project starts on a free temporary web address. That's fine: you'll attach `management.prospray.net`
    in step 7.
 
 **About the `production` branch:** the repo's GitHub Action runs all tests on every push to `main`
@@ -120,9 +120,9 @@ settings, not in a file):
 | `JWT_SECRET` | Secret 1 from step 0 |
 | `ENCRYPTION_KEY` | Secret 2 from step 0. Encrypts uploaded documents and two-factor secrets. **Never change it after launch, and keep a copy offline** (see step 12) |
 | `JOBS_SECRET` | Secret 3 from step 0 (used by the cron job in step 9) |
-| `WEB_URL` | `https://manage.prospray.net` |
-| `PUBLIC_API_URL` | `https://manage.prospray.net/api` |
-| `CORS_ORIGINS` | `https://manage.prospray.net` |
+| `WEB_URL` | `https://management.prospray.net` |
+| `PUBLIC_API_URL` | `https://management.prospray.net/api` |
+| `CORS_ORIGINS` | `https://management.prospray.net` |
 | `UPLOAD_DIR` *or* `S3_*` | From step 4 |
 | `SMTP_URL`, `EMAIL_FROM` | From step 5 |
 | `BACKUP_PUBLIC_KEY`, `BACKUP_DIR` | From step 12 (can be added later) |
@@ -131,20 +131,20 @@ settings, not in a file):
 Don't set `PORT`; SiteGround provides it. Deploy, and watch the **deployment log** until the build
 finishes.
 
-## 7. Attach manage.prospray.net
+## 7. Attach management.prospray.net
 
 In the project's Site Tools, look under **Domain** for adding (or parking) a domain, and connect
-`manage.prospray.net`. Then check **Security → SSL Manager** has a Let's Encrypt certificate for it:
+`management.prospray.net`. Then check **Security → SSL Manager** has a Let's Encrypt certificate for it:
 Crewdesk must be served over HTTPS (phones and camera scanning need it).
 
-If you already created `manage` as a subdomain under the prospray.net website, delete it there first,
-or the two may conflict. If prospray.net's DNS isn't at SiteGround, point `manage` at the address
+If you already created `management` as a subdomain under the prospray.net website, delete it there first,
+or the two may conflict. If prospray.net's DNS isn't at SiteGround, point `management` at the address
 SiteGround shows for the project.
 
 ## 8. Check it and create your account
 
-1. Open `https://manage.prospray.net/api/health`. It should say `{"ok":true}`.
-2. Open `https://manage.prospray.net/signup` and create your company and owner login.
+1. Open `https://management.prospray.net/api/health`. It should say `{"ok":true}`.
+2. Open `https://management.prospray.net/signup` and create your company and owner login.
 3. **Sign-up then closes automatically.** Add everyone else from **Team → Add employee** (give them
    a password, or let them use email/text notifications only).
 4. **Two-factor:** owners and admins get a 6-digit code by email each time they sign in, so email
@@ -162,7 +162,7 @@ or pauses the app, also add **Site Tools → Devs → Cron Jobs**, every 5 minut
 interval SiteGround offers):
 
 ```
-curl -s -X POST -H "X-Jobs-Secret: YOUR_JOBS_SECRET" https://manage.prospray.net/api/jobs/run > /dev/null
+curl -s -X POST -H "X-Jobs-Secret: YOUR_JOBS_SECRET" https://management.prospray.net/api/jobs/run > /dev/null
 ```
 
 Running it twice is harmless; each alert is only sent once.
@@ -178,7 +178,7 @@ completed work orders can then be sent to your books.
 
 Push notifications and the camera scanner need the Crewdesk app built for your server:
 
-1. `apps/mobile/eas.json` already points the app at `https://manage.prospray.net/api`.
+1. `apps/mobile/eas.json` already points the app at `https://management.prospray.net/api`.
 2. Follow **Enabling push on phones** in the README (`eas init`, `eas build`).
 3. To put it in the App Store and Google Play you need an Apple Developer account ($99/year) and a
    Google Play developer account ($25 once). `eas submit` uploads the builds.
@@ -216,7 +216,7 @@ documents after a full restore. Nobody, including SiteGround, can recover these 
 **d. Add a nightly cron job** (Devs → Cron Jobs, e.g. 2:15 AM):
 
 ```
-curl -s -X POST -H "X-Jobs-Secret: YOUR_JOBS_SECRET" https://manage.prospray.net/api/jobs/backup > /dev/null
+curl -s -X POST -H "X-Jobs-Secret: YOUR_JOBS_SECRET" https://management.prospray.net/api/jobs/backup > /dev/null
 ```
 
 The newest 30 backups are kept (`BACKUP_KEEP` changes that). Run it once by hand and check that a
