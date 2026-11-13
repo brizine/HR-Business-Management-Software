@@ -14,6 +14,7 @@ function usDigits(value: string): string | null {
 
 /** For saving and showing: "5125550100" → "(512) 555-0100"; anything else is returned trimmed. */
 export function normalizePhone(value: string): string;
+export function normalizePhone(value: string | undefined): string | undefined;
 export function normalizePhone(value: string | null | undefined): string | null | undefined;
 export function normalizePhone(value: string | null | undefined) {
   if (value == null) return value;
