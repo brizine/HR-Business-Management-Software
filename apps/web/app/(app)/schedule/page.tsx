@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { availabilityConflicts, describeRule, isInactive } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -223,6 +223,123 @@ function ShiftEditor({ draft, weekDays, employees, assets, templates, onClose, o
   );
 }
 
+/** Change or delete every shift in a date range at once (a week, a month…). */
+function RangeEditor({ week, employees, assets, onClose, onDone }: {
+  week: Date; employees: any[]; assets: any[]; onClose: () => void; onDone: (message: string) => void;
+}) {
+  const { busy, error, run } = useAction();
+  const [from, setFrom] = useState(ymd(week));
+  const [to, setTo] = useState(ymd(addDays(week, 6)));
+  const [who, setWho] = useState("all");
+  const [status, setStatus] = useState("");
+  const [count, setCount] = useState<{ count: number; published: number } | null>(null);
+  const [c, setC] = useState({ startTime: "", endTime: "", employeeId: "keep", position: "", location: "", assetId: "keep", notes: "" });
+  const scope = { from, to, who, ...(status ? { status } : {}) };
+
+  // Count the matching shifts whenever the choices change.
+  const key = JSON.stringify(scope);
+  useEffect(() => {
+    let live = true;
+    setCount(null);
+    if (!from || !to || to < from) return;
+    api("/shifts/range", { body: { ...scope, action: "preview" } }).then((r) => live && setCount(r), () => {});
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  const setRange = (start: Date, end: Date) => { setFrom(ymd(start)); setTo(ymd(end)); };
+  const monthOf = (d: Date, plus = 0) => [new Date(d.getFullYear(), d.getMonth() + plus, 1), new Date(d.getFullYear(), d.getMonth() + plus + 1, 0)] as const;
+  const n = count?.count ?? 0;
+  const label = `${n} shift${n === 1 ? "" : "s"}`;
+  const fmt = (v: string) => { const [y, m, d] = v.split("-"); return `${Number(m)}/${Number(d)}/${y}`; };
+  const notifyNote = count?.published ? ` ${count.published} of them ${count.published === 1 ? "is" : "are"} published, so those people will be told.` : "";
+
+  const changes = {
+    ...(c.startTime ? { startTime: c.startTime } : {}),
+    ...(c.endTime ? { endTime: c.endTime } : {}),
+    ...(c.employeeId !== "keep" ? { employeeId: c.employeeId === "open" ? null : c.employeeId } : {}),
+    ...(c.position.trim() ? { position: c.position.trim() } : {}),
+    ...(c.location.trim() ? { location: c.location.trim() } : {}),
+    ...(c.assetId !== "keep" ? { assetId: c.assetId === "none" ? null : c.assetId } : {}),
+    ...(c.notes.trim() ? { notes: c.notes.trim() } : {}),
+  };
+  const anyChange = Object.keys(changes).length > 0;
+
+  return (
+    <div className="card">
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+        <h2 style={{ margin: 0 }}>Change or delete shifts</h2>
+        <button className="btn sm" onClick={onClose}>Close</button>
+      </div>
+      <div className="stack">
+        <div className="formgrid">
+          <label>From<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+          <label>To<input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+          <label>Whose shifts
+            <select value={who} onChange={(e) => setWho(e.target.value)}>
+              <option value="all">Everyone&apos;s</option>
+              <option value="open">Open shifts only</option>
+              {employees.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
+            </select>
+          </label>
+          <label>Which
+            <select value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="">Drafts and published</option>
+              <option value="draft">Drafts only</option>
+              <option value="published">Published only</option>
+            </select>
+          </label>
+        </div>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          <button type="button" className="btn sm" onClick={() => setRange(week, addDays(week, 6))}>This week</button>
+          <button type="button" className="btn sm" onClick={() => setRange(addDays(week, 7), addDays(week, 13))}>Next week</button>
+          <button type="button" className="btn sm" onClick={() => setRange(week, addDays(week, 27))}>4 weeks from this week</button>
+          <button type="button" className="btn sm" onClick={() => setRange(...monthOf(week))}>This month</button>
+          <button type="button" className="btn sm" onClick={() => setRange(...monthOf(week, 1))}>Next month</button>
+        </div>
+        <p style={{ margin: 0 }}>
+          {to < from ? "The end date is before the start date." : count === null ? "Counting…" : <><strong>{label}</strong> from {fmt(from)} to {fmt(to)}.{notifyNote}</>}
+        </p>
+
+        <h3 style={{ margin: "8px 0 0" }}>Change them</h3>
+        <p className="muted" style={{ margin: 0 }}>Fill in only what should change. Everything left blank stays as it is, and each shift keeps its own day.</p>
+        <div className="formgrid">
+          <label>New start time<input type="time" value={c.startTime} onChange={(e) => setC({ ...c, startTime: e.target.value })} /></label>
+          <label>New end time<input type="time" value={c.endTime} onChange={(e) => setC({ ...c, endTime: e.target.value })} /></label>
+          <label>Give them to
+            <select value={c.employeeId} onChange={(e) => setC({ ...c, employeeId: e.target.value })}>
+              <option value="keep">Keep the same person</option>
+              <option value="open">Make them open shifts</option>
+              {employees.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
+            </select>
+          </label>
+          <label>New position<input value={c.position} onChange={(e) => setC({ ...c, position: e.target.value })} placeholder="Keep" /></label>
+          <label>New location / job site<input value={c.location} onChange={(e) => setC({ ...c, location: e.target.value })} placeholder="Keep" /></label>
+          <label>Vehicle / equipment
+            <select value={c.assetId} onChange={(e) => setC({ ...c, assetId: e.target.value })}>
+              <option value="keep">Keep</option>
+              <option value="none">None</option>
+              {assets.filter((a) => a.status !== "retired").map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </label>
+          <label>New notes<input value={c.notes} onChange={(e) => setC({ ...c, notes: e.target.value })} placeholder="Keep" /></label>
+        </div>
+        <ErrorBox error={error} />
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn primary" disabled={busy || !n || !anyChange} onClick={() => confirm(`Change ${label} from ${fmt(from)} to ${fmt(to)}?`) && run(async () => {
+            const r = await api("/shifts/range", { body: { ...scope, action: "update", changes } });
+            onDone(`Changed ${r.updated} shift${r.updated === 1 ? "" : "s"}.${r.warnings.length ? ` Note: ${r.warnings.join("; ")}.` : ""}`);
+          })}>Change {label}</button>
+          <button className="btn danger" disabled={busy || !n} onClick={() => confirm(`Delete ${label} from ${fmt(from)} to ${fmt(to)}? This can't be undone.`) && run(async () => {
+            const r = await api("/shifts/range", { body: { ...scope, action: "delete" } });
+            onDone(`Deleted ${r.deleted} shift${r.deleted === 1 ? "" : "s"}.`);
+          })}>Delete {label}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Schedule() {
   const { me, can } = useAuth();
   const manager = can("manager", "schedule");
@@ -242,6 +359,7 @@ export default function Schedule() {
   // Availability is only tracked for part-time employees.
   const partTime = me?.user.employmentType === "part_time";
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showRange, setShowRange] = useState(false);
   const [editing, setEditing] = useState<Draft | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const action = useAction();
@@ -356,6 +474,7 @@ export default function Schedule() {
           const day = today >= from && today < to ? today : from;
           setEditing({ employeeId: "", date: ymd(day), start: "08:00", end: "16:30" });
         }}>+ Add shift</button>}
+        {manager && <button className="btn" onClick={() => { setShowRange(!showRange); setEditing(null); }}>Change or delete shifts</button>}
         {manager && <button className="btn" onClick={() => setShowTemplates(!showTemplates)}>Templates{templates.data?.length ? ` (${templates.data.length})` : ""}</button>}
         {manager && (
           <>
@@ -392,7 +511,11 @@ export default function Schedule() {
           templates={templates.data ?? []} onTemplatesChanged={() => { templates.reload(); setNotice("Template saved."); }} onClose={() => setEditing(null)}
           onSaved={(w) => { setEditing(null); setNotice(w.length ? `Saved. ${w.map((x) => x[0].toUpperCase() + x.slice(1)).join(". ")}.` : null); reload(); }} />
       )}
-      {manager && !editing && list.data && !allShifts.length && !filtering && (
+      {manager && showRange && (
+        <RangeEditor week={from} employees={staff} assets={assets.data ?? []} onClose={() => setShowRange(false)}
+          onDone={(m) => { setShowRange(false); setNotice(m); reload(); }} />
+      )}
+      {manager && !editing && !showRange && list.data && !allShifts.length && !filtering && (
         <div className="card">
           <h2>Make this week&apos;s schedule</h2>
           <ol className="stack" style={{ paddingLeft: 18, margin: 0 }}>

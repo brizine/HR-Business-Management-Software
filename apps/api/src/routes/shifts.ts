@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
-import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, type SQL } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, type SQL } from "drizzle-orm";
 import { WEEKDAYS, availabilityConflicts, describeRule, isInactive, shiftBaseSchema, shiftRangeSchema, shiftSchema, shiftSegments, shiftTemplateSchema, type ShiftInput } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
@@ -7,7 +7,7 @@ import { assets, availability, companies, employees, ptoRequests, shiftTemplates
 import { authenticate, isManager, requireRole } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { approversFor, except, notify, staffWithRole } from "../lib/notify";
-import { fmtDayMdy, fmtShift, fmtTime, localDate, localParts } from "../lib/tz";
+import { addDaysYmd, fmtDayMdy, fmtShift, fmtTime, localDate, localParts, zonedTime } from "../lib/tz";
 
 /** Which area of the Permissions page controls access here. */
 const AREA = "schedule" as const;
@@ -30,9 +30,10 @@ async function loadShift(companyId: string, id: string) {
 }
 
 /** Throws 409 if the employee already has a shift overlapping [start, end). */
-async function assertNoOverlap(employeeId: string, start: Date, end: Date, ignoreId?: string) {
+async function assertNoOverlap(employeeId: string, start: Date, end: Date, ignoreId?: string, ignoreAlso?: Set<string>) {
   const filters: SQL[] = [eq(shifts.employeeId, employeeId), lt(shifts.startsAt, end), gt(shifts.endsAt, start)];
   if (ignoreId) filters.push(ne(shifts.id, ignoreId));
+  if (ignoreAlso?.size) filters.push(notInArray(shifts.id, [...ignoreAlso]));
   const [clash] = await db
     .select()
     .from(shifts)
@@ -47,7 +48,7 @@ async function assertNoOverlap(employeeId: string, start: Date, end: Date, ignor
 }
 
 /** Validates references and returns non-blocking warnings (e.g. approved time off that day). */
-async function check(companyId: string, s: ShiftInput, ignoreId?: string) {
+async function check(companyId: string, s: ShiftInput, ignoreId?: string, ignoreAlso?: Set<string>) {
   const warnings: string[] = [];
   if (s.assetId) {
     const [a] = await db
@@ -68,7 +69,7 @@ async function check(companyId: string, s: ShiftInput, ignoreId?: string) {
 
   const start = new Date(s.startsAt);
   const end = new Date(s.endsAt);
-  await assertNoOverlap(emp.id, start, end, ignoreId);
+  await assertNoOverlap(emp.id, start, end, ignoreId, ignoreAlso);
 
   const tz = await companyTz(companyId);
   const [pto] = await db
@@ -103,6 +104,8 @@ function toRow(s: ShiftInput) {
     notes: s.notes ?? null,
   };
 }
+
+const fmtHm = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 
 function toInput(r: ShiftRow): ShiftInput {
   return {
@@ -260,6 +263,123 @@ const routes: FastifyPluginAsync = async (app) => {
     }
     const rows = keep.length ? await db.insert(shifts).values(keep.map((s) => ({ ...toRow(s), companyId: req.user.companyId }))).returning() : [];
     return { shifts: rows, skipped, warnings: [...warnings] };
+  });
+
+  /**
+   * Changes or deletes every shift in a date range at once (a week, a month…), optionally only one
+   * person's, open shifts, drafts or published ones. "preview" just counts them. Changes are all or
+   * nothing: if any shift can't be changed (e.g. it would double-book someone) nothing is saved.
+   */
+  app.post("/range", { preHandler: requireRole("manager", AREA) }, async (req) => {
+    const ymdField = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+    const hhmm = z.string().regex(/^\d{2}:\d{2}$/);
+    const body = parse(z.object({
+      from: ymdField,
+      to: ymdField,
+      /** Whose shifts: everyone (default), "open" for open shifts, or one person's id. */
+      who: z.union([z.literal("all"), z.literal("open"), z.string().uuid()]).default("all"),
+      status: z.enum(["draft", "published"]).optional(),
+      action: z.enum(["preview", "delete", "update"]),
+      /** Only what's given changes. employeeId null makes them open shifts; assetId null removes the vehicle. */
+      changes: z.object({
+        startTime: hhmm.optional(),
+        endTime: hhmm.optional(),
+        employeeId: z.string().uuid().nullable().optional(),
+        position: z.string().trim().max(120).optional(),
+        location: z.string().trim().max(200).optional(),
+        assetId: z.string().uuid().nullable().optional(),
+        notes: z.string().trim().max(500).optional(),
+      }).default({}),
+    }), req.body);
+    if (body.to < body.from) throw new HttpError(400, "The end date is before the start date");
+    const tz = await companyTz(req.user.companyId);
+    const filters: SQL[] = [
+      eq(shifts.companyId, req.user.companyId),
+      gte(shifts.startsAt, zonedTime(body.from, "00:00", tz)),
+      lt(shifts.startsAt, zonedTime(addDaysYmd(body.to, 1), "00:00", tz)),
+    ];
+    if (body.who === "open") filters.push(isNull(shifts.employeeId));
+    else if (body.who !== "all") filters.push(eq(shifts.employeeId, body.who));
+    if (body.status) filters.push(eq(shifts.status, body.status));
+    const found = await db.select().from(shifts).where(and(...filters)).orderBy(asc(shifts.startsAt));
+    const published = found.filter((s) => s.status === "published");
+
+    if (body.action === "preview") return { count: found.length, published: published.length };
+    if (!found.length) throw new HttpError(400, "No shifts match");
+
+    /** Tells each affected person once, e.g. "3 of your shifts were changed". */
+    const tell = (ids: (string | null)[], title: (n: number) => string) => {
+      const counts = new Map<string, number>();
+      for (const id of ids) if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
+      for (const [id, n] of counts) {
+        notify(req.user.companyId, except([id], req.user.sub), {
+          category: "schedule", title: title(n), body: `Between ${fmtDayMdy(zonedTime(body.from, "12:00", tz), tz)} and ${fmtDayMdy(zonedTime(body.to, "12:00", tz), tz)}`, link: { screen: "schedule" },
+        });
+      }
+    };
+
+    if (body.action === "delete") {
+      await db.delete(shifts).where(inArray(shifts.id, found.map((s) => s.id)));
+      tell(published.map((s) => s.employeeId), (n) => (n === 1 ? "A shift was removed from your schedule" : `${n} shifts were removed from your schedule`));
+      return { deleted: found.length };
+    }
+
+    const c = body.changes;
+    if (!Object.values(c).some((v) => v !== undefined)) throw new HttpError(400, "Choose something to change");
+    const updated = found.map((s) => {
+      const input = toInput(s);
+      if (c.startTime || c.endTime) {
+        const day = localParts(s.startsAt, tz).date;
+        const startT = c.startTime ?? fmtHm(localParts(s.startsAt, tz).minutes);
+        const endT = c.endTime ?? fmtHm(localParts(s.endsAt, tz).minutes);
+        const start = zonedTime(day, startT, tz);
+        let end = zonedTime(day, endT, tz);
+        // An end time at or before the start runs past midnight.
+        if (end <= start) end = zonedTime(addDaysYmd(day, 1), endT, tz);
+        input.startsAt = start.toISOString();
+        input.endsAt = end.toISOString();
+      }
+      if (c.employeeId !== undefined) input.employeeId = c.employeeId;
+      if (c.position !== undefined) input.position = c.position || undefined;
+      if (c.location !== undefined) input.location = c.location || undefined;
+      if (c.assetId !== undefined) input.assetId = c.assetId;
+      if (c.notes !== undefined) input.notes = c.notes || undefined;
+      return { before: s, input };
+    });
+    const day = (s: ShiftInput) => fmtDayMdy(new Date(s.startsAt), tz);
+    // The changed shifts mustn't overlap each other for the same person…
+    const byStart = [...updated].sort((a, b) => Date.parse(a.input.startsAt) - Date.parse(b.input.startsAt));
+    for (let i = 1; i < byStart.length; i++) {
+      const [a, b] = [byStart[i - 1].input, byStart[i].input];
+      if (a.employeeId && a.employeeId === b.employeeId && Date.parse(b.startsAt) < Date.parse(a.endsAt)) {
+        throw new HttpError(409, `The shifts on ${day(a)} and ${day(b)} would overlap`);
+      }
+    }
+    // …or anyone's other shifts. Shifts being changed are compared by their new times only.
+    const changing = new Set(found.map((s) => s.id));
+    const warnings = new Set<string>();
+    for (const u of updated) {
+      const parsed = shiftSchema.safeParse(u.input);
+      if (!parsed.success) throw new HttpError(400, `${day(u.input)}: ${parsed.error.issues[0].message}`);
+      try {
+        for (const w of await check(req.user.companyId, parsed.data, u.before.id, changing)) warnings.add(w);
+      } catch (e) {
+        if (e instanceof HttpError) throw new HttpError(e.statusCode, `${day(u.input)}: ${e.message}`);
+        throw e;
+      }
+    }
+    await db.transaction(async (tx) => {
+      for (const u of updated) {
+        const reassigned = (u.input.employeeId ?? null) !== u.before.employeeId;
+        await tx.update(shifts).set({ ...toRow(u.input), ...(reassigned ? { dropRequestedAt: null, dropReason: null } : {}) }).where(eq(shifts.id, u.before.id));
+      }
+    });
+    const pub = updated.filter((u) => u.before.status === "published");
+    const moved = pub.filter((u) => (u.input.employeeId ?? null) !== u.before.employeeId);
+    tell(pub.filter((u) => !moved.includes(u)).map((u) => u.before.employeeId), (n) => (n === 1 ? "Your shift was changed" : `${n} of your shifts were changed`));
+    tell(moved.map((u) => u.before.employeeId), (n) => (n === 1 ? "You were taken off a shift" : `You were taken off ${n} shifts`));
+    tell(moved.map((u) => u.input.employeeId ?? null), (n) => (n === 1 ? "New shift added to your schedule" : `${n} shifts were added to your schedule`));
+    return { updated: updated.length, warnings: [...warnings] };
   });
 
   /** Edits a shift. Changes to a published shift are announced to whoever it affects. */

@@ -227,3 +227,51 @@ describe("caching", () => {
     expect(res.headers["cache-control"]).toBe("private, no-store");
   });
 });
+
+describe("changing or deleting a range of shifts", () => {
+  // Six weeks after the main test week (Mon 2/18/2030), clear of the other tests' shifts.
+  const d = (day: number, hour: number) => at(42 + day, hour);
+  const range = { from: "2030-02-18", to: "2030-02-24" };
+
+  beforeAll(async () => {
+    await call("POST", "/shifts/bulk", "owner", { shifts: [0, 1, 2].map((i) => ({ employeeId: people.amy.id, startsAt: d(i, 8), endsAt: d(i, 16), position: "Crew" })) });
+    await call("POST", "/shifts/bulk", "owner", { shifts: [{ startsAt: d(3, 8), endsAt: d(3, 12) }] });
+  });
+
+  it("previews how many shifts match, by person, open shifts and status", async () => {
+    expect((await call("POST", "/shifts/range", "amy", { ...range, action: "preview" })).status).toBe(403);
+    expect((await call("POST", "/shifts/range", "owner", { ...range, action: "preview" })).body).toEqual({ count: 4, published: 0 });
+    expect((await call("POST", "/shifts/range", "owner", { ...range, who: people.amy.id, action: "preview" })).body.count).toBe(3);
+    expect((await call("POST", "/shifts/range", "owner", { ...range, who: "open", action: "preview" })).body.count).toBe(1);
+    expect((await call("POST", "/shifts/range", "owner", { ...range, status: "published", action: "preview" })).body.count).toBe(0);
+  });
+
+  it("changes times and details on every matching shift, keeping each one's day", async () => {
+    const res = await call("POST", "/shifts/range", "owner", { ...range, who: people.amy.id, action: "update", changes: { startTime: "07:00", endTime: "15:30", position: "Mowing" } });
+    expect(res.status).toBe(200);
+    expect(res.body.updated).toBe(3);
+    const list = (await call("GET", `/shifts?from=${d(0, 0)}&to=${d(7, 0)}`, "owner")).body.filter((r: any) => r.shift.employeeId === people.amy.id);
+    expect(list.map((r: any) => [r.shift.startsAt, r.shift.endsAt, r.shift.position])).toEqual(
+      [0, 1, 2].map((i) => [new Date(d(i, 7)).toISOString(), new Date(d(i, 15.5)).toISOString(), "Mowing"]),
+    );
+  });
+
+  it("won't double-book: nothing changes if one shift can't move", async () => {
+    // Ben gets a Tuesday shift, then moving Amy's shifts to Ben must fail and leave everything as it was.
+    await call("POST", "/shifts", "owner", { employeeId: people.ben.id, startsAt: d(1, 9), endsAt: d(1, 11) });
+    const res = await call("POST", "/shifts/range", "owner", { ...range, who: people.amy.id, action: "update", changes: { employeeId: people.ben.id } });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/^Tue 2\/19\/2030: /);
+    expect((await call("POST", "/shifts/range", "owner", { ...range, who: people.amy.id, action: "preview" })).body.count).toBe(3);
+  });
+
+  it("deletes a range, telling people about published shifts once", async () => {
+    await call("POST", "/shifts/publish", "owner", { from: d(0, 0), to: d(7, 0) });
+    await flushNotifications();
+    sent = [];
+    const res = await call("POST", "/shifts/range", "owner", { ...range, who: people.amy.id, action: "delete" });
+    expect(res.body.deleted).toBe(3);
+    expect(await titlesFor("amy")).toEqual(["3 shifts were removed from your schedule"]);
+    expect((await call("POST", "/shifts/range", "owner", { ...range, action: "preview" })).body.count).toBe(2); // the open shift and Ben's
+  });
+});

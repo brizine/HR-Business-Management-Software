@@ -34,3 +34,25 @@ export function localParts(d: Date, timeZone: string) {
     minutes: Number(parts.hour) * 60 + Number(parts.minute),
   };
 }
+
+/** The instant when the clock reads `time` (HH:MM) on `date` (YYYY-MM-DD) in the time zone. */
+export function zonedTime(date: string, time: string, timeZone: string) {
+  const [y, m, d] = date.split("-").map(Number);
+  const [h, min] = time.split(":").map(Number);
+  const want = Date.UTC(y, m - 1, d, h, min);
+  // Start from the wall time read as UTC, then correct by the zone's offset (twice, for DST edges).
+  let t = want;
+  for (let i = 0; i < 2; i++) {
+    const p = localParts(new Date(t), timeZone);
+    const [py, pm, pd] = p.date.split("-").map(Number);
+    const shown = Date.UTC(py, pm - 1, pd, Math.floor(p.minutes / 60), p.minutes % 60);
+    t += want - shown;
+  }
+  return new Date(t);
+}
+
+/** YYYY-MM-DD plus `n` days. */
+export function addDaysYmd(date: string, n: number) {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
