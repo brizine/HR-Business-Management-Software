@@ -9,7 +9,7 @@
     "dev:mobile": "pnpm --filter @crewdesk/mobile start",
     "db:migrate": "pnpm --filter @crewdesk/api db:migrate",
     "db:seed": "pnpm --filter @crewdesk/api db:seed",
-    "build": "pnpm --filter @crewdesk/web build:prod && pnpm --filter @crewdesk/api build",
+    "build": "pnpm --filter @crewdesk/web build:prod && pnpm --filter @crewdesk/api build && node scripts/prune-old-builds.mjs",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "start": "node apps/api/dist/start.js",

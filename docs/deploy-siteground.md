@@ -236,6 +236,12 @@ e.g. by SiteGround's own backups. Restoring them needs the same `ENCRYPTION_KEY`
 
 ## Troubleshooting
 
+- **"Exceeded 90% of the inode quota" email**: SiteGround keeps every deploy as a full copy of the app
+  (about 58,000 files each, mostly `node_modules`) in `.nodeapp/<build>/`. The build now removes old
+  copies at the end of each deploy (`scripts/prune-old-builds.mjs`), keeping only the live one and the
+  new one, so a **Redeploy** clears the backlog. To see the counts over SSH:
+  `for b in ~/www/*/public_html/.nodeapp/*/; do printf '%7d %s\n' "$(find "$b" | wc -l)" "$b"; done`
+
 - **502 Bad Gateway**: the website is up but Crewdesk didn't start. SiteGround doesn't show what a
   running app prints, so Crewdesk writes it to a file: in **Site Tools → Site → File Manager**, open
   your home folder (the one that holds `crewdesk-uploads`) and open **`crewdesk-startup.log`**. The
