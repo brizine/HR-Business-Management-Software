@@ -14,7 +14,7 @@ function Attendance() {
   const manager = can("manager", "time");
   const params = useSearchParams();
   const staff = useApi<any[]>(manager ? "/employees" : null);
-  const [tab, setTab] = useState<Tab>(params.get("employee") || !manager ? "calendar" : "report");
+  const [tab, setTab] = useState<Tab>("calendar");
   const [person, setPerson] = useState<string | null>(params.get("employee"));
   useEffect(() => { if (params.get("employee")) { setPerson(params.get("employee")); setTab("calendar"); } }, [params]);
   const [f, setF] = useState({ q: "", title: "", dept: "", show: "" });
@@ -28,7 +28,7 @@ function Attendance() {
   const distinct = (k: string) => [...new Set(everyone.map((e) => e[k]).filter(Boolean))].sort() as string[];
   // The chosen person, or the first who matches the search and filters.
   const shown = manager ? (person && people.some((e) => e.id === person) ? person : people[0]?.id) : me?.user.id;
-  const tabs: [Tab, string][] = manager ? [["report", "Report"], ["calendar", "Calendar"], ["settings", "Rules & settings"]] : [["calendar", "My attendance"], ["settings", "Rules"]];
+  const tabs: [Tab, string][] = manager ? [["calendar", "Calendar"], ["report", "Report"], ["settings", "Rules & settings"]] : [["calendar", "My attendance"], ["settings", "Rules"]];
 
   return (
     <>
