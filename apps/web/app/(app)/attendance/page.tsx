@@ -28,7 +28,7 @@ function Attendance() {
   const distinct = (k: string) => [...new Set(everyone.map((e) => e[k]).filter(Boolean))].sort() as string[];
   // The chosen person, or the first who matches the search and filters.
   const shown = manager ? (person && people.some((e) => e.id === person) ? person : people[0]?.id) : me?.user.id;
-  const tabs: [Tab, string][] = manager ? [["report", "Report"], ["calendar", "Calendar"], ["settings", "Settings"]] : [["calendar", "My attendance"], ["settings", "Rules"]];
+  const tabs: [Tab, string][] = manager ? [["report", "Report"], ["calendar", "Calendar"], ["settings", "Rules & settings"]] : [["calendar", "My attendance"], ["settings", "Rules"]];
 
   return (
     <>

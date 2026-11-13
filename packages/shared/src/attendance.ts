@@ -53,6 +53,14 @@ export const attendanceRulesSchema = z.object({
   earlyLeavePoints: z.number().min(0).max(10),
   noShowPoints: z.number().min(0).max(10),
   sickPoints: z.number().min(0).max(10),
+  /** "Very late": at least this many minutes late earns lateTierPoints instead (0 = off). */
+  lateTierMinutes: z.number().int().min(0).max(720),
+  lateTierPoints: z.number().min(0).max(10),
+  /** "Left very early": at least this many minutes early earns earlyTierPoints instead (0 = off). */
+  earlyTierMinutes: z.number().int().min(0).max(720),
+  earlyTierPoints: z.number().min(0).max(10),
+  /** A day that's both late and left early earns points for both (otherwise just for being late). */
+  countLateAndEarly: z.boolean(),
   /** Points drop off this many days after the day they were earned. */
   pointsExpireDays: z.number().int().min(7).max(730),
   thresholds: z.array(attendanceThresholdSchema).max(10),
@@ -69,6 +77,11 @@ export const DEFAULT_ATTENDANCE_RULES: AttendanceRules = {
   earlyLeavePoints: 0.5,
   noShowPoints: 1,
   sickPoints: 0,
+  lateTierMinutes: 0,
+  lateTierPoints: 1,
+  earlyTierMinutes: 0,
+  earlyTierPoints: 1,
+  countLateAndEarly: false,
   pointsExpireDays: 90,
   thresholds: [
     { points: 3, label: "Verbal warning" },
@@ -143,12 +156,26 @@ export function classifyDay(input: {
   return { status, shifts: results };
 }
 
-/** Points a day earns under the rules (0 if points are off). */
-export function pointsFor(status: AttendanceStatus | null, rules: AttendanceRules): number {
+/** How late / early a day was: the worst shift that day. */
+export interface DayTimes { minutesLate: number; minutesEarly: number }
+
+/** The worst lateness and early departure among a day's shifts (beyond the grace periods count). */
+export function dayTimes(shifts: Pick<ShiftResult, "minutesLate" | "minutesEarly">[]): DayTimes {
+  return { minutesLate: Math.max(0, ...shifts.map((s) => s.minutesLate)), minutesEarly: Math.max(0, ...shifts.map((s) => s.minutesEarly)) };
+}
+
+/**
+ * Points a day earns under the rules (0 if points are off). With `times` (what the punches showed),
+ * the "very late" / "left very early" amounts apply, and a day that was both late and early can
+ * earn both. Without them (e.g. an owner set the day by hand) the usual amounts apply.
+ */
+export function pointsFor(status: AttendanceStatus | null, rules: AttendanceRules, times?: DayTimes): number {
   if (!rules.pointsEnabled || !status) return 0;
+  const late = () => (times && rules.lateTierMinutes > 0 && times.minutesLate >= rules.lateTierMinutes ? rules.lateTierPoints : rules.tardyPoints);
+  const early = () => (times && rules.earlyTierMinutes > 0 && times.minutesEarly >= rules.earlyTierMinutes ? rules.earlyTierPoints : rules.earlyLeavePoints);
   switch (status) {
-    case "tardy": return rules.tardyPoints;
-    case "early_leave": return rules.earlyLeavePoints;
+    case "tardy": return late() + (rules.countLateAndEarly && times && times.minutesEarly > rules.earlyLeaveGraceMinutes ? early() : 0);
+    case "early_leave": return early();
     case "no_show": return rules.noShowPoints;
     case "sick": return rules.sickPoints;
     default: return 0;

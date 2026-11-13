@@ -7,7 +7,8 @@ import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox } from "./ui";
 
 type ShiftResult = { start: number; end: number; clockIn: number | null; clockOut: number | null; minutesLate: number; minutesEarly: number; status: string };
-export type AttendanceDay = { date: string; status: AttendanceStatus; auto: AttendanceStatus | null; overridden: boolean; note: string | null; points: number; shifts: ShiftResult[] };
+type Punch = { id: string; clockIn: string; clockOut: string | null };
+export type AttendanceDay = { date: string; status: AttendanceStatus; auto: AttendanceStatus | null; overridden: boolean; note: string | null; points: number; shifts: ShiftResult[]; punches: Punch[] };
 type Points = { total: number; highest: { points: number; label: string } | null; next: { points: number; label: string } | null; nextExpiry: string | null };
 export type PersonAttendance = {
   employee: { id: string; firstName: string; lastName: string; title: string | null; department: string | null; active: boolean };
@@ -21,6 +22,9 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const fromIso = (s: string) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
 const time = (ms: number | null) => (ms == null ? "—" : new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+/** ISO time ↔ the value of a datetime-local box (local time). */
+const toLocalInput = (iso: string | number | null) => { if (iso == null) return ""; const d = new Date(iso); return `${ymd(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const fromLocalInput = (v: string) => (v ? new Date(v).toISOString() : null);
 const longDay = (s: string) => fromIso(s).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
 /** The colours: green worked, yellow late/left early, red no-show, blue sick, grey excused. */
@@ -87,8 +91,60 @@ function DayEditor({ employeeId, date, day, onSaved, onClose }: { employeeId: st
   );
 }
 
+/**
+ * Managers: fix the punches behind a day (wrong time, forgot to clock in or out, a duplicate).
+ * The day's colour and points follow automatically.
+ */
+function PunchFixer({ employeeId, date, day, onSaved }: { employeeId: string; date: string; day: AttendanceDay | undefined; onSaved: () => void }) {
+  const { busy, error, run } = useAction();
+  const [editing, setEditing] = useState<string | null>(null); // a punch id, or "new"
+  const [inAt, setInAt] = useState("");
+  const [outAt, setOutAt] = useState("");
+  const open = (p: Punch | null) => {
+    const shift = day?.shifts[0];
+    setEditing(p ? p.id : "new");
+    setInAt(toLocalInput(p ? p.clockIn : shift ? shift.start : `${date}T08:00`));
+    setOutAt(toLocalInput(p ? p.clockOut : shift ? shift.end : `${date}T16:30`));
+  };
+  const save = () => run(async () => {
+    const body = { clockIn: fromLocalInput(inAt), clockOut: fromLocalInput(outAt) };
+    if (!body.clockIn) throw new Error("Enter the clock-in time");
+    if (editing === "new") await api("/time/entries", { body: { ...body, employeeId } });
+    else await api(`/time/entries/${editing}`, { method: "PATCH", body });
+    setEditing(null);
+    onSaved();
+  });
+  const punches = day?.punches ?? [];
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <strong style={{ fontSize: 14 }}>Punches</strong>
+      {punches.length === 0 && editing !== "new" && <span className="muted" style={{ fontSize: 13 }}>No punches this day.</span>}
+      {punches.map((p) => editing === p.id ? null : (
+        <div key={p.id} className="row" style={{ gap: 8, fontSize: 13 }}>
+          <span>In {time(Date.parse(p.clockIn))} · Out {p.clockOut ? time(Date.parse(p.clockOut)) : "— (still clocked in or forgot)"}</span>
+          <button type="button" className="btn sm" onClick={() => open(p)}>Fix times</button>
+          <button type="button" className="btn sm danger" disabled={busy} onClick={() => confirm("Remove this punch? Use this for a duplicate or a mistake.") && run(async () => { await api(`/time/entries/${p.id}`, { method: "DELETE" }); onSaved(); })}>Remove</button>
+        </div>
+      ))}
+      {editing && (
+        <div className="row" style={{ gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <label style={{ width: 210 }}>Clocked in<input type="datetime-local" value={inAt} onChange={(e) => setInAt(e.target.value)} /></label>
+          <label style={{ width: 210 }}>Clocked out<input type="datetime-local" value={outAt} onChange={(e) => setOutAt(e.target.value)} /></label>
+          <button type="button" className="btn primary sm" disabled={busy} onClick={save}>{editing === "new" ? "Add punch" : "Save"}</button>
+          <button type="button" className="btn sm" onClick={() => setEditing(null)}>Cancel</button>
+        </div>
+      )}
+      {!editing && <div><button type="button" className="btn sm" onClick={() => open(null)}>+ Add a missed punch</button></div>}
+      <ErrorBox error={error} />
+      <span className="muted" style={{ fontSize: 12 }}>Changes update the timesheet too (it will need approving again).</span>
+    </div>
+  );
+}
+
 /** A month of one person's attendance: each day coloured; owners/admins click a day to change it. */
 export function AttendanceCalendar({ employeeId, compact = false, highlight = "" }: { employeeId: string; compact?: boolean; highlight?: string }) {
+  const { can } = useAuth();
+  const canFixPunches = can("manager", "time");
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [picked, setPicked] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -133,6 +189,7 @@ export function AttendanceCalendar({ employeeId, compact = false, highlight = ""
         })}
       </div>
       <AttendanceLegend />
+      {!compact && !picked && (canFixPunches || data.data?.canEdit) && <p className="muted" style={{ margin: 0, fontSize: 13 }}>Click a day to see its punches, fix the times, add a missed punch{data.data?.canEdit ? ", or change its status and points" : ""}.</p>}
       {picked && (
         <div className="card stack att-day-detail" style={{ margin: 0 }}>
           {editing ? (
@@ -141,7 +198,7 @@ export function AttendanceCalendar({ employeeId, compact = false, highlight = ""
             <>
               <div className="row" style={{ justifyContent: "space-between" }}>
                 <strong>{longDay(picked)}</strong>
-                {data.data?.canEdit && <button className="btn sm" onClick={() => setEditing(true)}>Change this day</button>}
+                {data.data?.canEdit && <button className="btn sm" onClick={() => setEditing(true)}>Change status or points</button>}
               </div>
               {pickedDay ? (
                 <>
@@ -154,6 +211,7 @@ export function AttendanceCalendar({ employeeId, compact = false, highlight = ""
                   ))}
                 </>
               ) : <div className="muted">Nothing scheduled or recorded.</div>}
+              {canFixPunches && <PunchFixer employeeId={employeeId} date={picked} day={pickedDay} onSaved={data.reload} />}
             </>
           )}
         </div>
@@ -293,10 +351,10 @@ export function AttendanceRulesForm() {
   return (
     <form className="card stack" onSubmit={(e) => { e.preventDefault(); run(async () => { data.setData(await api<AttendanceRules>("/attendance/rules", { method: "PUT", body: r })); setSaved(true); }); }}>
       <fieldset disabled={!admin} className="stack" style={{ border: 0, padding: 0, margin: 0 }}>
-        <h2 style={{ margin: 0 }}>Grace periods</h2>
+        <h2 style={{ margin: 0 }}>Grace periods (buffers)</h2>
         <div className="formgrid">
-          {num("graceMinutes", "Late after (minutes)", "Clocking in this many minutes after a shift starts still counts as on time.", { max: 120 })}
-          {num("earlyLeaveGraceMinutes", "Left early before (minutes)", "Clocking out this many minutes before a shift ends still counts as on time.", { max: 240 })}
+          {num("graceMinutes", "Late buffer (minutes)", "Clocking in up to this many minutes after a shift starts still counts as on time.", { max: 120 })}
+          {num("earlyLeaveGraceMinutes", "Leaving-early buffer (minutes)", "Clocking out up to this many minutes before a shift ends still counts as on time.", { max: 240 })}
           {num("noShowMinutes", "No-show after (minutes)", "Not clocked in this long after a shift starts: alert, and it counts as a no-show.", { min: 5, max: 720 })}
         </div>
         <label className="check"><input type="checkbox" checked={r.alertsEnabled} onChange={(e) => set({ alertsEnabled: e.target.checked })} /> Alert managers (and the employee) when someone hasn&apos;t clocked in by then</label>
@@ -312,6 +370,14 @@ export function AttendanceRulesForm() {
               {num("sickPoints", "Called in sick", "Points per sick day (0 for none).", { max: 10, step: 0.25 })}
               {num("pointsExpireDays", "Points last (days)", "Each point drops off this many days after it's earned.", { min: 7, max: 730 })}
             </div>
+            <strong>Bigger amounts for bigger misses</strong>
+            <div className="formgrid">
+              {num("lateTierMinutes", "Very late at (minutes)", "This late or more earns the very-late points instead. 0 turns it off.", { max: 720 })}
+              {num("lateTierPoints", "Very late points", "Points for a very late arrival.", { max: 10, step: 0.25 })}
+              {num("earlyTierMinutes", "Left very early at (minutes)", "Leaving this early or more earns the very-early points instead. 0 turns it off.", { max: 720 })}
+              {num("earlyTierPoints", "Left very early points", "Points for leaving very early.", { max: 10, step: 0.25 })}
+            </div>
+            <label className="check"><input type="checkbox" checked={r.countLateAndEarly} onChange={(e) => set({ countLateAndEarly: e.target.checked })} /> When someone is late <em>and</em> leaves early the same day, give points for both (otherwise only for being late)</label>
             <div className="stack">
               <strong>Point levels</strong>
               <span className="muted" style={{ fontSize: 13 }}>Managers are alerted when someone reaches a level.</span>

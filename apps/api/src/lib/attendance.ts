@@ -4,6 +4,7 @@ import {
   DEFAULT_ATTENDANCE_RULES,
   classifyDay,
   currentPoints,
+  dayTimes,
   isInactive,
   pointsFor,
   pointsWindowStart,
@@ -32,6 +33,8 @@ export interface AttendanceDay {
   note: string | null;
   points: number;
   shifts: ShiftResult[];
+  /** The punches counted for this day, so a manager can fix them from the calendar. */
+  punches: { id: string; clockIn: string; clockOut: string | null }[];
 }
 
 /**
@@ -56,7 +59,7 @@ export async function computeAttendance(companyId: string, from: string, to: str
 
   const shiftRows = await db.select({ employeeId: shifts.employeeId, startsAt: shifts.startsAt, endsAt: shifts.endsAt }).from(shifts)
     .where(and(eq(shifts.companyId, companyId), eq(shifts.status, "published"), isNotNull(shifts.employeeId), inArray(shifts.employeeId, ids), gte(shifts.startsAt, lo), lt(shifts.startsAt, hi)));
-  const punchRows = await db.select({ employeeId: timeEntries.employeeId, clockIn: timeEntries.clockIn, clockOut: timeEntries.clockOut }).from(timeEntries)
+  const punchRows = await db.select({ id: timeEntries.id, employeeId: timeEntries.employeeId, clockIn: timeEntries.clockIn, clockOut: timeEntries.clockOut }).from(timeEntries)
     .where(and(eq(timeEntries.companyId, companyId), inArray(timeEntries.employeeId, ids), gte(timeEntries.clockIn, new Date(lo.getTime() - DAY)), lt(timeEntries.clockIn, hi)));
   const offRows = await db.select({ employeeId: ptoRequests.employeeId, startDate: ptoRequests.startDate, endDate: ptoRequests.endDate, policy: ptoPolicies.name }).from(ptoRequests)
     .innerJoin(ptoPolicies, eq(ptoPolicies.id, ptoRequests.policyId))
@@ -69,7 +72,7 @@ export async function computeAttendance(companyId: string, from: string, to: str
 
   const result = people.map((e) => {
     const myShifts = shiftRows.filter((s) => s.employeeId === e.id).map((s) => ({ start: s.startsAt.getTime(), end: s.endsAt.getTime(), date: dateOf(s.startsAt) }));
-    const myPunches = punchRows.filter((p) => p.employeeId === e.id).map((p) => ({ clockIn: p.clockIn.getTime(), clockOut: p.clockOut?.getTime() ?? null, date: dateOf(p.clockIn) }));
+    const myPunches = punchRows.filter((p) => p.employeeId === e.id).map((p) => ({ id: p.id, clockIn: p.clockIn.getTime(), clockOut: p.clockOut?.getTime() ?? null, date: dateOf(p.clockIn) }));
     const myOff = offRows.filter((r) => r.employeeId === e.id);
     const myOverrides = new Map(overrideRows.filter((o) => o.employeeId === e.id).map((o) => [o.date, o]));
     const overlapsShift = (p: { clockIn: number; clockOut: number | null }) => myShifts.some((s) => p.clockIn < s.end && (p.clockOut ?? nowMs) > s.start - 3 * 3_600_000);
@@ -84,9 +87,12 @@ export async function computeAttendance(companyId: string, from: string, to: str
       if (date < loadFrom || date > (to > today ? to : today)) continue;
       const dayShifts = myShifts.filter((s) => s.date === date);
       const off = myOff.find((r) => r.startDate <= date && date <= r.endDate);
+      const dayPunches = dayShifts.length
+        ? myPunches.filter((p) => dayShifts.some((sh) => p.clockIn < sh.end && (p.clockOut ?? nowMs) > sh.start - 3 * 3_600_000))
+        : myPunches.filter((p) => p.date === date && !overlapsShift(p));
       const classified = classifyDay({
         shifts: dayShifts,
-        punches: dayShifts.length ? myPunches : myPunches.filter((p) => p.date === date && !overlapsShift(p)),
+        punches: dayPunches,
         timeOff: dayShifts.length && off ? { sick: /sick|ill/i.test(off.policy) } : null,
         rules,
         now: nowMs,
@@ -100,8 +106,10 @@ export async function computeAttendance(companyId: string, from: string, to: str
         auto: classified.status,
         overridden: !!o,
         note: o?.note ?? null,
-        points: o?.points ?? pointsFor(status, rules),
+        // A day set by hand earns the usual points for its status; otherwise how late/early it was counts.
+        points: o?.points ?? pointsFor(status, rules, o ? undefined : dayTimes(classified.shifts)),
         shifts: classified.shifts,
+        punches: dayPunches.map((p) => ({ id: p.id, clockIn: new Date(p.clockIn).toISOString(), clockOut: p.clockOut == null ? null : new Date(p.clockOut).toISOString() })),
       });
     }
     const points = currentPoints(days.map((d) => ({ date: d.date, points: d.points })), today, rules);

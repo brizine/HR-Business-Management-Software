@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
-import { and, desc, eq, gte, inArray, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, lt, or } from "drizzle-orm";
 import { clockInSchema, effectivePto, entryHours, formatDistance, locationPolicySchema, summarizeHours, timeEntryEditSchema, yearsOfService } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
@@ -213,6 +213,30 @@ const routes: FastifyPluginAsync = async (app) => {
       .returning();
     if (!row) notFound("Time entry");
     return row;
+  });
+
+  /** A manager adds a punch someone missed (e.g. forgot to clock in), from the timesheet or attendance calendar. */
+  app.post("/entries", { preHandler: requireRole("manager", AREA) }, async (req) => {
+    const body = parse(timeEntryEditSchema.extend({ employeeId: z.string().uuid() }), req.body);
+    if (body.clockOut && new Date(body.clockOut) <= new Date(body.clockIn)) throw new HttpError(400, "Clock-out must be after clock-in");
+    const [who] = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.id, body.employeeId), eq(employees.companyId, req.user.companyId)));
+    if (!who) notFound("Employee");
+    const end = body.clockOut ? new Date(body.clockOut) : new Date(new Date(body.clockIn).getTime() + 1);
+    const [clash] = await db.select({ id: timeEntries.id }).from(timeEntries).where(and(
+      eq(timeEntries.employeeId, body.employeeId), lt(timeEntries.clockIn, end), or(isNull(timeEntries.clockOut), gt(timeEntries.clockOut, new Date(body.clockIn))),
+    )).limit(1);
+    if (clash) throw new HttpError(409, "That overlaps a punch they already have. Change that one instead.");
+    const [row] = await db.insert(timeEntries).values({
+      companyId: req.user.companyId, employeeId: body.employeeId, clockIn: new Date(body.clockIn), clockOut: body.clockOut ? new Date(body.clockOut) : null, note: body.note || "Added by a manager",
+    }).returning();
+    return row;
+  });
+
+  /** A manager removes a punch made by mistake (e.g. a duplicate). */
+  app.delete<{ Params: { id: string } }>("/entries/:id", { preHandler: requireRole("manager", AREA) }, async (req) => {
+    const [row] = await db.delete(timeEntries).where(and(eq(timeEntries.id, req.params.id), eq(timeEntries.companyId, req.user.companyId))).returning();
+    if (!row) notFound("Time entry");
+    return { ok: true };
   });
 
   app.post("/entries/approve", { preHandler: requireRole("manager", AREA) }, async (req) => {

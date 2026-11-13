@@ -544,3 +544,25 @@ describe("accounting (Bigcapital)", () => {
     expect(accountingSettingsSchema.safeParse({ ...base, baseUrl: "books.example.com" }).success).toBe(false);
   });
 });
+
+describe("attendance points: very late, very early, both", async () => {
+  const { pointsFor, DEFAULT_ATTENDANCE_RULES } = await import("../src");
+  const rules = { ...DEFAULT_ATTENDANCE_RULES, tardyPoints: 0.5, earlyLeavePoints: 0.5, lateTierMinutes: 30, lateTierPoints: 1, earlyTierMinutes: 60, earlyTierPoints: 1.5 };
+  it("uses the usual amount until the 'very' tier is reached", () => {
+    expect(pointsFor("tardy", rules, { minutesLate: 10, minutesEarly: 0 })).toBe(0.5);
+    expect(pointsFor("tardy", rules, { minutesLate: 30, minutesEarly: 0 })).toBe(1);
+    expect(pointsFor("early_leave", rules, { minutesLate: 0, minutesEarly: 59 })).toBe(0.5);
+    expect(pointsFor("early_leave", rules, { minutesLate: 0, minutesEarly: 90 })).toBe(1.5);
+  });
+  it("tiers are off at 0, and a day set by hand earns the usual amount", () => {
+    expect(pointsFor("tardy", { ...rules, lateTierMinutes: 0 }, { minutesLate: 120, minutesEarly: 0 })).toBe(0.5);
+    expect(pointsFor("tardy", rules)).toBe(0.5);
+  });
+  it("late and left early: only late, unless both count", () => {
+    const times = { minutesLate: 10, minutesEarly: 20 };
+    expect(pointsFor("tardy", rules, times)).toBe(0.5);
+    expect(pointsFor("tardy", { ...rules, countLateAndEarly: true }, times)).toBe(1);
+    // Leaving within the early grace isn't counted.
+    expect(pointsFor("tardy", { ...rules, countLateAndEarly: true }, { minutesLate: 10, minutesEarly: 3 })).toBe(0.5);
+  });
+});

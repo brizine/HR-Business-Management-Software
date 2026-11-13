@@ -146,3 +146,43 @@ describe("attendance", () => {
     expect(n[0].body).toContain("Verbal warning");
   });
 });
+
+describe("fixing attendance and flexible rules", () => {
+  const week = "/attendance?from=2026-10-12&to=2026-10-16";
+  const crewDays = async () => (await call("GET", week, "owner")).body.people.find((p: any) => p.employee.id === ID.crew).days as any[];
+
+  it("each day lists its punches, and managers add or remove one to fix the day", async () => {
+    const days = await crewDays();
+    expect(days.find((d) => d.date === "2026-10-13").punches).toHaveLength(1);
+    expect(days.find((d) => d.date === "2026-10-14").punches).toEqual([]);
+    // The no-show actually worked: a manager adds the missed punch.
+    expect((await call("POST", "/time/entries", "crew", { employeeId: ID.crew, clockIn: at("2026-10-14", 8), clockOut: at("2026-10-14", 16) })).status).toBe(403);
+    const added = await call("POST", "/time/entries", "lead", { employeeId: ID.crew, clockIn: at("2026-10-14", 8), clockOut: at("2026-10-14", 16) });
+    expect(added.status).toBe(200);
+    // (An owner marked that day sick earlier, so look at what the punches now show.)
+    expect((await crewDays()).find((d) => d.date === "2026-10-14").auto).toBe("on_time");
+    // Overlapping an existing punch is refused.
+    expect((await call("POST", "/time/entries", "lead", { employeeId: ID.crew, clockIn: at("2026-10-14", 9), clockOut: at("2026-10-14", 10) })).status).toBe(409);
+    // Removing it puts the day back.
+    expect((await call("DELETE", `/time/entries/${added.body.id}`, "lead")).status).toBe(200);
+    expect((await crewDays()).find((d) => d.date === "2026-10-14").auto).toBe("no_show");
+  });
+
+  it("very late and left very early earn their own points; both can count on one day", async () => {
+    const rules = (await call("GET", "/attendance/rules", "owner")).body;
+    expect(rules).toMatchObject({ lateTierMinutes: 0, earlyTierMinutes: 0, countLateAndEarly: false });
+    // Tue 10/13 was 20 minutes late; Fri 10/16 left 2 hours early.
+    await call("PUT", "/attendance/rules", "owner", { ...rules, graceMinutes: 5, tardyPoints: 0.5, earlyLeavePoints: 0.5, lateTierMinutes: 15, lateTierPoints: 1, earlyTierMinutes: 60, earlyTierPoints: 2 });
+    let days = await crewDays();
+    expect(days.find((d) => d.date === "2026-10-13").points).toBe(1);
+    expect(days.find((d) => d.date === "2026-10-16").points).toBe(2);
+    // Mon 10/12: make it late (8:30, very late) and early (3:30 pm, not very early); with both counting it earns 1 + 0.5.
+    const mon = days.find((d) => d.date === "2026-10-12").punches[0];
+    await call("PATCH", `/time/entries/${mon.id}`, "lead", { clockIn: at("2026-10-12", 8, 30), clockOut: at("2026-10-12", 15, 30) });
+    expect((await crewDays()).find((d) => d.date === "2026-10-12").points).toBe(1);
+    await call("PUT", "/attendance/rules", "owner", { ...(await call("GET", "/attendance/rules", "owner")).body, countLateAndEarly: true });
+    days = await crewDays();
+    expect(days.find((d) => d.date === "2026-10-12")).toMatchObject({ status: "tardy", points: 1.5 });
+    await call("PUT", "/attendance/rules", "owner", rules);
+  });
+});
