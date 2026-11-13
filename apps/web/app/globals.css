@@ -145,9 +145,9 @@ tr.openrow td { background: var(--bg); }
 .shift.draft { background: transparent; border: 1px dashed var(--muted); }
 .addshift {
   width: 100%; border: 1px dashed var(--border); background: none; color: var(--muted); border-radius: 6px;
-  cursor: pointer; opacity: 0; font: inherit; padding: 2px;
+  cursor: pointer; opacity: .45; font: inherit; padding: 2px;
 }
-.shiftcell:hover .addshift { opacity: 1; }
+.shiftcell:hover .addshift, .addshift:focus-visible { opacity: 1; }
 @media (hover: none) { .addshift { opacity: 1; } }
 .shiftcell.unavail {
   background: repeating-linear-gradient(135deg, transparent 0 6px, var(--border) 6px 7px);

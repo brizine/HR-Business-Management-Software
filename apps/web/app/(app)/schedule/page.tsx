@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { availabilityConflicts, describeRule, isInactive } from "@crewdesk/shared";
 import { api } from "@/lib/api";
@@ -269,6 +270,12 @@ export default function Schedule() {
       <PageHead title="Schedule" sub={`Week of ${from.toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" })}`}>
         <WeekPicker week={from} onChange={(monday) => setOffset(Math.round((monday.getTime() - weekStart(0).getTime()) / (7 * DAY)))} />
         {partTime && <button className="btn" onClick={() => setShowAvailability(!showAvailability)}>My availability</button>}
+        {manager && <button className="btn primary" onClick={() => {
+          // Today if it's in the week being shown, otherwise that week's Monday.
+          const today = new Date();
+          const day = today >= from && today < to ? today : from;
+          setEditing({ employeeId: "", date: ymd(day), start: "08:00", end: "16:30" });
+        }}>+ Add shift</button>}
         {manager && <button className="btn" onClick={() => setShowTemplates(!showTemplates)}>Templates{templates.data?.length ? ` (${templates.data.length})` : ""}</button>}
         {manager && (
           <>
@@ -304,6 +311,17 @@ export default function Schedule() {
         <ShiftEditor key={editing.id ?? `${editing.employeeId}-${editing.date}`} draft={editing} employees={staff} assets={assets.data ?? []}
           templates={templates.data ?? []} onTemplatesChanged={() => { templates.reload(); setNotice("Template saved."); }} onClose={() => setEditing(null)}
           onSaved={(w) => { setEditing(null); setNotice(w.length ? `Saved with warnings: ${w.join("; ")}` : null); reload(); }} />
+      )}
+      {manager && !editing && list.data && !allShifts.length && !filtering && (
+        <div className="card">
+          <h2>Make this week&apos;s schedule</h2>
+          <ol className="stack" style={{ paddingLeft: 18, margin: 0 }}>
+            {staff.length <= 1 && <li>Add your team under <Link href="/people">Team</Link>, so they show up here to schedule.</li>}
+            <li>Click <strong>+ Add shift</strong> above, or the <strong>+</strong> in anyone&apos;s row under a day. Shifts in the <strong>Open shifts</strong> row can be picked up by anyone.</li>
+            <li>Shifts start as drafts that only managers see. When the week looks right, click <strong>Publish</strong> to share it and notify your team.</li>
+            <li>Next week, <strong>Copy last week</strong> brings these shifts forward as drafts, and <strong>Templates</strong> save shifts you use often.</li>
+          </ol>
+        </div>
       )}
       {partTime && showAvailability && (
         <div className="card">
