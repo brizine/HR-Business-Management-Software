@@ -134,7 +134,7 @@ function PunchFixer({ employeeId, date, day, onSaved }: { employeeId: string; da
           <button type="button" className="btn sm" onClick={() => setEditing(null)}>Cancel</button>
         </div>
       )}
-      {!editing && <div><button type="button" className="btn sm" onClick={() => open(null)}>+ Add a missed punch</button></div>}
+      {!editing && <div><button type="button" className="btn primary sm" onClick={() => open(null)}>+ Add a missed punch</button></div>}
       <ErrorBox error={error} />
       <span className="muted" style={{ fontSize: 12 }}>Changes update the timesheet too (it will need approving again).</span>
     </div>
