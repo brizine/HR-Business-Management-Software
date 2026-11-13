@@ -122,7 +122,7 @@ function PunchFixer({ employeeId, date, day, onSaved }: { employeeId: string; da
       {punches.map((p) => editing === p.id ? null : (
         <div key={p.id} className="row" style={{ gap: 8, fontSize: 13 }}>
           <span>In {time(Date.parse(p.clockIn))} · Out {p.clockOut ? time(Date.parse(p.clockOut)) : "— (still clocked in or forgot)"}</span>
-          <button type="button" className="btn sm" onClick={() => open(p)}>Fix times</button>
+          <button type="button" className="btn primary sm" onClick={() => open(p)}>Fix times</button>
           <button type="button" className="btn sm danger" disabled={busy} onClick={() => confirm("Remove this punch? Use this for a duplicate or a mistake.") && run(async () => { await api(`/time/entries/${p.id}`, { method: "DELETE" }); onSaved(); })}>Remove</button>
         </div>
       ))}
