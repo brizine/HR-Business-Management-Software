@@ -68,6 +68,13 @@ export async function buildApp(opts: AppOptions = {}) {
   // Opt-in per route (sign-in endpoints set config.rateLimit).
   await app.register(rateLimit, { global: false });
   registerErrorHandler(app);
+  // Every answer is personal and changes as people edit, so no proxy or browser may keep a copy.
+  // Without this, a host's cache (e.g. SiteGround's dynamic cache) can keep serving an old schedule
+  // after a shift is deleted. Routes that set their own caching (photos, logo) keep it.
+  app.addHook("onSend", async (_req, reply, payload) => {
+    if (!reply.hasHeader("cache-control")) reply.header("Cache-Control", "private, no-store");
+    return payload;
+  });
   await app.register(apiRoutes, { prefix: opts.prefix ?? "" });
   return app;
 }

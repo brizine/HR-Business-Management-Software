@@ -220,3 +220,10 @@ describe("adding several days at once", () => {
     expect(res.body.skipped).toEqual(["Mon 1/28/2030"]);
   });
 });
+
+describe("caching", () => {
+  it("tells proxies and browsers not to keep copies of the schedule", async () => {
+    const res = await app.inject({ method: "GET", url: `/shifts?from=${week.from}&to=${week.to}`, headers: { authorization: `Bearer ${people.owner.token}` } });
+    expect(res.headers["cache-control"]).toBe("private, no-store");
+  });
+});
