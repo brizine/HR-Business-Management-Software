@@ -459,6 +459,7 @@ tr.openrow td { background: var(--bg); }
 .att-label { font-size: 11px; line-height: 1.2; }
 .att-pts { position: absolute; right: 5px; top: 3px; font-size: 10px; font-weight: 700; }
 .att-edited { position: absolute; right: 5px; bottom: 3px; font-size: 11px; opacity: .7; }
+.att-earlyin { position: absolute; left: 5px; bottom: 3px; font-size: 11px; }
 .att-green { background: #dcfce7; border-color: #86efac; color: #14532d; }
 .att-green-outline { border: 2px dashed #22c55e; }
 .att-yellow { background: #fef9c3; border-color: #fde047; color: #713f12; }

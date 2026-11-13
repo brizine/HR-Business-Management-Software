@@ -186,3 +186,38 @@ describe("fixing attendance and flexible rules", () => {
     await call("PUT", "/attendance/rules", "owner", rules);
   });
 });
+
+describe("clock-in early buffer", () => {
+  it("notes days someone clocked in earlier than the buffer allows", async () => {
+    const rules = (await call("GET", "/attendance/rules", "owner")).body;
+    expect(rules).toMatchObject({ earlyClockInMinutes: 0, earlyClockInAction: "note" });
+    await call("PUT", "/attendance/rules", "owner", { ...rules, earlyClockInMinutes: 10, earlyClockInAction: "points", earlyClockInPoints: 0.25 });
+    // Fri 10/16 punch moved to start at 7:30 for an 8:00 shift (and still leaves at 2pm: left early).
+    const days = (await call("GET", "/attendance?from=2026-10-12&to=2026-10-16", "owner")).body.people.find((p: any) => p.employee.id === ID.crew).days as any[];
+    const fri = days.find((d) => d.date === "2026-10-16");
+    await call("PATCH", `/time/entries/${fri.punches[0].id}`, "lead", { clockIn: at("2026-10-16", 7, 30), clockOut: at("2026-10-16", 14) });
+    const after = (await call("GET", "/attendance?from=2026-10-12&to=2026-10-16", "owner")).body.people.find((p: any) => p.employee.id === ID.crew);
+    const day = after.days.find((d: any) => d.date === "2026-10-16");
+    expect(day).toMatchObject({ earlyIn: true, status: "early_leave" });
+    expect(day.shifts[0].minutesEarlyIn).toBe(30);
+    expect(day.points).toBe(0.25 + rules.earlyLeavePoints);
+    expect(after.summary.earlyClockIns).toBe(1);
+    await call("PUT", "/attendance/rules", "owner", rules);
+  });
+
+  it("can stop people clocking in too early at the time clock", async () => {
+    const rules = (await call("GET", "/attendance/rules", "owner")).body;
+    await call("PUT", "/attendance/rules", "owner", { ...rules, earlyClockInMinutes: 15, earlyClockInAction: "block" });
+    const soon = (min: number) => new Date(Date.now() + min * 60_000).toISOString();
+    const s = await call("POST", "/shifts", "owner", { employeeId: ID.other, startsAt: soon(120), endsAt: soon(480) });
+    await call("POST", "/shifts/publish", "owner", { from: soon(-60), to: soon(600) });
+    const tooEarly = await call("POST", "/time/clock-in", "other", {});
+    expect(tooEarly.status).toBe(400);
+    expect(tooEarly.body.error).toMatch(/^Your shift starts at .+\. You can clock in from .+\.$/);
+    // Within the buffer it's fine.
+    await call("PATCH", `/shifts/${s.body.shift.id}`, "owner", { startsAt: soon(10), endsAt: soon(480) });
+    expect((await call("POST", "/time/clock-in", "other", {})).status).toBe(200);
+    await call("POST", "/time/clock-out", "other", {});
+    await call("PUT", "/attendance/rules", "owner", rules);
+  });
+});

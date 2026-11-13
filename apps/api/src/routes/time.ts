@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
-import { and, desc, eq, gt, gte, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import { clockInSchema, effectivePto, entryHours, formatDistance, locationPolicySchema, summarizeHours, timeEntryEditSchema, yearsOfService } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
@@ -8,7 +8,8 @@ import { authenticate, isManager, requireRole } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { activeSites, checkPunch, locationPolicies, type PunchCheck } from "../lib/geofence";
 import { approversFor, except, notify } from "../lib/notify";
-import { localParts } from "../lib/tz";
+import { fmtTime, localParts } from "../lib/tz";
+import { attendanceRulesFor } from "../lib/attendance";
 
 /** Which area of the Permissions page controls access here. */
 const AREA = "time" as const;
@@ -62,9 +63,32 @@ const routes: FastifyPluginAsync = async (app) => {
     });
   }
 
+  /**
+   * When the attendance rules say not to allow early clock-ins: refuse clocking in more than the
+   * early buffer before a published shift starting in the next 12 hours (if they're not already
+   * inside a shift). People without a shift coming up can clock in as usual.
+   */
+  async function assertNotTooEarly(companyId: string, employeeId: string) {
+    const rules = await attendanceRulesFor(companyId);
+    if (rules.earlyClockInAction !== "block" || rules.earlyClockInMinutes <= 0) return;
+    const now = new Date();
+    const [current] = await db.select({ id: shifts.id }).from(shifts).where(and(
+      eq(shifts.employeeId, employeeId), eq(shifts.status, "published"), lte(shifts.startsAt, new Date(now.getTime() + rules.earlyClockInMinutes * 60_000)), gt(shifts.endsAt, now),
+    )).limit(1);
+    if (current) return;
+    const [next] = await db.select({ startsAt: shifts.startsAt }).from(shifts).where(and(
+      eq(shifts.employeeId, employeeId), eq(shifts.status, "published"), gt(shifts.startsAt, now), lt(shifts.startsAt, new Date(now.getTime() + 12 * 3_600_000)),
+    )).orderBy(asc(shifts.startsAt)).limit(1);
+    if (!next) return;
+    const tz = (await db.select({ tz: companies.timezone }).from(companies).where(eq(companies.id, companyId)))[0].tz;
+    const opens = new Date(next.startsAt.getTime() - rules.earlyClockInMinutes * 60_000);
+    throw new HttpError(400, `Your shift starts at ${fmtTime(next.startsAt, tz)}. You can clock in from ${fmtTime(opens, tz)}.`, "too_early");
+  }
+
   app.post("/clock-in", async (req) => {
     const body = parse(clockInSchema, req.body ?? {});
     if (await openEntry(req.user.sub)) throw new HttpError(409, "Already clocked in");
+    await assertNotTooEarly(req.user.companyId, req.user.sub);
     const check = await checkPunch(req.user.companyId, (await locationPolicies(req.user.companyId)).clockIn, body, "in");
     const [row] = await db
       .insert(timeEntries)

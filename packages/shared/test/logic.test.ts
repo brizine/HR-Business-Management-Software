@@ -566,3 +566,19 @@ describe("attendance points: very late, very early, both", async () => {
     expect(pointsFor("tardy", { ...rules, countLateAndEarly: true }, { minutesLate: 10, minutesEarly: 3 })).toBe(0.5);
   });
 });
+
+describe("clock-in early buffer", async () => {
+  const { pointsFor, clockedInTooEarly, DEFAULT_ATTENDANCE_RULES } = await import("../src");
+  const rules = { ...DEFAULT_ATTENDANCE_RULES, earlyClockInMinutes: 10, earlyClockInPoints: 0.25 };
+  const early = { minutesLate: 0, minutesEarly: 0, minutesEarlyIn: 25 };
+  it("only counts clocking in earlier than the buffer, and is off at 0", () => {
+    expect(clockedInTooEarly(early, rules)).toBe(true);
+    expect(clockedInTooEarly({ ...early, minutesEarlyIn: 10 }, rules)).toBe(false);
+    expect(clockedInTooEarly(early, { earlyClockInMinutes: 0 })).toBe(false);
+  });
+  it("adds points only when the rules say so", () => {
+    expect(pointsFor("on_time", { ...rules, earlyClockInAction: "note" }, early)).toBe(0);
+    expect(pointsFor("on_time", { ...rules, earlyClockInAction: "points" }, early)).toBe(0.25);
+    expect(pointsFor("tardy", { ...rules, earlyClockInAction: "points" }, { ...early, minutesLate: 0 })).toBe(0.25 + rules.tardyPoints);
+  });
+});

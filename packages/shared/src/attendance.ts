@@ -33,6 +33,14 @@ export const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
   pending: "Scheduled",
 };
 
+export const EARLY_CLOCK_IN_ACTIONS = ["note", "points", "block"] as const;
+export type EarlyClockInAction = (typeof EARLY_CLOCK_IN_ACTIONS)[number];
+export const EARLY_CLOCK_IN_LABELS: Record<EarlyClockInAction, string> = {
+  note: "Just note it on the calendar and report",
+  points: "Note it and add points",
+  block: "Don't allow clocking in that early",
+};
+
 export const attendanceThresholdSchema = z.object({
   points: z.number().min(0.5).max(100),
   /** What it means, e.g. "Written warning". Managers are alerted when someone reaches it. */
@@ -61,6 +69,11 @@ export const attendanceRulesSchema = z.object({
   earlyTierPoints: z.number().min(0).max(10),
   /** A day that's both late and left early earns points for both (otherwise just for being late). */
   countLateAndEarly: z.boolean(),
+  /** Clocking in up to this many minutes before a shift is fine; earlier counts as "clocked in early" (0 = no limit). */
+  earlyClockInMinutes: z.number().int().min(0).max(240),
+  /** What happens when someone clocks in earlier: just note it, also add points, or don't allow it at the time clock. */
+  earlyClockInAction: z.enum(EARLY_CLOCK_IN_ACTIONS),
+  earlyClockInPoints: z.number().min(0).max(10),
   /** Points drop off this many days after the day they were earned. */
   pointsExpireDays: z.number().int().min(7).max(730),
   thresholds: z.array(attendanceThresholdSchema).max(10),
@@ -82,6 +95,9 @@ export const DEFAULT_ATTENDANCE_RULES: AttendanceRules = {
   earlyTierMinutes: 0,
   earlyTierPoints: 1,
   countLateAndEarly: false,
+  earlyClockInMinutes: 0,
+  earlyClockInAction: "note",
+  earlyClockInPoints: 0.5,
   pointsExpireDays: 90,
   thresholds: [
     { points: 3, label: "Verbal warning" },
@@ -110,6 +126,8 @@ export interface ShiftResult {
   clockOut: number | null;
   minutesLate: number;
   minutesEarly: number;
+  /** How many minutes before the shift they clocked in (0 if not early). */
+  minutesEarlyIn: number;
   status: Exclude<AttendanceStatus, "sick" | "excused" | "unscheduled">;
 }
 
@@ -123,16 +141,17 @@ export function classifyShift(shift: ShiftLike, punches: PunchLike[], rules: Pic
   const base = { start: shift.start, end: shift.end };
   if (!mine.length) {
     const noShowAt = shift.start + rules.noShowMinutes * MIN;
-    return { ...base, clockIn: null, clockOut: null, minutesLate: 0, minutesEarly: 0, status: now >= noShowAt ? "no_show" : "pending" };
+    return { ...base, clockIn: null, clockOut: null, minutesLate: 0, minutesEarly: 0, minutesEarlyIn: 0, status: now >= noShowAt ? "no_show" : "pending" };
   }
   const clockIn = mine[0].clockIn;
   const last = mine[mine.length - 1];
   const clockOut = last.clockOut;
   const minutesLate = Math.max(0, Math.round((clockIn - shift.start) / MIN));
   const minutesEarly = clockOut == null ? 0 : Math.max(0, Math.round((shift.end - clockOut) / MIN));
+  const minutesEarlyIn = Math.max(0, Math.round((shift.start - clockIn) / MIN));
   const status = minutesLate > rules.graceMinutes ? "tardy" : minutesEarly > rules.earlyLeaveGraceMinutes ? "early_leave" : clockOut == null && now < shift.end ? "pending" : "on_time";
   // Still on the clock and on time: "pending" only until the shift ends; then it counts as worked.
-  return { ...base, clockIn, clockOut, minutesLate, minutesEarly, status: status === "pending" ? "on_time" : status };
+  return { ...base, clockIn, clockOut, minutesLate, minutesEarly, minutesEarlyIn, status: status === "pending" ? "on_time" : status };
 }
 
 const WORST: AttendanceStatus[] = ["no_show", "tardy", "early_leave", "pending", "on_time"];
@@ -157,12 +176,20 @@ export function classifyDay(input: {
 }
 
 /** How late / early a day was: the worst shift that day. */
-export interface DayTimes { minutesLate: number; minutesEarly: number }
+export interface DayTimes { minutesLate: number; minutesEarly: number; minutesEarlyIn?: number }
 
 /** The worst lateness and early departure among a day's shifts (beyond the grace periods count). */
-export function dayTimes(shifts: Pick<ShiftResult, "minutesLate" | "minutesEarly">[]): DayTimes {
-  return { minutesLate: Math.max(0, ...shifts.map((s) => s.minutesLate)), minutesEarly: Math.max(0, ...shifts.map((s) => s.minutesEarly)) };
+export function dayTimes(shifts: Pick<ShiftResult, "minutesLate" | "minutesEarly" | "minutesEarlyIn">[]): DayTimes {
+  return {
+    minutesLate: Math.max(0, ...shifts.map((s) => s.minutesLate)),
+    minutesEarly: Math.max(0, ...shifts.map((s) => s.minutesEarly)),
+    minutesEarlyIn: Math.max(0, ...shifts.map((s) => s.minutesEarlyIn)),
+  };
 }
+
+/** Whether a day's clock-in was earlier than the early buffer allows. */
+export const clockedInTooEarly = (times: DayTimes | undefined, rules: Pick<AttendanceRules, "earlyClockInMinutes">) =>
+  !!times && rules.earlyClockInMinutes > 0 && (times.minutesEarlyIn ?? 0) > rules.earlyClockInMinutes;
 
 /**
  * Points a day earns under the rules (0 if points are off). With `times` (what the punches showed),
@@ -171,6 +198,12 @@ export function dayTimes(shifts: Pick<ShiftResult, "minutesLate" | "minutesEarly
  */
 export function pointsFor(status: AttendanceStatus | null, rules: AttendanceRules, times?: DayTimes): number {
   if (!rules.pointsEnabled || !status) return 0;
+  // Clocking in too early adds its points to a worked day, when the rules say so.
+  const earlyIn = rules.earlyClockInAction === "points" && clockedInTooEarly(times, rules) && ["on_time", "tardy", "early_leave"].includes(status) ? rules.earlyClockInPoints : 0;
+  return earlyIn + basePoints(status, rules, times);
+}
+
+function basePoints(status: AttendanceStatus, rules: AttendanceRules, times?: DayTimes): number {
   const late = () => (times && rules.lateTierMinutes > 0 && times.minutesLate >= rules.lateTierMinutes ? rules.lateTierPoints : rules.tardyPoints);
   const early = () => (times && rules.earlyTierMinutes > 0 && times.minutesEarly >= rules.earlyTierMinutes ? rules.earlyTierPoints : rules.earlyLeavePoints);
   switch (status) {

@@ -1,19 +1,19 @@
 "use client";
 import { useEffect, useState } from "react";
-import { ATTENDANCE_LABELS, OVERRIDE_STATUSES, type AttendanceRules, type AttendanceStatus } from "@crewdesk/shared";
+import { ATTENDANCE_LABELS, EARLY_CLOCK_IN_ACTIONS, EARLY_CLOCK_IN_LABELS, OVERRIDE_STATUSES, type AttendanceRules, type AttendanceStatus, type EarlyClockInAction } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox } from "./ui";
 
-type ShiftResult = { start: number; end: number; clockIn: number | null; clockOut: number | null; minutesLate: number; minutesEarly: number; status: string };
+type ShiftResult = { start: number; end: number; clockIn: number | null; clockOut: number | null; minutesLate: number; minutesEarly: number; minutesEarlyIn: number; status: string };
 type Punch = { id: string; clockIn: string; clockOut: string | null };
-export type AttendanceDay = { date: string; status: AttendanceStatus; auto: AttendanceStatus | null; overridden: boolean; note: string | null; points: number; shifts: ShiftResult[]; punches: Punch[] };
+export type AttendanceDay = { date: string; status: AttendanceStatus; auto: AttendanceStatus | null; overridden: boolean; note: string | null; points: number; earlyIn: boolean; shifts: ShiftResult[]; punches: Punch[] };
 type Points = { total: number; highest: { points: number; label: string } | null; next: { points: number; label: string } | null; nextExpiry: string | null };
 export type PersonAttendance = {
   employee: { id: string; firstName: string; lastName: string; title: string | null; department: string | null; active: boolean };
   days: AttendanceDay[];
-  summary: { scheduledDays: number; onTime: number; tardy: number; earlyLeave: number; noShow: number; sick: number; excused: number; unscheduled: number; onTimeRate: number | null; minutesLate: number };
+  summary: { scheduledDays: number; onTime: number; tardy: number; earlyLeave: number; noShow: number; sick: number; excused: number; unscheduled: number; earlyClockIns: number; onTimeRate: number | null; minutesLate: number };
   points: Points;
 };
 type Response = { rules: AttendanceRules; today: string; people: PersonAttendance[]; canEdit: boolean };
@@ -184,6 +184,7 @@ export function AttendanceCalendar({ employeeId, compact = false, highlight = ""
               {!compact && day && <span className="att-label">{ATTENDANCE_LABELS[day.status]}</span>}
               {day && day.points > 0 && <span className="att-pts">{day.points}</span>}
               {day?.overridden && <span className="att-edited" title="Changed by an owner/admin">✎</span>}
+              {day?.earlyIn && <span className="att-earlyin" title="Clocked in earlier than allowed">⏰</span>}
             </button>
           );
         })}
@@ -206,7 +207,7 @@ export function AttendanceCalendar({ employeeId, compact = false, highlight = ""
                   {pickedDay.overridden && <div className="muted" style={{ fontSize: 13 }}>Set by an owner/admin{pickedDay.auto ? ` (the punches show: ${ATTENDANCE_LABELS[pickedDay.auto]})` : ""}{pickedDay.note ? `. Note: ${pickedDay.note}` : ""}</div>}
                   {pickedDay.shifts.map((s, i) => (
                     <div key={i} className="muted" style={{ fontSize: 13 }}>
-                      Scheduled {time(s.start)}–{time(s.end)} · clocked in {time(s.clockIn)}{s.minutesLate ? ` (${s.minutesLate} min late)` : ""} · out {time(s.clockOut)}{s.minutesEarly ? ` (${s.minutesEarly} min early)` : ""}
+                      Scheduled {time(s.start)}–{time(s.end)} · clocked in {time(s.clockIn)}{s.minutesLate ? ` (${s.minutesLate} min late)` : s.minutesEarlyIn ? ` (${s.minutesEarlyIn} min early${pickedDay.earlyIn ? ", earlier than allowed" : ""})` : ""} · out {time(s.clockOut)}{s.minutesEarly ? ` (${s.minutesEarly} min early)` : ""}
                     </div>
                   ))}
                 </>
@@ -308,7 +309,7 @@ export function AttendanceReport({ onOpen }: { onOpen: (employeeId: string) => v
         {data.data && <p className="muted" role="status" style={{ margin: "0 0 8px", fontSize: 13 }}>{rows.length === all.length ? `${all.length} people` : `Showing ${rows.length} of ${all.length} people`}</p>}
         {rows.length ? (
           <table className="att-report">
-            <thead><tr><th>Employee</th><th>Scheduled</th><th className="att-c-green">On time</th><th className="att-c-yellow">Late</th><th className="att-c-yellow">Left early</th><th className="att-c-red">No-show</th><th className="att-c-blue">Sick</th><th>Excused</th><th>On-time rate</th>{data.data?.rules.pointsEnabled && <th>Points</th>}</tr></thead>
+            <thead><tr><th>Employee</th><th>Scheduled</th><th className="att-c-green">On time</th><th className="att-c-yellow">Late</th><th className="att-c-yellow">Left early</th><th className="att-c-red">No-show</th><th className="att-c-blue">Sick</th><th>Excused</th><th title="Clocked in earlier than the early buffer allows">Early in</th><th>On-time rate</th>{data.data?.rules.pointsEnabled && <th>Points</th>}</tr></thead>
             <tbody>{rows.map((p) => (
               <tr key={p.employee.id} onClick={() => onOpen(p.employee.id)} style={{ cursor: "pointer" }}>
                 <td><strong>{p.employee.firstName} {p.employee.lastName}</strong>{p.employee.title && <div className="muted" style={{ fontSize: 12 }}>{p.employee.title}</div>}</td>
@@ -319,6 +320,7 @@ export function AttendanceReport({ onOpen }: { onOpen: (employeeId: string) => v
                 <td>{p.summary.noShow}</td>
                 <td>{p.summary.sick}</td>
                 <td>{p.summary.excused}</td>
+                <td>{p.summary.earlyClockIns || "—"}</td>
                 <td>{p.summary.onTimeRate == null ? "—" : `${p.summary.onTimeRate}%`}</td>
                 {data.data?.rules.pointsEnabled && <td><strong>{p.points.total}</strong>{p.points.highest && <div className={`att-level`}>{p.points.highest.label}</div>}</td>}
               </tr>
@@ -358,6 +360,18 @@ export function AttendanceRulesForm() {
           {num("noShowMinutes", "No-show after (minutes)", "Not clocked in this long after a shift starts: alert, and it counts as a no-show.", { min: 5, max: 720 })}
         </div>
         <label className="check"><input type="checkbox" checked={r.alertsEnabled} onChange={(e) => set({ alertsEnabled: e.target.checked })} /> Alert managers (and the employee) when someone hasn&apos;t clocked in by then</label>
+
+        <h2 style={{ margin: "8px 0 0" }}>Clocking in early</h2>
+        <div className="formgrid">
+          {num("earlyClockInMinutes", "Clock-in early buffer (minutes)", "Clocking in up to this many minutes before a shift is fine. Earlier counts as clocking in early. 0 means no limit.", { max: 240 })}
+          <label>When someone clocks in earlier
+            <select value={r.earlyClockInAction} onChange={(e) => set({ earlyClockInAction: e.target.value as EarlyClockInAction })} disabled={!r.earlyClockInMinutes}>
+              {EARLY_CLOCK_IN_ACTIONS.map((a) => <option key={a} value={a}>{EARLY_CLOCK_IN_LABELS[a]}</option>)}
+            </select>
+            <span className="muted" style={{ fontSize: 12 }}>{r.earlyClockInAction === "block" ? "The time clock tells them when their shift starts and when they can clock in. Managers can still add a punch." : "Shown with ⏰ on the calendar and counted in the report."}</span>
+          </label>
+          {r.earlyClockInAction === "points" && num("earlyClockInPoints", "Early clock-in points", "Points each time (added to the day's other points).", { max: 10, step: 0.25 })}
+        </div>
 
         <h2 style={{ margin: "8px 0 0" }}>Attendance points</h2>
         <label className="check"><input type="checkbox" checked={r.pointsEnabled} onChange={(e) => set({ pointsEnabled: e.target.checked })} /> Use attendance points</label>

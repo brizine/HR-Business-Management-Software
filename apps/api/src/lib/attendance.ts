@@ -3,6 +3,7 @@ import {
   ATTENDANCE_LABELS,
   DEFAULT_ATTENDANCE_RULES,
   classifyDay,
+  clockedInTooEarly,
   currentPoints,
   dayTimes,
   isInactive,
@@ -33,6 +34,8 @@ export interface AttendanceDay {
   note: string | null;
   points: number;
   shifts: ShiftResult[];
+  /** Clocked in earlier than the early buffer allows. */
+  earlyIn: boolean;
   /** The punches counted for this day, so a manager can fix them from the calendar. */
   punches: { id: string; clockIn: string; clockOut: string | null }[];
 }
@@ -97,6 +100,7 @@ export async function computeAttendance(companyId: string, from: string, to: str
         rules,
         now: nowMs,
       });
+      const times = dayTimes(classified.shifts);
       const o = myOverrides.get(date);
       const status = (o?.status as AttendanceStatus | undefined) ?? classified.status;
       if (!status) continue;
@@ -107,7 +111,8 @@ export async function computeAttendance(companyId: string, from: string, to: str
         overridden: !!o,
         note: o?.note ?? null,
         // A day set by hand earns the usual points for its status; otherwise how late/early it was counts.
-        points: o?.points ?? pointsFor(status, rules, o ? undefined : dayTimes(classified.shifts)),
+        points: o?.points ?? pointsFor(status, rules, o ? undefined : times),
+        earlyIn: clockedInTooEarly(times, rules),
         shifts: classified.shifts,
         punches: dayPunches.map((p) => ({ id: p.id, clockIn: new Date(p.clockIn).toISOString(), clockOut: p.clockOut == null ? null : new Date(p.clockOut).toISOString() })),
       });
@@ -128,6 +133,8 @@ export async function computeAttendance(companyId: string, from: string, to: str
         sick: count("sick"),
         excused: count("excused"),
         unscheduled: count("unscheduled"),
+        /** Days they clocked in earlier than the early buffer allows. */
+        earlyClockIns: inRange.filter((d) => d.earlyIn).length,
         /** On-time share of the days that count (worked or missed, not excused). */
         onTimeRate: counted ? Math.round((count("on_time") / counted) * 100) : null,
         minutesLate: inRange.reduce((m, d) => m + d.shifts.reduce((x, s) => x + (d.status === "tardy" ? s.minutesLate : 0), 0), 0),
