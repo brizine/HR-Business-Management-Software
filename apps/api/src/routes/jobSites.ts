@@ -4,7 +4,9 @@ import { jobSiteSchema } from "@crewdesk/shared";
 import { db } from "../db";
 import { jobSites } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
-import { notFound, parse } from "../lib/errors";
+import { HttpError, notFound, parse } from "../lib/errors";
+import { geocode } from "../lib/geocode";
+import { z } from "zod";
 
 /** Which area of the Permissions page controls access here. */
 const AREA = "time" as const;
@@ -16,6 +18,14 @@ const routes: FastifyPluginAsync = async (app) => {
   app.get("/", async (req) =>
     db.select().from(jobSites).where(eq(jobSites.companyId, req.user.companyId)).orderBy(asc(jobSites.name)),
   );
+
+  /** Turns an address, a maps link (including short share links) or "lat, lng" into coordinates. */
+  app.post("/geocode", { preHandler: requireRole("manager", AREA) }, async (req) => {
+    const { query } = parse(z.object({ query: z.string().trim().min(1, "Type an address or paste a map link").max(1000) }), req.body);
+    const found = await geocode(query);
+    if (!found) throw new HttpError(404, "Couldn't find that place. Check the address (street, city and state), or paste a Google Maps link or \"latitude, longitude\".");
+    return found;
+  });
 
   app.post("/", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const body = parse(jobSiteSchema, req.body);

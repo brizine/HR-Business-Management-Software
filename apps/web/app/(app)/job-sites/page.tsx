@@ -58,6 +58,8 @@ function Rules({ siteCount }: { siteCount: number }) {
 
 function SiteForm({ onSaved }: { onSaved: () => void }) {
   const [where, setWhere] = useState("");
+  const [address, setAddress] = useState("");
+  const [found, setFound] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const { busy, error, run, setError } = useAction();
   const coords = parseCoordinates(where);
@@ -66,34 +68,48 @@ function SiteForm({ onSaved }: { onSaved: () => void }) {
     if (!navigator.geolocation) return setError("This browser can't share its location.");
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (p) => { setWhere(`${p.coords.latitude.toFixed(6)}, ${p.coords.longitude.toFixed(6)}`); setLocating(false); },
-      () => { setError("Couldn't get your location. Allow location for this site in the browser, or paste a map link."); setLocating(false); },
+      (p) => { setWhere(`${p.coords.latitude.toFixed(6)}, ${p.coords.longitude.toFixed(6)}`); setFound("your current location"); setLocating(false); },
+      () => { setError("Couldn't get your location. Allow location for this site in the browser, or type the address."); setLocating(false); },
       { enableHighAccuracy: true, timeout: 15000 },
     );
   };
+
+  /** Looks up an address or map link; fills in the coordinates for the person to check before saving. */
+  const find = (query: string) => run(async () => {
+    const r = await api("/job-sites/geocode", { body: { query } });
+    setWhere(`${r.lat.toFixed(6)}, ${r.lng.toFixed(6)}`);
+    setFound(r.label);
+    if (!address && r.source !== "coordinates" && r.source !== "link") setAddress(query);
+  });
 
   return (
     <form className="card stack" onSubmit={(e) => {
       e.preventDefault();
       const form = e.currentTarget;
       const f = new FormData(form);
-      if (!coords) return setError("Enter the site's location: paste a Google or Apple Maps link, type \"latitude, longitude\", or use your current location.");
+      if (!coords) {
+        const query = where.trim() || address.trim();
+        if (!query) return setError("Enter the site's address, paste a Google or Apple Maps link, or use your current location.");
+        return find(query);
+      }
       run(async () => {
         await api("/job-sites", { body: {
-          name: f.get("name"), address: (f.get("address") as string) || undefined,
+          name: f.get("name"), address: address.trim() || undefined,
           lat: coords.lat, lng: coords.lng, radiusMeters: Number(f.get("radiusMeters")),
         } });
         form.reset();
         setWhere("");
+        setAddress("");
+        setFound(null);
         onSaved();
       });
     }}>
       <h2 style={{ margin: 0 }}>Add a job site</h2>
       <div className="formgrid">
         <label>Name<input name="name" required placeholder="e.g. North yard, Riverside HOA" /></label>
-        <label>Address (for your reference)<input name="address" /></label>
-        <label>Location
-          <input value={where} onChange={(e) => setWhere(e.target.value)} placeholder="Paste a Google Maps link, or 30.2672, -97.7431" aria-describedby="where-help" />
+        <label>Address<input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Main St, Austin, TX" /></label>
+        <label>Location on the map
+          <input value={where} onChange={(e) => { setWhere(e.target.value); setFound(null); }} placeholder="Leave blank to use the address, or paste a map link" aria-describedby="where-help" />
         </label>
         <label>Radius
           <select name="radiusMeters" defaultValue="150">
@@ -101,13 +117,14 @@ function SiteForm({ onSaved }: { onSaved: () => void }) {
           </select>
         </label>
       </div>
-      <div id="where-help" className="row muted" style={{ fontSize: 13 }}>
+      <div id="where-help" className="row muted" style={{ fontSize: 13, flexWrap: "wrap" }}>
+        <button type="button" className="btn sm" disabled={busy || !(where.trim() || address.trim())} onClick={() => find(coords ? where : where.trim() || address.trim())}>🔎 Find on map</button>
         <button type="button" className="btn sm" onClick={useMine} disabled={locating}>{locating ? "Locating…" : "📍 Use my current location"}</button>
-        {coords ? <span>Found {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)} · <a href={`https://www.openstreetmap.org/?mlat=${coords.lat}&mlon=${coords.lng}#map=17/${coords.lat}/${coords.lng}`} target="_blank" rel="noreferrer">check on a map</a></span>
-          : <span>In Google Maps, right-click the spot and click the coordinates to copy them, or share the place and paste the link.</span>}
+        {coords ? <span>✓ {found ? <>Found <strong>{found}</strong> at </> : "Using "}{coords.lat.toFixed(5)}, {coords.lng.toFixed(5)} · <a href={`https://www.openstreetmap.org/?mlat=${coords.lat}&mlon=${coords.lng}#map=17/${coords.lat}/${coords.lng}`} target="_blank" rel="noreferrer">check on a map</a></span>
+          : <span>Type the address and click Find on map, or paste a Google or Apple Maps link (share links work too), or &ldquo;latitude, longitude&rdquo;.</span>}
       </div>
       <ErrorBox error={error} />
-      <div><button className="btn primary" disabled={busy}>Add site</button></div>
+      <div><button className="btn primary" disabled={busy}>{coords ? "Add site" : "Find and check location"}</button></div>
     </form>
   );
 }
