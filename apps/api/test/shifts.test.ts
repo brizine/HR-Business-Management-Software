@@ -199,7 +199,7 @@ describe("adding several days at once", () => {
       shifts: [5, 2, 6].map((i) => ({ employeeId: people.ben.id, startsAt: d(i, 9), endsAt: d(i, 12) })),
     });
     expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/^Wed, Jan 30, 2030: /);
+    expect(res.body.error).toMatch(/^Wed 1\/30\/2030: /);
     const list = await call("GET", `/shifts?from=${d(5, 0)}&to=${d(7, 0)}`, "owner");
     expect(list.body.filter((r: any) => r.shift.employeeId === people.ben.id)).toHaveLength(0);
   });
