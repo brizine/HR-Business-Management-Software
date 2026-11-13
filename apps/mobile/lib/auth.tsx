@@ -11,7 +11,7 @@ interface Me {
   access?: { areas: AreaLevels; managesPermissions: boolean };
 }
 
-export type SignInStep = { kind: "done" } | { kind: "code"; mfaToken: string } | { kind: "setup"; setupToken: string };
+export type SignInStep = { kind: "done" } | { kind: "code"; mfaToken: string; method: "app" | "email"; emailHint: string } | { kind: "setup"; setupToken: string };
 
 interface AuthCtx {
   me: Me | null;
@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string): Promise<SignInStep> => {
     const res = await api("/auth/login", { body: { email, password } });
-    if (res.mfaRequired) return { kind: "code", mfaToken: res.mfaToken };
+    if (res.mfaRequired) return { kind: "code", mfaToken: res.mfaToken, method: res.method ?? "app", emailHint: res.emailHint ?? "your email" };
     if (res.mfaSetupRequired) return { kind: "setup", setupToken: res.setupToken };
     await completeSignIn(res.token);
     return { kind: "done" };

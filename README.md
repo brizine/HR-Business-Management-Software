@@ -189,10 +189,11 @@ the payroll calendar, safety rules and so on.
 
 ## Account security
 
-- **Two-factor sign-in** with any authenticator app (Google Authenticator, Microsoft Authenticator,
-  1Password…), plus 10 one-time backup codes. The owner chooses who must use it under **Settings →
-  Security** (default: owners and admins); anyone can turn it on for themselves. People newly
-  required are walked through setup at their next sign-in. Secrets are encrypted in the database
+- **Two-factor sign-in**: a 6-digit code emailed at each sign-in (works 10 minutes, newest only), or
+  any authenticator app (Google Authenticator, Microsoft Authenticator, 1Password…) with 10 one-time
+  backup codes; app users can also ask for an emailed code. The owner chooses who must use it under
+  **Settings → Security** (default: owners and admins); anyone can turn on the app for themselves.
+  If email isn't set up, people required to use it are walked through app setup instead. Secrets are encrypted in the database
   (`ENCRYPTION_KEY`), and each code works only once.
 - **Lockout:** 5 wrong passwords or codes in a row lock the account for 15 minutes (admins can
   unlock it). Sign-in endpoints are also rate-limited per IP address.

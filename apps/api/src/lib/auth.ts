@@ -7,8 +7,10 @@ import { HttpError } from "./errors";
 
 /**
  * - session: a normal signed-in session.
- * - mfa: password was right; only good for submitting a two-factor code.
- * - mfa-setup: password was right but two-factor is required and not set up;
+ * - mfa: password was right; only good for submitting a two-factor code (app, emailed or backup)
+ *   or asking for an emailed code.
+ * - mfa-setup: password was right, two-factor is required, there's no authenticator app and email
+ *   isn't working, so it has to be set up;
  *   only good for setting it up.
  */
 export type TokenPurpose = "session" | "mfa" | "mfa-setup";
@@ -70,7 +72,7 @@ export function clearSessionCookie(reply: FastifyReply) {
 export function issueToken(app: FastifyInstance, e: EmployeeRow, purpose: TokenPurpose = "session") {
   return app.jwt.sign(
     { sub: e.id, companyId: e.companyId, role: e.role as Role, ver: e.tokenVersion, purpose },
-    { expiresIn: purpose === "session" ? SESSION_TTL : purpose === "mfa" ? "5m" : "15m" },
+    { expiresIn: purpose === "session" ? SESSION_TTL : "15m" },
   );
 }
 

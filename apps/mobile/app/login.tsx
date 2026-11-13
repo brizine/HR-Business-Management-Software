@@ -20,6 +20,7 @@ export default function Login() {
   const [code, setCode] = useState("");
   const [setup, setSetup] = useState<{ secret: string; otpauthUri: string } | null>(null);
   const [backup, setBackup] = useState<{ codes: string[]; token: string } | null>(null);
+  const [sentNote, setSentNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,6 +47,13 @@ export default function Login() {
     const res = await api("/auth/login/mfa", { body: { code: code.trim() }, token: step.mfaToken });
     await completeSignIn(res.token);
   }).finally(() => setCode(""));
+
+  const emailCode = () => attempt(async () => {
+    if (step.kind !== "code") return;
+    const res = await api("/auth/login/mfa/email", { method: "POST", token: step.mfaToken });
+    setStep({ ...step, method: "email", emailHint: res.emailHint });
+    setSentNote(`New code sent to ${res.emailHint}. Only the newest code works.`);
+  });
 
   const confirmSetup = () => attempt(async () => {
     if (step.kind !== "setup") return;
@@ -81,12 +89,16 @@ export default function Login() {
     );
   } else if (step.kind === "code") {
     body = (
-      <Card title="Two-factor sign-in">
-        <Txt muted>Enter the 6-digit code from your authenticator app, or one of your backup codes.</Txt>
+      <Card title={step.method === "email" ? "Check your email" : "Two-factor sign-in"}>
+        <Txt muted>{step.method === "email"
+          ? `We emailed a 6-digit code to ${step.emailHint}. It works for 10 minutes. You can also enter a backup code.`
+          : "Enter the 6-digit code from your authenticator app, or one of your backup codes."}</Txt>
         <Input label="Code" value={code} onChangeText={setCode} autoCapitalize="none" textContentType="oneTimeCode" autoFocus onSubmitEditing={submitCode} />
         <ErrorText error={error} />
         <Button title="Verify" onPress={submitCode} busy={busy} disabled={code.trim().length < 6} />
-        <Txt muted style={{ fontSize: 12 }}>No phone and no backup codes? Ask your Crewdesk admin to reset your two-factor.</Txt>
+        {sentNote && <Txt muted>{sentNote}</Txt>}
+        <Button title={step.method === "email" ? "Send a new code" : "Email me a code instead"} kind="secondary" onPress={emailCode} disabled={busy} />
+        <Txt muted style={{ fontSize: 12 }}>Still stuck? Ask your Crewdesk admin to reset your two-factor.</Txt>
       </Card>
     );
   } else {

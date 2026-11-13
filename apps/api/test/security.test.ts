@@ -35,7 +35,23 @@ async function hire(who: string, role = "employee") {
   return res.body.id as string;
 }
 
-/** Walks the "two-factor required" setup flow and returns the secret, session and backup codes. */
+/** The 6-digit code in the newest sign-in email to `who`. */
+function emailedCode(who: string) {
+  const m = [...emails].reverse().find((e) => e.to === email(who) && / sign-in code$/.test(e.subject));
+  expect(m).toBeDefined();
+  return m!.subject.slice(0, 6);
+}
+
+/** Signs in with the code Crewdesk emails (two-factor required, no authenticator app); returns the session token. */
+async function emailLogin(who: string, password = "password123") {
+  const step = await login(who, password);
+  expect(step.body).toMatchObject({ mfaRequired: true, method: "email" });
+  const res = await call("POST", "/auth/login/mfa", step.body.mfaToken, { code: emailedCode(who) });
+  expect(res.status).toBe(200);
+  return res.body.token as string;
+}
+
+/** Walks the authenticator-app setup flow and returns the secret, session and backup codes. */
 async function setUpTwoFactor(setupToken: string) {
   const setup = await call("POST", "/auth/mfa/setup", setupToken);
   expect(setup.status).toBe(200);
@@ -66,24 +82,41 @@ describe("two-factor sign-in", () => {
   let secret: string;
   let codes: string[];
 
-  it("owners and admins must set it up by default; a setup token can't do anything else", async () => {
+  it("owners and admins get a code by email by default; the code token can't do anything else", async () => {
+    emails = [];
     const first = await login("owner");
-    expect(first.body).toMatchObject({ mfaSetupRequired: true });
+    expect(first.body).toMatchObject({ mfaRequired: true, method: "email", emailHint: "ow•••@sec.test" });
     expect(first.body.token).toBeUndefined();
-    expect((await call("GET", "/employees", first.body.setupToken)).status).toBe(401);
+    expect((await call("GET", "/employees", first.body.mfaToken)).status).toBe(401);
+    expect(emails).toHaveLength(1);
+    const code = emailedCode("owner");
+    expect(code).toMatch(/^\d{6}$/);
+    expect(emails[0].text).toContain(code);
+    expect((await call("POST", "/auth/login/mfa", first.body.mfaToken, { code: code === "000000" ? "111111" : "000000" })).status).toBe(401);
 
-    expect((await call("POST", "/auth/mfa/enable", first.body.setupToken, { code: "000000" })).status).toBe(400); // not started
-    const done = await setUpTwoFactor(first.body.setupToken);
+    // Asking again sends a new code, and the old one stops working.
+    expect((await call("POST", "/auth/login/mfa/email", first.body.mfaToken)).status).toBe(200);
+    const newer = emailedCode("owner");
+    if (newer !== code) expect((await call("POST", "/auth/login/mfa", first.body.mfaToken, { code })).status).toBe(401);
+    const ok = await call("POST", "/auth/login/mfa", first.body.mfaToken, { code: newer });
+    expect(ok.status).toBe(200);
+    ownerToken = ok.body.token;
+
+    // Each code works once.
+    const again = await login("owner");
+    expect((await call("POST", "/auth/login/mfa", again.body.mfaToken, { code: newer })).status).toBe(401);
+  });
+
+  it("anyone can use an authenticator app instead", async () => {
+    const done = await setUpTwoFactor(ownerToken);
     ({ secret, codes } = done);
     expect(codes).toHaveLength(10);
     expect(codes[0]).toMatch(/^[a-z2-9]{5}-[a-z2-9]{5}$/);
-    expect((await call("GET", "/employees", done.token)).status).toBe(200);
-    ownerToken = done.token;
   });
 
-  it("then asks for a code after the password, and won't accept the same code twice", async () => {
+  it("then asks for the app's code after the password, and won't accept the same code twice", async () => {
     const step1 = await login("owner");
-    expect(step1.body).toMatchObject({ mfaRequired: true });
+    expect(step1.body).toMatchObject({ mfaRequired: true, method: "app" });
     expect((await call("GET", "/employees", step1.body.mfaToken)).status).toBe(401);
     expect((await call("POST", "/auth/login/mfa", step1.body.mfaToken, { code: "123456" })).status).toBe(401);
 
@@ -98,6 +131,16 @@ describe("two-factor sign-in", () => {
     expect((await call("POST", "/auth/login/mfa", again.body.mfaToken, { code })).status).toBe(401);
   });
 
+  it("app users can have a code emailed instead (no phone handy)", async () => {
+    emails = [];
+    const step1 = await login("owner");
+    expect(emails).toHaveLength(0); // not unless they ask
+    expect((await call("POST", "/auth/login/mfa/email", step1.body.mfaToken)).status).toBe(200);
+    const ok = await call("POST", "/auth/login/mfa", step1.body.mfaToken, { code: emailedCode("owner") });
+    expect(ok.status).toBe(200);
+    ownerToken = ok.body.token;
+  });
+
   it("backup codes work once", async () => {
     const a = await login("owner");
     const ok = await call("POST", "/auth/login/mfa", a.body.mfaToken, { code: codes[0].toUpperCase() });
@@ -107,14 +150,38 @@ describe("two-factor sign-in", () => {
     ownerToken = ok.body.token;
   });
 
-  it("can't be turned off while the company requires it", async () => {
-    const res = await call("POST", "/auth/mfa/disable", ownerToken, { password: "password123", code: codes[1] });
-    expect(res.status).toBe(403);
+  it("turning the app off while it's required goes back to emailed codes (only if email works)", async () => {
+    await hire("dana", "admin");
+    const { secret: s, codes: backup } = await setUpTwoFactor(await emailLogin("dana"));
+    const token = (await call("POST", "/auth/login/mfa", (await login("dana")).body.mfaToken, { code: codeAt(s, currentStep() + 1) })).body.token;
+    setEmailTransport(null);
+    expect((await call("POST", "/auth/mfa/disable", token, { password: "password123", code: backup[0] })).status).toBe(403);
+    setEmailTransport({ send: async (m) => void emails.push(m) });
+    expect((await call("POST", "/auth/mfa/disable", token, { password: "password123", code: backup[1] })).status).toBe(200);
+    expect((await login("dana")).body).toMatchObject({ mfaRequired: true, method: "email" });
+  });
+
+  it("if email isn't working, people without the app must set it up; that token can't do anything else", async () => {
+    await hire("noemail", "admin");
+    setEmailTransport(null);
+    try {
+      const first = await login("noemail");
+      expect(first.body).toMatchObject({ mfaSetupRequired: true });
+      expect(first.body.token).toBeUndefined();
+      expect((await call("GET", "/employees", first.body.setupToken)).status).toBe(401);
+      expect((await call("POST", "/auth/mfa/enable", first.body.setupToken, { code: "000000" })).status).toBe(400); // not started
+      const done = await setUpTwoFactor(first.body.setupToken);
+      expect((await call("GET", "/employees", done.token)).status).toBe(200);
+      // App users who ask for an emailed code are told to use the app.
+      expect((await call("POST", "/auth/login/mfa/email", (await login("owner")).body.mfaToken)).status).toBe(503);
+    } finally {
+      setEmailTransport({ send: async (m) => void emails.push(m) });
+    }
   });
 
   it("security status reports it", async () => {
     const res = await call("GET", "/auth/security", ownerToken);
-    expect(res.body).toMatchObject({ twoFactorEnabled: true, twoFactorRequired: true, policy: "admin" });
+    expect(res.body).toMatchObject({ twoFactorEnabled: true, twoFactorMethod: "app", twoFactorRequired: true, policy: "admin" });
   });
 });
 
@@ -336,8 +403,7 @@ describe("admin limits", () => {
 
   beforeAll(async () => {
     adminId = await hire("adam", "admin");
-    const first = await login("adam");
-    adminToken = (await setUpTwoFactor(first.body.setupToken)).token;
+    adminToken = await emailLogin("adam");
   });
 
   it("admins can't take over the owner or other admins, or create admins", async () => {
@@ -358,7 +424,7 @@ describe("admin limits", () => {
     expect((await login("crewmfa")).body.token).toBeDefined();
 
     expect((await call("POST", `/employees/${adminId}/reset-two-factor`, ownerToken)).status).toBe(200);
-    expect((await login("adam")).body.mfaSetupRequired).toBe(true); // required for admins
+    expect((await login("adam")).body).toMatchObject({ mfaRequired: true, method: "email" }); // required for admins
   });
 
   it("never sends secrets to clients", async () => {
@@ -371,7 +437,7 @@ describe("admin limits", () => {
 });
 
 describe("company policy", () => {
-  it("requiring it for everyone signs out people without it, who then set it up", async () => {
+  it("requiring it for everyone signs out people without it, who then get emailed codes", async () => {
     await hire("crewpol");
     const before = (await login("crewpol")).body.token;
     expect((await call("PUT", "/auth/policy", before, { twoFactorRequiredFor: "employee" })).status).toBe(403);
@@ -379,7 +445,7 @@ describe("company policy", () => {
     const res = await call("PUT", "/auth/policy", ownerToken, { twoFactorRequiredFor: "employee" });
     expect(res.body.signedOut).toBeGreaterThan(0);
     expect((await call("GET", "/auth/me", before)).status).toBe(401);
-    expect((await login("crewpol")).body.mfaSetupRequired).toBe(true);
+    expect((await login("crewpol")).body).toMatchObject({ mfaRequired: true, method: "email" });
     await call("PUT", "/auth/policy", ownerToken, { twoFactorRequiredFor: "admin" });
   });
 });

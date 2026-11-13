@@ -33,7 +33,7 @@ function TwoFactorCard() {
         <RecoveryCodes codes={codes} onSaved={() => { setCodes(null); setMode("idle"); status.reload(); }} />
       ) : s.twoFactorEnabled ? (
         <div className="stack">
-          <p style={{ margin: 0 }}>✓ On since {fmtDate(s.twoFactorEnabledAt)}. Signing in asks for a code from your authenticator app.</p>
+          <p style={{ margin: 0 }}>✓ On since {fmtDate(s.twoFactorEnabledAt)}. Signing in asks for a code from your authenticator app. If your phone isn&apos;t handy, you can have a code emailed instead.</p>
           <p className="muted" style={{ margin: 0 }}>
             {s.recoveryCodesLeft} unused backup code{s.recoveryCodesLeft === 1 ? "" : "s"} left.
             {s.recoveryCodesLeft <= 3 && " Make new ones soon."}
@@ -49,7 +49,7 @@ function TwoFactorCard() {
             }}>
               {mode === "disable" && <input name="password" type="password" placeholder="Your password" required style={{ width: 180 }} />}
               <input name="code" placeholder="Current code" required autoComplete="one-time-code" style={{ width: 140 }} />
-              <button className="btn primary" disabled={busy}>{mode === "codes" ? "Make new codes" : "Turn off"}</button>
+              <button className="btn primary" disabled={busy}>{mode === "codes" ? "Make new codes" : s.twoFactorRequired ? "Switch to emailed codes" : "Turn off"}</button>
               <button type="button" className="btn" onClick={() => setMode("idle")}>Cancel</button>
             </form>
           )}
@@ -57,11 +57,15 @@ function TwoFactorCard() {
           {mode === "idle" && (
             <div className="row">
               <button className="btn" onClick={() => setMode("codes")}>New backup codes</button>
-              {s.twoFactorRequired
-                ? <span className="muted">Required for your role, so it can&apos;t be turned off.</span>
-                : <button className="btn danger" onClick={() => setMode("disable")}>Turn off</button>}
+              <button className="btn danger" onClick={() => setMode("disable")}>{s.twoFactorRequired ? "Switch to emailed codes" : "Turn off"}</button>
             </div>
           )}
+        </div>
+      ) : s.twoFactorMethod === "email" ? (
+        <div className="stack">
+          <p style={{ margin: 0 }}>✓ On. Each time you sign in, a 6-digit code is emailed to {s.emailHint}.</p>
+          <p className="muted" style={{ margin: 0 }}>For extra security, or to sign in without checking email, you can use an authenticator app instead.</p>
+          <div><button className="btn" onClick={() => setMode("setup")}>Use an authenticator app</button></div>
         </div>
       ) : (
         <div className="stack">
@@ -136,11 +140,11 @@ function PolicyCard() {
       <div className="row">
         <select value={data.twoFactorRequiredFor} disabled={!can("owner", "company") || busy} style={{ width: 280 }} onChange={(e) => {
           const value = e.target.value;
-          if (!confirm(`Require two-factor for: ${POLICY_LABELS[value]}? People newly covered who haven't set it up will be signed out and walked through setup next time they sign in.`)) return;
+          if (!confirm(`Require two-factor for: ${POLICY_LABELS[value]}? People newly covered who don't use an authenticator app will be signed out, and emailed a code each time they sign in.`)) return;
           run(async () => {
             const res = await api("/auth/policy", { method: "PUT", body: { twoFactorRequiredFor: value } });
             setData({ twoFactorRequiredFor: res.twoFactorRequiredFor });
-            setNote(res.signedOut ? `${res.signedOut} ${res.signedOut === 1 ? "person was" : "people were"} signed out to set it up.` : null);
+            setNote(res.signedOut ? `${res.signedOut} ${res.signedOut === 1 ? "person was" : "people were"} signed out; they'll get an emailed code next time.` : null);
           });
         }}>
           {Object.entries(POLICY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -149,7 +153,7 @@ function PolicyCard() {
       </div>
       <ErrorBox error={error} />
       <p className="muted">
-        Anyone can turn it on for themselves. If someone loses their phone and backup codes, an admin can reset it from their profile.
+        People it covers get a 6-digit code by email each time they sign in, or can use an authenticator app instead. Anyone can turn on the app for themselves. If someone loses their phone and backup codes, an admin can reset it from their profile.
         {!can("owner", "company") && " Only the owner can change this."}
       </p>
     </div>

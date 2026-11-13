@@ -147,9 +147,10 @@ SiteGround shows for the project.
 2. Open `https://manage.prospray.net/signup` and create your company and owner login.
 3. **Sign-up then closes automatically.** Add everyone else from **Team → Add employee** (give them
    a password, or let them use email/text notifications only).
-4. **Two-factor:** owners and admins must use an authenticator app. The next time you sign in you'll
-   be walked through setup; save the backup codes it shows. Change who must use it under
-   **Settings → Security**.
+4. **Two-factor:** owners and admins get a 6-digit code by email each time they sign in, so email
+   (step 5) must work. Anyone can switch to an authenticator app under **Settings → Security**, and
+   the owner chooses who must use two-factor there. If email isn't working, people without the app
+   are walked through setting it up instead.
 5. Test **Forgot your password?** on the sign-in page once email is set up, so you know reset emails arrive.
 
 ## 9. Add the scheduled-checks cron job

@@ -9,7 +9,7 @@ import { loadLastCompanyName } from "@/lib/last-company";
 import { ErrorBox, formValues } from "@/components/ui";
 import { TwoFactorSetup } from "@/components/two-factor-setup";
 
-type Step = { kind: "password" } | { kind: "code"; mfaToken: string } | { kind: "setup"; setupToken: string };
+type Step = { kind: "password" } | { kind: "code"; mfaToken: string; method: "app" | "email"; emailHint: string } | { kind: "setup"; setupToken: string };
 
 function Login() {
   const { signIn } = useAuth();
@@ -20,6 +20,7 @@ function Login() {
   const [step, setStep] = useState<Step>({ kind: "password" });
   const [useBackup, setUseBackup] = useState(false);
   const { busy, error, run, setError } = useAction();
+  const [sentNote, setSentNote] = useState<string | null>(null);
   // The company last signed in on this browser (read after mount, since the server can't see it).
   const [companyName, setCompanyName] = useState<string | null>(null);
   useEffect(() => {
@@ -56,7 +57,7 @@ function Login() {
               const body = formValues(e.currentTarget);
               run(async () => {
                 const res = await api("/auth/login", { body });
-                if (res.mfaRequired) setStep({ kind: "code", mfaToken: res.mfaToken });
+                if (res.mfaRequired) setStep({ kind: "code", mfaToken: res.mfaToken, method: res.method ?? "app", emailHint: res.emailHint ?? "your email" });
                 else if (res.mfaSetupRequired) setStep({ kind: "setup", setupToken: res.setupToken });
                 else await finish();
               });
@@ -73,8 +74,12 @@ function Login() {
 
         {step.kind === "code" && (
           <>
-            <h1>Two-factor sign-in</h1>
-            <p className="muted">{useBackup ? "Enter one of your backup codes." : "Enter the 6-digit code from your authenticator app."}</p>
+            <h1>{step.method === "email" && !useBackup ? "Check your email" : "Two-factor sign-in"}</h1>
+            <p className="muted">
+              {useBackup ? "Enter one of your backup codes."
+                : step.method === "email" ? `We emailed a 6-digit code to ${step.emailHint}. It works for 10 minutes.`
+                : "Enter the 6-digit code from your authenticator app."}
+            </p>
             <form className="stack" onSubmit={(e) => {
               e.preventDefault();
               const { code } = formValues(e.currentTarget);
@@ -92,12 +97,24 @@ function Login() {
               <ErrorBox error={error} />
               <button className="btn primary" disabled={busy}>Verify</button>
             </form>
+            {sentNote && <p className="muted">{sentNote}</p>}
+            <p className="muted">
+              <a href="#" onClick={(e) => {
+                e.preventDefault();
+                run(async () => {
+                  const res = await api("/auth/login/mfa/email", { token: step.mfaToken, method: "POST" });
+                  setStep({ ...step, method: "email", emailHint: res.emailHint });
+                  setUseBackup(false);
+                  setSentNote(`New code sent to ${res.emailHint}. Only the newest code works. Check your spam folder if it doesn't arrive.`);
+                });
+              }}>{step.method === "email" ? "Send a new code" : "Email me a code instead"}</a>
+            </p>
             <p className="muted">
               <a href="#" onClick={(e) => { e.preventDefault(); setUseBackup(!useBackup); setError(null); }}>
-                {useBackup ? "Use my authenticator app instead" : "Lost your phone? Use a backup code"}
+                {useBackup ? "Use a 6-digit code instead" : step.method === "email" ? "Can't get to your email? Use a backup code" : "Lost your phone? Use a backup code"}
               </a>
             </p>
-            <p className="muted" style={{ fontSize: 12 }}>No phone and no backup codes? Ask your Crewdesk admin to reset your two-factor.</p>
+            <p className="muted" style={{ fontSize: 12 }}>Still stuck? Ask your Crewdesk admin to reset your two-factor.</p>
           </>
         )}
 

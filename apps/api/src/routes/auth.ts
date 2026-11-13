@@ -18,7 +18,7 @@ import {
   twoFactorRequired,
   verifyToken,
 } from "../lib/auth";
-import { WEB_URL, sendSystemEmail } from "../lib/channels";
+import { WEB_URL, emailTransport, sendSystemEmail } from "../lib/channels";
 import { decrypt, encrypt, randomToken, sha256 } from "../lib/crypto";
 import { HttpError, parse } from "../lib/errors";
 import { newTotpSecret, otpauthUri, verifyTotp } from "../lib/totp";
@@ -33,6 +33,8 @@ export const MAX_FAILED_ATTEMPTS = 5;
 export const LOCKOUT_MINUTES = 15;
 const RESET_TTL_MINUTES = 60;
 const RECOVERY_CODE_COUNT = 10;
+/** How long an emailed sign-in code works. */
+export const EMAIL_CODE_MINUTES = 10;
 
 const passwordSchema = z.string().min(8, "Use at least 8 characters").max(200);
 
@@ -65,8 +67,62 @@ async function clearFailures(user: EmployeeRow) {
   }
 }
 
-/** Accepts an authenticator code, or an unused backup code (which is then used up). */
+const loginCodeHash = (employeeId: string, code: string) => sha256(`login-code:${employeeId}:${code}`);
+
+/** "brian@prospraylawns.com" → "br•••@prospraylawns.com", so the page can say where the code went. */
+export function maskEmail(address: string) {
+  const [name, domain] = address.split("@");
+  return `${name.slice(0, Math.min(2, Math.max(1, name.length - 1)))}•••@${domain}`;
+}
+
+/**
+ * Emails a new 6-digit sign-in code (any earlier one stops working). False if email isn't set up
+ * or sending failed, so the caller can offer another way in.
+ */
+async function sendLoginCode(user: EmployeeRow) {
+  const code = String(randomInt(1_000_000)).padStart(6, "0");
+  await db.delete(passwordResets).where(and(eq(passwordResets.employeeId, user.id), eq(passwordResets.purpose, "login-code")));
+  const [row] = await db.insert(passwordResets).values({
+    purpose: "login-code", employeeId: user.id, tokenHash: loginCodeHash(user.id, code), expiresAt: new Date(Date.now() + EMAIL_CODE_MINUTES * 60_000),
+  }).returning();
+  const [company] = await db.select({ name: companies.name }).from(companies).where(eq(companies.id, user.companyId));
+  const from = company?.name ?? "Crewdesk";
+  try {
+    const sent = await sendSystemEmail(
+      user.email,
+      `${code} is your ${from} sign-in code`,
+      `Hi ${user.firstName},\n\nYour sign-in code is ${code}\n\nIt works for ${EMAIL_CODE_MINUTES} minutes. If you didn't just try to sign in, change your password: someone may know it.\n`,
+      `<p>Hi ${escapeHtml(user.firstName)},</p><p>Your sign-in code is</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px">${code}</p><p>It works for ${EMAIL_CODE_MINUTES} minutes. If you didn't just try to sign in, change your password: someone may know it.</p>`,
+    );
+    if (sent) return true;
+  } catch (e) {
+    console.error(`Couldn't email a sign-in code to ${user.email}: ${(e as Error).message}`);
+  }
+  await db.delete(passwordResets).where(eq(passwordResets.id, row.id));
+  return false;
+}
+
+const escapeHtml = (t: string) => t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+/** Uses up an emailed sign-in code if it's right and still current. */
+async function useLoginCode(employeeId: string, code: string) {
+  const [used] = await db
+    .update(passwordResets)
+    .set({ usedAt: new Date() })
+    .where(and(
+      eq(passwordResets.tokenHash, loginCodeHash(employeeId, code)),
+      eq(passwordResets.purpose, "login-code"),
+      isNull(passwordResets.usedAt),
+      gt(passwordResets.expiresAt, new Date()),
+    ))
+    .returning();
+  return !!used;
+}
+
+/** Accepts an emailed code, an authenticator code, or an unused backup code (which is then used up). */
 async function checkSecondFactor(user: EmployeeRow, code: string) {
+  const digits = code.replace(/\s/g, "");
+  if (/^\d{6}$/.test(digits) && (await useLoginCode(user.id, digits))) return true;
   if (!user.totpSecret) return false;
   const step = verifyTotp(decrypt(user.totpSecret), code);
   if (step !== null) {
@@ -155,13 +211,21 @@ const routes: FastifyPluginAsync = async (app) => {
     return afterPassword(req, reply, user);
   });
 
-  /** Once the password checks out: ask for the second factor, require setting it up, or start the session. */
-  const afterPassword = async (req: FastifyRequest, reply: FastifyReply, user: EmployeeRow) => {
-    if (user.totpSecret) return { mfaRequired: true, mfaToken: issueToken(app, user, "mfa") };
-    await clearFailures(user);
-    if (twoFactorRequired(await companyPolicy(user.companyId), user.role as Role)) {
+  /**
+   * Once the password checks out: ask for the second factor, or start the session.
+   * People with an authenticator app use it (or can ask for an emailed code). Otherwise, when the
+   * company requires two-factor for their role, a code is emailed to them. Only if email isn't
+   * working do they have to set up an authenticator app. Coming from an invite link already proves
+   * they can read their email, so no code is sent then.
+   */
+  const afterPassword = async (req: FastifyRequest, reply: FastifyReply, user: EmployeeRow, opts: { viaInvite?: boolean } = {}) => {
+    const mfa = () => ({ mfaRequired: true, mfaToken: issueToken(app, user, "mfa"), emailHint: maskEmail(user.email) });
+    if (user.totpSecret) return { ...mfa(), method: "app" as const };
+    if (!opts.viaInvite && twoFactorRequired(await companyPolicy(user.companyId), user.role as Role)) {
+      if (await sendLoginCode(user)) return { ...mfa(), method: "email" as const };
       return { mfaSetupRequired: true, setupToken: issueToken(app, user, "mfa-setup") };
     }
+    await clearFailures(user);
     return session(req, reply, user);
   };
 
@@ -206,17 +270,25 @@ const routes: FastifyPluginAsync = async (app) => {
       .set({ passwordHash: await bcrypt.hash(body.password, 10), failedLoginCount: 0, lockedUntil: null })
       .where(eq(employees.id, employee.id))
       .returning();
-    return afterPassword(req, reply, user);
+    return afterPassword(req, reply, user, { viaInvite: true });
   });
 
-  /** Step 2: the authenticator (or backup) code. */
+  /** Emails a (new) sign-in code, e.g. for someone who uses an authenticator app but doesn't have their phone. */
+  app.post("/login/mfa/email", limited, async (req) => {
+    const user = await verifyToken(req, ["mfa"]);
+    assertNotLocked(user);
+    if (!(await sendLoginCode(user))) throw new HttpError(503, "Email isn't working right now. Use your authenticator app or a backup code.");
+    return { ok: true, emailHint: maskEmail(user.email) };
+  });
+
+  /** Step 2: the emailed, authenticator or backup code. */
   app.post("/login/mfa", limited, async (req, reply) => {
     const { code } = parse(z.object({ code: z.string().min(6).max(20) }), req.body);
     const user = await verifyToken(req, ["mfa"]);
     assertNotLocked(user);
     if (!(await checkSecondFactor(user, code))) {
       await recordFailure(user);
-      throw new HttpError(401, "That code didn't work. Check the time on your phone, or use a backup code.");
+      throw new HttpError(401, `That code didn't work. Emailed codes work for ${EMAIL_CODE_MINUTES} minutes and only the newest one counts; you can ask for a new one.`);
     }
     await clearFailures(user);
     const [fresh] = await db.select().from(employees).where(eq(employees.id, user.id));
@@ -248,6 +320,9 @@ const routes: FastifyPluginAsync = async (app) => {
       twoFactorEnabled: !!user.totpSecret,
       twoFactorEnabledAt: user.totpEnabledAt,
       twoFactorRequired: twoFactorRequired(policy, user.role as Role),
+      /** How signing in checks it's you: an authenticator app, an emailed code, or just the password. */
+      twoFactorMethod: user.totpSecret ? "app" : twoFactorRequired(policy, user.role as Role) && emailTransport() ? "email" : "none",
+      emailHint: maskEmail(user.email),
       recoveryCodesLeft: n,
       policy,
     };
@@ -284,8 +359,9 @@ const routes: FastifyPluginAsync = async (app) => {
   app.post("/mfa/disable", { preHandler: authenticate }, async (req) => {
     const body = parse(z.object({ password: z.string(), code: z.string() }), req.body);
     const [user] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
-    if (twoFactorRequired(await companyPolicy(user.companyId), user.role as Role)) {
-      throw new HttpError(403, "Your company requires two-factor sign-in for your role");
+    // When it's required, turning off the app goes back to emailed codes, so email has to work.
+    if (twoFactorRequired(await companyPolicy(user.companyId), user.role as Role) && !emailTransport()) {
+      throw new HttpError(403, "Your company requires two-factor sign-in for your role, and email isn't set up for codes");
     }
     if (!user.passwordHash || !(await bcrypt.compare(body.password, user.passwordHash))) throw new HttpError(401, "Wrong password");
     if (!(await checkSecondFactor(user, body.code))) throw new HttpError(401, "That code didn't work");
