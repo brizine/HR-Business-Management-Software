@@ -35,12 +35,15 @@ type Filters = typeof NO_FILTERS;
 
 type Draft = { id?: string; employeeId: string; date: string; start: string; end: string; position?: string; location?: string; assetId?: string; notes?: string; status?: string };
 
-function ShiftEditor({ draft, employees, assets, templates, onClose, onSaved, onTemplatesChanged }: {
-  draft: Draft; employees: any[]; assets: any[]; templates: any[];
+function ShiftEditor({ draft, weekDays, employees, assets, templates, onClose, onSaved, onTemplatesChanged }: {
+  draft: Draft; weekDays: Date[]; employees: any[]; assets: any[]; templates: any[];
   onClose: () => void; onSaved: (warnings: string[]) => void; onTemplatesChanged: () => void;
 }) {
   const { busy, error, run } = useAction();
   const formRef = useRef<HTMLFormElement>(null);
+  // New shifts can go on several days of the week shown at once.
+  const [picked, setPicked] = useState<string[]>([draft.date]);
+  const toggle = (d: string) => setPicked((p) => (p.includes(d) ? p.filter((x) => x !== d) : [...p, d]));
 
   /** Fills the form from a saved template, keeping the chosen person and date. */
   const applyTemplate = (id: string) => {
@@ -71,23 +74,29 @@ function ShiftEditor({ draft, employees, assets, templates, onClose, onSaved, on
   };
   const save = (form: HTMLFormElement) => {
     const f = new FormData(form);
-    const date = f.get("date") as string;
-    const startsAt = new Date(`${date}T${f.get("start")}`);
-    let endsAt = new Date(`${date}T${f.get("end")}`);
-    // An end time at or before the start means the shift runs past midnight.
-    if (endsAt <= startsAt) endsAt = new Date(endsAt.getTime() + DAY);
     const str = (k: string) => (f.get(k) as string) || undefined;
-    const body = {
-      employeeId: str("employeeId") ?? null,
-      startsAt: startsAt.toISOString(),
-      endsAt: endsAt.toISOString(),
-      position: str("position"),
-      location: str("location"),
-      assetId: str("assetId") ?? null,
-      notes: str("notes"),
+    const shiftOn = (date: string) => {
+      const startsAt = new Date(`${date}T${f.get("start")}`);
+      let endsAt = new Date(`${date}T${f.get("end")}`);
+      // An end time at or before the start means the shift runs past midnight.
+      if (endsAt <= startsAt) endsAt = new Date(endsAt.getTime() + DAY);
+      return {
+        employeeId: str("employeeId") ?? null,
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
+        position: str("position"),
+        location: str("location"),
+        assetId: str("assetId") ?? null,
+        notes: str("notes"),
+      };
     };
     run(async () => {
-      const res = await api(draft.id ? `/shifts/${draft.id}` : "/shifts", { method: draft.id ? "PATCH" : "POST", body });
+      if (draft.id) {
+        const res = await api(`/shifts/${draft.id}`, { method: "PATCH", body: shiftOn(f.get("date") as string) });
+        return onSaved(res.warnings);
+      }
+      if (!picked.length) throw new Error("Pick at least one day");
+      const res = await api("/shifts/bulk", { body: { shifts: [...picked].sort().map(shiftOn) } });
       onSaved(res.warnings);
     });
   };
@@ -107,6 +116,28 @@ function ShiftEditor({ draft, employees, assets, templates, onClose, onSaved, on
             </select>
           </label>
         )}
+        {!draft.id && (
+          <fieldset className="daypick">
+            <legend>Days</legend>
+            <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
+              {weekDays.map((d) => {
+                const v = ymd(d);
+                return (
+                  <label key={v} className={`daychip ${picked.includes(v) ? "on" : ""}`}>
+                    <input type="checkbox" checked={picked.includes(v)} onChange={() => toggle(v)} />
+                    {d.toLocaleDateString([], { weekday: "short" })} {d.getMonth() + 1}/{d.getDate()}
+                  </label>
+                );
+              })}
+              <button type="button" className="btn sm" onClick={() => setPicked(weekDays.slice(0, 5).map(ymd))}>Mon–Fri</button>
+              <button type="button" className="btn sm" onClick={() => setPicked(weekDays.map(ymd))}>Every day</button>
+              <button type="button" className="btn sm" onClick={() => setPicked([])}>Clear</button>
+            </div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              The same hours go on each day you tick. For another week, change the week at the top of the page.
+            </div>
+          </fieldset>
+        )}
         <div className="formgrid">
           <label>Who
             <select name="employeeId" defaultValue={draft.employeeId}>
@@ -114,7 +145,7 @@ function ShiftEditor({ draft, employees, assets, templates, onClose, onSaved, on
               {employees.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
             </select>
           </label>
-          <label>Date<input name="date" type="date" defaultValue={draft.date} required /></label>
+          {draft.id && <label>Date<input name="date" type="date" defaultValue={draft.date} required /></label>}
           <label>Start<input name="start" type="time" defaultValue={draft.start} required /></label>
           <label>End<input name="end" type="time" defaultValue={draft.end} required /></label>
           <label>Position<input name="position" defaultValue={draft.position} placeholder="Driver, crew lead…" /></label>
@@ -129,7 +160,7 @@ function ShiftEditor({ draft, employees, assets, templates, onClose, onSaved, on
         </div>
         <ErrorBox error={error} />
         <div className="row">
-          <button className="btn primary" disabled={busy}>Save</button>
+          <button className="btn primary" disabled={busy || (!draft.id && !picked.length)}>{draft.id || picked.length <= 1 ? "Save" : `Save ${picked.length} shifts`}</button>
           {draft.id && (
             <button type="button" className="btn danger" disabled={busy} onClick={() => confirm("Delete this shift?") && run(async () => { await api(`/shifts/${draft.id}`, { method: "DELETE" }); onSaved([]); })}>
               Delete
@@ -308,7 +339,7 @@ export default function Schedule() {
       <ErrorBox error={action.error || list.error} />
       {notice && <div className="card row" style={{ justifyContent: "space-between" }}><span>{notice}</span><button className="btn sm" onClick={() => setNotice(null)}>×</button></div>}
       {editing && (
-        <ShiftEditor key={editing.id ?? `${editing.employeeId}-${editing.date}`} draft={editing} employees={staff} assets={assets.data ?? []}
+        <ShiftEditor key={editing.id ?? `${editing.employeeId}-${editing.date}`} draft={editing} weekDays={days} employees={staff} assets={assets.data ?? []}
           templates={templates.data ?? []} onTemplatesChanged={() => { templates.reload(); setNotice("Template saved."); }} onClose={() => setEditing(null)}
           onSaved={(w) => { setEditing(null); setNotice(w.length ? `Saved with warnings: ${w.join("; ")}` : null); reload(); }} />
       )}

@@ -152,6 +152,14 @@ tr.openrow td { background: var(--bg); }
 .shiftcell.unavail {
   background: repeating-linear-gradient(135deg, transparent 0 6px, var(--border) 6px 7px);
 }
+.daypick { border: 0; padding: 0; margin: 0; }
+.daypick legend { font-size: 13px; color: var(--muted); margin-bottom: 4px; padding: 0; }
+.daychip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--border);
+  border-radius: 999px; cursor: pointer; font-size: 13px; user-select: none; color: var(--text);
+}
+.daychip input { margin: 0; width: auto; }
+.daychip.on { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
 .unavail-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
 
 /* QR labels */

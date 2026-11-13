@@ -179,3 +179,34 @@ describe("copying and reminders", () => {
     expect((await call("GET", "/shifts/mine", "amy")).body.mine.map((r: any) => r.shift.id)).toContain(s.body.shift.id);
   });
 });
+
+describe("adding several days at once", () => {
+  // Three weeks after the main test week, so it doesn't affect the other tests.
+  const d = (day: number, hour: number) => at(21 + day, hour);
+
+  it("adds the same hours on several days in one go", async () => {
+    const days = [0, 1, 2, 3, 4].map((i) => ({ employeeId: people.ben.id, startsAt: d(i, 8), endsAt: d(i, 16), position: "Crew" }));
+    expect((await call("POST", "/shifts/bulk", "amy", { shifts: days })).status).toBe(403);
+    const res = await call("POST", "/shifts/bulk", "owner", { shifts: days });
+    expect(res.status).toBe(200);
+    expect(res.body.shifts).toHaveLength(5);
+    expect(res.body.shifts.every((s: any) => s.status === "draft" && s.position === "Crew")).toBe(true);
+  });
+
+  it("saves nothing if any day can't be added, and says which day", async () => {
+    // Ben already works day 2 (Wednesday); add Tue–Thu again.
+    const res = await call("POST", "/shifts/bulk", "owner", {
+      shifts: [5, 2, 6].map((i) => ({ employeeId: people.ben.id, startsAt: d(i, 9), endsAt: d(i, 12) })),
+    });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/^2030-01-30: /);
+    const list = await call("GET", `/shifts?from=${d(5, 0)}&to=${d(7, 0)}`, "owner");
+    expect(list.body.filter((r: any) => r.shift.employeeId === people.ben.id)).toHaveLength(0);
+  });
+
+  it("open shifts can be added on several days too", async () => {
+    const res = await call("POST", "/shifts/bulk", "owner", { shifts: [5, 6].map((i) => ({ startsAt: d(i, 8), endsAt: d(i, 12) })) });
+    expect(res.status).toBe(200);
+    expect(res.body.shifts.every((s: any) => s.employeeId === null)).toBe(true);
+  });
+});

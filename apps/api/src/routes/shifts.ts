@@ -220,6 +220,34 @@ const routes: FastifyPluginAsync = async (app) => {
     return { shift, warnings };
   });
 
+  /**
+   * Adds several shifts at once (e.g. the same hours on each day of a week). All are checked first;
+   * if any can't be added (overlap, inactive person…) nothing is saved and the error names the day.
+   */
+  app.post("/bulk", { preHandler: requireRole("manager", AREA) }, async (req) => {
+    const { shifts: list } = parse(z.object({ shifts: z.array(shiftSchema).min(1).max(31) }), req.body);
+    const tz = await companyTz(req.user.companyId);
+    const day = (s: ShiftInput) => localDate(new Date(s.startsAt), tz);
+    const sorted = [...list].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+    for (let i = 1; i < sorted.length; i++) {
+      const [a, b] = [sorted[i - 1], sorted[i]];
+      if ((a.employeeId ?? null) === (b.employeeId ?? null) && a.employeeId && Date.parse(b.startsAt) < Date.parse(a.endsAt)) {
+        throw new HttpError(409, `The shifts on ${day(a)} and ${day(b)} overlap`);
+      }
+    }
+    const warnings = new Set<string>();
+    for (const s of sorted) {
+      try {
+        for (const w of await check(req.user.companyId, s)) warnings.add(w);
+      } catch (e) {
+        if (e instanceof HttpError) throw new HttpError(e.statusCode, `${day(s)}: ${e.message}`);
+        throw e;
+      }
+    }
+    const rows = await db.insert(shifts).values(sorted.map((s) => ({ ...toRow(s), companyId: req.user.companyId }))).returning();
+    return { shifts: rows, warnings: [...warnings] };
+  });
+
   /** Edits a shift. Changes to a published shift are announced to whoever it affects. */
   app.patch<{ Params: { id: string } }>("/:id", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const existing = await loadShift(req.user.companyId, req.params.id);
