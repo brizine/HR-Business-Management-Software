@@ -199,7 +199,7 @@ export function AttendanceCalendar({ employeeId, compact = false, highlight = ""
             <>
               <div className="row" style={{ justifyContent: "space-between" }}>
                 <strong>{longDay(picked)}</strong>
-                {data.data?.canEdit && <button className="btn sm" onClick={() => setEditing(true)}>Change status or points</button>}
+                {data.data?.canEdit && <button className="btn primary sm" onClick={() => setEditing(true)}>Change status or points</button>}
               </div>
               {pickedDay ? (
                 <>
