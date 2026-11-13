@@ -45,14 +45,14 @@ export function RequestTimeOffBox({ employeeId, firstName, isSelf, balances, onC
         });
       }} onChange={() => setSent(false)}>
         <div className="formgrid">
+          <label>Start<input type="date" name="startDate" required /></label>
+          <label>End<input type="date" name="endDate" required /></label>
           <label>Type
             <select value={chosen} onChange={(e) => setPolicyId(e.target.value)} required>
               {policies.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
             {available != null && <span className="muted" style={{ fontSize: 12 }}>{available}h available</span>}
           </label>
-          <label>Start<input type="date" name="startDate" required /></label>
-          <label>End<input type="date" name="endDate" required /></label>
           <label>Hours<input type="number" name="hours" step="0.5" min="0.5" required /></label>
         </div>
         <label>Reason (optional)<input name="reason" maxLength={500} /></label>
