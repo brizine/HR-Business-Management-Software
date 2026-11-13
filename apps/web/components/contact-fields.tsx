@@ -1,6 +1,7 @@
 "use client";
-import { EMPLOYEE_PRIVATE_CONTACT_FIELDS } from "@crewdesk/shared";
+import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, formatPhone } from "@crewdesk/shared";
 import { today } from "@/lib/api";
+import { phoneInput } from "@/lib/phone-input";
 
 /** Date of birth, home address and emergency contact inputs, shared by the employee form and Settings → My info. */
 export function ContactFields({ initial = {} as any }) {
@@ -21,7 +22,7 @@ export function ContactFields({ initial = {} as any }) {
         <legend>Emergency contact</legend>
         <label>Name<input name="emergencyName" defaultValue={initial.emergencyName ?? ""} /></label>
         <label>Relationship<input name="emergencyRelationship" defaultValue={initial.emergencyRelationship ?? ""} placeholder="e.g. Spouse, parent" /></label>
-        <label>Phone<input name="emergencyPhone" type="tel" defaultValue={initial.emergencyPhone ?? ""} /></label>
+        <label>Phone<input name="emergencyPhone" {...phoneInput} defaultValue={formatPhone(initial.emergencyPhone)} /></label>
       </fieldset>
     </>
   );

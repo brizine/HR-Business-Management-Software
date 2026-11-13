@@ -1,12 +1,13 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ATTESTATIONS } from "@crewdesk/shared";
+import { ATTESTATIONS, formatPhone } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { PageHead } from "@/components/ui";
 import { AddressFields, Section, SignatureBlock, readForm } from "@/components/tax-form-bits";
+import { phoneInput } from "@/lib/phone-input";
 
 export default function I9Form() {
   const { me } = useAuth();
@@ -36,7 +37,7 @@ export default function I9Form() {
           <label>Date of birth<input name="dateOfBirth" type="date" defaultValue={d.dateOfBirth} required /></label>
           <label>Social Security number<input name="ssn" inputMode="numeric" autoComplete="off" placeholder="Optional" /></label>
           <label>Email (optional)<input name="email" type="email" defaultValue={d.email} /></label>
-          <label>Phone (optional)<input name="phone" defaultValue={d.phone} /></label>
+          <label>Phone (optional)<input name="phone" {...phoneInput} defaultValue={formatPhone(d.phone)} /></label>
         </div>
       </Section>
       <Section title="I attest, under penalty of perjury, that I am (check one):">

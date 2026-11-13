@@ -1,5 +1,5 @@
 "use client";
-import { PROFILE_FIELDS, ageOn, type ProfileFieldKey } from "@crewdesk/shared";
+import { PROFILE_FIELDS, ageOn, type ProfileFieldKey, formatPhone } from "@crewdesk/shared";
 import { fmtDate, money } from "@/lib/api";
 import { Badge } from "./ui";
 import { useMenuData } from "@/lib/menus";
@@ -10,7 +10,7 @@ const LABELS = Object.fromEntries(PROFILE_FIELDS.map((f) => [f.key, f.label])) a
 function value(key: ProfileFieldKey, e: any, label: ReturnType<typeof useMenuData>["label"]) {
   switch (key) {
     case "email": return e.email;
-    case "phone": return e.phone ?? "—";
+    case "phone": return formatPhone(e.phone) || "—";
     case "role": return label("role", e.role);
     case "hireDate": return fmtDate(e.startDate);
     case "pay": return "payRateCents" in e ? `${money(e.payRateCents)} ${e.payType === "hourly" ? "/hr" : "/yr"}` : null;
@@ -30,7 +30,7 @@ function value(key: ProfileFieldKey, e: any, label: ReturnType<typeof useMenuDat
       return e.emergencyName || e.emergencyPhone ? (
         <>
           {e.emergencyName ?? ""}{e.emergencyRelationship ? ` (${e.emergencyRelationship})` : ""}
-          {e.emergencyPhone && <div><a href={`tel:${e.emergencyPhone}`}>{e.emergencyPhone}</a></div>}
+          {e.emergencyPhone && <div><a href={`tel:${e.emergencyPhone}`}>{formatPhone(e.emergencyPhone)}</a></div>}
         </>
       ) : "—";
   }

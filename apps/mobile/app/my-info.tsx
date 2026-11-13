@@ -1,13 +1,15 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, View } from "react-native";
-import { EMPLOYEE_PRIVATE_CONTACT_FIELDS } from "@crewdesk/shared";
+import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, formatPhone, formatPhoneTyping } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, ErrorText, Input, Row, Screen, Txt } from "@/components/ui";
 
 type Field = "phone" | (typeof EMPLOYEE_PRIVATE_CONTACT_FIELDS)[number];
 const FIELDS: Field[] = ["phone", ...EMPLOYEE_PRIVATE_CONTACT_FIELDS];
+/** Formatted as (555) 555-5555 while typing. */
+const PHONE_FIELDS: Field[] = ["phone", "emergencyPhone"];
 
 /** Your phone, date of birth, home address and emergency contact. Only managers and admins can see them. */
 export default function MyInfo() {
@@ -19,14 +21,14 @@ export default function MyInfo() {
   useEffect(() => {
     if (!me) return;
     api(`/employees/${me.user.id}`).then(
-      (e: any) => setV(Object.fromEntries(FIELDS.map((f) => [f, e[f] ?? ""])) as Record<Field, string>),
+      (e: any) => setV(Object.fromEntries(FIELDS.map((f) => [f, PHONE_FIELDS.includes(f) ? formatPhone(e[f]) : e[f] ?? ""])) as Record<Field, string>),
       (e) => setError(e.message),
     );
   }, [me]);
 
   if (!v) return <Screen><ErrorText error={error} /></Screen>;
   const field = (f: Field, label: string, props: object = {}) => (
-    <Input label={label} value={v[f]} onChangeText={(text) => setV({ ...v, [f]: text })} {...props} />
+    <Input label={label} value={v[f]} onChangeText={(text) => setV({ ...v, [f]: PHONE_FIELDS.includes(f) ? formatPhoneTyping(text) : text })} {...(PHONE_FIELDS.includes(f) ? { placeholder: "(555) 555-5555" } : {})} {...props} />
   );
   const save = async () => {
     setBusy(true);

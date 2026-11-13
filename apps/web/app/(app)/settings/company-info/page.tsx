@@ -7,6 +7,8 @@ import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead, formValues } from "@/components/ui";
 import { SettingsTabs } from "@/components/settings-tabs";
 import { BusinessAddressFields, businessAddressValues } from "@/components/business-address-fields";
+import { phoneInput } from "@/lib/phone-input";
+import { formatPhone } from "@crewdesk/shared";
 
 type Info = { hasLogo: boolean; logoUpdatedAt: string | null; name: string; legalName: string | null; ein: string | null; address: string | null; addressLine1: string | null; addressLine2: string | null; city: string | null; state: string | null; zip: string | null; phone: string | null; email: string | null; website: string | null; timezone: string; canEdit: boolean };
 
@@ -99,7 +101,7 @@ export default function CompanyInfo() {
             </div>
             <BusinessAddressFields initial={d} />
             <div className="formgrid">
-              <label>Phone<input name="phone" type="tel" maxLength={40} defaultValue={d.phone ?? ""} /></label>
+              <label>Phone<input name="phone" {...phoneInput} defaultValue={formatPhone(d.phone)} /></label>
               <label>Email<input name="email" type="email" maxLength={200} defaultValue={d.email ?? ""} placeholder="office@example.com" /></label>
               <label>Website<input name="website" maxLength={200} defaultValue={d.website ?? ""} placeholder="example.com" /></label>
               <label>Time zone

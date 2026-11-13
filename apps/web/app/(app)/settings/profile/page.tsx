@@ -6,6 +6,8 @@ import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead, formValues } from "@/components/ui";
 import { SettingsTabs } from "@/components/settings-tabs";
 import { ContactFields, withClearedContact } from "@/components/contact-fields";
+import { phoneInput } from "@/lib/phone-input";
+import { formatPhone } from "@crewdesk/shared";
 
 /** Everyone keeps their own phone, home address and emergency contact up to date. */
 export default function MyInfo() {
@@ -26,7 +28,7 @@ export default function MyInfo() {
           run(async () => { emp.setData(await api("/employees/me/profile", { method: "PATCH", body: v })); setSaved(true); });
         }}>
           <div className="formgrid">
-            <label>Mobile phone<input name="phone" type="tel" defaultValue={e.phone ?? ""} autoComplete="tel" /></label>
+            <label>Mobile phone<input name="phone" {...phoneInput} defaultValue={formatPhone(e.phone)} autoComplete="tel" /></label>
           </div>
           <ContactFields initial={e} />
           <ErrorBox error={error} />

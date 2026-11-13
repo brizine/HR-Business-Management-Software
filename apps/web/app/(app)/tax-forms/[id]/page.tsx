@@ -1,6 +1,6 @@
 "use client";
 import { use, useState } from "react";
-import { ATTESTATIONS } from "@crewdesk/shared";
+import { ATTESTATIONS, formatPhone } from "@crewdesk/shared";
 import { api, fmtDate, fmtDateTime } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -112,7 +112,7 @@ export default function ViewTaxForm({ params }: { params: Promise<{ id: string }
       <div className="card tablewrap">
         <table><tbody>
           {Object.entries(data.data).filter(([k]) => k !== "signedName").map(([k, v]) => (
-            <tr key={k}><td className="muted" style={{ width: 280 }}>{LABELS[k] ?? k}</td><td>{show(v)}</td></tr>
+            <tr key={k}><td className="muted" style={{ width: 280 }}>{LABELS[k] ?? k}</td><td>{k === "phone" && typeof v === "string" ? formatPhone(v) : show(v)}</td></tr>
           ))}
         </tbody></table>
       </div>

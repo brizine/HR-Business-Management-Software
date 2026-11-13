@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { Fragment, Suspense, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { EMPLOYEE_STATUSES } from "@crewdesk/shared";
+import { EMPLOYEE_STATUSES, formatPhone } from "@crewdesk/shared";
 import { api, fmtDate, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -200,7 +200,7 @@ function People() {
                 <td>{e.title ?? "—"}</td>
                 <td>{e.department ?? "—"}</td>
                 <td style={{ whiteSpace: "nowrap" }}>{fmtDate(e.startDate)}</td>
-                <td>{e.email}<div className="muted">{e.phone}</div></td>
+                <td>{e.email}<div className="muted">{formatPhone(e.phone)}</div></td>
                 {seesPay && <td>{money(e.payRateCents)}{e.payType === "hourly" ? "/hr" : "/yr"}</td>}
                 <td>
                   <Badge value={e.status} menu="employeeStatus" />

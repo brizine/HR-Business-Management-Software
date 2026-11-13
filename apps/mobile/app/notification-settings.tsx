@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Pressable, Switch, View } from "react-native";
-import { DELIVERY_MODES, NOTIFICATION_CATEGORY_INFO, type DeliveryMode, type NotificationPreference } from "@crewdesk/shared";
+import { DELIVERY_MODES, NOTIFICATION_CATEGORY_INFO, formatPhone, formatPhoneTyping, type DeliveryMode, type NotificationPreference } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { Button, Card, Divider, Input, Row, Screen, Txt, useTheme } from "@/components/ui";
 
@@ -25,7 +25,7 @@ export default function NotificationSettings() {
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const load = () => api("/notifications/preferences").then((d) => { setData(d); setPhone(d.employee.phone ?? ""); });
+  const load = () => api("/notifications/preferences").then((d) => { setData(d); setPhone(formatPhone(d.employee.phone)); });
   useEffect(() => { load(); }, []);
 
   const save = async (body: object) => {
@@ -47,8 +47,8 @@ export default function NotificationSettings() {
   return (
     <Screen>
       <Card title="Text messages">
-        <Input label="Mobile number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="(512) 555-0100" />
-        {phone !== (data.employee.phone ?? "") && (
+        <Input label="Mobile number" value={phone} onChangeText={(t) => setPhone(formatPhoneTyping(t))} keyboardType="phone-pad" placeholder="(555) 555-5555" />
+        {phone !== formatPhone(data.employee.phone) && (
           <Button title="Save number" kind="secondary" busy={busy} onPress={async () => {
             setBusy(true);
             try {

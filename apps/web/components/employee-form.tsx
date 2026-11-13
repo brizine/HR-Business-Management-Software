@@ -1,9 +1,10 @@
 "use client";
 import { useState } from "react";
-import { EMPLOYEE_STATUSES, EMPLOYMENT_TYPES, PAY_TYPES, ROLES, isInactive } from "@crewdesk/shared";
+import { EMPLOYEE_STATUSES, EMPLOYMENT_TYPES, PAY_TYPES, ROLES, isInactive, formatPhone } from "@crewdesk/shared";
 import { formValues } from "./ui";
 import { ContactFields, withClearedContact } from "./contact-fields";
 import { LabeledSelect, MenuSelect, useMenus } from "./menu-select";
+import { phoneInput } from "@/lib/phone-input";
 
 export function EmployeeFields({ initial = {} as any, employees = [] as any[] }) {
   const [status, setStatus] = useState<string>(initial.status ?? "active");
@@ -14,7 +15,7 @@ export function EmployeeFields({ initial = {} as any, employees = [] as any[] })
       <label>First name<input name="firstName" defaultValue={initial.firstName} required /></label>
       <label>Last name<input name="lastName" defaultValue={initial.lastName} required /></label>
       <label>Email<input name="email" type="email" defaultValue={initial.email} required /></label>
-      <label>Phone<input name="phone" defaultValue={initial.phone ?? ""} /></label>
+      <label>Phone<input name="phone" {...phoneInput} defaultValue={formatPhone(initial.phone)} /></label>
       <MenuSelect name="title" label="Job title" options={menus.jobTitles} current={initial.title} />
       <MenuSelect name="department" label="Department" options={menus.departments} current={initial.department} />
       <label>Role

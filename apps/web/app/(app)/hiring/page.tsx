@@ -9,6 +9,7 @@ import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
 import { InviteResult } from "@/components/invite-result";
 import { LabeledSelect, MenuSelect, useMenus } from "@/components/menu-select";
 import { useMenuData } from "@/lib/menus";
+import { phoneInput } from "@/lib/phone-input";
 
 /** Details for a new hire: start date, pay, manager, checklist and invite. */
 function HireForm({ applicant, job, templates, staff, onCancel, onHired }: {
@@ -158,7 +159,7 @@ export default function Hiring() {
                   <label>First name<input name="firstName" required /></label>
                   <label>Last name<input name="lastName" required /></label>
                   <label>Email<input name="email" type="email" required /></label>
-                  <label>Phone<input name="phone" /></label>
+                  <label>Phone<input name="phone" {...phoneInput} /></label>
                 </div>
                 <label>Notes<textarea name="notes" /></label>
                 <ErrorBox error={appAction.error} />

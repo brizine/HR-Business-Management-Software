@@ -3,6 +3,7 @@ import { use, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
 import { ErrorBox, formValues } from "@/components/ui";
+import { phoneInput } from "@/lib/phone-input";
 
 /** Public job board a business can link from its website. */
 export default function Careers({ params }: { params: Promise<{ companyId: string }> }) {
@@ -39,7 +40,7 @@ export default function Careers({ params }: { params: Promise<{ companyId: strin
                   <label>First name<input name="firstName" required /></label>
                   <label>Last name<input name="lastName" required /></label>
                   <label>Email<input name="email" type="email" required /></label>
-                  <label>Phone<input name="phone" /></label>
+                  <label>Phone<input name="phone" {...phoneInput} autoComplete="tel" /></label>
                 </div>
                 <label>Tell us about your experience<textarea name="notes" /></label>
                 <ErrorBox error={error} />

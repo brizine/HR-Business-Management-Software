@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizePhone } from "./phone";
 
 /**
  * Electronic tax and employment forms collected in Crewdesk when a company
@@ -107,7 +108,7 @@ export const i9Section1Schema = z
     /** Optional on Form I-9 unless the employer uses E-Verify. */
     ssn: z.union([ssnSchema, z.literal("")]).optional(),
     email: z.string().trim().email().optional().or(z.literal("")),
-    phone: z.string().trim().optional(),
+    phone: z.string().trim().optional().transform((v) => normalizePhone(v)),
     citizenship: z.enum(CITIZENSHIP),
     /** Lawful permanent resident: USCIS A-Number. Authorized alien: one of the three below. */
     uscisNumber: z.string().trim().optional(),
@@ -204,7 +205,7 @@ export const companyPayrollInfoSchema = z.object({
 /** Settings → Company info. Legal name, EIN and address are the same fields Payroll settings edits. */
 export const companyInfoSchema = companyPayrollInfoSchema.extend({
   name: z.string().trim().min(1, "Enter the company name").max(120),
-  phone: z.string().trim().max(40).optional(),
+  phone: z.string().trim().max(40).optional().transform((v) => normalizePhone(v)),
   email: z.string().trim().email("Enter a valid email").max(200).optional().or(z.literal("")),
   website: z.string().trim().max(200).optional(),
   /** IANA time zone (e.g. America/Chicago): used for schedules, reminders and pay periods. */

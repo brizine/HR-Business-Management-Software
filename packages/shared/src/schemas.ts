@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizePhone } from "./phone";
 import { DELIVERY_MODES, NOTIFICATION_CATEGORIES } from "./notifications";
 import { ONBOARDING_FORM_TYPES } from "./taxForms";
 import { ROLES } from "./roles";
@@ -30,6 +31,9 @@ export const isInactive = (status: string | null | undefined) => INACTIVE_STATUS
 
 /** Optional text; an empty box clears it (null). */
 const clearable = (max: number) => z.string().trim().max(max).nullable().optional().transform((v) => (v === "" ? null : v));
+/** A phone number: US numbers are saved as (555) 555-5555. */
+const clearablePhone = clearable(40).transform((v) => normalizePhone(v));
+const optionalPhone = z.string().trim().max(40).optional().transform((v) => normalizePhone(v));
 
 /** A real birth date: not in the future, after 1900. */
 const birthDate = z
@@ -47,7 +51,7 @@ export function ageOn(dateOfBirth: string, on = new Date()) {
 
 /** Date of birth, home address and emergency contact. Employees can edit their own; managers and up see everyone's. */
 export const employeeContactSchema = z.object({
-  phone: clearable(40),
+  phone: clearablePhone,
   dateOfBirth: z.union([birthDate, z.literal("")]).nullable().optional().transform((v) => (v === "" ? null : v)),
   addressLine1: clearable(200),
   addressLine2: clearable(200),
@@ -56,7 +60,7 @@ export const employeeContactSchema = z.object({
   zip: z.string().trim().regex(/^(\d{5}(-\d{4})?)?$/, "Enter a 5-digit ZIP code").nullable().optional().transform((v) => (v === "" ? null : v)),
   emergencyName: clearable(120),
   emergencyRelationship: clearable(60),
-  emergencyPhone: clearable(40),
+  emergencyPhone: clearablePhone,
 });
 export type EmployeeContact = z.infer<typeof employeeContactSchema>;
 /** Fields that only managers and up (and the person themselves) can see. */
@@ -104,7 +108,7 @@ export const employeeSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   email: z.string().email(),
-  phone: z.string().optional(),
+  phone: optionalPhone,
   title: z.string().trim().max(120).nullable().optional(),
   department: z.string().trim().max(120).nullable().optional(),
   role: z.enum(ROLES).default("employee"),
@@ -211,7 +215,7 @@ export const applicantSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   email: z.string().email(),
-  phone: z.string().optional(),
+  phone: optionalPhone,
   notes: z.string().optional(),
 });
 

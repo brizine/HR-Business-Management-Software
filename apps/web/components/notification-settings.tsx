@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { DELIVERY_MODES, NOTIFICATION_CATEGORY_INFO, type DeliveryMode, type NotificationPreference } from "@crewdesk/shared";
+import { DELIVERY_MODES, NOTIFICATION_CATEGORY_INFO, type DeliveryMode, type NotificationPreference, formatPhone, formatPhoneTyping } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -50,10 +50,10 @@ export function NotificationSettings({ employeeId }: { employeeId?: string }) {
                   setPhone(null);
                 });
               }}>
-                <input value={phone ?? employee.phone ?? ""} onChange={(e) => setPhone(e.target.value)} placeholder="(512) 555-0100" style={{ width: 170 }} />
+                <input type="tel" inputMode="tel" value={phone ?? formatPhone(employee.phone)} onChange={(e) => setPhone(formatPhoneTyping(e.target.value))} placeholder="(555) 555-5555" style={{ width: 170 }} />
                 {phone !== null && <button className="btn sm">Save</button>}
               </form>
-            ) : (employee.phone ?? "—")}
+            ) : (formatPhone(employee.phone) || "—")}
             {employee.phone && !employee.phoneTextable && <div className="muted">This doesn&apos;t look like a mobile number we can text.</div>}
           </div>
         </div>
