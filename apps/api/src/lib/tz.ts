@@ -7,6 +7,12 @@ export function fmtTime(d: Date, timeZone: string) {
   return d.toLocaleTimeString("en-US", { timeZone, hour: "numeric", minute: "2-digit" });
 }
 
+/** Weekday and month/day/year, e.g. "Mon 11/9/2026". */
+export function fmtDayMdy(d: Date, timeZone: string) {
+  const weekday = d.toLocaleDateString("en-US", { timeZone, weekday: "short" });
+  return `${weekday} ${d.toLocaleDateString("en-US", { timeZone, month: "numeric", day: "numeric", year: "numeric" })}`;
+}
+
 /** e.g. "Mon, Nov 2, 7:00 AM – 3:30 PM" */
 export function fmtShift(start: Date, end: Date, timeZone: string) {
   const day = start.toLocaleDateString("en-US", { timeZone, weekday: "short", month: "short", day: "numeric" });

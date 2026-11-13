@@ -7,7 +7,7 @@ import { assets, availability, companies, employees, ptoRequests, shiftTemplates
 import { authenticate, isManager, requireRole } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { approversFor, except, notify, staffWithRole } from "../lib/notify";
-import { fmtShift, localDate, localParts } from "../lib/tz";
+import { fmtDayMdy, fmtShift, fmtTime, localDate, localParts } from "../lib/tz";
 
 /** Which area of the Permissions page controls access here. */
 const AREA = "schedule" as const;
@@ -40,7 +40,8 @@ async function assertNoOverlap(employeeId: string, start: Date, end: Date, ignor
     .limit(1);
   if (clash) {
     // Say which shift, so it can be found (it may be a draft, or start the day before).
-    const when = fmtShift(clash.startsAt, clash.endsAt, await companyTz(clash.companyId));
+    const tz = await companyTz(clash.companyId);
+    const when = `${fmtDayMdy(clash.startsAt, tz)}, ${fmtTime(clash.startsAt, tz)} – ${fmtTime(clash.endsAt, tz)}`;
     throw new HttpError(409, `This person already has a shift that overlaps that time: ${when}${clash.status === "draft" ? " (draft)" : ""}`);
   }
 }
@@ -231,11 +232,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.post("/bulk", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const { shifts: list } = parse(z.object({ shifts: z.array(shiftSchema).min(1).max(31) }), req.body);
     const tz = await companyTz(req.user.companyId);
-    // Month/day/year, e.g. "Mon 11/9/2026".
-    const day = (s: ShiftInput) => {
-      const d = new Date(s.startsAt);
-      return `${d.toLocaleDateString("en-US", { timeZone: tz, weekday: "short" })} ${d.toLocaleDateString("en-US", { timeZone: tz, month: "numeric", day: "numeric", year: "numeric" })}`;
-    };
+    const day = (s: ShiftInput) => fmtDayMdy(new Date(s.startsAt), tz);
     const sorted = [...list].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
     for (let i = 1; i < sorted.length; i++) {
       const [a, b] = [sorted[i - 1], sorted[i]];
