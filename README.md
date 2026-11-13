@@ -256,7 +256,7 @@ the payroll calendar, safety rules and so on.
 - **Encryption:** all traffic is HTTPS. Uploaded documents are encrypted with AES-256-GCM (a separate
   key per file, from `ENCRYPTION_KEY`) before they're written to disk or a bucket. Passwords are
   bcrypt-hashed and two-factor secrets are encrypted. Database backups are encrypted with a public key
-  whose private half stays offline (`pnpm backup:keygen`, or `openssl` as in the deploy guide).
+  whose private half stays offline (`node scripts/backup-keygen.mjs`, an X25519 key short enough for any host's settings form; older RSA keys still work).
   Other database fields rely on the host's disk encryption.
 - **Website sessions** live in an `HttpOnly`, `SameSite` (and in production `Secure`) cookie that page
   scripts can't read. Cookie-authenticated changes must carry the `X-Crewdesk-Client` header, which

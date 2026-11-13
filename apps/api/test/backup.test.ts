@@ -29,7 +29,7 @@ describe("encrypted backups", () => {
   it("backs up the database so only the private key can read it", async () => {
     const result = await runBackup();
     const raw = await readFile(result.location);
-    expect(raw.subarray(0, 7).toString()).toBe("CDBAK1\n");
+    expect(raw.subarray(0, 7).toString()).toBe("CDBAK2\n");
     expect(raw.includes(Buffer.from("PGDMP"))).toBe(false); // the dump itself isn't visible
 
     const out = join(dir, "restored.dump");
@@ -39,6 +39,22 @@ describe("encrypted backups", () => {
     const listing = execFileSync("pg_restore", ["--list", out]).toString();
     expect(listing).toContain("TABLE public employees");
   }, 30_000);
+
+  it("the public key is short enough for any host's settings form", () => {
+    expect(keys.publicKey.length).toBeLessThanOrEqual(64);
+    expect(loadPublicKey(keys.publicKey).asymmetricKeyType).toBe("x25519");
+  });
+
+  it("still reads and writes backups for older RSA keys", async () => {
+    const { generateKeyPairSync } = await import("node:crypto");
+    const rsa = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const pub = rsa.publicKey.export({ type: "spki", format: "der" }).toString("base64");
+    const path = join(dir, "rsa.enc");
+    await encryptStreamToFile(Readable.from([Buffer.from("old style")]), path, loadPublicKey(pub));
+    expect((await readFile(path)).subarray(0, 7).toString()).toBe("CDBAK1\n");
+    await decryptFileToFile(path, join(dir, "rsa.out"), rsa.privateKey.export({ type: "pkcs8", format: "pem" }).toString());
+    expect((await readFile(join(dir, "rsa.out"))).toString()).toBe("old style");
+  });
 
   it("fails with the wrong key, the wrong passphrase, or a tampered file", async () => {
     const path = join(dir, "sample.enc");

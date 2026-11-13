@@ -192,15 +192,16 @@ Crewdesk makes a nightly, encrypted copy of the database. Backups are locked wit
 only the matching **private key**, which never goes on the server, can open them. So a leaked backup,
 or even a broken-into server, doesn't expose old backups.
 
-**a. Make the key pair on your own computer** (Mac: Terminal; Windows: Git Bash). Choose a strong
-passphrase when asked:
+**a. Make the key pair on your own computer** (the Mac that stays in the office). In Terminal, in
+your Crewdesk folder (run `git pull` first so you have the script):
 
 ```
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -aes256 -out crewdesk-backup-private-key.pem
-openssl pkey -in crewdesk-backup-private-key.pem -pubout -outform DER | base64 | tr -d '\n'; echo
+node scripts/backup-keygen.mjs
 ```
 
-The second command prints one long line: that's the **public key**.
+It asks for a passphrase twice (nothing shows while you type), saves the private key as
+`crewdesk-backup-private-key.pem` in that folder, and prints the **public key**: one short line,
+about 60 characters. It needs only Node.js, no install or build.
 
 **b. Store the private key and its passphrase offline**, e.g. in your password manager plus a printed
 copy in the office safe. Store `ENCRYPTION_KEY` the same way: you'd need it to open uploaded
@@ -210,7 +211,7 @@ documents after a full restore. Nobody, including SiteGround, can recover these 
 
 | Name | Value |
 | --- | --- |
-| `BACKUP_PUBLIC_KEY` | The long line from step a |
+| `BACKUP_PUBLIC_KEY` | The line from step a |
 | `BACKUP_DIR` | A folder outside the app's code, e.g. `~/crewdesk-backups` (made the same way as the uploads folder in step 4) (or use the R2 bucket from step 4; backups then go under `backups/`) |
 
 **d. Add a nightly cron job** (Devs → Cron Jobs, e.g. 2:15 AM):

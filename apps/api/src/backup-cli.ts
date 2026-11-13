@@ -6,14 +6,15 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
+import { Writable } from "node:stream";
 import { decryptFileToFile, generateBackupKeys, runBackup } from "./lib/backup";
 
 /** Reads a line without echoing it (for passphrases). */
 async function secret(prompt: string) {
-  const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-  const write = (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput.bind(rl);
-  (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput = (s: string) => write(s.startsWith(prompt) ? s : "");
-  const answer = await rl.question(prompt);
+  const hidden = new Writable({ write(_chunk, _enc, cb) { cb(); } });
+  const rl = createInterface({ input: process.stdin, output: hidden, terminal: !!process.stdin.isTTY });
+  process.stdout.write(prompt);
+  const answer = await rl.question("");
   rl.close();
   process.stdout.write("\n");
   return answer;

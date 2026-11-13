@@ -5,7 +5,9 @@ import {
   createDecipheriv,
   createPrivateKey,
   createPublicKey,
+  diffieHellman,
   generateKeyPairSync,
+  hkdfSync,
   privateDecrypt,
   publicEncrypt,
   randomBytes,
@@ -23,21 +25,34 @@ import { folderPath } from "./paths";
 /**
  * Encrypted database backups.
  *
- * Each backup gets a fresh AES-256-GCM key, which is itself encrypted with an
- * RSA public key (BACKUP_PUBLIC_KEY). The server only ever has the public key,
- * so it can make backups but can't read them; only whoever holds the private
- * key (kept offline) can. A stolen backup, or a stolen server, doesn't expose
- * the data in old backups.
+ * Each backup gets a fresh AES-256-GCM key, derived for one public key
+ * (BACKUP_PUBLIC_KEY). The server only ever has the public key, so it can make
+ * backups but can't read them; only whoever holds the private key (kept
+ * offline) can. A stolen backup, or a stolen server, doesn't expose the data in
+ * old backups.
  *
- * File layout: "CDBAK1\n" | key length (uint16) | RSA-wrapped key | iv (12) | ciphertext | tag (16)
+ * Keys are X25519 (the public key is 60 characters, short enough for any host's
+ * settings form). Older RSA keys still work.
+ *
+ * X25519 file: "CDBAK2\n" | one-time public key (32) | iv (12) | ciphertext | tag (16)
+ *   AES key = HKDF-SHA256(X25519(one-time private, recipient public), salt = one-time public | recipient public)
+ * RSA file:    "CDBAK1\n" | key length (uint16) | RSA-OAEP-wrapped key | iv (12) | ciphertext | tag (16)
  */
 
 const MAGIC = Buffer.from("CDBAK1\n");
+const MAGIC2 = Buffer.from("CDBAK2\n");
 const TAG_LEN = 16;
+const INFO = Buffer.from("crewdesk-backup-v2");
+/** The DER header in front of a raw 32-byte X25519 public key (SubjectPublicKeyInfo). */
+const X25519_SPKI_PREFIX = Buffer.from("302a300506032b656e032100", "hex");
 
-/** A new RSA-4096 key pair. The public key is one base64 line, easy to paste into a host's settings. */
+const rawX25519 = (key: KeyObject) => key.export({ type: "spki", format: "der" }).subarray(-32);
+const x25519FromRaw = (raw: Buffer) => createPublicKey({ key: Buffer.concat([X25519_SPKI_PREFIX, raw]), format: "der", type: "spki" });
+const deriveKey = (shared: Buffer, oneTime: Buffer, recipient: Buffer) => Buffer.from(hkdfSync("sha256", shared, Buffer.concat([oneTime, recipient]), INFO, 32));
+
+/** A new X25519 key pair. The public key is one short base64 line, easy to paste into a host's settings. */
 export function generateBackupKeys(passphrase?: string) {
-  const { publicKey, privateKey } = generateKeyPairSync("rsa", { modulusLength: 4096 });
+  const { publicKey, privateKey } = generateKeyPairSync("x25519");
   return {
     publicKey: publicKey.export({ type: "spki", format: "der" }).toString("base64"),
     privateKeyPem: privateKey
@@ -48,7 +63,9 @@ export function generateBackupKeys(passphrase?: string) {
 
 export function loadPublicKey(base64 = process.env.BACKUP_PUBLIC_KEY) {
   if (!base64) throw new Error("BACKUP_PUBLIC_KEY isn't set. Run `pnpm backup:keygen` and add the public key to the server's settings.");
-  return createPublicKey({ key: Buffer.from(base64.trim(), "base64"), format: "der", type: "spki" });
+  const key = createPublicKey({ key: Buffer.from(base64.trim(), "base64"), format: "der", type: "spki" });
+  if (key.asymmetricKeyType !== "x25519" && key.asymmetricKeyType !== "rsa") throw new Error("BACKUP_PUBLIC_KEY must be an X25519 (or RSA) public key. Make one with `node scripts/backup-keygen.mjs`.");
+  return key;
 }
 
 const wrapKey = (publicKey: KeyObject, key: Buffer) =>
@@ -56,14 +73,24 @@ const wrapKey = (publicKey: KeyObject, key: Buffer) =>
 
 /** Encrypts a stream into `outPath`. */
 export async function encryptStreamToFile(input: NodeJS.ReadableStream, outPath: string, publicKey: KeyObject) {
-  const key = randomBytes(32);
   const iv = randomBytes(12);
-  const wrapped = wrapKey(publicKey, key);
-  const header = Buffer.alloc(2);
-  header.writeUInt16BE(wrapped.length);
+  let key: Buffer;
+  let head: Buffer;
+  if (publicKey.asymmetricKeyType === "x25519") {
+    const oneTime = generateKeyPairSync("x25519");
+    const oneTimeRaw = rawX25519(oneTime.publicKey);
+    key = deriveKey(diffieHellman({ privateKey: oneTime.privateKey, publicKey }), oneTimeRaw, rawX25519(publicKey));
+    head = Buffer.concat([MAGIC2, oneTimeRaw, iv]);
+  } else {
+    key = randomBytes(32);
+    const wrapped = wrapKey(publicKey, key);
+    const len = Buffer.alloc(2);
+    len.writeUInt16BE(wrapped.length);
+    head = Buffer.concat([MAGIC, len, wrapped, iv]);
+  }
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const out = createWriteStream(outPath, { mode: 0o600 });
-  out.write(Buffer.concat([MAGIC, header, wrapped, iv]));
+  out.write(head);
   // Append the GCM tag once all the data has gone through.
   const withTag = new Transform({
     transform(chunk, _enc, cb) {
@@ -82,19 +109,37 @@ export async function decryptFileToFile(inPath: string, outPath: string, private
   const { size } = await stat(inPath);
   const fh = await open(inPath, "r");
   try {
-    const head = Buffer.alloc(MAGIC.length + 2);
-    await fh.read(head, 0, head.length, 0);
-    if (!head.subarray(0, MAGIC.length).equals(MAGIC)) throw new Error("Not a Crewdesk backup file");
-    const wrappedLen = head.readUInt16BE(MAGIC.length);
-    const rest = Buffer.alloc(wrappedLen + 12);
-    await fh.read(rest, 0, rest.length, head.length);
+    const magic = Buffer.alloc(MAGIC.length);
+    await fh.read(magic, 0, magic.length, 0);
+    let key: Buffer;
+    let iv: Buffer;
+    let start: number;
+    if (magic.equals(MAGIC2)) {
+      const rest = Buffer.alloc(32 + 12);
+      await fh.read(rest, 0, rest.length, magic.length);
+      const oneTimeRaw = rest.subarray(0, 32);
+      const recipient = createPublicKey(privateKey);
+      if (recipient.asymmetricKeyType !== "x25519") throw new Error("This backup needs the newer (X25519) private key");
+      key = deriveKey(diffieHellman({ privateKey, publicKey: x25519FromRaw(oneTimeRaw) }), oneTimeRaw, rawX25519(recipient));
+      iv = rest.subarray(32);
+      start = magic.length + rest.length;
+    } else if (magic.equals(MAGIC)) {
+      const len = Buffer.alloc(2);
+      await fh.read(len, 0, 2, magic.length);
+      const wrappedLen = len.readUInt16BE(0);
+      const rest = Buffer.alloc(wrappedLen + 12);
+      await fh.read(rest, 0, rest.length, magic.length + 2);
+      key = privateDecrypt({ key: privateKey, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" }, rest.subarray(0, wrappedLen));
+      iv = rest.subarray(wrappedLen);
+      start = magic.length + 2 + rest.length;
+    } else {
+      throw new Error("Not a Crewdesk backup file");
+    }
     const tag = Buffer.alloc(TAG_LEN);
     await fh.read(tag, 0, TAG_LEN, size - TAG_LEN);
 
-    const key = privateDecrypt({ key: privateKey, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" }, rest.subarray(0, wrappedLen));
-    const decipher = createDecipheriv("aes-256-gcm", key, rest.subarray(wrappedLen));
+    const decipher = createDecipheriv("aes-256-gcm", key, iv);
     decipher.setAuthTag(tag);
-    const start = head.length + rest.length;
     // The tag is checked at the end; a tampered or truncated file throws and the partial output is removed.
     await pipeline(createReadStream(inPath, { start, end: size - TAG_LEN - 1 }), decipher, createWriteStream(outPath, { mode: 0o600 })).catch(
       async (err) => {
