@@ -363,6 +363,8 @@ tr.openrow td { background: var(--bg); }
 
 /* Filter bars (Team page) */
 .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+/* Every filter box gets a "Filters" title on its own line (CSS, so the page layout editor doesn't see an extra item). */
+.filters::before { content: "Filters"; flex: 0 0 100%; font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: -2px; }
 .filters label { width: 170px; }
 .filters label:has(input[type="search"]) { width: 220px; }
 .filters .pay-range { border: 0; padding: 0; margin: 0; display: flex; align-items: center; gap: 6px; }
