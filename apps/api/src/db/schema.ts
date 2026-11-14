@@ -383,6 +383,8 @@ export const maintenanceSchedules = pgTable("maintenance_schedules", {
   lastServiceDate: date("last_service_date"),
   lastServiceOdometer: doublePrecision("last_service_odometer"),
   lastServiceHours: doublePrecision("last_service_hours"),
+  /** Who looks after this service: gets its reminders, and work orders made from it are assigned to them. */
+  assignedToId: uuid("assigned_to_id").references(() => employees.id, { onDelete: "set null" }),
   createdAt: createdAt(),
 });
 

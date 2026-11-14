@@ -1,0 +1,2 @@
+ALTER TABLE "maintenance_schedules" ADD COLUMN "assigned_to_id" uuid;--> statement-breakpoint
+ALTER TABLE "maintenance_schedules" ADD CONSTRAINT "maintenance_schedules_assigned_to_id_employees_id_fk" FOREIGN KEY ("assigned_to_id") REFERENCES "public"."employees"("id") ON DELETE set null ON UPDATE no action;

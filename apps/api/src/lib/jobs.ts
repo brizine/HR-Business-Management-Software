@@ -43,7 +43,7 @@ export async function runScheduledChecks(now = new Date()) {
     const key = `maint:${s.id}:${due.status}:${s.lastServiceDate}:${s.lastServiceOdometer}:${s.lastServiceHours}`;
     if (!(await firstTime(s.companyId, key))) continue;
     const managers = await staffWithRole(s.companyId, "manager", "fleet");
-    notify(s.companyId, [...managers, asset.assignedEmployeeId], {
+    notify(s.companyId, [...managers, asset.assignedEmployeeId, s.assignedToId], {
       category: "fleet",
       title: `${asset.name}: ${s.name} ${due.status === "overdue" ? "overdue" : "due soon"}`,
       body: due.reasons.join(", "),

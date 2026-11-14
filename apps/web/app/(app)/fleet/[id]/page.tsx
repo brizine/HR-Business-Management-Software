@@ -1,4 +1,5 @@
 "use client";
+import { isInactive } from "@crewdesk/shared";
 import Link from "next/link";
 import { use, useState } from "react";
 import { api, fmtDate, fmtDateTime, money } from "@/lib/api";
@@ -20,10 +21,12 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
   const sched = useAction();
   const meter = useAction();
   const a = asset.data;
+  const activeStaff = (employees.data ?? []).filter((e) => !isInactive(e.status));
+  const nameOf = (id: string | null) => { const e = id && employees.data?.find((x) => x.id === id); return e ? `${e.firstName} ${e.lastName}` : ""; };
   if (!a) return <ErrorBox error={asset.error} />;
 
   const createWorkOrder = (s: any) =>
-    api("/work-orders", { body: { assetId: a.id, scheduleId: s.id, title: s.name, priority: s.due.status === "overdue" ? "high" : "medium" } })
+    api("/work-orders", { body: { assetId: a.id, scheduleId: s.id, title: s.name, priority: s.due.status === "overdue" ? "high" : "medium", assignedToId: s.assignedToId ?? null } })
       .then(asset.reload, (e) => alert(e.message));
 
   return (
@@ -80,7 +83,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
             const body = { ...formValues(e.currentTarget), assetId: id };
             sched.run(async () => { await api("/assets/schedules", { body }); setAddingSchedule(false); asset.reload(); });
           }}>
-            <p className="muted" style={{ margin: 0 }}>Whichever interval comes first triggers the service. Leave last-service fields blank to count from today.</p>
+            <p className="muted" style={{ margin: 0 }}>Whichever interval comes first triggers the service. Leave last-service fields blank to count from today. The person assigned gets its reminders, and work orders made from it go to them.</p>
             <div className="formgrid">
               <label>Service<input name="name" required placeholder="Oil & filter change" /></label>
               <label>Every N miles<input name="intervalMiles" type="number" min="1" /></label>
@@ -89,6 +92,12 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
               <label>Last service date<input name="lastServiceDate" type="date" /></label>
               <label>Last service odometer<input name="lastServiceOdometer" type="number" min="0" /></label>
               <label>Last service hours<input name="lastServiceHours" type="number" min="0" /></label>
+              <label>Assign to
+                <select name="assignedToId" defaultValue="">
+                  <option value="">No one</option>
+                  {activeStaff.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
+                </select>
+              </label>
             </div>
             <ErrorBox error={sched.error} />
             <div><button className="btn primary" disabled={sched.busy}>Save schedule</button></div>
@@ -96,7 +105,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
         )}
         {a.schedules.length ? (
           <div className="tablewrap"><table>
-            <thead><tr><th>Service</th><th>Interval</th><th>Last done</th><th>Next due</th><th>Status</th><th /></tr></thead>
+            <thead><tr><th>Service</th><th>Interval</th><th>Last done</th><th>Next due</th><th>Status</th><th>Assigned to</th><th /></tr></thead>
             <tbody>{a.schedules.map((s: any) => (
               <tr key={s.id}>
                 <td>{s.name}</td>
@@ -104,6 +113,15 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
                 <td>{fmtDate(s.lastServiceDate)}<div className="muted">{s.lastServiceOdometer != null && s.intervalMiles ? `${s.lastServiceOdometer.toLocaleString()} mi` : ""}{s.lastServiceHours != null && s.intervalHours ? ` ${s.lastServiceHours} hrs` : ""}</div></td>
                 <td>{[s.due.nextDueOdometer && `${s.due.nextDueOdometer.toLocaleString()} mi`, s.due.nextDueHours && `${s.due.nextDueHours} hrs`, s.due.nextDueDate && fmtDate(s.due.nextDueDate)].filter(Boolean).join(" / ")}</td>
                 <td><Badge value={s.due.status} /><div className="muted">{s.due.reasons.join(", ")}</div></td>
+                <td>
+                  {can("manager", "fleet") ? (
+                    <select aria-label={`Who looks after ${s.name}`} value={s.assignedToId ?? ""} style={{ width: 160 }}
+                      onChange={(e) => api(`/assets/schedules/${s.id}`, { method: "PATCH", body: { assignedToId: e.target.value || null } }).then(asset.reload, (err) => alert(err.message))}>
+                      <option value="">No one</option>
+                      {[...activeStaff, ...(employees.data ?? []).filter((e) => e.id === s.assignedToId && !activeStaff.includes(e))].map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
+                    </select>
+                  ) : (nameOf(s.assignedToId) || "—")}
+                </td>
                 <td className="row">
                   {can("manager", "fleet") && <button className="btn sm" onClick={() => createWorkOrder(s)}>Create work order</button>}
                   {can("manager", "fleet") && <button className="btn sm danger" onClick={() => confirm("Delete schedule?") && api(`/assets/schedules/${s.id}`, { method: "DELETE" }).then(asset.reload)}>×</button>}

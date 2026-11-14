@@ -174,6 +174,20 @@ describe("scheduled checks", () => {
     expect((await pushesTo(tokens.owner)).filter((m) => m.title.startsWith("Loader"))).toHaveLength(1);
   });
 
+  it("a maintenance schedule can be assigned to someone, who then gets its reminders", async () => {
+    const mower = await call("POST", "/assets", owner.token, { name: "Zero-turn", type: "equipment", engineHours: 100 });
+    const sched = await call("POST", "/assets/schedules", owner.token, { assetId: mower.body.id, name: "Blade sharpening", intervalHours: 20, assignedToId: tech.id });
+    expect(sched.body.assignedToId).toBe(tech.id);
+    // Only managers change it, and only to someone who works here.
+    expect((await call("PATCH", `/assets/schedules/${sched.body.id}`, tech.token, { assignedToId: null })).status).toBe(403);
+    expect((await call("PATCH", `/assets/schedules/${sched.body.id}`, owner.token, { assignedToId: "00000000-0000-4000-8000-000000000000" })).status).toBe(404);
+    sent = [];
+    await call("POST", `/assets/${mower.body.id}/meter`, owner.token, { engineHours: 125 });
+    await runScheduledChecks();
+    expect((await pushesTo(tokens.tech)).map((m) => m.title)).toContain("Zero-turn: Blade sharpening overdue");
+    expect((await call("PATCH", `/assets/schedules/${sched.body.id}`, owner.token, { assignedToId: null })).body.assignedToId).toBeNull();
+  });
+
   it("work orders scheduled by mileage or hours: shown with distance to go, and alerted as they come due", async () => {
     const truck = await call("POST", "/assets", owner.token, { name: "Spray Truck", type: "truck", odometer: 40000, assignedEmployeeId: tech.id });
     const wo = await call("POST", "/work-orders", owner.token, { assetId: truck.body.id, title: "Replace brake pads", dueOdometer: 45000, assignedToId: tech.id });

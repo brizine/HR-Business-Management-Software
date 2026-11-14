@@ -1,10 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 import { and, asc, desc, eq } from "drizzle-orm";
-import { assetSchema, maintenanceScheduleSchema, meterReadingSchema } from "@crewdesk/shared";
+import { assetSchema, isInactive, maintenanceScheduleSchema, meterReadingSchema } from "@crewdesk/shared";
+import { z } from "zod";
 import { db } from "../db";
-import { assets, inspections, maintenanceSchedules, meterReadings, newAssetCode, workOrders } from "../db/schema";
+import { assets, employees, inspections, maintenanceSchedules, meterReadings, newAssetCode, workOrders } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
-import { notFound, parse } from "../lib/errors";
+import { HttpError, notFound, parse } from "../lib/errors";
 import { recordMeter, withDue } from "../lib/fleet";
 
 /** Which area of the Permissions page controls access here. */
@@ -139,9 +140,18 @@ const routes: FastifyPluginAsync = async (app) => {
     return recordMeter(db, asset, body, req.user.sub);
   });
 
+  /** The person must work here (and not be inactive). */
+  async function checkAssignee(companyId: string, id: string | null | undefined) {
+    if (!id) return;
+    const [e] = await db.select({ status: employees.status }).from(employees).where(and(eq(employees.id, id), eq(employees.companyId, companyId)));
+    if (!e) notFound("Employee");
+    if (isInactive(e.status)) throw new HttpError(400, "That person is no longer active");
+  }
+
   app.post("/schedules", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const body = parse(maintenanceScheduleSchema, req.body);
     const asset = await loadAsset(req.user.companyId, body.assetId);
+    await checkAssignee(req.user.companyId, body.assignedToId);
     const [row] = await db
       .insert(maintenanceSchedules)
       .values({
@@ -154,6 +164,19 @@ const routes: FastifyPluginAsync = async (app) => {
       })
       .returning();
     return withDue(row, asset);
+  });
+
+  /** Change who a schedule is assigned to. */
+  app.patch<{ Params: { id: string } }>("/schedules/:id", { preHandler: requireRole("manager", AREA) }, async (req) => {
+    const { assignedToId } = parse(z.object({ assignedToId: z.string().uuid().nullable() }), req.body);
+    await checkAssignee(req.user.companyId, assignedToId);
+    const [row] = await db
+      .update(maintenanceSchedules)
+      .set({ assignedToId })
+      .where(and(eq(maintenanceSchedules.id, req.params.id), eq(maintenanceSchedules.companyId, req.user.companyId)))
+      .returning();
+    if (!row) notFound("Schedule");
+    return withDue(row, await loadAsset(req.user.companyId, row.assetId));
   });
 
   app.delete<{ Params: { id: string } }>("/schedules/:id", { preHandler: requireRole("manager", AREA) }, async (req) => {

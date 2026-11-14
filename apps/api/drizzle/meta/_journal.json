@@ -281,6 +281,13 @@
       "when": 1794676562838,
       "tag": "0039_work_order_due_meters",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1794679406884,
+      "tag": "0040_schedule_assignee",
+      "breakpoints": true
     }
   ]
 }

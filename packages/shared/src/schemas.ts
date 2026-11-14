@@ -304,6 +304,8 @@ export const maintenanceScheduleSchema = z
     lastServiceDate: isoDate.nullable().optional(),
     lastServiceOdometer: z.number().nonnegative().nullable().optional(),
     lastServiceHours: z.number().nonnegative().nullable().optional(),
+    /** Who looks after this service (gets its reminders; work orders from it are assigned to them). */
+    assignedToId: z.string().uuid().nullable().optional(),
   })
   .refine((s) => s.intervalMiles || s.intervalHours || s.intervalDays, {
     message: "At least one interval (miles, hours or days) is required",
