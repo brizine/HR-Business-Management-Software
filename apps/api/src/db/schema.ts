@@ -48,6 +48,10 @@ export const companies = pgTable("companies", {
   accountingKey: text("accounting_key"),
   /** Grace periods, alerts and points for attendance (see attendance.ts in @crewdesk/shared). */
   attendanceRules: jsonb("attendance_rules").$type<AttendanceRules>(),
+  /** The company's own edited copy of the user manual (Markdown); null = the standard docs/help-guide.md. */
+  helpGuide: text("help_guide"),
+  /** A fingerprint of the standard manual when the copy was last saved, to tell when the standard one changes. */
+  helpGuideBase: text("help_guide_base"),
   /** Maintenance reminder defaults (how far ahead, repeat while overdue). */
   fleetSettings: jsonb("fleet_settings").$type<FleetSettings>(),
   /** Who gets paid holidays and what working one pays (see HolidayRules in @crewdesk/shared). */

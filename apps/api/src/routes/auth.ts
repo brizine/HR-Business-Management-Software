@@ -151,10 +151,19 @@ async function newRecoveryCodes(employeeId: string) {
   return codes;
 }
 
+/**
+ * The company as every signed-in person may see it: not the storage key for the logo, the
+ * accounting connection (or its encrypted key), or the edited manual (the Help page loads that).
+ */
+function publicCompany(company: typeof companies.$inferSelect) {
+  const { logoKey, accountingKey, accounting, helpGuide, helpGuideBase, ...companyInfo } = company;
+  return { ...companyInfo, hasLogo: !!logoKey };
+}
+
 const routes: FastifyPluginAsync = async (app) => {
   const session = async (req: FastifyRequest, reply: FastifyReply, user: EmployeeRow) => {
     const [company] = await db.select().from(companies).where(eq(companies.id, user.companyId));
-    return { ...deliverSession(req, reply, issueToken(app, user)), user: publicEmployee(user), company };
+    return { ...deliverSession(req, reply, issueToken(app, user)), user: publicEmployee(user), company: publicCompany(company) };
   };
 
   /**
@@ -304,8 +313,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const [company] = await db.select().from(companies).where(eq(companies.id, user.companyId));
     // Access by area (Permissions page), so the website and app show only what this person can use.
     // Not for every signed-in person: the storage key, and the accounting connection (and its encrypted key).
-    const { logoKey, accountingKey, accounting, ...companyInfo } = company;
-    return { user: publicEmployee(user), company: { ...companyInfo, hasLogo: !!logoKey }, access: { areas: req.user.areas ?? {}, managesPermissions: !!req.user.managesPermissions } };
+    return { user: publicEmployee(user), company: publicCompany(company), access: { areas: req.user.areas ?? {}, managesPermissions: !!req.user.managesPermissions } };
   });
 
   /** What the Security settings page shows. */

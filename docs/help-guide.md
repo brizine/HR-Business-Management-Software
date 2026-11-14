@@ -46,7 +46,11 @@ question, get step-by-step answers) and **User Manual** (this guide, with conten
   someone's profile and click **Notifications**.
 - **Company Info:** company name, logo, address (separate boxes), phone, email, website, time zone.
 - **Layout Editor** (owner): drag boxes and fields to rearrange pages, hide items, edit drop-down
-  menus (job titles, departments and so on), and set **Role access**.
+  menus (job titles, departments and so on), set **Role access**, and edit the **User Manual**
+  (**Edit the user manual**: change anything or add company procedures, check it on **Preview**,
+  then **Save the manual**; **Reset to the standard manual** undoes all edits). Help and the
+  assistant use the edited copy. When Crewdesk's standard manual is updated, a notice offers the
+  **Standard manual** tab so you can copy in what's new.
 - **Permissions:** per-person access by area, with search and filters.
 
 ## Notifications

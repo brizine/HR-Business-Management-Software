@@ -302,6 +302,13 @@
       "when": 1794694803832,
       "tag": "0042_pay_rate_history",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1794696178702,
+      "tag": "0043_company_help_guide",
+      "breakpoints": true
     }
   ]
 }

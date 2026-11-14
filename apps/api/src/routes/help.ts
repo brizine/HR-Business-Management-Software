@@ -7,7 +7,8 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { companies, employees } from "../db/schema";
-import { authenticate } from "../lib/auth";
+import { authenticate, requireRole } from "../lib/auth";
+import { sha256 } from "../lib/crypto";
 import { HttpError, parse } from "../lib/errors";
 
 /**
@@ -33,7 +34,7 @@ function helpClient(): HelpClient | null {
 
 /** docs/help-guide.md, found by walking up from this file (works from src/ and from the built dist/). */
 let guide: string | null = null;
-function helpGuide() {
+export function standardGuide() {
   if (guide) return guide;
   let dir = dirname(fileURLToPath(import.meta.url));
   for (let i = 0; i < 6; i++) {
@@ -61,6 +62,18 @@ const messageSchema = z.object({
     .refine((m) => m.length > 0 && m[m.length - 1].role === "user", "The last message must be a question"),
 });
 
+/** The company's manual: its own edited copy if it has one, otherwise the standard one. */
+async function companyGuide(companyId: string) {
+  const [c] = await db.select({ guide: companies.helpGuide, base: companies.helpGuideBase }).from(companies).where(eq(companies.id, companyId));
+  const standard = standardGuide();
+  return {
+    markdown: c?.guide ?? standard,
+    custom: !!c?.guide,
+    // The standard manual changed (e.g. new features) since the company last saved its copy.
+    standardChanged: !!c?.guide && c.base !== sha256(standard),
+  };
+}
+
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
 
@@ -68,7 +81,18 @@ const routes: FastifyPluginAsync = async (app) => {
   app.get("/status", async () => ({ available: !!helpClient() }));
 
   /** The user manual itself (Markdown), for the browsable copy on the Help page. Works without an API key. */
-  app.get("/guide", async () => ({ markdown: helpGuide() }));
+  app.get("/guide", async (req) => companyGuide(req.user.companyId));
+
+  /** The standard manual, to compare with or start over from (Layout Editor). */
+  app.get("/guide/standard", { preHandler: requireRole("owner", "company") }, async () => ({ markdown: standardGuide() }));
+
+  /** The owner edits the company's manual in the Layout Editor; blank goes back to the standard one. */
+  app.put("/guide", { preHandler: requireRole("owner", "company") }, async (req) => {
+    const { markdown } = parse(z.object({ markdown: z.string().max(200_000).nullable() }), req.body);
+    const text = markdown?.trim() ? markdown.replace(/\r\n/g, "\n") : null;
+    await db.update(companies).set({ helpGuide: text, helpGuideBase: text ? sha256(standardGuide()) : null }).where(eq(companies.id, req.user.companyId));
+    return companyGuide(req.user.companyId);
+  });
 
   app.post("/ask", { config: { rateLimit: { max: Number(process.env.HELP_RATE_LIMIT ?? 60), timeWindow: "1 hour" } } }, async (req) => {
     const { messages } = parse(messageSchema, req.body);
@@ -91,7 +115,7 @@ const routes: FastifyPluginAsync = async (app) => {
         betas: ["server-side-fallback-2026-07-01"],
         fallbacks: "default",
         system: [
-          { type: "text", text: `${INSTRUCTIONS}\n\n<crewdesk_user_guide>\n${helpGuide()}\n</crewdesk_user_guide>`, cache_control: { type: "ephemeral" } },
+          { type: "text", text: `${INSTRUCTIONS}\n\n<crewdesk_user_guide>\n${(await companyGuide(req.user.companyId)).markdown}\n</crewdesk_user_guide>`, cache_control: { type: "ephemeral" } },
           { type: "text", text: who },
         ],
         messages,

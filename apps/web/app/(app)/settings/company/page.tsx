@@ -4,6 +4,7 @@ import { PageHead } from "@/components/ui";
 import { SettingsTabs } from "@/components/settings-tabs";
 import { PageLayoutsCard } from "@/components/page-layout";
 import { RoleAccessCard } from "@/components/role-access-card";
+import { ManualEditorCard } from "@/components/manual-editor";
 
 export default function CompanySettings() {
   const { can } = useAuth();
@@ -15,6 +16,7 @@ export default function CompanySettings() {
         <>
           <PageLayoutsCard />
           <RoleAccessCard />
+          <ManualEditorCard />
         </>
       )}
     </>
