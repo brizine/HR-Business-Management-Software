@@ -33,10 +33,29 @@ function addDays(date: string, days: number): string {
 }
 
 /**
- * Whichever interval (miles, engine hours, calendar days) comes first wins,
- * like a "every 5,000 miles or 6 months" oil-change rule.
+ * How far ahead the "due soon" reminder goes out. Each value left out (or null) falls back to
+ * DUE_SOON_FRACTION of that interval for schedules, and WORK_ORDER_DUE_SOON for work orders.
  */
-export function computeDue(schedule: ScheduleLike, meter: MeterLike, today = new Date()): DueResult {
+export interface ReminderLead { miles?: number | null; hours?: number | null; days?: number | null }
+
+/** A schedule's own lead times, then the company's defaults, field by field. */
+export function resolveLead(
+  schedule: { remindMilesBefore?: number | null; remindHoursBefore?: number | null; remindDaysBefore?: number | null },
+  company?: { remindMilesBefore?: number | null; remindHoursBefore?: number | null; remindDaysBefore?: number | null } | null,
+): ReminderLead {
+  return {
+    miles: schedule.remindMilesBefore ?? company?.remindMilesBefore ?? null,
+    hours: schedule.remindHoursBefore ?? company?.remindHoursBefore ?? null,
+    days: schedule.remindDaysBefore ?? company?.remindDaysBefore ?? null,
+  };
+}
+
+/**
+ * Whichever interval (miles, engine hours, calendar days) comes first wins,
+ * like a "every 5,000 miles or 6 months" oil-change rule. `lead` sets how far ahead
+ * it counts as "due soon" (otherwise 10% of each interval).
+ */
+export function computeDue(schedule: ScheduleLike, meter: MeterLike, today = new Date(), lead: ReminderLead = {}): DueResult {
   const reasons: string[] = [];
   let worst: DueStatus = "ok";
   const bump = (s: DueStatus) => {
@@ -44,10 +63,11 @@ export function computeDue(schedule: ScheduleLike, meter: MeterLike, today = new
   };
 
   const check = (remaining: number, interval: number, unit: string) => {
+    const soon = (unit === "miles" ? lead.miles : unit === "hours" ? lead.hours : lead.days) ?? interval * DUE_SOON_FRACTION;
     if (remaining <= 0) {
       bump("overdue");
       reasons.push(`Overdue by ${Math.abs(Math.round(remaining)).toLocaleString()} ${unit}`);
-    } else if (remaining <= interval * DUE_SOON_FRACTION) {
+    } else if (remaining <= soon) {
       bump("due_soon");
       reasons.push(`Due in ${Math.round(remaining).toLocaleString()} ${unit}`);
     }
@@ -87,7 +107,8 @@ export interface WorkOrderDueLike { dueDate?: string | null; dueOdometer?: numbe
  * comes first): "upcoming", "due_soon" or "overdue", with the distance to go for each. Null if it
  * has no due point.
  */
-export function workOrderDue(wo: WorkOrderDueLike, meter: MeterLike, today = new Date()): { status: "upcoming" | "due_soon" | "overdue"; notes: string[] } | null {
+export function workOrderDue(wo: WorkOrderDueLike, meter: MeterLike, today = new Date(), lead: ReminderLead = {}): { status: "upcoming" | "due_soon" | "overdue"; notes: string[] } | null {
+  const soon = { miles: lead.miles ?? WORK_ORDER_DUE_SOON.miles, hours: lead.hours ?? WORK_ORDER_DUE_SOON.hours, days: lead.days ?? WORK_ORDER_DUE_SOON.days };
   const notes: string[] = [];
   let status: "upcoming" | "due_soon" | "overdue" | null = null;
   const bump = (s: "upcoming" | "due_soon" | "overdue") => {
@@ -97,17 +118,17 @@ export function workOrderDue(wo: WorkOrderDueLike, meter: MeterLike, today = new
   const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
   if (wo.dueOdometer != null) {
     const left = wo.dueOdometer - meter.odometer;
-    bump(left <= 0 ? "overdue" : left <= WORK_ORDER_DUE_SOON.miles ? "due_soon" : "upcoming");
+    bump(left <= 0 ? "overdue" : left <= soon.miles ? "due_soon" : "upcoming");
     notes.push(left <= 0 ? `${fmt(-left)} miles past ${fmt(wo.dueOdometer)} mi` : `${fmt(left)} miles to go (due at ${fmt(wo.dueOdometer)} mi)`);
   }
   if (wo.dueHours != null) {
     const left = wo.dueHours - meter.engineHours;
-    bump(left <= 0 ? "overdue" : left <= WORK_ORDER_DUE_SOON.hours ? "due_soon" : "upcoming");
+    bump(left <= 0 ? "overdue" : left <= soon.hours ? "due_soon" : "upcoming");
     notes.push(left <= 0 ? `${fmt(-left)} hours past ${fmt(wo.dueHours)} hrs` : `${fmt(left)} hours to go (due at ${fmt(wo.dueHours)} hrs)`);
   }
   if (wo.dueDate) {
     const days = Math.round((Date.parse(`${wo.dueDate}T00:00:00Z`) - Date.parse(`${today.toISOString().slice(0, 10)}T00:00:00Z`)) / DAY_MS);
-    bump(days < 0 ? "overdue" : days <= WORK_ORDER_DUE_SOON.days ? "due_soon" : "upcoming");
+    bump(days < 0 ? "overdue" : days <= soon.days ? "due_soon" : "upcoming");
     notes.push(days < 0 ? `${-days} day${days === -1 ? "" : "s"} past the due date` : days === 0 ? "due today" : `${days} day${days === 1 ? "" : "s"} to go`);
   }
   return status ? { status, notes } : null;

@@ -9,6 +9,7 @@ import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
 import { AssetFields } from "@/components/asset-form";
 import { DocumentList } from "@/components/documents";
 import { QrCode, assetQrUrl, qrSvg } from "@/components/qr";
+import { ScheduleReminderEditor, describeLead } from "@/components/maintenance-reminders";
 
 export default function AssetDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -17,6 +18,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
   const employees = useApi<any[]>("/employees");
   const [editing, setEditing] = useState(false);
   const [addingSchedule, setAddingSchedule] = useState(false);
+  const [remindFor, setRemindFor] = useState<string | null>(null);
   const edit = useAction();
   const sched = useAction();
   const meter = useAction();
@@ -92,6 +94,9 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
               <label>Last service date<input name="lastServiceDate" type="date" /></label>
               <label>Last service odometer<input name="lastServiceOdometer" type="number" min="0" /></label>
               <label>Last service hours<input name="lastServiceHours" type="number" min="0" /></label>
+              <label>Remind miles before<input name="remindMilesBefore" type="number" min="1" placeholder="Company default" /></label>
+              <label>Remind engine hours before<input name="remindHoursBefore" type="number" min="1" step="0.5" placeholder="Company default" /></label>
+              <label>Remind days before<input name="remindDaysBefore" type="number" min="1" placeholder="Company default" /></label>
               <label>Assign to
                 <select name="assignedToId" defaultValue="">
                   <option value="">No one</option>
@@ -105,8 +110,8 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
         )}
         {a.schedules.length ? (
           <div className="tablewrap"><table>
-            <thead><tr><th>Service</th><th>Interval</th><th>Last done</th><th>Next due</th><th>Status</th><th>Assigned to</th><th /></tr></thead>
-            <tbody>{a.schedules.map((s: any) => (
+            <thead><tr><th>Service</th><th>Interval</th><th>Last done</th><th>Next due</th><th>Status</th><th>Assigned to</th><th>Reminder</th><th /></tr></thead>
+            <tbody>{a.schedules.map((s: any) => [
               <tr key={s.id}>
                 <td>{s.name}</td>
                 <td className="muted">{[s.intervalMiles && `${s.intervalMiles.toLocaleString()} mi`, s.intervalHours && `${s.intervalHours} hrs`, s.intervalDays && `${s.intervalDays} days`].filter(Boolean).join(" / ")}</td>
@@ -122,12 +127,21 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
                     </select>
                   ) : (nameOf(s.assignedToId) || "—")}
                 </td>
+                <td>
+                  <span className="muted" style={{ fontSize: 13 }}>{describeLead(s) ? `${describeLead(s)} before` : "Company default"}</span>
+                  {can("manager", "fleet") && <div><button className="btn sm" onClick={() => setRemindFor(remindFor === s.id ? null : s.id)}>Change</button></div>}
+                </td>
                 <td className="row">
                   {can("manager", "fleet") && <button className="btn sm" onClick={() => createWorkOrder(s)}>Create work order</button>}
                   {can("manager", "fleet") && <button className="btn sm danger" onClick={() => confirm("Delete schedule?") && api(`/assets/schedules/${s.id}`, { method: "DELETE" }).then(asset.reload)}>×</button>}
                 </td>
-              </tr>
-            ))}</tbody>
+              </tr>,
+              remindFor === s.id && (
+                <tr key={s.id + "-remind"}><td colSpan={8}>
+                  <ScheduleReminderEditor schedule={s} onClose={() => setRemindFor(null)} onSaved={() => { setRemindFor(null); asset.reload(); }} />
+                </td></tr>
+              ),
+            ])}</tbody>
           </table></div>
         ) : <Empty>No schedules yet. Add oil changes, inspections, filter swaps and so on.</Empty>}
       </div>

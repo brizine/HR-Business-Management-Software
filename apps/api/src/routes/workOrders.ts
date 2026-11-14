@@ -1,11 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { workOrderSchema, workOrderUpdateSchema } from "@crewdesk/shared";
+import { workOrderSchema, workOrderUpdateSchema, resolveLead, workOrderDue } from "@crewdesk/shared";
 import { db } from "../db";
 import { assets, employees, maintenanceSchedules, workOrders } from "../db/schema";
 import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
-import { nextWorkOrderNumber, recordMeter } from "../lib/fleet";
+import { nextWorkOrderNumber, recordMeter, fleetSettingsFor } from "../lib/fleet";
 import { except, notify, staffWithRole } from "../lib/notify";
 import { accountingConfig, autoPost, postWorkOrder } from "../lib/accounting";
 
@@ -35,7 +35,8 @@ const routes: FastifyPluginAsync = async (app) => {
     if (req.query.mine === "true") filters.push(eq(workOrders.assignedToId, req.user.sub));
     // Managers can list one person's work orders (their Tasks box on the employee page).
     else if (req.query.assignedToId && isManager(req, AREA)) filters.push(eq(workOrders.assignedToId, req.query.assignedToId));
-    return db
+    const lead = resolveLead({}, await fleetSettingsFor(req.user.companyId));
+    const rows = await db
       .select({
         workOrder: workOrders,
         assetName: assets.name,
@@ -47,6 +48,9 @@ const routes: FastifyPluginAsync = async (app) => {
       .leftJoin(employees, eq(employees.id, workOrders.assignedToId))
       .where(and(...filters))
       .orderBy(desc(workOrders.createdAt));
+    // Where each scheduled one stands (using the company's reminder lead times).
+    const done = (s: string) => s === "completed" || s === "cancelled";
+    return rows.map((r) => ({ ...r, due: done(r.workOrder.status) ? null : workOrderDue(r.workOrder, r.assetMeter, new Date(), lead) }));
   });
 
   /** Anyone can report an issue; only managers can assign or set a schedule. */

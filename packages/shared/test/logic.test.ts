@@ -582,3 +582,21 @@ describe("clock-in early buffer", async () => {
     expect(pointsFor("tardy", { ...rules, earlyClockInAction: "points" }, { ...early, minutesLate: 0 })).toBe(0.25 + rules.tardyPoints);
   });
 });
+
+describe("maintenance reminder lead times", async () => {
+  const { computeDue, resolveLead, workOrderDue } = await import("../src");
+  const sched = { intervalMiles: 5000, lastServiceOdometer: 10000 };
+  it("defaults to 10% of the interval; a lead time replaces it", () => {
+    expect(computeDue(sched, { odometer: 14400, engineHours: 0 }).status).toBe("ok"); // 600 left > 500
+    expect(computeDue(sched, { odometer: 14400, engineHours: 0 }, new Date(), { miles: 1000 }).status).toBe("due_soon");
+  });
+  it("the schedule's own setting beats the company default, field by field", () => {
+    expect(resolveLead({ remindMilesBefore: 300 }, { remindMilesBefore: 1000, remindDaysBefore: 14 })).toEqual({ miles: 300, hours: null, days: 14 });
+    expect(resolveLead({}, null)).toEqual({ miles: null, hours: null, days: null });
+  });
+  it("work orders use the company lead times too", () => {
+    const wo = { dueOdometer: 20000 };
+    expect(workOrderDue(wo, { odometer: 19000, engineHours: 0 })?.status).toBe("upcoming");
+    expect(workOrderDue(wo, { odometer: 19000, engineHours: 0 }, new Date(), { miles: 1500 })?.status).toBe("due_soon");
+  });
+});

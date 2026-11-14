@@ -1,7 +1,7 @@
 "use client";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { WORK_ORDER_STATUSES, workOrderDue } from "@crewdesk/shared";
+import { WORK_ORDER_STATUSES } from "@crewdesk/shared";
 import { api, fmtDate, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -14,11 +14,9 @@ const DUE_LABEL = { upcoming: "Upcoming", due_soon: "Coming due", overdue: "Due 
 const DUE_CLASS = { upcoming: "", due_soon: "warn", overdue: "bad" } as const;
 
 /** Due date and/or mileage and engine hours, with how far off each is. */
-function DueCell({ w, meter }: { w: any; meter: { odometer: number; engineHours: number } | null }) {
+function DueCell({ w, due }: { w: any; due: { status: "upcoming" | "due_soon" | "overdue"; notes: string[] } | null }) {
   const parts = [w.dueDate && fmtDate(w.dueDate), w.dueOdometer != null && `${fmtNum(w.dueOdometer)} mi`, w.dueHours != null && `${fmtNum(w.dueHours)} hrs`].filter(Boolean);
   if (!parts.length) return <>—</>;
-  const finished = w.status === "completed" || w.status === "cancelled";
-  const due = !finished && meter ? workOrderDue(w, meter) : null;
   return (
     <div>
       <div>{parts.join(" or ")}</div>
@@ -111,16 +109,15 @@ function WorkOrders() {
   const all = list.data ?? [];
   const q = filters.q.trim().toLowerCase();
   const done = (w: any) => w.status === "completed" || w.status === "cancelled";
-  const dueOf = (w: any, meter: any) => (done(w) || !meter ? null : workOrderDue(w, meter));
-  const rows = all.filter(({ workOrder: w, assetName, assignee, assetMeter }) =>
+  const rows = all.filter(({ workOrder: w, assetName, assignee, due }) =>
     // Search: number, title, description, asset, who it's assigned to, vendor and notes.
     (!q || `#${w.number} ${w.number} ${w.title} ${w.description ?? ""} ${assetName ?? ""} ${assignee?.id ? `${assignee.firstName} ${assignee.lastName}` : ""} ${w.vendor ?? ""} ${w.resolutionNotes ?? ""}`.toLowerCase().includes(q)) &&
     (!filters.asset || w.assetId === filters.asset) &&
     (!filters.priority || w.priority === filters.priority) &&
     (!filters.assigned || (filters.assigned === NONE ? !w.assignedToId : w.assignedToId === filters.assigned)) &&
     (!filters.due ||
-      (filters.due === "overdue" && dueOf(w, assetMeter)?.status === "overdue") ||
-      (filters.due === "week" && dueOf(w, assetMeter)?.status === "due_soon") ||
+      (filters.due === "overdue" && due?.status === "overdue") ||
+      (filters.due === "week" && due?.status === "due_soon") ||
       (filters.due === "meters" && (w.dueOdometer != null || w.dueHours != null)) ||
       (filters.due === "none" && !w.dueDate && w.dueOdometer == null && w.dueHours == null)));
   const assetsInList = [...new Map(all.map(({ workOrder: w, assetName }) => [w.assetId, assetName ?? "Unknown"])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
@@ -166,7 +163,7 @@ function WorkOrders() {
           <select value={filters.due} onChange={(e) => setFilter({ due: e.target.value })}>
             <option value="">Any time</option>
             <option value="overdue">Due now / overdue</option>
-            <option value="week">Coming due (7 days, 500 miles or 25 hours)</option>
+            <option value="week">Coming due</option>
             <option value="meters">Scheduled by mileage or hours</option>
             <option value="none">No due date or mileage</option>
           </select>
@@ -206,7 +203,7 @@ function WorkOrders() {
         {rows.length ? (
           <table>
             <thead><tr><th>#</th><th>Work order</th><th>Asset</th><th>Priority</th><th>Assigned</th><th>Due</th><th>Status</th><th>Cost</th></tr></thead>
-            <tbody>{rows.map(({ workOrder: w, assetName, assignee, assetMeter }) => {
+            <tbody>{rows.map(({ workOrder: w, assetName, assignee, assetMeter, due }) => {
               const editable = can("manager", "fleet") || w.assignedToId === me?.user.id;
               return [
                 <tr key={w.id} onClick={() => editable && setOpen(open === w.id ? null : w.id)} style={{ cursor: editable ? "pointer" : undefined, background: open === w.id ? "var(--info-bg)" : undefined }}>
@@ -215,7 +212,7 @@ function WorkOrders() {
                   <td>{assetName}</td>
                   <td><Badge value={w.priority} menu="workOrderPriority" /></td>
                   <td>{assignee?.id ? `${assignee.firstName} ${assignee.lastName}` : "—"}</td>
-                  <td><DueCell w={w} meter={assetMeter} /></td>
+                  <td><DueCell w={w} due={due} /></td>
                   <td><Badge value={w.status} menu="workOrderStatus" /></td>
                   <td>{w.partsCostCents + w.laborCostCents ? money(w.partsCostCents + w.laborCostCents) : "—"}</td>
                 </tr>,

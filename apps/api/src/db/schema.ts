@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import type { AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess } from "@crewdesk/shared";
+import type { AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings } from "@crewdesk/shared";
 import {
   boolean,
   primaryKey,
@@ -48,6 +48,8 @@ export const companies = pgTable("companies", {
   accountingKey: text("accounting_key"),
   /** Grace periods, alerts and points for attendance (see attendance.ts in @crewdesk/shared). */
   attendanceRules: jsonb("attendance_rules").$type<AttendanceRules>(),
+  /** Maintenance reminder defaults (how far ahead, repeat while overdue). */
+  fleetSettings: jsonb("fleet_settings").$type<FleetSettings>(),
   /** Who gets paid holidays and what working one pays (see HolidayRules in @crewdesk/shared). */
   holidayRules: jsonb("holiday_rules").$type<HolidayRules>(),
   /** Access by area for each role (Settings → Layout Editor): { manager: { payroll: "admin" }, … }. */
@@ -385,6 +387,10 @@ export const maintenanceSchedules = pgTable("maintenance_schedules", {
   lastServiceHours: doublePrecision("last_service_hours"),
   /** Who looks after this service: gets its reminders, and work orders made from it are assigned to them. */
   assignedToId: uuid("assigned_to_id").references(() => employees.id, { onDelete: "set null" }),
+  /** Send the "due soon" reminder this far ahead (null = the company default, else 10% of the interval). */
+  remindMilesBefore: doublePrecision("remind_miles_before"),
+  remindHoursBefore: doublePrecision("remind_hours_before"),
+  remindDaysBefore: integer("remind_days_before"),
   createdAt: createdAt(),
 });
 

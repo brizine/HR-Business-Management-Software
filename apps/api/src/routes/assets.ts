@@ -1,12 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 import { and, asc, desc, eq } from "drizzle-orm";
-import { assetSchema, isInactive, maintenanceScheduleSchema, meterReadingSchema } from "@crewdesk/shared";
-import { z } from "zod";
+import { assetSchema, fleetSettingsSchema, isInactive, maintenanceScheduleSchema, maintenanceScheduleUpdateSchema, meterReadingSchema } from "@crewdesk/shared";
 import { db } from "../db";
-import { assets, employees, inspections, maintenanceSchedules, meterReadings, newAssetCode, workOrders } from "../db/schema";
+import { assets, companies, employees, inspections, maintenanceSchedules, meterReadings, newAssetCode, workOrders } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
-import { recordMeter, withDue } from "../lib/fleet";
+import { fleetSettingsFor, recordMeter, withDue } from "../lib/fleet";
 
 /** Which area of the Permissions page controls access here. */
 const AREA = "fleet" as const;
@@ -25,8 +24,23 @@ async function loadAsset(companyId: string, id: string) {
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
 
+  /** Company-wide maintenance reminder defaults. */
+  app.get("/settings", async (req) => fleetSettingsFor(req.user.companyId));
+  app.put("/settings", { preHandler: requireRole("admin", AREA) }, async (req) => {
+    const body = parse(fleetSettingsSchema, req.body);
+    const settings = {
+      remindMilesBefore: body.remindMilesBefore ?? null,
+      remindHoursBefore: body.remindHoursBefore ?? null,
+      remindDaysBefore: body.remindDaysBefore ?? null,
+      repeatOverdueDays: body.repeatOverdueDays ?? null,
+    };
+    await db.update(companies).set({ fleetSettings: settings }).where(eq(companies.id, req.user.companyId));
+    return settings;
+  });
+
   /** All assets, each with its worst maintenance status. */
   app.get("/", async (req) => {
+    const settings = await fleetSettingsFor(req.user.companyId);
     const list = await db
       .select()
       .from(assets)
@@ -37,7 +51,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .from(maintenanceSchedules)
       .where(eq(maintenanceSchedules.companyId, req.user.companyId));
     return list.map((a) => {
-      const due = schedules.filter((s) => s.assetId === a.id).map((s) => withDue(s, a).due.status);
+      const due = schedules.filter((s) => s.assetId === a.id).map((s) => withDue(s, a, settings).due.status);
       const maintenanceStatus = due.reduce<"ok" | "due_soon" | "overdue">(
         (w, s) => (STATUS_RANK[s] > STATUS_RANK[w] ? s : w),
         "ok",
@@ -48,13 +62,14 @@ const routes: FastifyPluginAsync = async (app) => {
 
   /** Every schedule that is due soon or overdue across the fleet. */
   app.get("/maintenance/due", async (req) => {
+    const settings = await fleetSettingsFor(req.user.companyId);
     const rows = await db
       .select({ schedule: maintenanceSchedules, asset: assets })
       .from(maintenanceSchedules)
       .innerJoin(assets, eq(assets.id, maintenanceSchedules.assetId))
       .where(eq(maintenanceSchedules.companyId, req.user.companyId));
     return rows
-      .map(({ schedule, asset }) => ({ ...withDue(schedule, asset), assetName: asset.name }))
+      .map(({ schedule, asset }) => ({ ...withDue(schedule, asset, settings), assetName: asset.name }))
       .filter((s) => s.due.status !== "ok")
       .sort((a, b) => STATUS_RANK[b.due.status] - STATUS_RANK[a.due.status]);
   });
@@ -86,6 +101,7 @@ const routes: FastifyPluginAsync = async (app) => {
 
   app.get<{ Params: { id: string } }>("/:id", async (req) => {
     const asset = await loadAsset(req.user.companyId, req.params.id);
+    const settings = await fleetSettingsFor(req.user.companyId);
     const [schedules, orders, recentInspections, readings] = await Promise.all([
       db.select().from(maintenanceSchedules).where(eq(maintenanceSchedules.assetId, asset.id)),
       db.select().from(workOrders).where(eq(workOrders.assetId, asset.id)).orderBy(desc(workOrders.createdAt)),
@@ -105,7 +121,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const completed = orders.filter((o) => o.status === "completed");
     return {
       ...asset,
-      schedules: schedules.map((s) => withDue(s, asset)),
+      schedules: schedules.map((s) => withDue(s, asset, settings)),
       workOrders: orders,
       inspections: recentInspections,
       meterReadings: readings,
@@ -163,20 +179,22 @@ const routes: FastifyPluginAsync = async (app) => {
         lastServiceHours: body.lastServiceHours ?? asset.engineHours,
       })
       .returning();
-    return withDue(row, asset);
+    return withDue(row, asset, await fleetSettingsFor(req.user.companyId));
   });
 
-  /** Change who a schedule is assigned to. */
+  /** Change who a schedule is assigned to, or when its reminder goes out (null = company default). */
   app.patch<{ Params: { id: string } }>("/schedules/:id", { preHandler: requireRole("manager", AREA) }, async (req) => {
-    const { assignedToId } = parse(z.object({ assignedToId: z.string().uuid().nullable() }), req.body);
-    await checkAssignee(req.user.companyId, assignedToId);
+    const body = parse(maintenanceScheduleUpdateSchema, req.body);
+    if (body.assignedToId !== undefined) await checkAssignee(req.user.companyId, body.assignedToId);
+    const changes = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined));
+    if (!Object.keys(changes).length) throw new HttpError(400, "Nothing to change");
     const [row] = await db
       .update(maintenanceSchedules)
-      .set({ assignedToId })
+      .set(changes)
       .where(and(eq(maintenanceSchedules.id, req.params.id), eq(maintenanceSchedules.companyId, req.user.companyId)))
       .returning();
     if (!row) notFound("Schedule");
-    return withDue(row, await loadAsset(req.user.companyId, row.assetId));
+    return withDue(row, await loadAsset(req.user.companyId, row.assetId), await fleetSettingsFor(req.user.companyId));
   });
 
   app.delete<{ Params: { id: string } }>("/schedules/:id", { preHandler: requireRole("manager", AREA) }, async (req) => {

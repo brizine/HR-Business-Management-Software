@@ -1,7 +1,7 @@
 import { eq, max } from "drizzle-orm";
-import { computeDue } from "@crewdesk/shared";
-import type { DB } from "../db";
-import { assets, maintenanceSchedules, meterReadings, workOrders } from "../db/schema";
+import { computeDue, resolveLead, type FleetSettings } from "@crewdesk/shared";
+import { db, type DB } from "../db";
+import { assets, companies, maintenanceSchedules, meterReadings, workOrders } from "../db/schema";
 
 type Tx = Parameters<Parameters<DB["transaction"]>[0]>[0] | DB;
 
@@ -44,6 +44,12 @@ export async function recordMeter(
 
 export type ScheduleRow = typeof maintenanceSchedules.$inferSelect;
 
-export function withDue(schedule: ScheduleRow, asset: { odometer: number; engineHours: number }) {
-  return { ...schedule, due: computeDue(schedule, asset) };
+/** The company's maintenance reminder defaults (empty = 10% of each interval, remind once). */
+export async function fleetSettingsFor(companyId: string): Promise<FleetSettings> {
+  const [c] = await db.select({ s: companies.fleetSettings }).from(companies).where(eq(companies.id, companyId));
+  return c?.s ?? {};
+}
+
+export function withDue(schedule: ScheduleRow, asset: { odometer: number; engineHours: number }, settings?: FleetSettings | null, now = new Date()) {
+  return { ...schedule, due: computeDue(schedule, asset, now, resolveLead(schedule, settings)) };
 }

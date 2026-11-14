@@ -294,6 +294,13 @@ export const meterReadingSchema = z.object({
   engineHours: z.number().nonnegative().optional(),
 });
 
+/** "Remind this far ahead" for maintenance: miles, engine hours, days (null = the default). */
+export const reminderLeadFields = {
+  remindMilesBefore: z.number().positive().max(100_000).nullable().optional(),
+  remindHoursBefore: z.number().positive().max(10_000).nullable().optional(),
+  remindDaysBefore: z.number().int().positive().max(365).nullable().optional(),
+};
+
 export const maintenanceScheduleSchema = z
   .object({
     assetId: z.string().uuid(),
@@ -306,10 +313,26 @@ export const maintenanceScheduleSchema = z
     lastServiceHours: z.number().nonnegative().nullable().optional(),
     /** Who looks after this service (gets its reminders; work orders from it are assigned to them). */
     assignedToId: z.string().uuid().nullable().optional(),
+    /** Send the "due soon" reminder this far ahead (null = the company default). */
+    ...reminderLeadFields,
   })
   .refine((s) => s.intervalMiles || s.intervalHours || s.intervalDays, {
     message: "At least one interval (miles, hours or days) is required",
   });
+
+/** Company-wide maintenance reminder settings (Assets page). */
+export const fleetSettingsSchema = z.object({
+  ...reminderLeadFields,
+  /** While a service stays overdue, remind again every this many days (null = only once). */
+  repeatOverdueDays: z.number().int().positive().max(90).nullable().optional(),
+});
+export type FleetSettings = z.infer<typeof fleetSettingsSchema>;
+
+/** Changing one schedule after it's made: who it's assigned to and its reminder timing. */
+export const maintenanceScheduleUpdateSchema = z.object({
+  assignedToId: z.string().uuid().nullable().optional(),
+  ...reminderLeadFields,
+});
 
 export const WORK_ORDER_STATUSES = ["open", "in_progress", "waiting_parts", "completed", "cancelled"] as const;
 

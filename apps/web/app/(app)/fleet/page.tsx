@@ -8,6 +8,7 @@ import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
 import { AssetFields } from "@/components/asset-form";
 import { useMenus } from "@/components/menu-select";
 import { useMenuData } from "@/lib/menus";
+import { MaintenanceReminderDefaults } from "@/components/maintenance-reminders";
 
 const NO_FILTERS = { q: "", type: "", status: "", maintenance: "", assigned: "" };
 const NONE = "__none";
@@ -19,6 +20,7 @@ export default function Fleet() {
   const { data, reload } = useApi<any[]>("/assets");
   const employees = useApi<any[]>("/employees");
   const [adding, setAdding] = useState(false);
+  const [reminders, setReminders] = useState(false);
   const { label } = useMenuData();
   const [filters, setFilters] = useState(NO_FILTERS);
   const setFilter = (patch: Partial<typeof NO_FILTERS>) => setFilters((f) => ({ ...f, ...patch }));
@@ -46,8 +48,10 @@ export default function Fleet() {
     <>
       <PageHead title="Vehicles & Equipment" sub={<span role="status">{filtering ? `Showing ${rows.length} of ${all.length} assets` : `${all.length} assets`}</span>}>
         <Link className="btn" href="/fleet/labels">Print QR labels</Link>
+        {can("manager", "fleet") && <button className="btn" onClick={() => setReminders(!reminders)}>Reminder settings</button>}
         {can("manager", "fleet") && <button className="btn primary" onClick={() => setAdding(!adding)}>Add asset</button>}
       </PageHead>
+      {reminders && <MaintenanceReminderDefaults onClose={() => setReminders(false)} />}
       <form className="card filters" role="search" aria-label="Filter assets" onSubmit={(e) => e.preventDefault()}>
         <label>Search
           <input type="search" placeholder="Name, make, VIN, plate, person…" value={filters.q} onChange={(e) => setFilter({ q: e.target.value })} />

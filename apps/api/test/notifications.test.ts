@@ -188,6 +188,33 @@ describe("scheduled checks", () => {
     expect((await call("PATCH", `/assets/schedules/${sched.body.id}`, owner.token, { assignedToId: null })).body.assignedToId).toBeNull();
   });
 
+  it("reminder timing: a company default, a per-schedule override, and repeats while overdue", async () => {
+    const van = await call("POST", "/assets", owner.token, { name: "Crew Van", type: "truck", odometer: 10000 });
+    const oil = await call("POST", "/assets/schedules", owner.token, { assetId: van.body.id, name: "Oil change", intervalMiles: 5000 });
+    expect((await call("PUT", "/assets/settings", tech.token, { remindMilesBefore: 1000 })).status).toBe(403);
+    // 800 miles left: not due soon by the 10% rule (500)...
+    await call("POST", `/assets/${van.body.id}/meter`, owner.token, { odometer: 14200 });
+    expect((await call("GET", `/assets/${van.body.id}`, owner.token)).body.schedules[0].due.status).toBe("ok");
+    // ...but it is with a company default of 1,000 miles ahead.
+    expect((await call("PUT", "/assets/settings", owner.token, { remindMilesBefore: 1000, repeatOverdueDays: 3 })).body).toEqual({ remindMilesBefore: 1000, remindHoursBefore: null, remindDaysBefore: null, repeatOverdueDays: 3 });
+    expect((await call("GET", `/assets/${van.body.id}`, owner.token)).body.schedules[0].due.status).toBe("due_soon");
+    // A schedule's own setting wins (300 miles ahead), and can go back to the default (null).
+    await call("PATCH", `/assets/schedules/${oil.body.id}`, owner.token, { remindMilesBefore: 300 });
+    expect((await call("GET", `/assets/${van.body.id}`, owner.token)).body.schedules[0].due.status).toBe("ok");
+    await call("PATCH", `/assets/schedules/${oil.body.id}`, owner.token, { remindMilesBefore: null });
+    expect((await call("GET", `/assets/${van.body.id}`, owner.token)).body.schedules[0].due.status).toBe("due_soon");
+
+    // Overdue: reminded again every 3 days while it stays overdue.
+    await call("POST", `/assets/${van.body.id}/meter`, owner.token, { odometer: 15200 });
+    // Start just after a 3-day boundary, so "a day later" stays in the same 3-day window.
+    const t0 = Math.floor(Date.UTC(2031, 0, 1) / (3 * 86_400_000)) * 3 * 86_400_000 + 3_600_000;
+    const overdue = async (at: number) => { sent = []; await runScheduledChecks(new Date(at)); return (await pushesTo(tokens.owner)).filter((m) => m.title === "Crew Van: Oil change overdue").length; };
+    expect(await overdue(t0)).toBe(1);
+    expect(await overdue(t0 + 86_400_000)).toBe(0);
+    expect(await overdue(t0 + 3 * 86_400_000)).toBe(1);
+    await call("PUT", "/assets/settings", owner.token, {});
+  });
+
   it("work orders scheduled by mileage or hours: shown with distance to go, and alerted as they come due", async () => {
     const truck = await call("POST", "/assets", owner.token, { name: "Spray Truck", type: "truck", odometer: 40000, assignedEmployeeId: tech.id });
     const wo = await call("POST", "/work-orders", owner.token, { assetId: truck.body.id, title: "Replace brake pads", dueOdometer: 45000, assignedToId: tech.id });

@@ -288,6 +288,13 @@
       "when": 1794679406884,
       "tag": "0040_schedule_assignee",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1794680970578,
+      "tag": "0041_maintenance_reminder_timing",
+      "breakpoints": true
     }
   ]
 }

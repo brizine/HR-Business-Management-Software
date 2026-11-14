@@ -1,6 +1,7 @@
 import { and, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or } from "drizzle-orm";
-import { INACTIVE_STATUSES, carryoverForfeit, computeDue, workOrderDue, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
+import { INACTIVE_STATUSES, carryoverForfeit, computeDue, resolveLead, workOrderDue, type FleetSettings, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
 import { db } from "../db";
+import { fleetSettingsFor } from "./fleet";
 import { assets, attendanceOverrides, companies, courseEnrollments, courses, employees, maintenanceSchedules, notificationLog, workOrders, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, ptoRequests, shifts, timeEntries } from "../db/schema";
 import { attendanceRulesFor, computeAttendance } from "./attendance";
 import { assignCourse, autoAssignees, companyToday, describeEnrollments, latestEnrollments } from "./training";
@@ -35,12 +36,20 @@ export async function runScheduledChecks(now = new Date()) {
     .select({ schedule: maintenanceSchedules, asset: assets })
     .from(maintenanceSchedules)
     .innerJoin(assets, eq(assets.id, maintenanceSchedules.assetId));
+  const fleetSettings = new Map<string, FleetSettings>();
+  const settingsFor = async (companyId: string) => {
+    if (!fleetSettings.has(companyId)) fleetSettings.set(companyId, await fleetSettingsFor(companyId));
+    return fleetSettings.get(companyId)!;
+  };
+  /** While still overdue, a new reminder every `repeatOverdueDays` (if the company set it). */
+  const repeatBucket = (settings: FleetSettings) => (settings.repeatOverdueDays ? `:r${Math.floor(now.getTime() / (settings.repeatOverdueDays * 86_400_000))}` : "");
   for (const { schedule: s, asset } of scheduleRows) {
     if (asset.status === "retired") continue;
-    const due = computeDue(s, asset, now);
+    const settings = await settingsFor(s.companyId);
+    const due = computeDue(s, asset, now, resolveLead(s, settings));
     if (due.status === "ok") continue;
     // Keyed on the last service so the alert re-arms after the next service.
-    const key = `maint:${s.id}:${due.status}:${s.lastServiceDate}:${s.lastServiceOdometer}:${s.lastServiceHours}`;
+    const key = `maint:${s.id}:${due.status}:${s.lastServiceDate}:${s.lastServiceOdometer}:${s.lastServiceHours}${due.status === "overdue" ? repeatBucket(settings) : ""}`;
     if (!(await firstTime(s.companyId, key))) continue;
     const managers = await staffWithRole(s.companyId, "manager", "fleet");
     notify(s.companyId, [...managers, asset.assignedEmployeeId, s.assignedToId], {
@@ -61,9 +70,10 @@ export async function runScheduledChecks(now = new Date()) {
     .where(and(inArray(workOrders.status, ["open", "in_progress", "waiting_parts"]), or(isNotNull(workOrders.dueOdometer), isNotNull(workOrders.dueHours))));
   for (const { wo, asset } of woRows) {
     if (asset.status === "retired") continue;
-    const due = workOrderDue(wo, asset, now);
+    const settings = await settingsFor(wo.companyId);
+    const due = workOrderDue(wo, asset, now, resolveLead({}, settings));
     if (!due || due.status === "upcoming") continue;
-    if (!(await firstTime(wo.companyId, `wodue:${wo.id}:${due.status}:${wo.dueOdometer}:${wo.dueHours}:${wo.dueDate}`))) continue;
+    if (!(await firstTime(wo.companyId, `wodue:${wo.id}:${due.status}:${wo.dueOdometer}:${wo.dueHours}:${wo.dueDate}${due.status === "overdue" ? repeatBucket(settings) : ""}`))) continue;
     const managers = await staffWithRole(wo.companyId, "manager", "fleet");
     notify(wo.companyId, [...managers, wo.assignedToId], {
       category: "fleet",
