@@ -8,19 +8,19 @@ import { useAuth } from "@/lib/auth";
 import { PageLayoutRoot } from "@/components/page-layout";
 
 const NAV: { section: string; items: { href: string; label: string; min?: Role; area?: PermissionArea }[] }[] = [
-  { section: "", items: [{ href: "/dashboard", label: "Dashboard", min: "manager", area: "dashboard" }, { href: "/wiki", label: "Company wiki" }, { href: "/spray-mix", label: "Spray Mix Calculator" }] },
+  { section: "", items: [{ href: "/dashboard", label: "Dashboard", min: "manager", area: "dashboard" }, { href: "/wiki", label: "Company Wiki" }, { href: "/spray-mix", label: "Spray Mix Calculator" }] },
   {
     section: "People",
     items: [
       { href: "/people", label: "Team" },
       { href: "/schedule", label: "Schedule" },
-      { href: "/time", label: "Time clock" },
+      { href: "/time", label: "Time Clock" },
       { href: "/attendance", label: "Attendance" },
-      { href: "/time-off", label: "Time off" },
-      { href: "/reviews", label: "Reviews & discipline" },
+      { href: "/time-off", label: "Time Off" },
+      { href: "/reviews", label: "Reviews & Discipline" },
       { href: "/training", label: "Training" },
       { href: "/documents", label: "Documents" },
-      { href: "/tax-forms", label: "Pay & tax forms" },
+      { href: "/tax-forms", label: "Pay & Tax Forms" },
       { href: "/onboarding", label: "Onboarding" },
       { href: "/hiring", label: "Hiring", min: "manager", area: "hiring" },
       { href: "/payroll", label: "Payroll", min: "admin", area: "payroll" },
@@ -28,10 +28,10 @@ const NAV: { section: string; items: { href: string; label: string; min?: Role; 
     ],
   },
   {
-    section: "Fleet & equipment",
+    section: "Fleet & Equipment",
     items: [
       { href: "/fleet", label: "Assets" },
-      { href: "/work-orders", label: "Work orders" },
+      { href: "/work-orders", label: "Work Orders" },
       { href: "/inspections", label: "Inspections" },
     ],
   },
@@ -113,7 +113,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
         <Link href="/settings/security" className={path.startsWith("/settings") ? "active" : ""}>Settings</Link>
         <a href="#" onClick={(e) => { e.preventDefault(); signOut().then(() => router.replace("/login")); }}>
-          Sign out
+          Sign Out
         </a>
       </nav>
       <main className="main"><PageLayoutRoot>{children}</PageLayoutRoot></main>
