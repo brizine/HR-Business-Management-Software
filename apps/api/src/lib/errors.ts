@@ -32,6 +32,7 @@ export function registerErrorHandler(app: FastifyInstance) {
       return reply.status(409).send({ error: "A record with that value already exists" });
     }
     const code = err instanceof HttpError ? err.code : undefined;
-    return reply.status(status).send({ error: status >= 500 ? "Internal server error" : err.message, ...(code ? { code } : {}) });
+    // Unexpected errors stay vague; an HttpError's message was written to be shown, whatever its status.
+    return reply.status(status).send({ error: status >= 500 && !(err instanceof HttpError) ? "Internal server error" : err.message, ...(code ? { code } : {}) });
   });
 }

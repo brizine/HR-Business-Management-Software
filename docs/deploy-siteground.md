@@ -234,6 +234,21 @@ pg_restore --no-owner -d "postgres://USER:PASSWORD@HOST:5432/NEW_DATABASE" crewd
 Uploaded documents are already encrypted, so the upload folder (or bucket) can be backed up as-is,
 e.g. by SiteGround's own backups. Restoring them needs the same `ENCRYPTION_KEY`.
 
+## 13. Help assistant (optional)
+
+The **Help** item in the sidebar answers "how do I…" questions about Crewdesk with an AI assistant
+(Anthropic's Claude), using `docs/help-guide.md` as its source. To turn it on:
+
+1. Create an API key at **console.anthropic.com** (Settings → API Keys) and add a payment method or
+   credits there. Consider setting a monthly spend limit in the Console.
+2. In the Node.js project's **Environment variables**, add `ANTHROPIC_API_KEY` with that key, then
+   **Save and deploy**.
+
+Each question costs roughly a cent or two (the guide is cached between questions). Each person can
+ask up to 60 questions an hour (`HELP_RATE_LIMIT` changes that). The assistant only sees the guide,
+the question and the person's name and role, never company records. Keep `docs/help-guide.md`
+up to date when features change.
+
 ## Troubleshooting
 
 - **"Exceeded 90% of the inode quota" email**: SiteGround keeps every deploy as a full copy of the app

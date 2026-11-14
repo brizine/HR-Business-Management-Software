@@ -516,3 +516,17 @@ tr.openrow td { background: var(--bg); }
 .quiz-edit { border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
 .linklike { all: unset; color: var(--primary); cursor: pointer; text-decoration: underline; }
 @media (max-width: 800px) { .lesson-layout { grid-template-columns: 1fr; } .lesson-nav { position: static; } }
+
+/* Help assistant */
+.help-chat { display: flex; flex-direction: column; gap: 12px; }
+.help-messages { display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+.help-msg { max-width: 85%; padding: 10px 14px; border-radius: 12px; line-height: 1.5; }
+.help-msg p { margin: 0 0 6px; }
+.help-msg p:last-child { margin-bottom: 0; }
+.help-msg.user { align-self: flex-end; background: var(--primary); color: var(--primary-ink); border-bottom-right-radius: 4px; }
+.help-msg.assistant { align-self: flex-start; background: var(--bg, #f3f4f6); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+.help-answer ol, .help-answer ul { margin: 4px 0 8px; padding-left: 22px; }
+.help-answer li { margin: 2px 0; }
+.help-input { display: flex; gap: 8px; align-items: flex-end; }
+.help-input textarea { flex: 1; resize: vertical; min-height: 44px; }
+@media (max-width: 700px) { .help-msg { max-width: 100%; } }

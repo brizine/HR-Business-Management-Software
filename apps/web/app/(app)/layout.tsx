@@ -104,13 +104,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         ))}
         {payApprovals?.isApprover && (
           <Link href="/pay-periods" className={path.startsWith("/pay-periods") ? "active" : ""}>
-            Pay approvals {payApprovals.pending > 0 && <span className="badge warn" style={{ marginLeft: 4 }}>{payApprovals.pending}</span>}
+            Pay Approvals {payApprovals.pending > 0 && <span className="badge warn" style={{ marginLeft: 4 }}>{payApprovals.pending}</span>}
           </Link>
         )}
         <div className="spacer" />
         <div className="company" style={{ paddingBottom: 4 }}>
           {me.user.firstName} {me.user.lastName} · {me.user.role}
         </div>
+        <Link href="/help" className={path.startsWith("/help") ? "active" : ""}>Help</Link>
         <Link href="/settings/security" className={path.startsWith("/settings") ? "active" : ""}>Settings</Link>
         <a href="#" onClick={(e) => { e.preventDefault(); signOut().then(() => router.replace("/login")); }}>
           Sign Out
