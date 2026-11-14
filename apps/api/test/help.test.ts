@@ -74,7 +74,7 @@ describe("help assistant", () => {
     expect((await call("PUT", "/help/guide", { markdown: custom })).body).toMatchObject({ markdown: custom, custom: true, standardChanged: false });
     expect((await call("GET", "/help/guide")).body.markdown).toBe(custom);
     expect((await call("GET", "/help/guide/standard")).body.markdown).toMatch(/^# Crewdesk user guide/);
-    setHelpClient({ beta: { messages: { create: async (body) => (sent.push(body), { stop_reason: "end_turn", content: [{ type: "text", text: "Ask Hana." }] }) } } });
+    setHelpClient({ beta: { messages: { create: async (body) => (sent.push(body), { stop_reason: "end_turn", content: [{ type: "text", text: "Ask Hana." }] } as any) } } });
     await call("POST", "/help/ask", { messages: [{ role: "user", content: "Where are the truck keys?" }] });
     expect(sent.at(-1).system[0].text).toContain("Ask Hana for the keys.");
     setHelpClient({ beta: { messages: { create: async (body) => (sent.push(body), reply) } } });
