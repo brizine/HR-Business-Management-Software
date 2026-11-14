@@ -319,9 +319,16 @@ export const workOrderSchema = z.object({
   priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
   assignedToId: z.string().uuid().nullable().optional(),
   dueDate: isoDate.nullable().optional(),
+  /** Due when the asset reaches this odometer reading / engine hours (whichever comes first, with the date). */
+  dueOdometer: z.number().nonnegative().nullable().optional(),
+  dueHours: z.number().nonnegative().nullable().optional(),
 });
 
 export const workOrderUpdateSchema = z.object({
+  /** Managers can reschedule: by date, mileage or engine hours (null clears one). */
+  dueDate: isoDate.nullable().optional(),
+  dueOdometer: z.number().nonnegative().nullable().optional(),
+  dueHours: z.number().nonnegative().nullable().optional(),
   status: z.enum(WORK_ORDER_STATUSES).optional(),
   assignedToId: z.string().uuid().nullable().optional(),
   laborHours: z.number().nonnegative().optional(),

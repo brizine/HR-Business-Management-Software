@@ -174,6 +174,32 @@ describe("scheduled checks", () => {
     expect((await pushesTo(tokens.owner)).filter((m) => m.title.startsWith("Loader"))).toHaveLength(1);
   });
 
+  it("work orders scheduled by mileage or hours: shown with distance to go, and alerted as they come due", async () => {
+    const truck = await call("POST", "/assets", owner.token, { name: "Spray Truck", type: "truck", odometer: 40000, assignedEmployeeId: tech.id });
+    const wo = await call("POST", "/work-orders", owner.token, { assetId: truck.body.id, title: "Replace brake pads", dueOdometer: 45000, assignedToId: tech.id });
+    expect(wo.body).toMatchObject({ dueOdometer: 45000, dueHours: null });
+    // A technician can't set or change the due point.
+    const field = await call("POST", "/work-orders", tech.token, { assetId: truck.body.id, title: "Noise", dueOdometer: 1 });
+    expect(field.body.dueOdometer).toBeNull();
+    expect((await call("PATCH", `/work-orders/${wo.body.id}`, tech.token, { dueOdometer: 99999 })).body.dueOdometer).toBe(45000);
+    // The list carries the asset's meters so the page can show what's left.
+    const row = (await call("GET", "/work-orders?status=active", owner.token)).body.find((r: any) => r.workOrder.id === wo.body.id);
+    expect(row.assetMeter).toEqual({ odometer: 40000, engineHours: 0 });
+
+    sent = [];
+    await runScheduledChecks();
+    expect((await pushesTo(tokens.owner)).filter((m) => m.title.startsWith("Spray Truck"))).toHaveLength(0); // 5,000 miles to go
+    await call("POST", `/assets/${truck.body.id}/meter`, tech.token, { odometer: 44700 });
+    await runScheduledChecks();
+    await runScheduledChecks();
+    const soon = (await pushesTo(tokens.tech)).filter((m) => m.title.startsWith("Spray Truck"));
+    expect(soon.map((m) => m.title)).toEqual(["Spray Truck: work order #" + wo.body.number + " is coming due"]);
+    expect(soon[0].body).toContain("300 miles to go");
+    await call("POST", `/assets/${truck.body.id}/meter`, tech.token, { odometer: 45100 });
+    await runScheduledChecks();
+    expect((await pushesTo(tokens.owner)).some((m) => m.title === `Spray Truck: work order #${wo.body.number} is due now`)).toBe(true);
+  });
+
   it("reminds people who forgot to clock out, and their manager", async () => {
     await call("POST", "/time/clock-in", tech.token, {});
     await db

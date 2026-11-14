@@ -39,6 +39,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .select({
         workOrder: workOrders,
         assetName: assets.name,
+        assetMeter: { odometer: assets.odometer, engineHours: assets.engineHours },
         assignee: { id: employees.id, firstName: employees.firstName, lastName: employees.lastName },
       })
       .from(workOrders)
@@ -59,6 +60,8 @@ const routes: FastifyPluginAsync = async (app) => {
     if (!isManager(req, AREA)) {
       body.assignedToId = null;
       body.scheduleId = null;
+      body.dueOdometer = null;
+      body.dueHours = null;
     }
     const created = await db.transaction(async (tx) => {
       const [row] = await tx
@@ -105,16 +108,19 @@ const routes: FastifyPluginAsync = async (app) => {
     if (!isManager(req, AREA)) {
       if (wo.assignedToId !== req.user.sub) throw new HttpError(403, "Only the assigned technician or a manager can update this");
       delete body.assignedToId;
+      delete body.dueDate;
+      delete body.dueOdometer;
+      delete body.dueHours;
     }
     const { completedOdometer, completedHours, ...fields } = body;
     const completing = fields.status === "completed" && wo.status !== "completed";
 
     const updated = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .update(workOrders)
-        .set({ ...fields, ...(completing ? { completedAt: new Date() } : {}) })
-        .where(eq(workOrders.id, wo.id))
-        .returning();
+      const changes = { ...fields, ...(completing ? { completedAt: new Date() } : {}) };
+      // Nothing this person may change (e.g. a technician sending only a due point): leave it as is.
+      const [row] = Object.values(changes).some((v) => v !== undefined)
+        ? await tx.update(workOrders).set(changes).where(eq(workOrders.id, wo.id)).returning()
+        : [wo];
 
       if (completing) {
         let [asset] = await tx.select().from(assets).where(eq(assets.id, wo.assetId));

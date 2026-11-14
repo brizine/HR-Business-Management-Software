@@ -1,7 +1,7 @@
-import { and, eq, gt, gte, isNotNull, isNull, lt, lte, ne, notInArray } from "drizzle-orm";
-import { INACTIVE_STATUSES, carryoverForfeit, computeDue, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
+import { and, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or } from "drizzle-orm";
+import { INACTIVE_STATUSES, carryoverForfeit, computeDue, workOrderDue, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
 import { db } from "../db";
-import { assets, attendanceOverrides, companies, courseEnrollments, courses, employees, maintenanceSchedules, notificationLog, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, ptoRequests, shifts, timeEntries } from "../db/schema";
+import { assets, attendanceOverrides, companies, courseEnrollments, courses, employees, maintenanceSchedules, notificationLog, workOrders, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, ptoRequests, shifts, timeEntries } from "../db/schema";
 import { attendanceRulesFor, computeAttendance } from "./attendance";
 import { assignCourse, autoAssignees, companyToday, describeEnrollments, latestEnrollments } from "./training";
 import { taskOwners } from "../routes/onboarding";
@@ -48,6 +48,28 @@ export async function runScheduledChecks(now = new Date()) {
       title: `${asset.name}: ${s.name} ${due.status === "overdue" ? "overdue" : "due soon"}`,
       body: due.reasons.join(", "),
       link: { screen: "asset", id: asset.id },
+    });
+    sent++;
+  }
+
+  // Work orders scheduled by mileage or engine hours: tell the assignee and fleet managers when
+  // they're getting close and again when they're reached (once each, re-armed if rescheduled).
+  const woRows = await db
+    .select({ wo: workOrders, asset: assets })
+    .from(workOrders)
+    .innerJoin(assets, eq(assets.id, workOrders.assetId))
+    .where(and(inArray(workOrders.status, ["open", "in_progress", "waiting_parts"]), or(isNotNull(workOrders.dueOdometer), isNotNull(workOrders.dueHours))));
+  for (const { wo, asset } of woRows) {
+    if (asset.status === "retired") continue;
+    const due = workOrderDue(wo, asset, now);
+    if (!due || due.status === "upcoming") continue;
+    if (!(await firstTime(wo.companyId, `wodue:${wo.id}:${due.status}:${wo.dueOdometer}:${wo.dueHours}:${wo.dueDate}`))) continue;
+    const managers = await staffWithRole(wo.companyId, "manager", "fleet");
+    notify(wo.companyId, [...managers, wo.assignedToId], {
+      category: "fleet",
+      title: `${asset.name}: work order #${wo.number} ${due.status === "overdue" ? "is due now" : "is coming due"}`,
+      body: `${wo.title}. ${due.notes.join("; ")}.`,
+      link: { screen: "work-order", id: wo.id, assetId: asset.id },
     });
     sent++;
   }

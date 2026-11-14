@@ -402,6 +402,9 @@ export const workOrders = pgTable("work_orders", {
   assignedToId: uuid("assigned_to_id").references(() => employees.id, { onDelete: "set null" }),
   reportedById: uuid("reported_by_id").references(() => employees.id, { onDelete: "set null" }),
   dueDate: date("due_date"),
+  /** Due when the asset's odometer / engine hours reach these (whichever comes first, with the date). */
+  dueOdometer: doublePrecision("due_odometer"),
+  dueHours: doublePrecision("due_hours"),
   laborHours: doublePrecision("labor_hours"),
   partsCostCents: integer("parts_cost_cents").notNull().default(0),
   laborCostCents: integer("labor_cost_cents").notNull().default(0),

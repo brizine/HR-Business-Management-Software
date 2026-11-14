@@ -1,7 +1,7 @@
 "use client";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { WORK_ORDER_STATUSES } from "@crewdesk/shared";
+import { WORK_ORDER_STATUSES, workOrderDue } from "@crewdesk/shared";
 import { api, fmtDate, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -9,7 +9,42 @@ import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
 import { LabeledSelect } from "@/components/menu-select";
 import { useMenuData } from "@/lib/menus";
 
-function WorkOrderEditor({ wo, employees, canManage, onDone }: { wo: any; employees: any[]; canManage: boolean; onDone: () => void }) {
+const fmtNum = (n: number) => Math.round(n).toLocaleString();
+const DUE_LABEL = { upcoming: "Upcoming", due_soon: "Coming due", overdue: "Due now" } as const;
+const DUE_CLASS = { upcoming: "", due_soon: "warn", overdue: "bad" } as const;
+
+/** Due date and/or mileage and engine hours, with how far off each is. */
+function DueCell({ w, meter }: { w: any; meter: { odometer: number; engineHours: number } | null }) {
+  const parts = [w.dueDate && fmtDate(w.dueDate), w.dueOdometer != null && `${fmtNum(w.dueOdometer)} mi`, w.dueHours != null && `${fmtNum(w.dueHours)} hrs`].filter(Boolean);
+  if (!parts.length) return <>—</>;
+  const finished = w.status === "completed" || w.status === "cancelled";
+  const due = !finished && meter ? workOrderDue(w, meter) : null;
+  return (
+    <div>
+      <div>{parts.join(" or ")}</div>
+      {due && <div title={due.notes.join("; ")}><span className={`badge ${DUE_CLASS[due.status]}`}>{DUE_LABEL[due.status]}</span> <span className="muted" style={{ fontSize: 12 }}>{due.notes[0]}</span></div>}
+    </div>
+  );
+}
+
+/** When it's due: a date, an odometer reading, engine hours, or any mix (whichever comes first). */
+function DueFields({ w, meter }: { w?: any; meter?: { odometer: number; engineHours: number } | null }) {
+  return (
+    <>
+      <label>Due date<input name="dueDate" type="date" defaultValue={w?.dueDate ?? ""} /></label>
+      <label>Due at mileage
+        <input name="dueOdometer" type="number" min="0" step="1" defaultValue={w?.dueOdometer ?? ""} placeholder="e.g. 45000" />
+        {meter && <span className="muted" style={{ fontSize: 12 }}>Now {fmtNum(meter.odometer)} mi</span>}
+      </label>
+      <label>Due at engine hours
+        <input name="dueHours" type="number" min="0" step="0.1" defaultValue={w?.dueHours ?? ""} placeholder="e.g. 1250" />
+        {meter && <span className="muted" style={{ fontSize: 12 }}>Now {fmtNum(meter.engineHours)} hrs</span>}
+      </label>
+    </>
+  );
+}
+
+function WorkOrderEditor({ wo, meter, employees, canManage, onDone }: { wo: any; meter: { odometer: number; engineHours: number } | null; employees: any[]; canManage: boolean; onDone: () => void }) {
   const { busy, error, run } = useAction();
   return (
     <form className="stack" onSubmit={(e) => {
@@ -17,7 +52,13 @@ function WorkOrderEditor({ wo, employees, canManage, onDone }: { wo: any; employ
       const { partsCost, laborCost, ...v } = formValues(e.currentTarget);
       if (partsCost != null) v.partsCostCents = Math.round(partsCost * 100);
       if (laborCost != null) v.laborCostCents = Math.round(laborCost * 100);
-      if (canManage) v.assignedToId ??= null;
+      if (canManage) {
+        v.assignedToId ??= null;
+        // A cleared box removes that due point.
+        v.dueDate ??= null;
+        v.dueOdometer ??= null;
+        v.dueHours ??= null;
+      }
       run(async () => { await api(`/work-orders/${wo.id}`, { method: "PATCH", body: v }); onDone(); });
     }}>
       {wo.description && <pre style={{ whiteSpace: "pre-wrap", margin: 0, font: "inherit" }} className="muted">{wo.description}</pre>}
@@ -31,6 +72,7 @@ function WorkOrderEditor({ wo, employees, canManage, onDone }: { wo: any; employ
             </select>
           </label>
         )}
+        {canManage && <DueFields w={wo} meter={meter} />}
         <label>Labor hours<input name="laborHours" type="number" step="0.1" min="0" defaultValue={wo.laborHours ?? ""} /></label>
         <label>Parts cost ($)<input name="partsCost" type="number" step="0.01" min="0" defaultValue={wo.partsCostCents ? wo.partsCostCents / 100 : ""} /></label>
         <label>Labor cost ($)<input name="laborCost" type="number" step="0.01" min="0" defaultValue={wo.laborCostCents ? wo.laborCostCents / 100 : ""} /></label>
@@ -48,8 +90,6 @@ function WorkOrderEditor({ wo, employees, canManage, onDone }: { wo: any; employ
 const NO_FILTERS = { q: "", asset: "", priority: "", assigned: "", due: "" };
 const NONE = "__none";
 const PRIORITIES = ["low", "medium", "high", "critical"];
-const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-const inDays = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
 function WorkOrders() {
   const { label } = useMenuData();
@@ -63,6 +103,7 @@ function WorkOrders() {
   const employees = useApi<any[]>("/employees");
   const [open, setOpen] = useState<string | null>(highlight);
   const [creating, setCreating] = useState(false);
+  const [newAsset, setNewAsset] = useState("");
   const create = useAction();
   const [filters, setFilters] = useState(NO_FILTERS);
   const setFilter = (patch: Partial<typeof NO_FILTERS>) => setFilters((f) => ({ ...f, ...patch }));
@@ -70,16 +111,18 @@ function WorkOrders() {
   const all = list.data ?? [];
   const q = filters.q.trim().toLowerCase();
   const done = (w: any) => w.status === "completed" || w.status === "cancelled";
-  const rows = all.filter(({ workOrder: w, assetName, assignee }) =>
+  const dueOf = (w: any, meter: any) => (done(w) || !meter ? null : workOrderDue(w, meter));
+  const rows = all.filter(({ workOrder: w, assetName, assignee, assetMeter }) =>
     // Search: number, title, description, asset, who it's assigned to, vendor and notes.
     (!q || `#${w.number} ${w.number} ${w.title} ${w.description ?? ""} ${assetName ?? ""} ${assignee?.id ? `${assignee.firstName} ${assignee.lastName}` : ""} ${w.vendor ?? ""} ${w.resolutionNotes ?? ""}`.toLowerCase().includes(q)) &&
     (!filters.asset || w.assetId === filters.asset) &&
     (!filters.priority || w.priority === filters.priority) &&
     (!filters.assigned || (filters.assigned === NONE ? !w.assignedToId : w.assignedToId === filters.assigned)) &&
     (!filters.due ||
-      (filters.due === "overdue" && !!w.dueDate && w.dueDate < today() && !done(w)) ||
-      (filters.due === "week" && !!w.dueDate && w.dueDate >= today() && w.dueDate <= inDays(7)) ||
-      (filters.due === "none" && !w.dueDate)));
+      (filters.due === "overdue" && dueOf(w, assetMeter)?.status === "overdue") ||
+      (filters.due === "week" && dueOf(w, assetMeter)?.status === "due_soon") ||
+      (filters.due === "meters" && (w.dueOdometer != null || w.dueHours != null)) ||
+      (filters.due === "none" && !w.dueDate && w.dueOdometer == null && w.dueHours == null)));
   const assetsInList = [...new Map(all.map(({ workOrder: w, assetName }) => [w.assetId, assetName ?? "Unknown"])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
   const people = [...new Map(all.filter(({ assignee }) => assignee?.id).map(({ assignee }) => [assignee.id, `${assignee.firstName} ${assignee.lastName}`])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
   const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
@@ -122,9 +165,10 @@ function WorkOrders() {
         <label>Due
           <select value={filters.due} onChange={(e) => setFilter({ due: e.target.value })}>
             <option value="">Any time</option>
-            <option value="overdue">Overdue</option>
-            <option value="week">Due in the next 7 days</option>
-            <option value="none">No due date</option>
+            <option value="overdue">Due now / overdue</option>
+            <option value="week">Coming due (7 days, 500 miles or 25 hours)</option>
+            <option value="meters">Scheduled by mileage or hours</option>
+            <option value="none">No due date or mileage</option>
           </select>
         </label>
         <label className="check" style={{ width: "auto", alignSelf: "flex-end", paddingBottom: 9 }}><input type="checkbox" checked={mine} onChange={(e) => { setMine(e.target.checked); if (e.target.checked) setFilter({ assigned: "" }); }} /> Assigned to me</label>
@@ -138,18 +182,21 @@ function WorkOrders() {
             create.run(async () => { await api("/work-orders", { body }); setCreating(false); list.reload(); });
           }}>
             <div className="formgrid">
-              <label>Asset<select name="assetId" required>{assets.data?.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+              <label>Asset<select name="assetId" required value={newAsset || assets.data?.[0]?.id || ""} onChange={(e) => setNewAsset(e.target.value)}>{assets.data?.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
               <label>Title<input name="title" required placeholder="e.g. Check engine light on" /></label>
               <label>Priority<LabeledSelect menu="workOrderPriority" values={["low", "medium", "high", "critical"]} name="priority" defaultValue="medium" /></label>
               {can("manager", "fleet") && (
                 <>
                   <label>Assign to<select name="assignedToId"><option value="">Unassigned</option>{employees.data?.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}</select></label>
-                  <label>Due date<input name="dueDate" type="date" /></label>
+                  <DueFields meter={(() => { const a = assets.data?.find((x) => x.id === (newAsset || assets.data?.[0]?.id)); return a ? { odometer: a.odometer, engineHours: a.engineHours } : null; })()} />
                 </>
               )}
             </div>
             <label>Description<textarea name="description" /></label>
-            <p className="muted" style={{ margin: 0 }}>Critical issues take the asset out of service until the work order is completed.</p>
+            <p className="muted" style={{ margin: 0 }}>
+              {can("manager", "fleet") ? "Schedule it by date, mileage, engine hours or any mix: it's due at whichever comes first, and the person assigned and fleet managers are reminded as it gets close. " : ""}
+              Critical issues take the asset out of service until the work order is completed.
+            </p>
             <ErrorBox error={create.error} />
             <div><button className="btn primary" disabled={create.busy}>Create</button></div>
           </form>
@@ -159,7 +206,7 @@ function WorkOrders() {
         {rows.length ? (
           <table>
             <thead><tr><th>#</th><th>Work order</th><th>Asset</th><th>Priority</th><th>Assigned</th><th>Due</th><th>Status</th><th>Cost</th></tr></thead>
-            <tbody>{rows.map(({ workOrder: w, assetName, assignee }) => {
+            <tbody>{rows.map(({ workOrder: w, assetName, assignee, assetMeter }) => {
               const editable = can("manager", "fleet") || w.assignedToId === me?.user.id;
               return [
                 <tr key={w.id} onClick={() => editable && setOpen(open === w.id ? null : w.id)} style={{ cursor: editable ? "pointer" : undefined, background: open === w.id ? "var(--info-bg)" : undefined }}>
@@ -168,13 +215,13 @@ function WorkOrders() {
                   <td>{assetName}</td>
                   <td><Badge value={w.priority} menu="workOrderPriority" /></td>
                   <td>{assignee?.id ? `${assignee.firstName} ${assignee.lastName}` : "—"}</td>
-                  <td>{fmtDate(w.dueDate)}</td>
+                  <td><DueCell w={w} meter={assetMeter} /></td>
                   <td><Badge value={w.status} menu="workOrderStatus" /></td>
                   <td>{w.partsCostCents + w.laborCostCents ? money(w.partsCostCents + w.laborCostCents) : "—"}</td>
                 </tr>,
                 open === w.id && (
                   <tr key={w.id + "-edit"}><td colSpan={8}>
-                    <WorkOrderEditor wo={w} employees={employees.data ?? []} canManage={can("manager", "fleet")} onDone={() => { setOpen(null); list.reload(); }} />
+                    <WorkOrderEditor wo={w} meter={assetMeter} employees={employees.data ?? []} canManage={can("manager", "fleet")} onDone={() => { setOpen(null); list.reload(); }} />
                   </td></tr>
                 ),
               ];
