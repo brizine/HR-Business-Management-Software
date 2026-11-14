@@ -3,6 +3,11 @@
 This guide is what the Help assistant answers from. Keep it in plain language and up to date when
 features change. Menu names are written as they appear in the left sidebar.
 
+## Getting help
+
+The blue **? Help** button at the top of the left menu opens Help: **Ask the Assistant** (type a
+question, get step-by-step answers) and **User Manual** (this guide, with contents and search).
+
 ## Roles and access
 
 - **Roles:** Owner, Admin, Manager, Employee. Owners can do everything. Admins manage people, pay

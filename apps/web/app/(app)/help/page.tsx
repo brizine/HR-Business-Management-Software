@@ -1,9 +1,11 @@
 "use client";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead } from "@/components/ui";
+import { MarkdownLite, slug } from "@/components/markdown-lite";
 
 type Msg = { role: "user" | "assistant"; content: string };
 const STORE = "crewdesk-help-chat";
@@ -16,45 +18,48 @@ const SUGGESTIONS = [
   "How do I add a new employee?",
 ];
 
-/** Bold (**text**) inside a line. */
-function inline(text: string) {
-  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
-    part.startsWith("**") && part.endsWith("**") ? <strong key={i}>{part.slice(2, -2)}</strong> : <Fragment key={i}>{part}</Fragment>,
+function Answer({ text }: { text: string }) {
+  return <MarkdownLite text={text} className="help-answer" />;
+}
+
+/** The whole user manual: contents on the left, sections on the right, with search. */
+function Manual() {
+  const guide = useApi<{ markdown: string }>("/help/guide");
+  const [q, setQ] = useState("");
+  const sections = useMemo(() => {
+    const md = guide.data?.markdown ?? "";
+    return md.split(/\n(?=## )/).filter((s) => s.startsWith("## ")).map((s) => {
+      const [first, ...rest] = s.split("\n");
+      return { title: first.replace(/^##\s+/, ""), body: rest.join("\n") };
+    });
+  }, [guide.data]);
+  const needle = q.trim().toLowerCase();
+  const shown = needle ? sections.filter((s) => `${s.title}\n${s.body}`.toLowerCase().includes(needle)) : sections;
+  if (!guide.data) return <ErrorBox error={guide.error} />;
+  return (
+    <div className="manual" data-lkeep="">
+      <nav className="card manual-toc" aria-label="Manual contents">
+        <label>Search the manual<input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. overtime, QR, holiday" /></label>
+        <ol>
+          {shown.map((s) => <li key={s.title}><a href={`#${slug(s.title)}`}>{s.title}</a></li>)}
+        </ol>
+        {needle && !shown.length && <p className="muted" style={{ margin: 0 }}>Nothing matches. Try the assistant.</p>}
+      </nav>
+      <div className="manual-body">
+        {shown.map((s) => (
+          <section key={s.title} className="card" id={slug(s.title)}>
+            <h2>{s.title}</h2>
+            <MarkdownLite text={s.body} className="help-answer" />
+          </section>
+        ))}
+      </div>
+    </div>
   );
 }
 
-/** The answers use simple Markdown: paragraphs, numbered and bulleted lists, bold. */
-function Answer({ text }: { text: string }) {
-  const blocks: React.ReactNode[] = [];
-  let list: { ordered: boolean; items: string[] } | null = null;
-  const flush = () => {
-    if (!list) return;
-    const items = list.items.map((t, i) => <li key={i}>{inline(t)}</li>);
-    blocks.push(list.ordered ? <ol key={blocks.length}>{items}</ol> : <ul key={blocks.length}>{items}</ul>);
-    list = null;
-  };
-  for (const raw of text.split("\n")) {
-    const line = raw.trim();
-    const numbered = /^\d+[.)]\s+(.*)$/.exec(line);
-    const bullet = /^[-*•]\s+(.*)$/.exec(line);
-    if (numbered || bullet) {
-      const ordered = !!numbered;
-      if (list && list.ordered !== ordered) flush();
-      list ??= { ordered, items: [] };
-      list.items.push((numbered ?? bullet)![1]);
-    } else if (!line) {
-      flush();
-    } else {
-      flush();
-      blocks.push(<p key={blocks.length}>{inline(line.replace(/^#+\s*/, ""))}</p>);
-    }
-  }
-  flush();
-  return <div className="help-answer">{blocks}</div>;
-}
-
-export default function Help() {
+function HelpPage() {
   const { me } = useAuth();
+  const [tab, setTab] = useState<"ask" | "manual">(useSearchParams().get("tab") === "manual" ? "manual" : "ask");
   const status = useApi<{ available: boolean }>("/help/status");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [draft, setDraft] = useState("");
@@ -95,9 +100,14 @@ export default function Help() {
   const unavailable = status.data && !status.data.available;
   return (
     <>
-      <PageHead title="Help" sub="Ask how to do anything in Crewdesk. Answers come from an AI assistant that knows the Crewdesk guide.">
-        {messages.length > 0 && <button className="btn" onClick={() => { setMessages([]); setError(null); }}>New conversation</button>}
+      <PageHead title="Help" sub="Ask the assistant how to do anything in Crewdesk, or browse the user manual.">
+        <div className="row" role="tablist" style={{ gap: 6 }}>
+          <button type="button" role="tab" aria-selected={tab === "ask"} className={`btn ${tab === "ask" ? "primary" : ""}`} onClick={() => setTab("ask")}>Ask the Assistant</button>
+          <button type="button" role="tab" aria-selected={tab === "manual"} className={`btn ${tab === "manual" ? "primary" : ""}`} onClick={() => setTab("manual")}>User Manual</button>
+        </div>
+        {tab === "ask" && messages.length > 0 && <button className="btn" onClick={() => { setMessages([]); setError(null); }}>New conversation</button>}
       </PageHead>
+      {tab === "manual" ? <Manual /> : <>
       {unavailable && (
         <div className="card">
           <h2>Help Assistant Not Set Up Yet</h2>
@@ -105,6 +115,7 @@ export default function Help() {
             {me?.user.role === "owner" || me?.user.role === "admin"
               ? "To turn it on, add an Anthropic API key as ANTHROPIC_API_KEY in the server's environment variables (on SiteGround: Node.js → Environment variables), then Save and deploy."
               : "Ask your Crewdesk admin to turn it on."}
+            {" "}Meanwhile, the <a href="#" onClick={(e) => { e.preventDefault(); setTab("manual"); }}>User Manual</a> has everything the assistant knows.
           </p>
         </div>
       )}
@@ -138,6 +149,11 @@ export default function Help() {
           The assistant explains how Crewdesk works; it can&apos;t see or change your company&apos;s records. It can make mistakes, so check anything important.
         </p>
       </div>
+      </>}
     </>
   );
+}
+
+export default function Help() {
+  return <Suspense><HelpPage /></Suspense>;
 }

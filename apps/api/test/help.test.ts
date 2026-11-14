@@ -59,6 +59,16 @@ describe("help assistant", () => {
     expect(body.system[1].text).not.toContain("Help Co\n"); // per-person details stay out of the cached block
   });
 
+  it("serves the manual to read, even without the assistant", async () => {
+    setHelpClient(null);
+    const res = await call("GET", "/help/guide");
+    expect(res.status).toBe(200);
+    expect(res.body.markdown).toMatch(/^# Crewdesk user guide/);
+    expect(res.body.markdown).toContain("## Work Orders");
+    expect((await call("GET", "/help/guide", undefined, false)).status).toBe(401);
+    setHelpClient({ beta: { messages: { create: async (body) => (sent.push(body), reply) } } });
+  });
+
   it("checks the conversation, and handles a declined answer", async () => {
     expect((await call("POST", "/help/ask", { messages: [] })).status).toBe(400);
     expect((await call("POST", "/help/ask", { messages: [{ role: "assistant", content: "Hi" }] })).status).toBe(400);

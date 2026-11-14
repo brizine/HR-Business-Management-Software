@@ -67,6 +67,9 @@ const routes: FastifyPluginAsync = async (app) => {
   /** Whether the assistant is set up (the page shows a note if not). */
   app.get("/status", async () => ({ available: !!helpClient() }));
 
+  /** The user manual itself (Markdown), for the browsable copy on the Help page. Works without an API key. */
+  app.get("/guide", async () => ({ markdown: helpGuide() }));
+
   app.post("/ask", { config: { rateLimit: { max: Number(process.env.HELP_RATE_LIMIT ?? 60), timeWindow: "1 hour" } } }, async (req) => {
     const { messages } = parse(messageSchema, req.body);
     const ai = helpClient();
