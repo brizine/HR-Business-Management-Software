@@ -244,8 +244,8 @@ The **Help** item in the sidebar answers "how do I…" questions about Crewdesk 
 2. In the Node.js project's **Environment variables**, add `ANTHROPIC_API_KEY` with that key, then
    **Save and deploy**.
 
-Each question costs roughly a cent or two (the guide is cached between questions). Each person can
-ask up to 60 questions an hour (`HELP_RATE_LIMIT` changes that). The assistant only sees the guide,
+Each question costs roughly a cent or two (the guide is cached between questions). Up to 60 questions an
+hour can come from one internet connection (`HELP_RATE_LIMIT` changes that). The assistant only sees the guide,
 the question and the person's name and role, never company records. Keep `docs/help-guide.md`
 up to date when features change.
 
