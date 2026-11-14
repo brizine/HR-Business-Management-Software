@@ -6,7 +6,7 @@ import { PageHead } from "@/components/ui";
 export default function PayPeriods() {
   return (
     <>
-      <PageHead title="Pay approvals" sub="When a pay period ends, review everyone's hours and approve them before payday." />
+      <PageHead title="Pay Approvals" sub="When a pay period ends, review everyone's hours and approve them before payday." />
       <PayPeriodList />
     </>
   );

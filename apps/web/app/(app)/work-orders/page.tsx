@@ -86,7 +86,7 @@ function WorkOrders() {
 
   return (
     <>
-      <PageHead title="Work orders" sub={<span role="status">{list.data ? (rows.length === all.length ? `Repairs and scheduled service · ${all.length} shown` : `Showing ${rows.length} of ${all.length}`) : "Repairs and scheduled service"}</span>}>
+      <PageHead title="Work Orders" sub={<span role="status">{list.data ? (rows.length === all.length ? `Repairs and scheduled service · ${all.length} shown` : `Showing ${rows.length} of ${all.length}`) : "Repairs and scheduled service"}</span>}>
         <button className="btn primary" onClick={() => setCreating(!creating)}>{can("manager", "fleet") ? "New work order" : "Report an issue"}</button>
       </PageHead>
       <form className="card filters" role="search" aria-label="Filter work orders" onSubmit={(e) => e.preventDefault()}>

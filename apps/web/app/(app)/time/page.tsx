@@ -150,7 +150,7 @@ export default function Time() {
   const { can } = useAuth();
   return (
     <>
-      <PageHead title="Time clock" sub="Clock in and out, review timesheets, fix missed punches">
+      <PageHead title="Time Clock" sub="Clock in and out, review timesheets, fix missed punches">
         {can("manager", "time") && <Link className="btn" href="/job-sites">Job sites & location rules</Link>}
       </PageHead>
       <ClockCard />

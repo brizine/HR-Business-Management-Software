@@ -53,7 +53,7 @@ export default function TaxForms() {
 
   return (
     <>
-      <PageHead title="Pay & tax forms" sub="Your W-4, I-9 and direct deposit. Social Security and bank numbers are encrypted; only you and payroll admins can see them." />
+      <PageHead title="Pay & Tax Forms" sub="Your W-4, I-9 and direct deposit. Social Security and bank numbers are encrypted; only you and payroll admins can see them." />
       {!settings.data.enabled ? (
         <div className="card"><p style={{ margin: 0 }}>Your company&apos;s payroll provider collects these forms. Watch for an email from them, or ask HR.</p></div>
       ) : (

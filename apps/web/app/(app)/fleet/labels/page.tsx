@@ -30,7 +30,7 @@ function Labels() {
   return (
     <>
       <div className="noprint">
-        <PageHead title="QR labels" sub="Stick one on each vehicle or piece of equipment. Anyone can scan it with a phone camera.">
+        <PageHead title="QR Labels" sub="Stick one on each vehicle or piece of equipment. Anyone can scan it with a phone camera.">
           <select value={size} onChange={(e) => setSize(e.target.value as "small" | "large")} style={{ width: 170 }}>
             <option value="large">Large (4″ × 2″)</option>
             <option value="small">Small (2.6″ × 1″)</option>

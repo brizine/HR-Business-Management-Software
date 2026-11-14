@@ -11,10 +11,10 @@ export function SettingsTabs() {
   );
   return (
     <div className="settings-tabs">
-      {tab("/settings/profile", "My info")}
+      {tab("/settings/profile", "My Info")}
       {tab("/settings/security", "Security")}
       {tab("/settings/notifications", "Notifications")}
-      {tab("/settings/company-info", "Company info")}
+      {tab("/settings/company-info", "Company Info")}
       {can("owner", "company") && tab("/settings/company", "Layout Editor")}
       {(me?.user.role === "owner" || me?.access?.managesPermissions) && tab("/settings/permissions", "Permissions")}
     </div>

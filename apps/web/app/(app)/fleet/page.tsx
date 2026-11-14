@@ -44,7 +44,7 @@ export default function Fleet() {
 
   return (
     <>
-      <PageHead title="Vehicles & equipment" sub={<span role="status">{filtering ? `Showing ${rows.length} of ${all.length} assets` : `${all.length} assets`}</span>}>
+      <PageHead title="Vehicles & Equipment" sub={<span role="status">{filtering ? `Showing ${rows.length} of ${all.length} assets` : `${all.length} assets`}</span>}>
         <Link className="btn" href="/fleet/labels">Print QR labels</Link>
         {can("manager", "fleet") && <button className="btn primary" onClick={() => setAdding(!adding)}>Add asset</button>}
       </PageHead>

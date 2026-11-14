@@ -36,7 +36,7 @@ function Settings() {
   return (
     <>
       <PageHead
-        title="Notification settings"
+        title="Notification Settings"
         sub={employeeId ? `For ${emp.data ? `${emp.data.firstName} ${emp.data.lastName}` : "…"}` : "Choose what reaches you, and how"}
       />
       <SettingsTabs />

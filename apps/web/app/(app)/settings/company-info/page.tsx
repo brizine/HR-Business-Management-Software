@@ -75,7 +75,7 @@ export default function CompanyInfo() {
 
   return (
     <>
-      <PageHead title="Company info" sub={d?.canEdit ? "Your company's details. The name shows in the sidebar; the legal name, EIN and address print on tax forms." : "Your company's details."} />
+      <PageHead title="Company Info" sub={d?.canEdit ? "Your company's details. The name shows in the sidebar; the legal name, EIN and address print on tax forms." : "Your company's details."} />
       <SettingsTabs />
       {d && <LogoCard info={d} onChange={async (next) => { info.setData(next); await signIn(); }} />}
       {!d ? <ErrorBox error={info.error} /> : (

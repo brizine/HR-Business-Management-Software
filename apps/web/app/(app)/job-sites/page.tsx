@@ -136,7 +136,7 @@ export default function JobSites() {
 
   return (
     <>
-      <PageHead title="Job sites & location rules" sub="Where clocking in and out counts. Set separate rules for clocking in and clocking out." />
+      <PageHead title="Job Sites & Location Rules" sub="Where clocking in and out counts. Set separate rules for clocking in and clocking out." />
       <Rules siteCount={active} />
       <div className="card tablewrap">
         <h2>Job sites</h2>

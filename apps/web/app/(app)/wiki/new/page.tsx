@@ -12,7 +12,7 @@ function NewPage() {
   if (!settings.data) return null;
   return (
     <WikiShell>
-      <PageHead title="New wiki page" />
+      <PageHead title="New Wiki Page" />
       {settings.data.canCreate ? <WikiEditor parentId={parent} /> : <ErrorBox error="Your company limits who can create wiki pages." />}
     </WikiShell>
   );

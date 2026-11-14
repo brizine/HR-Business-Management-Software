@@ -43,7 +43,7 @@ export default function TimeOff() {
 
   return (
     <>
-      <PageHead title="Time off">
+      <PageHead title="Time Off">
         {me && <Link className="btn" href={`/people/${me.user.id}`}>My balance</Link>}
         <button className="btn primary" onClick={() => setRequesting(!requesting)}>Request time off</button>
       </PageHead>

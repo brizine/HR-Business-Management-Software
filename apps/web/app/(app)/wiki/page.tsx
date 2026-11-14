@@ -48,7 +48,7 @@ function WikiHome() {
 
   return (
     <WikiShell>
-      <PageHead title={q ? `Search: “${q}”` : "Company wiki"} sub={q ? undefined : "Policies, how-tos and everything else worth writing down."} />
+      <PageHead title={q ? `Search: “${q}”` : "Company Wiki"} sub={q ? undefined : "Policies, how-tos and everything else worth writing down."} />
       {q ? (
         <div className="card">
           {results.data?.length ? (

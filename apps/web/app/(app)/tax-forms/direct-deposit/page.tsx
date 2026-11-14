@@ -20,7 +20,7 @@ export default function DirectDepositForm() {
       e.preventDefault();
       run(async () => { await api("/tax-forms/direct-deposit", { body: readForm(e.currentTarget) }); router.push("/tax-forms?saved=dd"); });
     }}>
-      <PageHead title="Direct deposit" sub="Your routing and account numbers are on your checks or in your bank's app. Changes apply from the next payroll HR runs after they enter them." />
+      <PageHead title="Direct Deposit" sub="Your routing and account numbers are on your checks or in your bank's app. Changes apply from the next payroll HR runs after they enter them." />
       <Section title="Bank account">
         <div className="formgrid">
           <label>Bank name<input name="bankName" defaultValue={d.bankName} required /></label>

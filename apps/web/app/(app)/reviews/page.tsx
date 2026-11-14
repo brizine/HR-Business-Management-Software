@@ -13,7 +13,7 @@ function Reviews() {
   const [newKind, setNewKind] = useState<RecordKind | null>(null);
   return (
     <>
-      <PageHead title="Reviews & discipline" sub={manager ? "Performance reviews and disciplinary actions. Drafts are only visible to managers until you share them." : "Reviews and disciplinary actions shared with you. Please acknowledge each one."}>
+      <PageHead title="Reviews & Discipline" sub={manager ? "Performance reviews and disciplinary actions. Drafts are only visible to managers until you share them." : "Reviews and disciplinary actions shared with you. Please acknowledge each one."}>
         {manager && <button className="btn" onClick={() => setNewKind("discipline")}>New disciplinary action</button>}
         {manager && <button className="btn primary" onClick={() => setNewKind("review")}>New review</button>}
       </PageHead>
