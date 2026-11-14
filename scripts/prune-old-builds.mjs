@@ -37,7 +37,9 @@ function prune() {
     try { keep.add(basename(resolve(nodeapp, readlinkSync(latest)))); } catch { /* not a link */ }
   }
 
-  const old = readdirSync(nodeapp).filter((name) => BUILD_ID.test(name) && !keep.has(name) && statSync(resolve(nodeapp, name)).isDirectory());
+  // Only builds older than this one (the id starts with when it was made), never one being built now.
+  const stamp = (name) => Number(name.split("-")[0]);
+  const old = readdirSync(nodeapp).filter((name) => BUILD_ID.test(name) && !keep.has(name) && stamp(name) < stamp(basename(build)) && statSync(resolve(nodeapp, name)).isDirectory());
   if (!old.length) {
     console.log(`No old builds to remove (keeping ${[...keep].join(", ")}).`);
     return;

@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { format } from "node:util";
 import { folderPath } from "./lib/paths";
 import { loadSettings } from "./lib/settings-file";
+import { removeOlderBuilds } from "./lib/prune-builds";
 
 // The home folder, plus a copy next to the code (SiteGround: .nodeapp/<build>/app_source), in case
 // the home folder isn't writable or isn't where you're looking.
@@ -45,6 +46,9 @@ const needed = ["DATABASE_URL", "JWT_SECRET", "ENCRYPTION_KEY"];
 const missing = needed.filter((k) => !process.env[k]);
 console.log(`PORT is ${process.env.PORT ? `"${process.env.PORT}"` : "not set (using 3000)"}. Settings found: ${needed.filter((k) => process.env[k]).join(", ") || "none"}.`);
 if (missing.length) console.error(`✖ Missing settings: ${missing.join(", ")}. Add them under the project's environment variables, then redeploy.`);
+
+// The previous deploy's copy isn't needed once this one is running (SiteGround keeps every copy).
+removeOlderBuilds(appRoot);
 
 const stop = (what: string) => (err: unknown) => {
   console.error(`\n✖ Crewdesk stopped (${what}):`, err instanceof Error ? (err.stack ?? err.message) : err);
