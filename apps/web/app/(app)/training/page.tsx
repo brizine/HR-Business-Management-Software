@@ -57,7 +57,7 @@ function Progress({ courses }: { courses: Course[] }) {
             report.reload();
           });
         }}>
-          <h2 style={{ margin: 0 }}>Assign a course</h2>
+          <h2 style={{ margin: 0 }}>Assign a Course</h2>
           <div className="formgrid">
             <label>Course
               <select required value={pick.course} onChange={(e) => setPick({ ...pick, course: e.target.value })}>

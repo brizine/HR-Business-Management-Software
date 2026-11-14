@@ -137,7 +137,7 @@ function ShiftEditor({ draft, weekDays, employees, assets, templates, onClose, o
   return (
     <div className="card">
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-        <h2 style={{ margin: 0 }}>{draft.id ? "Edit shift" : "New shift"} {draft.status && <Badge value={draft.status} />}</h2>
+        <h2 style={{ margin: 0 }}>{draft.id ? "Edit Shift" : "New Shift"} {draft.status && <Badge value={draft.status} />}</h2>
         <button className="btn sm" onClick={onClose}>Close</button>
       </div>
       <form ref={formRef} className="stack" onSubmit={(e) => { e.preventDefault(); save(e.currentTarget); }}>
@@ -268,7 +268,7 @@ function RangeEditor({ week, employees, assets, onClose, onDone }: {
   return (
     <div className="card">
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-        <h2 style={{ margin: 0 }}>Change or delete shifts</h2>
+        <h2 style={{ margin: 0 }}>Change or Delete Shifts</h2>
         <button className="btn sm" onClick={onClose}>Close</button>
       </div>
       <div className="stack">
@@ -301,7 +301,7 @@ function RangeEditor({ week, employees, assets, onClose, onDone }: {
           {to < from ? "The end date is before the start date." : count === null ? "Counting…" : <><strong>{label}</strong> from {fmt(from)} to {fmt(to)}.{notifyNote}</>}
         </p>
 
-        <h3 style={{ margin: "8px 0 0" }}>Change them</h3>
+        <h3 style={{ margin: "8px 0 0" }}>Change Them</h3>
         <p className="muted" style={{ margin: 0 }}>Fill in only what should change. Everything left blank stays as it is, and each shift keeps its own day.</p>
         <div className="formgrid">
           <label>New start time<input type="time" value={c.startTime} onChange={(e) => setC({ ...c, startTime: e.target.value })} /></label>
@@ -517,7 +517,7 @@ export default function Schedule() {
       )}
       {manager && !editing && !showRange && list.data && !allShifts.length && !filtering && (
         <div className="card">
-          <h2>Make this week&apos;s schedule</h2>
+          <h2>Make This Week&apos;s Schedule</h2>
           <ol className="stack" style={{ paddingLeft: 18, margin: 0 }}>
             {staff.length <= 1 && <li>Add your team under <Link href="/people">Team</Link>, so they show up here to schedule.</li>}
             <li>Click <strong>+ Add shift</strong> above, or the <strong>+</strong> in anyone&apos;s row under a day. Shifts in the <strong>Open shifts</strong> row can be picked up by anyone.</li>
@@ -528,14 +528,14 @@ export default function Schedule() {
       )}
       {partTime && showAvailability && (
         <div className="card">
-          <h2>When I can&apos;t work</h2>
+          <h2>When I Can&apos;t Work</h2>
           <p className="muted" style={{ marginTop: 0 }}>Recurring times you&apos;re unavailable. For specific days off, request time off instead.</p>
           <AvailabilityEditor onSaved={unavailable.reload} />
         </div>
       )}
       {showTemplates && manager && (
         <div className="card">
-          <h2>Shift templates</h2>
+          <h2>Shift Templates</h2>
           {templates.data?.length ? (
             <table><tbody>{templates.data.map((t) => (
               <tr key={t.id}>
@@ -550,7 +550,7 @@ export default function Schedule() {
       )}
       {manager && !!drops.data?.length && (
         <div className="card">
-          <h2>Drop requests</h2>
+          <h2>Drop Requests</h2>
           <table><tbody>{drops.data.map(({ shift: s, employee }) => (
             <tr key={s.id}>
               <td>{employee.firstName} {employee.lastName}<div className="muted">{s.dropReason ?? "No reason given"}</div></td>

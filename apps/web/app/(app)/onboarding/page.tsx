@@ -18,7 +18,7 @@ function MyTasks() {
   const left = mine.filter((t) => !t.completedAt).length;
   return (
     <div className="card">
-      <h2>My onboarding checklist</h2>
+      <h2>My Onboarding Checklist</h2>
       <p className="muted" style={{ marginTop: 0 }}>{left ? `${left} of ${mine.length} left. Upload tasks accept a photo from your phone.` : "All done. Thanks!"}</p>
       <table><tbody>{data.map((t) => <OnboardingTask key={t.id} task={t} mode="self" onChange={reload} />)}</tbody></table>
     </div>
@@ -30,7 +30,7 @@ function WaitingOnMe() {
   if (!data?.length) return null;
   return (
     <div className="card">
-      <h2>Waiting on you ({data.length})</h2>
+      <h2>Waiting on You ({data.length})</h2>
       <table><tbody>{data.map((t) => (
         <OnboardingTask key={t.id} mode="manager" onChange={reload}
           task={{ ...t, title: `${t.title}: ${t.employee.name}`, description: t.employee.startDate ? `starts ${fmtDate(t.employee.startDate)}` : t.description }} />
@@ -52,7 +52,7 @@ function TemplateBuilder({ onSaved }: { onSaved: () => void }) {
 
   return (
     <div className="card">
-      <h2>New checklist template</h2>
+      <h2>New Checklist Template</h2>
       <div className="stack">
         <label>Template name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Field crew onboarding" /></label>
         {tasks.map((t, i) => (
@@ -126,7 +126,7 @@ export default function Onboarding() {
         <>
           <WaitingOnMe />
           <div className="card">
-            <h2>New hires in progress</h2>
+            <h2>New Hires in Progress</h2>
             {progress.data?.length ? (
               <table><tbody>{progress.data.map((p) => (
                 <tr key={p.employeeId}>
@@ -145,7 +145,7 @@ export default function Onboarding() {
             ) : <Empty>No one is onboarding right now.</Empty>}
           </div>
           <div className="card">
-            <h2>Checklist templates</h2>
+            <h2>Checklist Templates</h2>
             {templates.data?.length ? templates.data.map((t) => (
               <details key={t.id} style={{ padding: "6px 0" }}>
                 <summary><strong>{t.name}</strong> <span className="muted">({t.tasks.length} tasks)</span></summary>

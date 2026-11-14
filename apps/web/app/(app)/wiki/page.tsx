@@ -16,7 +16,7 @@ function AdminSettings() {
   if (!settings.data) return null;
   return (
     <div className="card stack">
-      <h2 style={{ margin: 0 }}>Wiki settings</h2>
+      <h2 style={{ margin: 0 }}>Wiki Settings</h2>
       <label style={{ maxWidth: 320 }}>Who can create new pages
         <select value={settings.data.createMin} disabled={busy} onChange={(e) => run(async () => { await api("/wiki/settings", { method: "PUT", body: { createMin: e.target.value } }); settings.reload(); })}>
           {WIKI_LEVELS.map((l) => <option key={l} value={l}>{WIKI_LEVEL_LABELS[l]}</option>)}
@@ -70,7 +70,7 @@ function WikiHome() {
             </section>
           )}
           <section className="card" aria-labelledby="recent-h">
-            <h2 id="recent-h">Recently updated</h2>
+            <h2 id="recent-h">Recently Updated</h2>
             {recent.length ? (
               <table><tbody>{recent.map((p) => (
                 <tr key={p.id}><td><Link href={`/wiki/${p.id}`}>{p.title}</Link></td><td className="muted">{updatedLine(p)}</td></tr>

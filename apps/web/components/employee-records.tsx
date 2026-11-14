@@ -193,7 +193,7 @@ export function RecordDetail({ r, onChange, onDeleted }: { r: EmployeeRecord; on
       <ErrorBox error={error} />
       {mine && r.status === "shared" && (
         <div className="card stack" style={{ margin: 0 }}>
-          <strong>Please acknowledge</strong>
+          <strong>Please Acknowledge</strong>
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>This confirms you&apos;ve read it. It doesn&apos;t mean you agree; you can add your side below.</p>
           <label>Your comment (optional)<textarea rows={3} value={comment} onChange={(e) => setComment(e.target.value)} maxLength={5000} /></label>
           <div><button className="btn primary" disabled={busy} onClick={() => run(async () => onChange(await api(`/reviews/${r.id}/acknowledge`, { body: { comment: comment || undefined } })))}>I&apos;ve read this</button></div>
@@ -317,7 +317,7 @@ export function EmployeeRecordsBox({ employeeId, firstName, isSelf }: { employee
   return (
     <div className="card stack">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <h2 style={{ margin: 0 }}>{isSelf ? "My reviews" : "Reviews & discipline"}</h2>
+        <h2 style={{ margin: 0 }}>{isSelf ? "My Reviews" : "Reviews & Discipline"}</h2>
         {manager && !newKind && (
           <div className="row" style={{ gap: 6 }}>
             <button className="btn sm" onClick={() => setNewKind("review")}>New review</button>

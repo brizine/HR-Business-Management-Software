@@ -28,7 +28,7 @@ function EmployeeTaxForms({ employeeId }: { employeeId: string }) {
   if (!data) return null;
   return (
     <div className="card">
-      <h2>Pay & tax forms</h2>
+      <h2>Pay & Tax Forms</h2>
       {data.length ? (
         <table><tbody>{data.map((f) => (
           <tr key={f.id} style={{ opacity: f.supersededAt ? 0.6 : 1 }}>

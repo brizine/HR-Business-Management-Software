@@ -62,7 +62,7 @@ function HolidayForm({ holiday, onSaved, onCancel }: { holiday?: Holiday; onSave
         onSaved();
       });
     }}>
-      <h3 style={{ margin: 0 }}>{holiday ? `Edit ${holiday.name}` : "Add a holiday"}</h3>
+      <h3 style={{ margin: 0 }}>{holiday ? `Edit ${holiday.name}` : "Add a Holiday"}</h3>
       <div className="formgrid">
         <label>Name<input value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} placeholder="e.g. Christmas Day" /></label>
         <label>Date rule
@@ -125,7 +125,7 @@ function RulesForm({ rules, onSaved }: { rules: HolidayRules; onSaved: () => voi
         onSaved();
       });
     }}>
-      <h3 style={{ margin: 0 }}>Holiday pay rules</h3>
+      <h3 style={{ margin: 0 }}>Holiday Pay Rules</h3>
       <fieldset className="contact-fieldset" style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
         <legend>Who gets paid holidays</legend>
         {EMPLOYMENT_TYPES.map((t) => (
@@ -184,7 +184,7 @@ export function PaidHolidays() {
   return (
     <div className="card stack">
       <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
-        <h2 style={{ margin: 0 }}>Paid holidays</h2>
+        <h2 style={{ margin: 0 }}>Paid Holidays</h2>
         {admin && (
           <div className="row" role="tablist" style={{ gap: 6 }}>
             {([["upcoming", "Upcoming"], ["manage", "Holidays"], ["rules", "Rules"]] as const).map(([k, l]) => (
@@ -228,7 +228,7 @@ export function PaidHolidays() {
               <ErrorBox error={action.error} />
               {available.length > 0 && (
                 <div className="stack holiday-presets">
-                  <h3 style={{ margin: 0 }}>Add common holidays</h3>
+                  <h3 style={{ margin: 0 }}>Add Common Holidays</h3>
                   <div className="row" style={{ flexWrap: "wrap", gap: "6px 16px" }}>
                     {available.map((p) => (
                       <label key={p.key} className="check">

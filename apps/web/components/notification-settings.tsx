@@ -28,7 +28,7 @@ export function NotificationSettings({ employeeId }: { employeeId?: string }) {
   return (
     <>
       <div className="card">
-        <h2>How {self ? "you" : `${employee.firstName}`} get{self ? "" : "s"} notified</h2>
+        <h2>How {self ? "You" : `${employee.firstName}`} Get{self ? "" : "s"} Notified</h2>
         <div className="formgrid">
           <div>
             <div className="muted">Phone app</div>
@@ -124,7 +124,7 @@ export function CompanyNotificationSettings() {
   if (!data) return null;
   return (
     <div className="card">
-      <h2>Company settings</h2>
+      <h2>Company Settings</h2>
       <label className="check">
         <input type="checkbox" checked={data.smsEnabled} disabled={!can("owner", "company") || busy}
           onChange={(e) => run(async () => setData(await api("/notifications/company-settings", { method: "PUT", body: { smsEnabled: e.target.checked } })))} />

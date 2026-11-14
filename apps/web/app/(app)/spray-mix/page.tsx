@@ -263,7 +263,7 @@ function Editor({ sheet, onChange }: { sheet: any; onChange: () => void }) {
 
   return (
     <div className="card stack noprint">
-      <h2 style={{ margin: 0 }}>More settings for {sheet.name}</h2>
+      <h2 style={{ margin: 0 }}>More Settings for {sheet.name}</h2>
       <p className="muted" style={{ margin: 0 }}>Tip: you can also click any name, rate, measurement or the default tank in the calculator above to change it.</p>
       <form className="formgrid" onSubmit={(e) => {
         e.preventDefault();
@@ -336,7 +336,7 @@ function Changes({ sheetId }: { sheetId: string }) {
   const { data } = useApi<any[]>(open ? `/spray-mixes/${sheetId}/changes` : null);
   return (
     <details className="card noprint" onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-      <summary><strong>Change history</strong></summary>
+      <summary><strong>Change History</strong></summary>
       {data?.length ? (
         <table><tbody>{data.map((c, i) => <tr key={i}><td>{c.summary}</td><td className="muted">{c.by}</td><td className="muted" style={{ whiteSpace: "nowrap" }}>{fmtDateTime(c.at)}</td></tr>)}</tbody></table>
       ) : data ? <Empty>No changes yet.</Empty> : null}
@@ -356,7 +356,7 @@ function Editors() {
   const people = staff.data.filter((e) => !isInactive(e.status) && !["admin", "owner"].includes(e.role));
   return (
     <details className="card noprint">
-      <summary><strong>Who can edit</strong> <span className="muted">({picked.size} employee{picked.size === 1 ? "" : "s"} + admins)</span></summary>
+      <summary><strong>Who Can Edit</strong> <span className="muted">({picked.size} employee{picked.size === 1 ? "" : "s"} + admins)</span></summary>
       <fieldset className="stack" style={{ border: 0, padding: 0, margin: "10px 0 0" }}>
         <legend className="muted" style={{ fontSize: 13 }}>Admins can always edit. Everyone can use the calculator.</legend>
         <div className="formgrid">

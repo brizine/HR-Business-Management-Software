@@ -40,7 +40,7 @@ export function WikiShell({ currentId, children }: { currentId?: string; childre
           <input id="wiki-search" type="search" placeholder="Search the wiki" value={q} onChange={(e) => setQ(e.target.value)} />
         </form>
         <div className="row" style={{ margin: "10px 0", justifyContent: "space-between" }}>
-          <Link href="/wiki"><strong>Company wiki</strong></Link>
+          <Link href="/wiki"><strong>Company Wiki</strong></Link>
           {settings.data?.canCreate && <Link className="btn sm" href={`/wiki/new${currentId ? `?parent=${currentId}` : ""}`}>+ New page</Link>}
         </div>
         {data ? (data.length ? <Tree pages={data} parentId={null} currentId={currentId} /> : <p className="muted">No pages yet.</p>) : null}

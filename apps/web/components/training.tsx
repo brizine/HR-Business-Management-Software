@@ -88,7 +88,7 @@ export function CourseForm({ course, onSaved }: { course?: Course; onSaved?: (c:
         if (course) onSaved?.(saved); else router.push(`/training/${saved.id}/edit`);
       });
     }}>
-      <h2 style={{ margin: 0 }}>{course ? "Course settings" : "New course"}</h2>
+      <h2 style={{ margin: 0 }}>{course ? "Course Settings" : "New Course"}</h2>
       <div className="formgrid">
         <label style={{ gridColumn: "span 2" }}>Title<input value={c.title} onChange={(e) => set({ title: e.target.value })} required maxLength={150} placeholder="e.g. Pesticide safety" /></label>
         <label>Category<input value={c.category} onChange={(e) => set({ category: e.target.value })} maxLength={60} placeholder="e.g. Safety" /></label>
@@ -147,7 +147,7 @@ export function LessonForm({ courseId, lesson, onSaved, onCancel }: { courseId: 
         onSaved();
       });
     }}>
-      <h3 style={{ margin: 0 }}>{lesson ? `Edit lesson: ${lesson.title}` : "New lesson"}</h3>
+      <h3 style={{ margin: 0 }}>{lesson ? `Edit Lesson: ${lesson.title}` : "New Lesson"}</h3>
       <div className="formgrid">
         <label>Chapter<input value={chapter} onChange={(e) => setChapter(e.target.value)} maxLength={120} placeholder="e.g. Getting started" /></label>
         <label style={{ gridColumn: "span 2" }}>Lesson title<input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={150} /></label>
@@ -231,7 +231,7 @@ export function EmployeeTrainingBox({ employeeId, isSelf }: { employeeId: string
   return (
     <div className="card stack">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <h2 style={{ margin: 0 }}>{isSelf ? "My training" : "Training"}</h2>
+        <h2 style={{ margin: 0 }}>{isSelf ? "My Training" : "Training"}</h2>
         <Link href="/training" className="muted" style={{ fontSize: 13 }}>{isSelf ? "Open training →" : "All training →"}</Link>
       </div>
       <ErrorBox error={error} />

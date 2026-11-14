@@ -29,7 +29,7 @@ function Rules({ siteCount }: { siteCount: number }) {
 
   return (
     <div className="card stack">
-      <h2 style={{ margin: 0 }}>Location rules</h2>
+      <h2 style={{ margin: 0 }}>Location Rules</h2>
       <div className="formgrid">
         {(["clockIn", "clockOut"] as const).map((key) => (
           <div key={key} className="stack">
@@ -104,7 +104,7 @@ function SiteForm({ onSaved }: { onSaved: () => void }) {
         onSaved();
       });
     }}>
-      <h2 style={{ margin: 0 }}>Add a job site</h2>
+      <h2 style={{ margin: 0 }}>Add a Job Site</h2>
       <div className="formgrid">
         <label>Name<input name="name" required placeholder="e.g. North yard, Riverside HOA" /></label>
         <label>Address<input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Main St, Austin, TX" /></label>
@@ -139,7 +139,7 @@ export default function JobSites() {
       <PageHead title="Job Sites & Location Rules" sub="Where clocking in and out counts. Set separate rules for clocking in and clocking out." />
       <Rules siteCount={active} />
       <div className="card tablewrap">
-        <h2>Job sites</h2>
+        <h2>Job Sites</h2>
         {sites.data?.length ? (
           <table>
             <thead><tr><th>Site</th><th>Radius</th><th>Status</th><th /></tr></thead>

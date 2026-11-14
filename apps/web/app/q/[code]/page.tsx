@@ -157,13 +157,13 @@ export default function Scan({ params }: { params: Promise<{ code: string }> }) 
 
       {(open.length > 0 || due.length > 0) && (
         <div className="card">
-          {open.length > 0 && <h2>Open work orders</h2>}
+          {open.length > 0 && <h2>Open Work Orders</h2>}
           {open.map((w: any) => (
             <div key={w.id} className="row" style={{ justifyContent: "space-between", padding: "4px 0" }}>
               <span>#{w.number} {w.title}</span><Badge value={w.status} />
             </div>
           ))}
-          {due.length > 0 && <h2 style={{ marginTop: open.length ? 14 : 0 }}>Maintenance due</h2>}
+          {due.length > 0 && <h2 style={{ marginTop: open.length ? 14 : 0 }}>Maintenance Due</h2>}
           {due.map((s: any) => (
             <div key={s.id} className="row" style={{ justifyContent: "space-between", padding: "4px 0" }}>
               <span>{s.name}<span className="muted"> · {s.due.reasons.join(", ")}</span></span><Badge value={s.due.status} />

@@ -51,7 +51,7 @@ export function TasksBox({ employeeId, firstName, isSelf }: { employeeId: string
 
   return (
     <div className="card">
-      <h2>{isSelf ? "My Tasks" : `${firstName}'s tasks`}{tasks.length ? <span className="muted" style={{ fontWeight: 400, fontSize: 14 }}> · {tasks.length} open</span> : null}</h2>
+      <h2>{isSelf ? "My Tasks" : `${firstName}'s Tasks`}{tasks.length ? <span className="muted" style={{ fontWeight: 400, fontSize: 14 }}> · {tasks.length} open</span> : null}</h2>
       {tasks.length ? (
         <ul className="task-list">
           {tasks.map((t) => (

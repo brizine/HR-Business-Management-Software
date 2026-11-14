@@ -26,7 +26,7 @@ export const useSavedLayouts = () => useContext(Ctx);
 export function PageLayoutsCard({ children }: { children?: ReactNode }) {
   return (
     <div className="card stack">
-      <h2 style={{ margin: 0 }}>Page layouts</h2>
+      <h2 style={{ margin: 0 }}>Page Layouts</h2>
       <p className="muted" style={{ margin: 0 }}>
         Opens a working copy of Crewdesk in a new tab where you can rearrange any page: drag its boxes to move them on the page, and drag
         the items inside a box (fields, details, filters, buttons) to move them within it. Nobody else sees your changes until you click Save there,
@@ -315,7 +315,7 @@ export function PageLayoutRoot({ children }: { children: ReactNode }) {
       {editor.on && (
         <div className="layout-editor-bar" role="region" aria-label="Layout editor">
           <div>
-            <strong>Layout editor</strong> · {pageName}
+            <strong>Layout Editor</strong> · {pageName}
             <div className="layout-editor-hint">
               {note ?? "Drag boxes anywhere on the page: drop on another box's left or right edge to sit beside it, or top or bottom to go above or below. Drag items within their box. Point at a box to set its width or hide it. Only you see changes until you save."}
             </div>
@@ -342,7 +342,7 @@ export function PageLayoutRoot({ children }: { children: ReactNode }) {
           <div className="mix-window menus-window" role="dialog" aria-modal="true" aria-labelledby="menus-window-title">
             <div className="mix-window-head">
               <div>
-                <h2 id="menus-window-title" style={{ margin: 0 }}>Drop-down menus on {pageName}</h2>
+                <h2 id="menus-window-title" style={{ margin: 0 }}>Drop-Down Menus on {pageName}</h2>
                 <div className="muted">The choices in this page&apos;s drop-down menus. Changes save as you make them and apply everywhere the menu is used.</div>
               </div>
               <button type="button" className="mix-window-close" onClick={() => setMenusOpen(false)} aria-label="Close" title="Close" autoFocus>×</button>

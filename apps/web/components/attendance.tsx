@@ -353,7 +353,7 @@ export function AttendanceRulesForm() {
   return (
     <form className="card stack" onSubmit={(e) => { e.preventDefault(); run(async () => { data.setData(await api<AttendanceRules>("/attendance/rules", { method: "PUT", body: r })); setSaved(true); }); }}>
       <fieldset disabled={!admin} className="stack" style={{ border: 0, padding: 0, margin: 0 }}>
-        <h2 style={{ margin: 0 }}>Grace periods (buffers)</h2>
+        <h2 style={{ margin: 0 }}>Grace Periods (Buffers)</h2>
         <div className="formgrid">
           {num("graceMinutes", "Late buffer (minutes)", "Clocking in up to this many minutes after a shift starts still counts as on time.", { max: 120 })}
           {num("earlyLeaveGraceMinutes", "Leaving-early buffer (minutes)", "Clocking out up to this many minutes before a shift ends still counts as on time.", { max: 240 })}
@@ -361,7 +361,7 @@ export function AttendanceRulesForm() {
         </div>
         <label className="check"><input type="checkbox" checked={r.alertsEnabled} onChange={(e) => set({ alertsEnabled: e.target.checked })} /> Alert managers (and the employee) when someone hasn&apos;t clocked in by then</label>
 
-        <h2 style={{ margin: "8px 0 0" }}>Clocking in early</h2>
+        <h2 style={{ margin: "8px 0 0" }}>Clocking In Early</h2>
         <div className="formgrid">
           {num("earlyClockInMinutes", "Clock-in early buffer (minutes)", "Clocking in up to this many minutes before a shift is fine. Earlier counts as clocking in early. 0 means no limit.", { max: 240 })}
           <label>When someone clocks in earlier
@@ -373,7 +373,7 @@ export function AttendanceRulesForm() {
           {r.earlyClockInAction === "points" && num("earlyClockInPoints", "Early clock-in points", "Points each time (added to the day's other points).", { max: 10, step: 0.25 })}
         </div>
 
-        <h2 style={{ margin: "8px 0 0" }}>Attendance points</h2>
+        <h2 style={{ margin: "8px 0 0" }}>Attendance Points</h2>
         <label className="check"><input type="checkbox" checked={r.pointsEnabled} onChange={(e) => set({ pointsEnabled: e.target.checked })} /> Use attendance points</label>
         {r.pointsEnabled && (
           <>
@@ -384,7 +384,7 @@ export function AttendanceRulesForm() {
               {num("sickPoints", "Called in sick", "Points per sick day (0 for none).", { max: 10, step: 0.25 })}
               {num("pointsExpireDays", "Points last (days)", "Each point drops off this many days after it's earned.", { min: 7, max: 730 })}
             </div>
-            <strong>Bigger amounts for bigger misses</strong>
+            <strong>Bigger Amounts for Bigger Misses</strong>
             <div className="formgrid">
               {num("lateTierMinutes", "Very late at (minutes)", "This late or more earns the very-late points instead. 0 turns it off.", { max: 720 })}
               {num("lateTierPoints", "Very late points", "Points for a very late arrival.", { max: 10, step: 0.25 })}
@@ -393,7 +393,7 @@ export function AttendanceRulesForm() {
             </div>
             <label className="check"><input type="checkbox" checked={r.countLateAndEarly} onChange={(e) => set({ countLateAndEarly: e.target.checked })} /> When someone is late <em>and</em> leaves early the same day, give points for both (otherwise only for being late)</label>
             <div className="stack">
-              <strong>Point levels</strong>
+              <strong>Point Levels</strong>
               <span className="muted" style={{ fontSize: 13 }}>Managers are alerted when someone reaches a level.</span>
               {r.thresholds.map((t, i) => (
                 <div key={i} className="row" style={{ flexWrap: "nowrap" }}>

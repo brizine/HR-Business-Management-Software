@@ -57,7 +57,7 @@ export function PaySchedule() {
       });
     }}>
       <div>
-        <h2 style={{ margin: 0 }}>Pay schedule</h2>
+        <h2 style={{ margin: 0 }}>Pay Schedule</h2>
         <p className="muted" style={{ margin: "4px 0 0" }}>Set how often you pay, when each pay period starts, and when payday is. The preview below updates as you choose.</p>
       </div>
       <fieldset disabled={!owner} className="setup-steps">
@@ -82,7 +82,7 @@ export function PaySchedule() {
         )}
         {(s.frequency === "semimonthly" || s.frequency === "monthly") && (
           <div className="setup-step">
-            <div className="setup-step-label"><span className="setup-step-num">{++step}</span><div><strong>Pay periods</strong></div></div>
+            <div className="setup-step-label"><span className="setup-step-num">{++step}</span><div><strong>Pay Periods</strong></div></div>
             <div className="setup-step-control"><div className="setup-step-hint" style={{ marginTop: 0 }}>{s.frequency === "monthly" ? "Each calendar month, the 1st to the last day." : "The 1st to the 15th, and the 16th to the end of the month."}</div></div>
           </div>
         )}
@@ -132,7 +132,7 @@ export function PaySchedule() {
 
       {preview.length > 0 && (
         <div className="pay-preview">
-          <strong style={{ fontSize: 14 }}>{changed ? "Preview (not saved yet)" : "Coming up"}</strong>
+          <strong style={{ fontSize: 14 }}>{changed ? "Preview (Not Saved Yet)" : "Coming Up"}</strong>
           <table>
             <thead><tr><th>Pay period</th><th>Payday</th></tr></thead>
             <tbody>{preview.map((p) => (
@@ -163,7 +163,7 @@ export function PayPeriodList({ onUse }: { onUse?: (start: string, end: string) 
   return (
     <div className="card">
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-        <h2 style={{ margin: 0 }}>Pay periods</h2>
+        <h2 style={{ margin: 0 }}>Pay Periods</h2>
         <div className="row" style={{ gap: 6 }}>
           <div className="picker-right"><PayPeriodPicker start={range?.start ?? ""} end={range?.end ?? ""} schedule={list.data.schedule} onChange={(start, end) => setRange({ start, end })} /></div>
           {range && <button type="button" className="btn sm" onClick={() => setRange(null)}>Show all</button>}

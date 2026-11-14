@@ -125,7 +125,7 @@ export function PayPeriodPicker({ start, end, schedule, onChange, placeholder = 
             </>
           ) : (
             <form className="stack" onSubmit={(e) => { e.preventDefault(); if (draft.start && draft.end && draft.start <= draft.end) pick(draft); }}>
-              <strong>Custom dates</strong>
+              <strong>Custom Dates</strong>
               {!hasSchedule && <p className="muted" style={{ margin: 0, fontSize: 13 }}>Set up a pay schedule below to pick whole pay periods from a calendar.</p>}
               <div className="row" style={{ flexWrap: "nowrap" }}>
                 <label>From<input type="date" value={draft.start} max={draft.end || undefined} onChange={(e) => setDraft({ ...draft, start: e.target.value })} required /></label>

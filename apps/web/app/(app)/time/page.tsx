@@ -39,7 +39,7 @@ function ManagerView() {
   return (
     <>
       <div className="card">
-        <h2>On the clock now ({who.data?.length ?? 0})</h2>
+        <h2>On the Clock Now ({who.data?.length ?? 0})</h2>
         {who.data?.length ? (
           <div className="row">{who.data.map((w) => (
             <span key={w.entryId} className="badge ok">
@@ -52,7 +52,7 @@ function ManagerView() {
       </div>
       <div className="card">
         <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>Timesheets: week of {from.toLocaleDateString()}</h2>
+          <h2 style={{ margin: 0 }}>Timesheets: Week of {from.toLocaleDateString()}</h2>
           <div className="row">
             <button className="btn sm" onClick={() => setWeek(week - 1)}>← Prev</button>
             <button className="btn sm" onClick={() => setWeek(0)}>This week</button>
@@ -128,7 +128,7 @@ function MyEntries() {
   const { data } = useApi<any[]>(`/time/entries?from=${from}`);
   return (
     <div className="card">
-      <h2>My recent time</h2>
+      <h2>My Recent Time</h2>
       {data?.length ? (
         <table>
           <thead><tr><th>In</th><th>Out</th><th>Hours</th><th>Status</th></tr></thead>

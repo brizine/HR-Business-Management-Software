@@ -22,7 +22,7 @@ export default function Dashboard() {
             <Stat label="On the clock now" value={data.people.clockedIn} tone="ok" />
             <Stat label="Pending time off" value={data.people.pendingPto} tone={data.people.pendingPto ? "warn" : undefined} />
           </div>
-          <h2>Fleet & equipment</h2>
+          <h2>Fleet & Equipment</h2>
           <div className="stats">
             <Stat label="Assets in service" value={data.fleet.assets} />
             <Stat label="In shop / out of service" value={data.fleet.outOfService} tone={data.fleet.outOfService ? "warn" : undefined} />
@@ -34,7 +34,7 @@ export default function Dashboard() {
       )}
       <div className="grid cols-2">
         <div className="card">
-          <h2>Maintenance due</h2>
+          <h2>Maintenance Due</h2>
           {due.data?.length ? (
             <table>
               <tbody>
@@ -49,7 +49,7 @@ export default function Dashboard() {
           ) : <Empty>Nothing due. Nice.</Empty>}
         </div>
         <div className="card">
-          <h2>Time-off requests</h2>
+          <h2>Time-Off Requests</h2>
           {pto.data?.length ? (
             <table>
               <tbody>
@@ -66,7 +66,7 @@ export default function Dashboard() {
         </div>
         {data?.fleet.expiringDocuments.length > 0 && (
           <div className="card">
-            <h2>Registrations & insurance expiring within 30 days</h2>
+            <h2>Registrations & Insurance Expiring Within 30 Days</h2>
             <table>
               <tbody>
                 {data.fleet.expiringDocuments.map((a: any) => (

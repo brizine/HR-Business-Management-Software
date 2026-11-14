@@ -32,7 +32,7 @@ export function RoleAccessCard() {
   const [saved, setSaved] = useState(false);
   const { busy, error, run } = useAction();
   useEffect(() => { if (data.data) setDraft(data.data.roleAccess); }, [data.data]);
-  if (!data.data) return <div className="card"><h2>Role access</h2><ErrorBox error={data.error} /></div>;
+  if (!data.data) return <div className="card"><h2>Role Access</h2><ErrorBox error={data.error} /></div>;
   const { areas, roleAccess } = data.data;
   const roleName = (r: Role) => { const l = label("role", r); return l[0].toUpperCase() + l.slice(1); };
   const level = (src: RoleAccess, r: ConfigurableRole, a: Area) => shownLevel(a, roleDefaultLevel(r, src, a.key));
@@ -59,7 +59,7 @@ export function RoleAccessCard() {
   return (
     <div className="card stack">
       <div>
-        <h2 style={{ margin: 0 }}>Role access</h2>
+        <h2 style={{ margin: 0 }}>Role Access</h2>
         <p className="muted" style={{ margin: "4px 0 0" }}>
           What each role can do in each area of the software. Everyone with that role gets it right away, on the website and the mobile app.
           {" "}Owners always have full access. To give one person something different, use <a href="/settings/permissions">Permissions</a>.

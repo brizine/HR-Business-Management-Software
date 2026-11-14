@@ -82,7 +82,7 @@ export default function TimeOff() {
       </form>
       {requesting && (
         <div className="card">
-          <h2>New request</h2>
+          <h2>New Request</h2>
           <form className="stack" onSubmit={(e) => {
             e.preventDefault();
             const body = formValues(e.currentTarget);
@@ -102,7 +102,7 @@ export default function TimeOff() {
       )}
       {can("manager", "timeoff") && (
         <div className="card">
-          <h2>Waiting for approval</h2>
+          <h2>Waiting for Approval</h2>
           {waiting.length ? (
             <table><tbody>{waiting.map(({ request: r, employee, policyName }) => (
               <tr key={r.id}>
@@ -123,7 +123,7 @@ export default function TimeOff() {
         </div>
       )}
       <div className="card">
-        <h2>{showingMine ? "My requests" : "Requests"}{filtering && mine.data ? <span className="muted" style={{ fontWeight: 400, fontSize: 14 }}> · {requests.length} shown</span> : null}</h2>
+        <h2>{showingMine ? "My Requests" : "Requests"}{filtering && mine.data ? <span className="muted" style={{ fontWeight: 400, fontSize: 14 }}> · {requests.length} shown</span> : null}</h2>
         {requests.length ? (
           <table><tbody>{requests.map(({ request: r, policyName, employee }) => (
             <tr key={r.id}>
@@ -156,7 +156,7 @@ export default function TimeOff() {
             )}
           </div>
           <div className="card">
-            <h2>Adjust a balance</h2>
+            <h2>Adjust a Balance</h2>
             <p className="muted">Grant annual hours or correct a balance. Use negative hours to deduct.</p>
             <form className="stack" onSubmit={(e) => {
               e.preventDefault();

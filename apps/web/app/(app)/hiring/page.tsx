@@ -135,7 +135,7 @@ export default function Hiring() {
       {hired && (
         <div className="card">
           <div className="row" style={{ justifyContent: "space-between" }}>
-            <h2 style={{ margin: 0 }}>{hired.firstName} {hired.lastName} is hired 🎉</h2>
+            <h2 style={{ margin: 0 }}>{hired.firstName} {hired.lastName} Is Hired 🎉</h2>
             <button className="btn sm" onClick={() => setHired(null)}>Close</button>
           </div>
           <p className="muted">{hired.tasks ? `Their ${hired.tasks}-task onboarding checklist has started.` : "No checklist was started."} <Link href={`/people/${hired.id}`}>Open their profile</Link></p>
@@ -145,7 +145,7 @@ export default function Hiring() {
       {job && (
         <>
           <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
-            <h2 style={{ margin: 0 }}>{job.title}: applicants</h2>
+            <h2 style={{ margin: 0 }}>{job.title}: Applicants</h2>
             <button className="btn" onClick={() => setAddingApplicant(!addingApplicant)}>Add applicant</button>
           </div>
           {addingApplicant && (

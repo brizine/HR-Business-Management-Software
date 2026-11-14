@@ -56,7 +56,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
         <div className="stat"><div className="v" style={{ fontSize: 16 }}>{fmtDate(a.insuranceExpires)}</div><div className="l">Insurance expires</div></div>
       </div>
       <div className="card">
-        <h2>Log meter reading</h2>
+        <h2>Log Meter Reading</h2>
         <form className="row" onSubmit={(e) => {
           e.preventDefault();
           const form = e.currentTarget;
@@ -71,7 +71,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
       </div>
       <div className="card">
         <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>Preventive maintenance schedules</h2>
+          <h2 style={{ margin: 0 }}>Preventive Maintenance Schedules</h2>
           {can("manager", "fleet") && <button className="btn" onClick={() => setAddingSchedule(!addingSchedule)}>Add schedule</button>}
         </div>
         {addingSchedule && (
@@ -115,7 +115,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
       </div>
       <div className="grid cols-2">
         <div className="card">
-          <h2>Work orders</h2>
+          <h2>Work Orders</h2>
           {a.workOrders.length ? (
             <table><tbody>{a.workOrders.map((w: any) => (
               <tr key={w.id}>
@@ -142,7 +142,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
       <div className="card row" style={{ alignItems: "flex-start", gap: 18 }}>
         <QrCode value={assetQrUrl(a.qrCode)} size={128} />
         <div className="stack" style={{ flex: 1, minWidth: 220 }}>
-          <h2 style={{ margin: 0 }}>QR label</h2>
+          <h2 style={{ margin: 0 }}>QR Label</h2>
           <div className="muted">Scanning opens a page to inspect this {a.type.replace(/_/g, " ")}, log a reading or report an issue. No app needed.</div>
           <div>Code <code style={{ letterSpacing: ".05em" }}>{a.qrCode}</code></div>
           <div className="row">

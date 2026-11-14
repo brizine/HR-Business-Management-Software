@@ -60,7 +60,7 @@ export function RecoveryCodes({ codes, onSaved }: { codes: string[]; onSaved: ()
   const text = `Crewdesk backup codes (each works once)\n\n${codes.join("\n")}\n`;
   return (
     <div className="stack">
-      <h2 style={{ margin: 0 }}>Save your backup codes</h2>
+      <h2 style={{ margin: 0 }}>Save Your Backup Codes</h2>
       <p className="muted" style={{ margin: 0 }}>
         If you lose your phone, each of these lets you sign in once. Store them somewhere safe, like a password
         manager or a printed copy. They won&apos;t be shown again.

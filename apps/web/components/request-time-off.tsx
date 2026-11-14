@@ -23,7 +23,7 @@ export function RequestTimeOffBox({ employeeId, firstName, isSelf, balances, onC
 
   return (
     <div className="card stack">
-      <h2 style={{ margin: 0 }}>Request time off</h2>
+      <h2 style={{ margin: 0 }}>Request Time Off</h2>
       {!isSelf && <p className="muted" style={{ margin: 0, fontSize: 13 }}>Entered for {firstName}. It goes through the usual approval, and {firstName} is told.</p>}
       <form className="stack" onSubmit={(e) => {
         e.preventDefault();
@@ -63,7 +63,7 @@ export function RequestTimeOffBox({ employeeId, firstName, isSelf, balances, onC
         </div>
       </form>
       <div>
-        <strong style={{ fontSize: 14 }}>Recent requests</strong>
+        <strong style={{ fontSize: 14 }}>Recent Requests</strong>
         {recent.length ? (
           <table><tbody>{recent.map(({ request: r, policyName }) => (
             <tr key={r.id}>

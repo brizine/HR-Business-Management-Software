@@ -43,7 +43,7 @@ function Settings({ settings, onSaved }: { settings: any; onSaved: () => void })
         onSaved();
       });
     }}>
-      <h2 style={{ margin: 0 }}>Payroll settings</h2>
+      <h2 style={{ margin: 0 }}>Payroll Settings</h2>
       <fieldset disabled={!owner} style={{ border: 0, padding: 0, margin: 0 }} className="stack">
         <label>How you run payroll
           <select value={provider} onChange={(e) => { setProvider(e.target.value); setSaved(false); }}>
@@ -111,7 +111,7 @@ export default function Payroll() {
       <PageHead title="Payroll" sub={usesProvider ? "Hours go to Check for you to approve there; you can still export a CSV any time." : "Export hours for each pay period and run payroll in your own system, or send the file to your accountant."} />
       {formsToEnter > 0 && !usesProvider && (
         <div className="card stack">
-          <h2 style={{ margin: 0 }}>Tax forms to enter</h2>
+          <h2 style={{ margin: 0 }}>Tax Forms to Enter</h2>
           <div className="row" style={{ justifyContent: "space-between" }}>
             <span>{formsToEnter} new or updated W-4 / direct deposit form{formsToEnter > 1 ? "s" : ""} to enter in your payroll system.</span>
             <Link className="btn sm primary" href="/tax-forms">Review</Link>
@@ -120,7 +120,7 @@ export default function Payroll() {
       )}
       <div className="card stack">
       <div>
-        <h2 style={{ margin: 0 }}>Export hours</h2>
+        <h2 style={{ margin: 0 }}>Export Hours</h2>
         <p className="muted" style={{ margin: "4px 0 0" }}>Pick a pay period to see everyone&apos;s hours below, then export them{usesProvider ? " or send them to Check" : ""}.</p>
       </div>
       <div className="row">
@@ -141,7 +141,7 @@ export default function Payroll() {
       <ErrorBox error={action.error || preview.error} />
       {unapproved > 0 && (
         <div className="card stack">
-          <h2 style={{ margin: 0 }}>Timesheets to approve</h2>
+          <h2 style={{ margin: 0 }}>Timesheets to Approve</h2>
           <div className="row" style={{ justifyContent: "space-between" }}>
             <span><Badge value="pending" /> {unapproved} time entr{unapproved === 1 ? "y hasn't" : "ies haven't"} been approved yet{approvedOnly ? " and are left out of this export" : ""}.</span>
             <Link className="btn sm" href="/time">Review timesheets</Link>

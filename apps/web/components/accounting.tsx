@@ -110,7 +110,7 @@ export function AccountingCard() {
               {pickAccount("Payroll liability", "payrollLiabilityAccountId", LIABILITY_ACCOUNT_TYPES, "Credited, e.g. Payroll Liabilities / Wages Payable. Clear it when you pay.")}
             </div>
             <label className="check"><input type="checkbox" checked={s.autoPostPayroll} onChange={(e) => set({ autoPostPayroll: e.target.checked })} /> Send each pay period automatically when it&apos;s approved</label>
-            <h3 style={{ margin: "8px 0 0" }}>Work orders</h3>
+            <h3 style={{ margin: "8px 0 0" }}>Work Orders</h3>
             <div className="formgrid">
               {pickAccount("Parts expense", "partsAccountId", EXPENSE_ACCOUNT_TYPES, "e.g. Vehicle Repairs & Maintenance.")}
               {pickAccount("Labor expense", "laborAccountId", EXPENSE_ACCOUNT_TYPES, "Optional: shop labor on its own account.", true)}
@@ -139,7 +139,7 @@ export function AccountingCard() {
       {st?.connected && (
         <>
           <ErrorBox error={send.error} />
-          <h3 style={{ margin: "8px 0 0" }}>Approved pay periods</h3>
+          <h3 style={{ margin: "8px 0 0" }}>Approved Pay Periods</h3>
           {st.payroll.length ? (
             <table><tbody>{st.payroll.map((p) => (
               <tr key={p.id}>
@@ -149,7 +149,7 @@ export function AccountingCard() {
               </tr>
             ))}</tbody></table>
           ) : <Empty>No approved pay periods yet.</Empty>}
-          <h3 style={{ margin: "8px 0 0" }}>Completed work orders with costs</h3>
+          <h3 style={{ margin: "8px 0 0" }}>Completed Work Orders with Costs</h3>
           {st.workOrders.length ? (
             <table><tbody>{st.workOrders.map((w) => (
               <tr key={w.id}>

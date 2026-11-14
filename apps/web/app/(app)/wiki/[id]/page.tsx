@@ -37,7 +37,7 @@ export default function WikiPage({ params }: { params: Promise<{ id: string }> }
           {p.body.trim() ? <Markdown>{p.body}</Markdown> : <Empty>This page is empty.{p.canEdit && <> <Link href={`/wiki/${id}/edit`}>Add some text</Link>.</>}</Empty>}
           {p.children.length > 0 && (
             <section aria-labelledby="sub-h" style={{ marginTop: 20, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
-              <h2 id="sub-h" style={{ fontSize: 15 }}>Pages in this section</h2>
+              <h2 id="sub-h" style={{ fontSize: 15 }}>Pages in This Section</h2>
               <ul>{p.children.map((c: any) => <li key={c.id}><Link href={`/wiki/${c.id}`}>{c.title}</Link></li>)}</ul>
             </section>
           )}

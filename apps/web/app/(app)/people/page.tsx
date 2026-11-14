@@ -162,7 +162,7 @@ function People() {
       )}
       {adding && (
         <div className="card">
-          <h2>New employee</h2>
+          <h2>New Employee</h2>
           <form
             className="stack"
             onSubmit={(e) => {

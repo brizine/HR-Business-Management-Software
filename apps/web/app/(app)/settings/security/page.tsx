@@ -26,7 +26,7 @@ function TwoFactorCard() {
 
   return (
     <div className="card">
-      <h2>Two-factor sign-in</h2>
+      <h2>Two-Factor Sign-In</h2>
       {mode === "setup" ? (
         <TwoFactorSetup onDone={() => { setMode("idle"); status.reload(); }} />
       ) : codes ? (
@@ -116,7 +116,7 @@ function SessionsCard() {
   const { busy, error, run } = useAction();
   return (
     <div className="card">
-      <h2>Signed-in devices</h2>
+      <h2>Signed-In Devices</h2>
       <p className="muted" style={{ marginTop: 0 }}>Lost a phone, or signed in on a shared computer? This signs you out of Crewdesk everywhere, including here, and stops notifications to your phones until you sign in again.</p>
       <ErrorBox error={error} />
       <button className="btn danger" disabled={busy} onClick={() => confirm("Sign out of Crewdesk on every device?") && run(async () => {
@@ -136,7 +136,7 @@ function PolicyCard() {
   if (!data) return null;
   return (
     <div className="card">
-      <h2>Company: who must use two-factor</h2>
+      <h2>Company: Who Must Use Two-Factor</h2>
       <div className="row">
         <select value={data.twoFactorRequiredFor} disabled={!can("owner", "company") || busy} style={{ width: 280 }} onChange={(e) => {
           const value = e.target.value;

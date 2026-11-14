@@ -45,7 +45,7 @@ function LogoCard({ info, onChange }: { info: Info; onChange: (i: Info) => Promi
           : <span className="muted">No logo</span>}
       </div>
       <div className="stack" style={{ flex: 1, minWidth: 200 }}>
-        <strong>Company logo</strong>
+        <strong>Company Logo</strong>
         <span className="muted" style={{ fontSize: 13 }}>Shows at the top of everyone&apos;s sidebar. JPEG, PNG or WebP up to 5 MB; a transparent PNG looks best.</span>
         {info.canEdit && (
           <div className="row">

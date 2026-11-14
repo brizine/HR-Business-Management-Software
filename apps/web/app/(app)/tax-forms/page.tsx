@@ -19,7 +19,7 @@ function AdminQueue() {
   if (!data) return null;
   return (
     <div className="card">
-      <h2>Waiting on you</h2>
+      <h2>Waiting on You</h2>
       {data.length ? (
         <table><tbody>{data.map((f) => (
           <tr key={f.id}>

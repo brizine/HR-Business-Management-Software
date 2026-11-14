@@ -118,7 +118,7 @@ export default function ViewTaxForm({ params }: { params: Promise<{ id: string }
       </div>
       {data.employerData && (
         <div className="card">
-          <h2>Section 2 (employer)</h2>
+          <h2>Section 2 (Employer)</h2>
           <p className="muted" style={{ marginTop: 0 }}>Signed by {f.employerSignedName}, {fmtDate(f.employerSignedAt)}</p>
           <table><tbody>
             {[...(data.employerData.listA ?? []).map((d: any, i: number) => [`List A #${i + 1}`, d]), ["List B", data.employerData.listB], ["List C", data.employerData.listC]]
@@ -137,7 +137,7 @@ export default function ViewTaxForm({ params }: { params: Promise<{ id: string }
       {f.processedAt && <p className="muted">Entered in payroll {fmtDate(f.processedAt)}.</p>}
       {can("admin", "payroll") && data.accessLog.length > 0 && (
         <div className="card">
-          <h2>Who has opened this</h2>
+          <h2>Who Has Opened This</h2>
           <table><tbody>{data.accessLog.map((l: any, i: number) => (
             <tr key={i}><td>{l.by}</td><td>{l.action === "download" ? "Downloaded PDF" : "Viewed"}</td><td className="muted">{fmtDateTime(l.at)}</td></tr>
           ))}</tbody></table>
