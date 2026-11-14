@@ -18,6 +18,8 @@ export const accountingSettingsSchema = z.object({
   wagesAccountId: z.number().int().positive().nullable(),
   /** Paid time off and paid holidays (optional; wages account if not set). Expense account. */
   timeOffAccountId: z.number().int().positive().nullable(),
+  /** Reimbursements paid through payroll (optional; left out of the journal if not set). Expense account. */
+  reimbursementAccountId: z.number().int().positive().nullable().optional(),
   /** Credited for payroll: e.g. "Payroll Liabilities" / "Wages Payable". Liability account. */
   payrollLiabilityAccountId: z.number().int().positive().nullable(),
   /** Work order parts. Expense account. */
@@ -36,6 +38,7 @@ export const DEFAULT_ACCOUNTING_SETTINGS: AccountingSettings = {
   baseUrl: "",
   wagesAccountId: null,
   timeOffAccountId: null,
+  reimbursementAccountId: null,
   payrollLiabilityAccountId: null,
   partsAccountId: null,
   laborAccountId: null,
@@ -56,26 +59,45 @@ export interface JournalLine { accountId: number; debitCents?: number; creditCen
 
 /**
  * The payroll journal for a period: wages (and time off, if it has its own account) debited,
- * the liability credited for the total. Hourly staff only; salaried pay isn't estimated here.
+ * the liability credited for the total. Hourly pay is estimated from hours; salaried pay isn't,
+ * but everyone's bonuses, commissions and other extra pay are included with wages, and
+ * reimbursements are debited to their own account when one is chosen.
  */
 export function payrollJournalLines(
-  lines: { payType: string; payRateCents: number; ptoHours: number; holidayHours: number; estimatedGrossCents: number | null }[],
-  s: Pick<AccountingSettings, "wagesAccountId" | "timeOffAccountId" | "payrollLiabilityAccountId">,
-): { lines: JournalLine[]; totalCents: number; salaried: number } {
+  lines: {
+    payType: string; payRateCents: number; ptoHours: number; holidayHours: number; estimatedGrossCents: number | null;
+    bonusCents?: number; commissionCents?: number; otherPayCents?: number; reimbursementCents?: number;
+  }[],
+  s: Pick<AccountingSettings, "wagesAccountId" | "timeOffAccountId" | "payrollLiabilityAccountId"> & { reimbursementAccountId?: number | null },
+): { lines: JournalLine[]; totalCents: number; salaried: number; reimbursementsLeftOut: number } {
   let wages = 0;
   let timeOff = 0;
+  let reimbursements = 0;
   let salaried = 0;
+  let reimbursementsLeftOut = 0;
   for (const l of lines) {
-    if (l.payType !== "hourly" || l.estimatedGrossCents == null) { if (l.payType === "salary") salaried++; continue; }
+    const extraWages = (l.bonusCents ?? 0) + (l.commissionCents ?? 0) + (l.otherPayCents ?? 0);
+    if (l.reimbursementCents) {
+      if (s.reimbursementAccountId) reimbursements += l.reimbursementCents;
+      else reimbursementsLeftOut += l.reimbursementCents;
+    }
+    if (l.payType !== "hourly" || l.estimatedGrossCents == null) {
+      if (l.payType === "salary") salaried++;
+      // Salaried pay isn't estimated, but their extra pay is a known amount.
+      wages += extraWages;
+      continue;
+    }
     const off = s.timeOffAccountId ? Math.round((l.ptoHours + l.holidayHours) * l.payRateCents) : 0;
     timeOff += off;
+    // The hourly estimate already includes extra wages.
     wages += l.estimatedGrossCents - off;
   }
-  const total = wages + timeOff;
-  if (!total || !s.wagesAccountId || !s.payrollLiabilityAccountId) return { lines: [], totalCents: total, salaried };
+  const total = wages + timeOff + reimbursements;
+  if (!total || !s.wagesAccountId || !s.payrollLiabilityAccountId) return { lines: [], totalCents: total, salaried, reimbursementsLeftOut };
   const out: JournalLine[] = [];
-  if (wages) out.push({ accountId: s.wagesAccountId, debitCents: wages, note: "Wages (regular, overtime, holiday premium)" });
+  if (wages) out.push({ accountId: s.wagesAccountId, debitCents: wages, note: "Wages (regular, overtime, holiday premium, bonuses, commissions)" });
   if (timeOff) out.push({ accountId: s.timeOffAccountId!, debitCents: timeOff, note: "Paid time off and holidays" });
-  out.push({ accountId: s.payrollLiabilityAccountId, creditCents: total, note: "Gross wages payable" });
-  return { lines: out, totalCents: total, salaried };
+  if (reimbursements) out.push({ accountId: s.reimbursementAccountId!, debitCents: reimbursements, note: "Reimbursements" });
+  out.push({ accountId: s.payrollLiabilityAccountId, creditCents: total, note: "Gross wages and reimbursements payable" });
+  return { lines: out, totalCents: total, salaried, reimbursementsLeftOut };
 }

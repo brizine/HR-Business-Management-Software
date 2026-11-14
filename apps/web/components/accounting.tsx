@@ -53,10 +53,10 @@ export function AccountingCard() {
   }, [saved.data]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!s) return <div className="card"><h2>Accounting</h2><ErrorBox error={saved.error} /></div>;
   const set = (p: Partial<typeof s>) => { setS({ ...s, ...p }); setNote(null); };
-  const pickAccount = (label: string, key: keyof AccountingSettings, types: string[], hint: string, optional = false) => (
+  const pickAccount = (label: string, key: keyof AccountingSettings, types: string[], hint: string, optional = false, emptyLabel = "Same as above") => (
     <label>{label}
       <select value={(s[key] as number | null) ?? ""} onChange={(e) => set({ [key]: e.target.value ? Number(e.target.value) : null } as Partial<typeof s>)} disabled={!accounts}>
-        <option value="">{optional ? "Same as above" : accounts ? "Choose…" : "Test the connection first"}</option>
+        <option value="">{optional ? emptyLabel : accounts ? "Choose…" : "Test the connection first"}</option>
         {(accounts ?? []).filter((a) => types.includes(a.type)).map((a) => <option key={a.id} value={a.id}>{a.code ? `${a.code} · ` : ""}{a.name}</option>)}
       </select>
       <span className="muted" style={{ fontSize: 12 }}>{hint}</span>
@@ -105,8 +105,9 @@ export function AccountingCard() {
             </div>
             <h3 style={{ margin: "8px 0 0" }}>Payroll</h3>
             <div className="formgrid">
-              {pickAccount("Wages expense", "wagesAccountId", EXPENSE_ACCOUNT_TYPES, "Debited with each period's estimated gross wages.")}
+              {pickAccount("Wages expense", "wagesAccountId", EXPENSE_ACCOUNT_TYPES, "Debited with each period's estimated gross wages, bonuses and commissions.")}
               {pickAccount("Time off & holidays expense", "timeOffAccountId", EXPENSE_ACCOUNT_TYPES, "Optional: paid time off and holidays on their own line.", true)}
+              {pickAccount("Reimbursements expense", "reimbursementAccountId", EXPENSE_ACCOUNT_TYPES, "Optional: reimbursements entered as extra pay. Left out of the entry if not chosen.", true, "Don't send reimbursements")}
               {pickAccount("Payroll liability", "payrollLiabilityAccountId", LIABILITY_ACCOUNT_TYPES, "Credited, e.g. Payroll Liabilities / Wages Payable. Clear it when you pay.")}
             </div>
             <label className="check"><input type="checkbox" checked={s.autoPostPayroll} onChange={(e) => set({ autoPostPayroll: e.target.checked })} /> Send each pay period automatically when it&apos;s approved</label>

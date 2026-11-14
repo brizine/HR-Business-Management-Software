@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { PayPeriodAccounting } from "@/components/accounting";
+import { ExtraPayLines } from "@/components/extra-pay";
 
 /** Where approvers land from the "ready to approve" notification. */
 export default function PayPeriodApproval() {
@@ -63,7 +64,7 @@ export default function PayPeriodApproval() {
                 <td>{l.overtimeHours.toFixed(2)}</td>
                 <td>{l.ptoHours ? l.ptoHours.toFixed(2) : "—"}</td>
                 <td>{l.holidayHours ? l.holidayHours.toFixed(2) : "—"}{l.holidayWorkedHours ? <div className="muted" style={{ fontSize: 12 }}>+{l.holidayWorkedHours.toFixed(2)}h worked</div> : null}{l.holidayNotes?.map((n: string) => <div key={n} className="muted" style={{ fontSize: 12, maxWidth: 260 }}>⚠ {n}</div>)}</td>
-                <td>{l.estimatedGrossCents == null ? <span className="muted">Salary</span> : money(l.estimatedGrossCents)}{l.payNote && <div className="muted" style={{ fontSize: 12, maxWidth: 240 }}>Pay changed: {l.payNote}</div>}</td>
+                <td>{l.estimatedGrossCents == null ? <span className="muted">Salary</span> : money(l.estimatedGrossCents)}{l.payNote && <div className="muted" style={{ fontSize: 12, maxWidth: 240 }}>Pay changed: {l.payNote}</div>}<ExtraPayLines line={l} /></td>
               </tr>
             ))}</tbody>
             <tfoot><tr><th>Total</th><th>{sum("regularHours")}</th><th>{sum("overtimeHours")}</th><th>{sum("ptoHours")}</th><th>{sum("holidayHours")}</th>

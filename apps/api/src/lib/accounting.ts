@@ -52,7 +52,7 @@ export async function postPayPeriod(companyId: string, periodId: string, by: str
     const externalId = await bc.createJournal({
       date: period.periodEnd,
       reference: `Payroll ${period.periodStart} to ${period.periodEnd}`,
-      description: `Estimated gross wages from Crewdesk for ${period.periodStart} to ${period.periodEnd} (payday ${period.payday}), before taxes and deductions.${j.salaried ? ` ${j.salaried} salaried ${j.salaried === 1 ? "person is" : "people are"} not included.` : ""}`,
+      description: `Estimated gross wages from Crewdesk for ${period.periodStart} to ${period.periodEnd} (payday ${period.payday}), before taxes and deductions.${j.salaried ? ` Salary for ${j.salaried} salaried ${j.salaried === 1 ? "person is" : "people is"} not included (their extra pay is).` : ""}${j.reimbursementsLeftOut ? ` Reimbursements of $${(j.reimbursementsLeftOut / 100).toFixed(2)} aren't included (no reimbursement account chosen).` : ""}`,
       lines: j.lines,
     });
     return await record(companyId, "payroll", periodId, { status: "posted", externalId, amountCents: amount, by });

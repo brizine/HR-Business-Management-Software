@@ -1,7 +1,7 @@
 import { and, eq, gte, lt, lte, isNotNull } from "drizzle-orm";
-import { DEFAULT_HOLIDAY_RULES, WORK_AROUND_WINDOW_DAYS, checkWorkAround, describeRates, entryHours, holidayHoursFor, holidaysBetween, hourlyGrossCents, isInactive, rateOn, ratesDuring, summarizeHours, type HolidayObserve, type PayRateLike } from "@crewdesk/shared";
+import { DEFAULT_HOLIDAY_RULES, WORK_AROUND_WINDOW_DAYS, extraPayTotals, checkWorkAround, describeRates, entryHours, holidayHoursFor, holidaysBetween, hourlyGrossCents, isInactive, rateOn, ratesDuring, summarizeHours, type HolidayObserve, type PayRateLike } from "@crewdesk/shared";
 import type { DB } from "../../db";
-import { companies, employees, holidays, ptoRequests, shifts, timeEntries } from "../../db/schema";
+import { companies, employees, extraPay, holidays, ptoRequests, shifts, timeEntries } from "../../db/schema";
 import { localParts } from "../tz";
 import { ratesByEmployee } from "../payRates";
 import { CheckPayrollProvider } from "./check";
@@ -31,12 +31,20 @@ export interface PayrollLine {
   holidayWorkedHours: number;
   /** Why a holiday wasn't paid, or is paid provisionally (the "work the day before and after" rule). */
   holidayNotes: string[];
+  /** Extra pay dated in the period (bonus, commission, reimbursement, other). */
+  extraPay: { id: string; date: string; kind: string; amountCents: number; note: string | null }[];
+  bonusCents: number;
+  commissionCents: number;
+  otherPayCents: number;
+  /** Reimbursements: paid back, not wages, so not in the estimated gross. */
+  reimbursementCents: number;
   /** Completed time entries in the period that a manager hasn't approved yet. */
   unapprovedEntries: number;
   /**
    * Gross for hourly days (regular + overtime + time off + holidays + holiday-work premium), each
    * day at the rate in effect that day; overtime uses the week's weighted average rate when a week
-   * has two rates. Salaried pay is left to the payroll system.
+   * has two rates, plus bonuses, commissions and other extra pay. Salaried pay is left to the
+   * payroll system (null), though their extra pay is still listed.
    */
   estimatedGrossCents: number | null;
 }
@@ -87,6 +95,8 @@ export async function buildPayrollLines(db: DB, companyId: string, period: Payro
 
   const staff = await db.select().from(employees).where(eq(employees.companyId, companyId));
   const rateHistory = await ratesByEmployee(db, companyId, staff);
+  const extras = await db.select().from(extraPay)
+    .where(and(eq(extraPay.companyId, companyId), gte(extraPay.date, period.periodStart), lte(extraPay.date, period.periodEnd)));
   const entries = await db
     .select()
     .from(timeEntries)
@@ -143,7 +153,7 @@ export async function buildPayrollLines(db: DB, companyId: string, period: Payro
   const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 
   return staff
-    .filter((e) => !isInactive(e.status) || entries.some((t) => t.employeeId === e.id))
+    .filter((e) => !isInactive(e.status) || entries.some((t) => t.employeeId === e.id) || extras.some((x) => x.employeeId === e.id))
     .map((e) => {
       const all = entries.filter((t) => t.employeeId === e.id);
       const counted = period.approvedOnly ? all.filter((t) => t.approvedAt) : all;
@@ -197,6 +207,8 @@ export async function buildPayrollLines(db: DB, companyId: string, period: Payro
         holidayWorked,
         holidayMultiplier: rules.workedMultiplier,
       });
+      const mine = extras.filter((x) => x.employeeId === e.id).sort((a, b) => a.date.localeCompare(b.date));
+      const extraTotals = extraPayTotals(mine);
       const during = ratesDuring(rates, period.periodStart, period.periodEnd);
       const atEnd = rateOn(rates, period.periodEnd)!;
       return {
@@ -214,8 +226,13 @@ export async function buildPayrollLines(db: DB, companyId: string, period: Payro
         holidayHours,
         holidayWorkedHours,
         holidayNotes,
+        extraPay: mine.map((x) => ({ id: x.id, date: x.date, kind: x.kind, amountCents: x.amountCents, note: x.note })),
+        bonusCents: extraTotals.bonusCents,
+        commissionCents: extraTotals.commissionCents,
+        otherPayCents: extraTotals.otherPayCents,
+        reimbursementCents: extraTotals.reimbursementCents,
         unapprovedEntries: all.filter((t) => !t.approvedAt).length,
-        estimatedGrossCents: gross,
+        estimatedGrossCents: gross == null ? null : gross + extraTotals.extraWagesCents,
       };
     });
 }
@@ -228,6 +245,9 @@ export async function linesForPayPeriod(db: DB, companyId: string, period: { per
   if (period.status === "approved" && period.approvedLines) return period.approvedLines as PayrollLine[];
   return buildPayrollLines(db, companyId, { periodStart: period.periodStart, periodEnd: period.periodEnd });
 }
+
+/** Cents as dollars for the CSV (0.00 when missing: approved periods saved before extra pay existed). */
+const dollars = (cents: number | undefined) => ((cents ?? 0) / 100).toFixed(2);
 
 function csvCell(v: unknown) {
   const s = v == null ? "" : String(v);
@@ -248,8 +268,13 @@ export function payrollCsv(lines: PayrollLine[]): string {
     "Time Off Hours",
     "Holiday Hours",
     "Hours Worked On Holidays",
+    "Bonus",
+    "Commission",
+    "Other Pay",
     "Estimated Gross",
+    "Reimbursements",
     "Pay Changes In Period",
+    "Extra Pay Notes",
   ];
   const rows = lines.map((l) => [
     l.employeeId,
@@ -264,8 +289,13 @@ export function payrollCsv(lines: PayrollLine[]): string {
     l.ptoHours.toFixed(2),
     l.holidayHours.toFixed(2),
     l.holidayWorkedHours.toFixed(2),
+    dollars(l.bonusCents),
+    dollars(l.commissionCents),
+    dollars(l.otherPayCents),
     l.estimatedGrossCents == null ? "" : (l.estimatedGrossCents / 100).toFixed(2),
+    dollars(l.reimbursementCents),
     l.payNote ?? "",
+    (l.extraPay ?? []).map((x) => `${x.kind} ${dollars(x.amountCents)}${x.note ? ` (${x.note})` : ""}`).join("; "),
   ]);
   return [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\n") + "\n";
 }

@@ -189,6 +189,14 @@ Job postings, a public careers page, an applicant board, and one-click hire.
   during the period, the line says so (for example "$18.00/hr, then $20.00/hr from Mar 4") and the
   estimated gross uses each day's rate. In a week with two rates, overtime uses the blended
   (weighted average) rate, as federal law requires.
+- **Extra Pay** (bonuses, commissions, reimbursements, other pay; owners and admins add it,
+  managers can see it): on the **Payroll** page, the **Extra Pay for …** box below the hours
+  table (**Add extra pay**: type, amount, date, note, and who: one person or tick several, with
+  **Select all shown**), or on an employee's page in their **Extra Pay** box. It goes in the pay
+  period its date falls in. Bonuses, commissions and other pay are added to the estimated gross;
+  reimbursements are listed but not counted as wages. The CSV has Bonus, Commission, Other Pay and
+  Reimbursements columns. Extra pay dated in an approved pay period isn't included until that period
+  is reopened and approved again. **Remove** deletes an entry made by mistake.
 - **Approved pay periods are locked:** their figures are saved when approved, so a later raise or
   correction doesn't change them (you'll see a 🔒 note). To recalculate one, an admin clicks
   **Reopen for approval**, then it's approved again.
@@ -196,7 +204,8 @@ Job postings, a public careers page, an applicant board, and one-click hire.
 ## Accounting
 
 Connects to Bigcapital (the company's accounting system). Approved pay periods can post as journal
-entries and completed work orders as expenses, automatically or by hand. Set up the connection and
+entries (wages, bonuses and commissions to the wages account; reimbursements to the reimbursements
+account if one is chosen) and completed work orders as expenses, automatically or by hand. Set up the connection and
 accounts on this page (admins).
 
 ## Assets (Vehicles & Equipment)

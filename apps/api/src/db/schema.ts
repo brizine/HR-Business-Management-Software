@@ -506,6 +506,21 @@ export const payPeriods = pgTable(
   (t) => [uniqueIndex("pay_periods_company_start_idx").on(t.companyId, t.periodStart)],
 );
 
+/** One-off pay on top of hours (bonus, commission, reimbursement, other), in the pay period its date falls in. */
+export const extraPay = pgTable("extra_pay", {
+  id: id(),
+  companyId: companyId(),
+  employeeId: uuid("employee_id")
+    .notNull()
+    .references(() => employees.id, { onDelete: "cascade" }),
+  date: date("date").notNull(),
+  kind: text("kind").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  note: text("note"),
+  createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+  createdAt: createdAt(),
+});
+
 /** Pay rate history: each raise or pay change, from the date it takes effect. employees.payRateCents mirrors today's rate. */
 export const payRates = pgTable(
   "pay_rates",

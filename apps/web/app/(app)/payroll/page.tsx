@@ -9,6 +9,7 @@ import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { PayPeriodList, PaySchedule } from "@/components/pay-schedule";
 import { BusinessAddressFields, businessAddressValues } from "@/components/business-address-fields";
 import { PayPeriodPicker, rangeLabel } from "@/components/pay-period-picker";
+import { ExtraPayBox, ExtraPayLines } from "@/components/extra-pay";
 
 function lastWeek() {
   const d = new Date();
@@ -99,7 +100,7 @@ export default function Payroll() {
   const runs = useApi<any[]>("/payroll/runs");
   const pending = useApi<any[]>("/tax-forms/pending");
   const action = useAction();
-  const rows = (preview.data ?? []).filter((l) => l.totalHours > 0 || l.ptoHours > 0 || l.holidayHours > 0 || l.holidayNotes?.length > 0 || l.payType === "salary");
+  const rows = (preview.data ?? []).filter((l) => l.totalHours > 0 || l.ptoHours > 0 || l.holidayHours > 0 || l.holidayNotes?.length > 0 || l.payType === "salary" || l.extraPay?.length > 0);
   const unapproved = (preview.data ?? []).reduce((n, l) => n + l.unapprovedEntries, 0);
   const s = settings.data;
   const usesProvider = s?.payrollProvider === "check";
@@ -161,7 +162,7 @@ export default function Payroll() {
                 <td>{l.overtimeHours.toFixed(2)}</td>
                 <td>{l.ptoHours ? l.ptoHours.toFixed(2) : "—"}</td>
                 <td title={l.holidayWorkedHours ? `${l.holidayWorkedHours.toFixed(2)}h worked on a holiday` : undefined}>{l.holidayHours ? l.holidayHours.toFixed(2) : "—"}{l.holidayWorkedHours ? <div className="muted" style={{ fontSize: 12 }}>+{l.holidayWorkedHours.toFixed(2)}h worked</div> : null}{l.holidayNotes?.map((n: string) => <div key={n} className="muted" style={{ fontSize: 12, maxWidth: 260 }}>⚠ {n}</div>)}</td>
-                <td>{l.estimatedGrossCents == null ? <span className="muted">Salary</span> : money(l.estimatedGrossCents)}</td>
+                <td>{l.estimatedGrossCents == null ? <span className="muted">Salary</span> : money(l.estimatedGrossCents)}<ExtraPayLines line={l} /></td>
               </tr>
             ))}</tbody>
             <tfoot><tr>
@@ -172,10 +173,11 @@ export default function Payroll() {
           </table>
         ) : <Empty>No hours or time off in this period.</Empty>}
         <p className="muted">
-          Gross pay before taxes and deductions. Overtime is 1.5× after {s?.weeklyOvertimeThreshold ?? 40} hours a week; approved time off is paid at the regular rate.
+          Gross pay before taxes and deductions, including bonuses, commissions and other extra pay (reimbursements are listed but not counted). Overtime is 1.5× after {s?.weeklyOvertimeThreshold ?? 40} hours a week; approved time off is paid at the regular rate.
           The CSV has one row per employee with regular, overtime and time-off hours, ready to key into QuickBooks, ADP, Gusto, Paychex, or to send to your accountant.
         </p>
       </div>
+      {start && end && <ExtraPayBox key={`${start}-${end}`} from={start} to={end} title={`Extra Pay for ${rangeLabel(start, end)}`} onChange={preview.reload} />}
       <div className="grid cols-2">
         <PaySchedule />
         <PayPeriodList onUse={(a, b) => { setStart(a); setEnd(b); picked.current = true; window.scrollTo({ top: 0, behavior: "smooth" }); }} />

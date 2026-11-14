@@ -9,6 +9,20 @@ import type { PayrollLine, PayrollPeriod, PayrollProvider, PayrollSubmitResult }
  *
  * Verify the request shape against Check's current API docs before going live.
  */
+const amount = (cents: number) => (cents / 100).toFixed(2);
+
+function extraEarnings(l: PayrollLine) {
+  const flat = [
+    ...(l.bonusCents ? [{ type: "bonus", amount: amount(l.bonusCents) }] : []),
+    ...(l.commissionCents ? [{ type: "commission", amount: amount(l.commissionCents) }] : []),
+    ...(l.otherPayCents ? [{ type: "other", amount: amount(l.otherPayCents) }] : []),
+  ];
+  return {
+    ...(flat.length ? { extra_earnings: flat } : {}),
+    ...(l.reimbursementCents ? { reimbursements: [{ amount: amount(l.reimbursementCents), description: "Reimbursement" }] } : {}),
+  };
+}
+
 export class CheckPayrollProvider implements PayrollProvider {
   name = "check";
 
@@ -23,7 +37,7 @@ export class CheckPayrollProvider implements PayrollProvider {
     }
 
     const items = lines
-      .filter((l) => l.providerEmployeeId && (l.totalHours > 0 || l.ptoHours > 0 || l.holidayHours > 0 || l.payType === "salary"))
+      .filter((l) => l.providerEmployeeId && (l.totalHours > 0 || l.ptoHours > 0 || l.holidayHours > 0 || l.payType === "salary" || (l.extraPay ?? []).length > 0))
       .map((l) => ({
         employee: l.providerEmployeeId,
         earnings:
@@ -36,6 +50,9 @@ export class CheckPayrollProvider implements PayrollProvider {
                 ...(l.ptoHours > 0 ? [{ type: "pto", hours: l.ptoHours }] : []),
                 ...(l.holidayHours > 0 ? [{ type: "holiday", hours: l.holidayHours }] : []),
               ],
+        // Bonuses, commissions and other pay as flat earnings; reimbursements as non-taxable
+        // reimbursements. Type names per Check's docs; confirm before going live.
+        ...extraEarnings(l),
       }));
 
     const res = await fetch(`${baseUrl}/payrolls`, {

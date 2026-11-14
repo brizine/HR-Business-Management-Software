@@ -547,3 +547,4 @@ tr.openrow td { background: var(--bg); }
 .manual-body .help-answer p { margin: 0 0 8px; }
 @media (max-width: 900px) { .manual { grid-template-columns: 1fr; } .manual-toc { position: static; max-height: none; } }
 .manual-preview { border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; max-height: 70vh; overflow-y: auto; }
+.extra-pay-people { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 12px; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
