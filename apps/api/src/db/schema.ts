@@ -495,9 +495,30 @@ export const payPeriods = pgTable(
     approvedById: uuid("approved_by_id").references(() => employees.id, { onDelete: "set null" }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     approvalNote: text("approval_note"),
+    /** The payroll figures as they were when approved, so later changes (a raise, a corrected rate) don't alter them. */
+    approvedLines: jsonb("approved_lines").$type<unknown[]>(),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("pay_periods_company_start_idx").on(t.companyId, t.periodStart)],
+);
+
+/** Pay rate history: each raise or pay change, from the date it takes effect. employees.payRateCents mirrors today's rate. */
+export const payRates = pgTable(
+  "pay_rates",
+  {
+    id: id(),
+    companyId: companyId(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    effectiveDate: date("effective_date").notNull(),
+    payType: text("pay_type").notNull(),
+    payRateCents: integer("pay_rate_cents").notNull(),
+    note: text("note"),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("pay_rates_employee_date_idx").on(t.employeeId, t.effectiveDate)],
 );
 
 /** Expo push tokens, one row per device. A device moves with whoever last signed in on it. */

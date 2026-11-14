@@ -1,8 +1,9 @@
 import { and, eq, gte, lt, lte, isNotNull } from "drizzle-orm";
-import { DEFAULT_HOLIDAY_RULES, WORK_AROUND_WINDOW_DAYS, checkWorkAround, entryHours, holidayHoursFor, holidaysBetween, isInactive, summarizeHours, type HolidayObserve } from "@crewdesk/shared";
+import { DEFAULT_HOLIDAY_RULES, WORK_AROUND_WINDOW_DAYS, checkWorkAround, describeRates, entryHours, holidayHoursFor, holidaysBetween, hourlyGrossCents, isInactive, rateOn, ratesDuring, summarizeHours, type HolidayObserve, type PayRateLike } from "@crewdesk/shared";
 import type { DB } from "../../db";
 import { companies, employees, holidays, ptoRequests, shifts, timeEntries } from "../../db/schema";
 import { localParts } from "../tz";
+import { ratesByEmployee } from "../payRates";
 import { CheckPayrollProvider } from "./check";
 
 export interface PayrollLine {
@@ -11,8 +12,13 @@ export interface PayrollLine {
   firstName: string;
   lastName: string;
   email: string;
+  /** Pay type and rate in effect at the end of the period. */
   payType: string;
   payRateCents: number;
+  /** Every rate that applied during the period (more than one when pay changed mid-period). */
+  payRates: PayRateLike[];
+  /** e.g. "$18.00/hr, then $20.00/hr from Mar 4" when pay changed during the period. */
+  payNote: string | null;
   regularHours: number;
   overtimeHours: number;
   /** Worked hours (regular + overtime). */
@@ -27,7 +33,11 @@ export interface PayrollLine {
   holidayNotes: string[];
   /** Completed time entries in the period that a manager hasn't approved yet. */
   unapprovedEntries: number;
-  /** Gross for hourly staff (regular + 1.5x overtime + time off + holidays + holiday-work premium); salaried staff are left to the payroll system. */
+  /**
+   * Gross for hourly days (regular + overtime + time off + holidays + holiday-work premium), each
+   * day at the rate in effect that day; overtime uses the week's weighted average rate when a week
+   * has two rates. Salaried pay is left to the payroll system.
+   */
   estimatedGrossCents: number | null;
 }
 
@@ -40,6 +50,7 @@ export interface PayrollPeriod {
 
 const DAY = 86_400_000;
 const days = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / DAY) + 1;
+const nextDay = (d: string) => new Date(Date.parse(`${d}T00:00:00Z`) + DAY).toISOString().slice(0, 10);
 
 /**
  * Hours of a time-off request that fall inside the period. A request that
@@ -75,6 +86,7 @@ export async function buildPayrollLines(db: DB, companyId: string, period: Payro
   const end = new Date(Date.parse(period.periodEnd + "T00:00:00Z") + 86_400_000);
 
   const staff = await db.select().from(employees).where(eq(employees.companyId, companyId));
+  const rateHistory = await ratesByEmployee(db, companyId, staff);
   const entries = await db
     .select()
     .from(timeEntries)
@@ -162,19 +174,41 @@ export async function buildPayrollLines(db: DB, companyId: string, period: Payro
           .filter((t) => t.clockOut && holidayDays.has(localParts(t.clockIn, tz).date))
           .reduce((sum, t) => sum + entryHours(t), 0),
       );
-      const premium = holidayWorkedHours * (rules.workedMultiplier - 1);
-      const gross =
-        e.payType === "hourly"
-          ? Math.round((hours.regularHours + ptoHours + holidayHours + premium) * e.payRateCents + hours.overtimeHours * e.payRateCents * 1.5)
-          : null;
+      // Each day at the rate in effect that day (company time zone decides the day).
+      const rates = rateHistory.get(e.id)!;
+      const myOff = timeOff.filter((r) => r.employeeId === e.id);
+      const paidHours: { date: string; hours: number }[] = [];
+      for (const r of myOff) {
+        const perDay = r.hours / days(r.startDate, r.endDate);
+        for (let d = r.startDate > period.periodStart ? r.startDate : period.periodStart; d <= (r.endDate < period.periodEnd ? r.endDate : period.periodEnd); d = nextDay(d)) paidHours.push({ date: d, hours: perDay });
+      }
+      for (const o of inPeriod) {
+        // Holiday hours that were actually paid (after the eligibility and work-around rules).
+        const hrs = holidayHoursFor({ employmentType: e.employmentType, hireDate: e.startDate }, rules, o.holiday.hours, o.observed);
+        if (hrs && !holidayNotes.some((n) => n.startsWith(`No holiday pay for ${o.holiday.name}:`))) paidHours.push({ date: o.observed, hours: hrs });
+      }
+      const holidayWorked = counted.filter((t) => t.clockOut && holidayDays.has(localParts(t.clockIn, tz).date))
+        .map((t) => ({ date: localParts(t.clockIn, tz).date, hours: entryHours(t) }));
+      const gross = hourlyGrossCents({
+        entries: counted.map((t) => ({ clockIn: t.clockIn, clockOut: t.clockOut, date: localParts(t.clockIn, tz).date })),
+        rates,
+        weeklyThreshold: company?.weeklyOvertimeThreshold ?? 40,
+        paidHours,
+        holidayWorked,
+        holidayMultiplier: rules.workedMultiplier,
+      });
+      const during = ratesDuring(rates, period.periodStart, period.periodEnd);
+      const atEnd = rateOn(rates, period.periodEnd)!;
       return {
         employeeId: e.id,
         providerEmployeeId: e.payrollProviderEmployeeId,
         firstName: e.firstName,
         lastName: e.lastName,
         email: e.email,
-        payType: e.payType,
-        payRateCents: e.payRateCents,
+        payType: atEnd.payType,
+        payRateCents: atEnd.payRateCents,
+        payRates: during,
+        payNote: during.length > 1 ? describeRates(during) : null,
         ...hours,
         ptoHours,
         holidayHours,
@@ -184,6 +218,15 @@ export async function buildPayrollLines(db: DB, companyId: string, period: Payro
         estimatedGrossCents: gross,
       };
     });
+}
+
+/**
+ * A pay period's lines: as saved when it was approved (so later raises or corrections don't
+ * change approved figures), otherwise worked out now.
+ */
+export async function linesForPayPeriod(db: DB, companyId: string, period: { periodStart: string; periodEnd: string; status: string; approvedLines?: unknown[] | null }) {
+  if (period.status === "approved" && period.approvedLines) return period.approvedLines as PayrollLine[];
+  return buildPayrollLines(db, companyId, { periodStart: period.periodStart, periodEnd: period.periodEnd });
 }
 
 function csvCell(v: unknown) {
@@ -206,6 +249,7 @@ export function payrollCsv(lines: PayrollLine[]): string {
     "Holiday Hours",
     "Hours Worked On Holidays",
     "Estimated Gross",
+    "Pay Changes In Period",
   ];
   const rows = lines.map((l) => [
     l.employeeId,
@@ -221,6 +265,7 @@ export function payrollCsv(lines: PayrollLine[]): string {
     l.holidayHours.toFixed(2),
     l.holidayWorkedHours.toFixed(2),
     l.estimatedGrossCents == null ? "" : (l.estimatedGrossCents / 100).toFixed(2),
+    l.payNote ?? "",
   ]);
   return [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\n") + "\n";
 }

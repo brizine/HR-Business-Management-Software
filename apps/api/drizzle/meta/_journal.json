@@ -295,6 +295,13 @@
       "when": 1794680970578,
       "tag": "0041_maintenance_reminder_timing",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1794694803832,
+      "tag": "0042_pay_rate_history",
+      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,8 @@ import { and, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, 
 import { INACTIVE_STATUSES, carryoverForfeit, computeDue, resolveLead, workOrderDue, type FleetSettings, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
 import { db } from "../db";
 import { fleetSettingsFor } from "./fleet";
-import { assets, attendanceOverrides, companies, courseEnrollments, courses, employees, maintenanceSchedules, notificationLog, workOrders, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, ptoRequests, shifts, timeEntries } from "../db/schema";
+import { syncCurrentPay } from "./payRates";
+import { assets, attendanceOverrides, companies, courseEnrollments, courses, employees, maintenanceSchedules, notificationLog, payRates, workOrders, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, ptoRequests, shifts, timeEntries } from "../db/schema";
 import { attendanceRulesFor, computeAttendance } from "./attendance";
 import { assignCourse, autoAssignees, companyToday, describeEnrollments, latestEnrollments } from "./training";
 import { taskOwners } from "../routes/onboarding";
@@ -82,6 +83,15 @@ export async function runScheduledChecks(now = new Date()) {
       link: { screen: "work-order", id: wo.id, assetId: asset.id },
     });
     sent++;
+  }
+
+  // Raises dated for today (or a missed day this week) become everyone's current pay.
+  for (const c of await db.select({ id: companies.id, tz: companies.timezone }).from(companies)) {
+    const today = localParts(now, c.tz).date;
+    const weekAgo = new Date(Date.parse(`${today}T00:00:00Z`) - 7 * 86_400_000).toISOString().slice(0, 10);
+    const recent = await db.selectDistinct({ employeeId: payRates.employeeId }).from(payRates)
+      .where(and(eq(payRates.companyId, c.id), gt(payRates.effectiveDate, weekAgo), lte(payRates.effectiveDate, today)));
+    for (const r of recent) await syncCurrentPay(db, r.employeeId, today);
   }
 
   // Registration and insurance expiring soon.

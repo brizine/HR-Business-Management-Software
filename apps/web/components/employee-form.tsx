@@ -34,6 +34,12 @@ export function EmployeeFields({ initial = {} as any, employees = [] as any[] })
         <LabeledSelect menu="payType" values={PAY_TYPES} name="payType" defaultValue={initial.payType ?? "hourly"} />
       </label>
       <label>Pay rate ($/hr or $/yr)<input name="payRate" type="number" step="0.01" min="0" defaultValue={initial.payRateCents != null ? initial.payRateCents / 100 : ""} /></label>
+      {initial.id && (
+        <label>If pay changes, it starts on
+          <input name="payEffectiveDate" type="date" defaultValue={todayYmd()} />
+          <span className="muted" style={{ fontSize: 12 }}>Earlier days keep the old rate. See Pay History below.</span>
+        </label>
+      )}
       <label>Hire date<input name="startDate" type="date" defaultValue={initial.startDate ?? ""} /></label>
       <label>Status
         <LabeledSelect menu="employeeStatus" values={EMPLOYEE_STATUSES} name="status" value={status} onChange={(e) => setStatus(e.target.value)} />
@@ -50,6 +56,8 @@ export function EmployeeFields({ initial = {} as any, employees = [] as any[] })
     </>
   );
 }
+
+const todayYmd = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
 /** Converts the form's dollar pay rate to cents and nulls an empty manager. */
 export function employeeBody(form: HTMLFormElement) {

@@ -17,6 +17,7 @@ import { RequestTimeOffBox } from "@/components/request-time-off";
 import { ClockCard } from "@/components/clock-card";
 import { ClockStatusBox } from "@/components/clock-status";
 import { EmployeeRecordsBox } from "@/components/employee-records";
+import { PayHistoryBox } from "@/components/pay-history";
 import { AttendanceCalendar } from "@/components/attendance";
 import { EmployeeTrainingBox } from "@/components/training";
 import { TasksBox } from "@/components/tasks-box";
@@ -181,6 +182,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
           <AttendanceCalendar employeeId={e.id} compact />
         </div>
       )}
+      {can("manager", "people") && <PayHistoryBox employeeId={e.id} firstName={e.firstName} onChange={emp.reload} />}
       {(can("manager", "training") || e.id === me?.user.id) && <EmployeeTrainingBox employeeId={e.id} isSelf={e.id === me?.user.id} />}
       {(can("manager", "reviews") || e.id === me?.user.id) && <EmployeeRecordsBox employeeId={e.id} firstName={e.firstName} isSelf={e.id === me?.user.id} />}
       {/* Availability is only tracked for part-time employees. */}

@@ -156,7 +156,7 @@ export default function Payroll() {
             <tbody>{rows.map((l) => (
               <tr key={l.employeeId}>
                 <td>{l.firstName} {l.lastName}{l.payType === "salary" && <div className="muted">Salaried</div>}{l.unapprovedEntries > 0 && <div className="muted">{l.unapprovedEntries} unapproved</div>}</td>
-                <td>{money(l.payRateCents)}{l.payType === "hourly" ? "/hr" : "/yr"}</td>
+                <td>{money(l.payRateCents)}{l.payType === "hourly" ? "/hr" : "/yr"}{l.payNote && <div className="muted" style={{ fontSize: 12, maxWidth: 220 }}>{l.payNote}</div>}</td>
                 <td>{l.regularHours.toFixed(2)}</td>
                 <td>{l.overtimeHours.toFixed(2)}</td>
                 <td>{l.ptoHours ? l.ptoHours.toFixed(2) : "—"}</td>

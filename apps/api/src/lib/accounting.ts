@@ -4,7 +4,7 @@ import { db } from "../db";
 import { accountingPostings, assets, companies, payPeriods, workOrders } from "../db/schema";
 import { decrypt } from "./crypto";
 import { bigcapital, BigcapitalError } from "./bigcapital";
-import { buildPayrollLines } from "./payroll";
+import { linesForPayPeriod } from "./payroll";
 import { localParts } from "./tz";
 
 const PURPOSE = "accounting-key-v1";
@@ -45,7 +45,7 @@ export async function postPayPeriod(companyId: string, periodId: string, by: str
     if (period.status !== "approved") throw new BigcapitalError("Approve the pay period first");
     const { cfg, bc } = await clientFor(companyId);
     if (!cfg.settings.wagesAccountId || !cfg.settings.payrollLiabilityAccountId) throw new BigcapitalError("Choose the wages and payroll liability accounts first (the Accounting page).");
-    const lines = await buildPayrollLines(db, companyId, { periodStart: period.periodStart, periodEnd: period.periodEnd });
+    const lines = await linesForPayPeriod(db, companyId, period);
     const j = payrollJournalLines(lines, cfg.settings);
     amount = j.totalCents;
     if (!j.lines.length) throw new BigcapitalError("No hourly wages to post for this period");

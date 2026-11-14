@@ -19,3 +19,4 @@ export * from "./attendance";
 export * from "./training";
 export * from "./accounting";
 export * from "./phone";
+export * from "./payRates";

@@ -7,7 +7,7 @@ import { companies, employees, payPeriodApprovers, payPeriods } from "../db/sche
 import { authenticate, requireRole, roleIn } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { notify, staffWithRole } from "../lib/notify";
-import { buildPayrollLines } from "../lib/payroll";
+import { buildPayrollLines, linesForPayPeriod } from "../lib/payroll";
 import { localParts } from "../lib/tz";
 import { accountingConfig, autoPost, postPayPeriod } from "../lib/accounting";
 
@@ -95,7 +95,12 @@ const routes: FastifyPluginAsync = async (app) => {
       canApprove: isApprover || hasRole(roleIn(req, AREA), "owner"),
       /** For the calendar that shades each pay period. */
       schedule: { frequency: c.frequency as PayFrequency | null, anchorDate: c.anchorDate, paydayOffsetDays: c.paydayOffsetDays },
-      periods: rows.map((r) => ({ ...r.period, approvedBy: r.approver?.firstName ? `${r.approver.firstName} ${r.approver.lastName}` : null })),
+      // The saved figures stay out of the list (the period's own page shows them).
+      periods: rows.map(({ period: { approvedLines, ...period }, approver }) => ({
+        ...period,
+        locked: !!approvedLines,
+        approvedBy: approver?.firstName ? `${approver.firstName} ${approver.lastName}` : null,
+      })),
     };
   });
 
@@ -108,10 +113,13 @@ const routes: FastifyPluginAsync = async (app) => {
       .leftJoin(employees, eq(employees.id, payPeriods.approvedById))
       .where(and(eq(payPeriods.id, req.params.id), eq(payPeriods.companyId, req.user.companyId)));
     if (!row) notFound("Pay period");
-    const lines = await buildPayrollLines(db, req.user.companyId, { periodStart: row.period.periodStart, periodEnd: row.period.periodEnd });
+    const lines = await linesForPayPeriod(db, req.user.companyId, row.period);
     const isApprover = (await approverIds(req.user.companyId)).includes(req.user.sub);
+    const { approvedLines, ...periodInfo } = row.period;
     return {
-      ...row.period,
+      ...periodInfo,
+      /** Approved periods show the figures saved at approval. */
+      locked: row.period.status === "approved" && !!approvedLines,
       approvedBy: row.approver?.firstName ? `${row.approver.firstName} ${row.approver.lastName}` : null,
       canApprove: isApprover || hasRole(roleIn(req, AREA), "owner"),
       lines: lines.filter((l) => l.totalHours > 0 || l.ptoHours > 0 || l.holidayHours > 0 || l.holidayNotes.length > 0 || l.payType === "salary"),
@@ -126,9 +134,11 @@ const routes: FastifyPluginAsync = async (app) => {
     const [period] = await db.select().from(payPeriods).where(and(eq(payPeriods.id, req.params.id), eq(payPeriods.companyId, req.user.companyId)));
     if (!period) notFound("Pay period");
     if (period.status === "approved") throw new HttpError(409, "This pay period is already approved");
+    // Save the figures as approved, so a later raise or rate correction can't change them.
+    const approvedLines = await buildPayrollLines(db, req.user.companyId, { periodStart: period.periodStart, periodEnd: period.periodEnd });
     const [updated] = await db
       .update(payPeriods)
-      .set({ status: "approved", approvedById: req.user.sub, approvedAt: new Date(), approvalNote: note || null })
+      .set({ status: "approved", approvedById: req.user.sub, approvedAt: new Date(), approvalNote: note || null, approvedLines })
       .where(and(eq(payPeriods.id, period.id), eq(payPeriods.status, "pending")))
       .returning();
     if (!updated) throw new HttpError(409, "This pay period is already approved");
@@ -142,14 +152,15 @@ const routes: FastifyPluginAsync = async (app) => {
     // Send it to Bigcapital if the company asked for that.
     const acct = await accountingConfig(req.user.companyId);
     if (acct.settings.enabled && acct.settings.autoPostPayroll && acct.hasKey) autoPost(() => postPayPeriod(req.user.companyId, period.id, req.user.sub));
-    return updated;
+    const { approvedLines: _saved, ...result } = updated;
+    return { ...result, locked: true };
   });
 
   /** Admins can reopen an approved period (e.g. hours were corrected) so it's approved again. */
   app.post<{ Params: { id: string } }>("/:id/reopen", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const [updated] = await db
       .update(payPeriods)
-      .set({ status: "pending", approvedById: null, approvedAt: null, approvalNote: null })
+      .set({ status: "pending", approvedById: null, approvedAt: null, approvalNote: null, approvedLines: null })
       .where(and(eq(payPeriods.id, req.params.id), eq(payPeriods.companyId, req.user.companyId)))
       .returning();
     if (!updated) notFound("Pay period");

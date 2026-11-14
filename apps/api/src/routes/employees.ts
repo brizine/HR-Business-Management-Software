@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import bcrypt from "bcryptjs";
-import { and, asc, eq, inArray } from "drizzle-orm";
-import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, employeeContactSchema, employeeMenusSchema, employeeSchema, hasRole, isInactive, menuRenameSchema, pageLayoutsUpdateSchema, MENU_LISTS, STORED_LISTS, defaultLabel, defaultList, menuLabelsSchema, menuListRenameSchema, menuListSchema, type Role, type StoredList } from "@crewdesk/shared";
+import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
+import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, payRateSchema, rateOn, employeeContactSchema, employeeMenusSchema, employeeSchema, hasRole, isInactive, menuRenameSchema, pageLayoutsUpdateSchema, MENU_LISTS, STORED_LISTS, defaultLabel, defaultList, menuLabelsSchema, menuListRenameSchema, menuListSchema, type Role, type StoredList } from "@crewdesk/shared";
+import { z } from "zod";
 import { db } from "../db";
-import { assets, companies, documents, employees, jobs, mixProducts, mixSheets, recoveryCodes } from "../db/schema";
+import { assets, companies, documents, employees, jobs, mixProducts, mixSheets, payPeriods, payRates, recoveryCodes } from "../db/schema";
+import { companyToday, setRate, syncCurrentPay } from "../lib/payRates";
 import { authenticate, canManageAccount, requireRole, signOutEverywhere, roleIn } from "../lib/auth";
 import { sendInvite } from "../lib/invites";
 import { storage } from "../lib/storage";
@@ -253,16 +255,25 @@ const routes: FastifyPluginAsync = async (app) => {
       if (!canManageAccount(roleIn(req, "people"), body.role)) throw new HttpError(403, "Only the owner can make someone an admin or owner");
     }
     const { password, statusReason, ...rest } = body;
-    const [row] = await db
-      .update(employees)
-      .set({
-        ...rest,
-        ...statusFields(body, target, req.user.sub),
-        ...(rest.email ? { email: rest.email.toLowerCase() } : {}),
-        ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}),
-      })
-      .where(and(eq(employees.id, req.params.id), eq(employees.companyId, req.user.companyId)))
-      .returning();
+    // A pay change becomes a dated rate in the pay history (today unless a start date is given), so
+    // payroll for earlier dates keeps the old rate. The current pay follows from the history.
+    const { payEffectiveDate } = parse(z.object({ payEffectiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }), req.body);
+    const payChanged = (rest.payRateCents !== undefined && rest.payRateCents !== target.payRateCents) || (rest.payType !== undefined && rest.payType !== target.payType);
+    if (payChanged) {
+      await setRate(db, target, { effectiveDate: payEffectiveDate ?? (await companyToday(req.user.companyId)), payType: rest.payType ?? target.payType, payRateCents: rest.payRateCents ?? target.payRateCents }, req.user.sub);
+    }
+    delete rest.payRateCents;
+    delete rest.payType;
+    const changes = Object.fromEntries(Object.entries({
+      ...rest,
+      ...statusFields(body, target, req.user.sub),
+      ...(rest.email ? { email: rest.email.toLowerCase() } : {}),
+      ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}),
+    }).filter(([, v]) => v !== undefined));
+    const where = and(eq(employees.id, req.params.id), eq(employees.companyId, req.user.companyId));
+    const [row] = Object.keys(changes).length
+      ? await db.update(employees).set(changes).where(where).returning()
+      : await db.select().from(employees).where(where);
     if (!row) notFound("Employee");
     // Anything that changes who can sign in, or as what, ends their current sessions.
     const changedAccess =
@@ -272,6 +283,48 @@ const routes: FastifyPluginAsync = async (app) => {
       (isInactive(rest.status) && !isInactive(target.status));
     return publicEmployee(changedAccess ? await signOutEverywhere(row.id) : row);
   });
+
+  /** Someone's pay history (managers and up in People, like the rest of their pay). */
+  app.get<{ Params: { id: string } }>("/:id/pay-rates", { preHandler: requireRole("manager", AREA) }, async (req) => {
+    const [e] = await db.select().from(employees).where(and(eq(employees.id, req.params.id), eq(employees.companyId, req.user.companyId)));
+    if (!e) notFound("Employee");
+    const rows = await db.select().from(payRates).where(eq(payRates.employeeId, e.id)).orderBy(desc(payRates.effectiveDate));
+    const names = await db.select({ id: employees.id, firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(eq(employees.companyId, req.user.companyId));
+    const today = await companyToday(req.user.companyId);
+    const current = rateOn(rows, today);
+    const history = rows.length ? rows : [{ id: null, effectiveDate: e.startDate ?? "2000-01-01", payType: e.payType, payRateCents: e.payRateCents, note: "Starting rate", createdById: null, createdAt: null }];
+    return history.map((r) => {
+      const who = names.find((n) => n.id === r.createdById);
+      return { ...r, createdBy: who ? `${who.firstName} ${who.lastName}` : null, current: !rows.length || r.id === current?.id, upcoming: r.effectiveDate > today };
+    });
+  });
+
+  /** Adds a raise (or any pay change) from a date; the same date replaces that entry. */
+  app.post<{ Params: { id: string } }>("/:id/pay-rates", { preHandler: requireRole("admin", AREA) }, async (req) => {
+    const body = parse(payRateSchema, req.body);
+    const target = await manageable(req, req.params.id);
+    await setRate(db, target, body, req.user.sub);
+    return { ok: true, warning: await approvedOverlap(req.user.companyId, body.effectiveDate) };
+  });
+
+  /** Removes a rate entered by mistake (not the only one). */
+  app.delete<{ Params: { id: string; rateId: string } }>("/:id/pay-rates/:rateId", { preHandler: requireRole("admin", AREA) }, async (req) => {
+    const target = await manageable(req, req.params.id);
+    const rows = await db.select().from(payRates).where(eq(payRates.employeeId, target.id));
+    const rate = rows.find((r) => r.id === req.params.rateId);
+    if (!rate) notFound("Pay rate");
+    if (rows.length === 1) throw new HttpError(400, "Everyone needs at least one pay rate. Add the right one first, then remove this.");
+    await db.delete(payRates).where(eq(payRates.id, rate.id));
+    await syncCurrentPay(db, target.id, await companyToday(req.user.companyId));
+    return { ok: true, warning: await approvedOverlap(req.user.companyId, rate.effectiveDate) };
+  });
+
+  /** Approved pay periods keep their saved figures; say so when a change reaches back into one. */
+  async function approvedOverlap(companyId: string, from: string) {
+    const [p] = await db.select({ id: payPeriods.id }).from(payPeriods)
+      .where(and(eq(payPeriods.companyId, companyId), eq(payPeriods.status, "approved"), gte(payPeriods.periodEnd, from))).limit(1);
+    return p ? "Pay periods already approved for those dates keep the figures they were approved with. To recalculate one, an admin can reopen it and approve it again." : null;
+  }
 
   /** Ends all of someone's sessions, e.g. a lost phone or the day they leave. */
   app.post<{ Params: { id: string } }>("/:id/sign-out-everywhere", { preHandler: requireRole("admin", AREA) }, async (req) => {

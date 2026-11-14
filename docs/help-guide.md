@@ -81,6 +81,12 @@ Admins choose which employees can edit products, rates and mixes; every change i
   resetting two-factor.
 - Phone numbers are formatted as (555) 555-5555 automatically.
 - Marking someone inactive or terminated (with a reason, visible to managers) signs them out.
+- **Pay History** (on the profile, managers see it, admins change it): every pay rate with the date
+  it started. **Add a raise or pay change** with the date it starts (today, a past date or a future
+  date). Payroll pays each day at the rate in effect that day, so earlier pay periods keep the old
+  rate and a raise in the middle of a pay period is split. A future raise takes effect on its day.
+  Editing the pay rate in the profile form also records a change, starting on the date in
+  **If pay changes, it starts on**. Remove an entry only if it was a mistake.
 
 ## Schedule
 
@@ -175,7 +181,13 @@ Job postings, a public careers page, an applicant board, and one-click hire.
 
 - **Pay schedule:** how often you pay, when periods start, payday, and who approves (owners and
   admins). Pay periods show on a calendar.
-- **Export hours** for a pay period (CSV) and **Timesheets to approve**.
+- **Export hours** for a pay period (CSV) and **Timesheets to approve**. When someone's pay changed
+  during the period, the line says so (for example "$18.00/hr, then $20.00/hr from Mar 4") and the
+  estimated gross uses each day's rate. In a week with two rates, overtime uses the blended
+  (weighted average) rate, as federal law requires.
+- **Approved pay periods are locked:** their figures are saved when approved, so a later raise or
+  correction doesn't change them (you'll see a 🔒 note). To recalculate one, an admin clicks
+  **Reopen for approval**, then it's approved again.
 
 ## Accounting
 

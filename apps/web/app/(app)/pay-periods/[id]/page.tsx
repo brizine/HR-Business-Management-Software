@@ -30,6 +30,7 @@ export default function PayPeriodApproval() {
         <div className="card">
           <strong>Approved</strong> by {d.approvedBy ?? "someone no longer here"} on {fmtDateTime(d.approvedAt)}.
           {d.approvalNote && <p style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>“{d.approvalNote}”</p>}
+          {d.locked && <p className="muted" style={{ margin: "6px 0 0", fontSize: 13 }}>🔒 These figures are saved as they were approved, so later pay changes or corrections don&apos;t alter them. Reopening works them out again.</p>}
           {can("admin", "payroll") && (
             <div style={{ marginTop: 10 }}>
               <button className="btn sm" disabled={busy} onClick={() => confirm("Reopen this pay period so it has to be approved again?") && run(async () => { await api(`/pay-periods/${id}/reopen`, { method: "POST" }); await p.reload(); })}>Reopen for approval</button>
@@ -62,7 +63,7 @@ export default function PayPeriodApproval() {
                 <td>{l.overtimeHours.toFixed(2)}</td>
                 <td>{l.ptoHours ? l.ptoHours.toFixed(2) : "—"}</td>
                 <td>{l.holidayHours ? l.holidayHours.toFixed(2) : "—"}{l.holidayWorkedHours ? <div className="muted" style={{ fontSize: 12 }}>+{l.holidayWorkedHours.toFixed(2)}h worked</div> : null}{l.holidayNotes?.map((n: string) => <div key={n} className="muted" style={{ fontSize: 12, maxWidth: 260 }}>⚠ {n}</div>)}</td>
-                <td>{l.estimatedGrossCents == null ? <span className="muted">Salary</span> : money(l.estimatedGrossCents)}</td>
+                <td>{l.estimatedGrossCents == null ? <span className="muted">Salary</span> : money(l.estimatedGrossCents)}{l.payNote && <div className="muted" style={{ fontSize: 12, maxWidth: 240 }}>Pay changed: {l.payNote}</div>}</td>
               </tr>
             ))}</tbody>
             <tfoot><tr><th>Total</th><th>{sum("regularHours")}</th><th>{sum("overtimeHours")}</th><th>{sum("ptoHours")}</th><th>{sum("holidayHours")}</th>
