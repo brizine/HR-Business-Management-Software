@@ -88,9 +88,9 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
             <p className="muted" style={{ margin: 0 }}>Whichever interval comes first triggers the service. Leave last-service fields blank to count from today. The person assigned gets its reminders, and work orders made from it go to them.</p>
             <div className="formgrid">
               <label>Service<input name="name" required placeholder="Oil & filter change" /></label>
-              <label>Every N miles<input name="intervalMiles" type="number" min="1" /></label>
-              <label>Every N engine hours<input name="intervalHours" type="number" min="1" /></label>
-              <label>Every N days<input name="intervalDays" type="number" min="1" /></label>
+              <label>Every X miles<input name="intervalMiles" type="number" min="1" /></label>
+              <label>Every X engine hours<input name="intervalHours" type="number" min="1" /></label>
+              <label>Every X days<input name="intervalDays" type="number" min="1" /></label>
               <label>Last service date<input name="lastServiceDate" type="date" /></label>
               <label>Last service odometer<input name="lastServiceOdometer" type="number" min="0" /></label>
               <label>Last service hours<input name="lastServiceHours" type="number" min="0" /></label>
