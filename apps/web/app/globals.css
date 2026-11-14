@@ -63,7 +63,7 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .sidebar a.active { background: rgba(255,255,255,.12); color: #fff; }
 .sidebar .spacer { flex: 1; }
 /* Help: a button rather than a plain menu link. */
-.sidebar a.nav-help { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 8px 12px; background: var(--primary); color: var(--primary-ink); font-weight: 600; border-radius: 8px; }
+.sidebar a.nav-help { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; padding: 8px 12px; background: var(--primary); color: var(--primary-ink); font-weight: 600; border-radius: 8px; }
 .sidebar a.nav-help:hover, .sidebar a.nav-help.active { background: var(--primary); filter: brightness(1.1); color: var(--primary-ink); }
 .sidebar a.nav-help span { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: rgba(255,255,255,.25); font-size: 13px; }
 .main { flex: 1; padding: 24px 28px; min-width: 0; }

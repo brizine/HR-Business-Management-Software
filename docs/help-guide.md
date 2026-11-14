@@ -5,7 +5,7 @@ features change. Menu names are written as they appear in the left sidebar.
 
 ## Getting help
 
-The blue **? Help** button at the top of the left menu opens Help: **Ask the Assistant** (type a
+The blue **? Help** button near the bottom of the left menu, above **Settings**, opens Help: **Ask the Assistant** (type a
 question, get step-by-step answers) and **User Manual** (this guide, with contents and search).
 
 ## Roles and access

@@ -87,7 +87,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* With a logo, the logo names the company; without one, the name shows instead. */}
         {!me.company.hasLogo && <div className="brand">{me.company.name}</div>}
         <div className="brand sidebar-company">Management Software</div>
-        <Link href="/help" className={`nav-help ${path.startsWith("/help") ? "active" : ""}`}><span aria-hidden="true">?</span> Help</Link>
         <Link href="/notifications" className={path.startsWith("/notifications") ? "active" : ""}>
           Notifications {unread > 0 && <span className="badge bad" style={{ marginLeft: 4 }}>{unread > 99 ? "99+" : unread}</span>}
         </Link>
@@ -112,6 +111,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="company" style={{ paddingBottom: 4 }}>
           {me.user.firstName} {me.user.lastName} · {me.user.role}
         </div>
+        <Link href="/help" className={`nav-help ${path.startsWith("/help") ? "active" : ""}`}><span aria-hidden="true">?</span> Help</Link>
         <Link href="/settings/security" className={path.startsWith("/settings") ? "active" : ""}>Settings</Link>
         <a href="#" onClick={(e) => { e.preventDefault(); signOut().then(() => router.replace("/login")); }}>
           Sign Out
