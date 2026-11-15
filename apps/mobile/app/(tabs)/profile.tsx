@@ -29,10 +29,13 @@ export default function Profile() {
           {mine.data && <MyPhoto e={mine.data} onChange={mine.reload} />}
           <View style={{ flex: 1 }}>
             <Txt style={{ fontSize: 20, fontWeight: "700" }}>{me?.user.firstName} {me?.user.lastName}</Txt>
-            <Txt muted>{label("role", me?.user.role)}</Txt>
+            <Txt muted>{label("role", me?.user.role).replace(/^./, (c: string) => c.toUpperCase())}</Txt>
           </View>
         </Row>
       </Card>
+      <Button title="My Info" kind="secondary" onPress={() => router.push("/my-info")} />
+      <Button title="My Attendance" kind="secondary" onPress={() => router.push("/attendance")} />
+      <Button title="My Reviews" kind="secondary" onPress={() => router.push("/reviews")} />
       {toSign.length > 0 && (
         <Card title="Needs your signature">
           {toSign.map((d) => (
@@ -55,11 +58,8 @@ export default function Profile() {
           </View>
         )) : <Txt muted>No documents.</Txt>}
       </Card>
-      <Button title="📖  Company wiki" onPress={() => router.push("/wiki")} />
-      <Button title="My info: address & emergency contact" kind="secondary" onPress={() => router.push("/my-info")} />
+      <Button title="📖  Company Wiki" onPress={() => router.push("/wiki")} />
       <Button title="🎓  Training" onPress={() => router.push("/training")} />
-      <Button title="My attendance" kind="secondary" onPress={() => router.push("/attendance")} />
-      <Button title="My reviews" kind="secondary" onPress={() => router.push("/reviews")} />
       <Button title="Sign out" kind="secondary" onPress={signOut} />
       <Button title="Sign out on all devices" kind="danger" onPress={() =>
         Alert.alert("Sign out everywhere?", "Ends your Crewdesk sessions on every phone and computer, including this one. Use this if a device was lost.", [

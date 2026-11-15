@@ -52,14 +52,14 @@ function Gate() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="notifications" options={{ title: "Notifications" }} />
-      <Stack.Screen name="wiki/index" options={{ title: "Company wiki" }} />
+      <Stack.Screen name="wiki/index" options={{ title: "Company Wiki" }} />
       <Stack.Screen name="wiki/[id]" options={{ title: "" }} />
-      <Stack.Screen name="scan" options={{ title: "Scan equipment" }} />
+      <Stack.Screen name="scan" options={{ title: "Scan Equipment" }} />
       <Stack.Screen name="q/[code]" options={{ title: "Equipment" }} />
-      <Stack.Screen name="availability" options={{ title: "My availability" }} />
-      <Stack.Screen name="my-info" options={{ title: "My info" }} />
-      <Stack.Screen name="reviews" options={{ title: "My reviews" }} />
-      <Stack.Screen name="attendance" options={{ title: "My attendance" }} />
+      <Stack.Screen name="availability" options={{ title: "My Availability" }} />
+      <Stack.Screen name="my-info" options={{ title: "My Info" }} />
+      <Stack.Screen name="reviews" options={{ title: "My Reviews" }} />
+      <Stack.Screen name="attendance" options={{ title: "My Attendance" }} />
       <Stack.Screen name="training/index" options={{ title: "Training" }} />
       <Stack.Screen name="training/[id]" options={{ title: "Course" }} />
       <Stack.Screen name="training/lesson/[id]" options={{ title: "Lesson" }} />
