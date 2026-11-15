@@ -35,7 +35,7 @@ export default function Profile() {
       </Card>
       <Button title="My Info" onPress={() => router.push("/my-info")} />
       <Button title="My Attendance" onPress={() => router.push("/attendance")} />
-      <Button title="My Reviews" kind="secondary" onPress={() => router.push("/reviews")} />
+      <Button title="My Reviews" onPress={() => router.push("/reviews")} />
       {toSign.length > 0 && (
         <Card title="Needs your signature">
           {toSign.map((d) => (
