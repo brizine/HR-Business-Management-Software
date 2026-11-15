@@ -6,7 +6,6 @@ import { useApi } from "@/lib/hooks";
 import { useMenuLabel } from "@/lib/menus";
 import { Badge, Button, Card, Divider, Row, Screen, Txt } from "@/components/ui";
 import { MyPhoto } from "@/components/avatar";
-import { CompanyLogo } from "@/components/company-logo";
 
 export default function Profile() {
   const { me, signOut } = useAuth();
@@ -30,8 +29,7 @@ export default function Profile() {
           {mine.data && <MyPhoto e={mine.data} onChange={mine.reload} />}
           <View style={{ flex: 1 }}>
             <Txt style={{ fontSize: 20, fontWeight: "700" }}>{me?.user.firstName} {me?.user.lastName}</Txt>
-            <Txt muted>{me?.company.name} · {label("role", me?.user.role)}</Txt>
-            <View style={{ marginTop: 6, alignSelf: "flex-start" }}><CompanyLogo height={36} maxWidth={160} /></View>
+            <Txt muted>{label("role", me?.user.role)}</Txt>
           </View>
         </Row>
       </Card>
