@@ -6,22 +6,13 @@ import { useApi } from "@/lib/hooks";
 import { useMenuLabel } from "@/lib/menus";
 import { Badge, Button, Card, Divider, Row, Screen, Txt } from "@/components/ui";
 import { MyPhoto } from "@/components/avatar";
+import { MyDocuments } from "@/components/my-documents";
 
 export default function Profile() {
   const { me, signOut } = useAuth();
   const label = useMenuLabel();
-  const docs = useApi<any[]>("/documents");
+  const docs = useApi<any[]>("/documents?mine=true");
   const mine = useApi<any>(me ? `/employees/${me.user.id}` : null);
-  const toSign = docs.data?.filter((d) => d.requiresSignature && !d.signedAt && d.employeeId === me?.user.id) ?? [];
-
-  const sign = (doc: any) => {
-    const name = `${me!.user.firstName} ${me!.user.lastName}`;
-    Alert.alert("Sign document", `Sign "${doc.name}" as ${name}?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Sign", onPress: () => api(`/documents/${doc.id}/sign`, { body: { signedName: name } }).then(docs.reload, (e) => Alert.alert("Error", e.message)) },
-    ]);
-  };
-
   return (
     <Screen refreshing={docs.loading} onRefresh={docs.reload}>
       <Card>
@@ -36,28 +27,7 @@ export default function Profile() {
       <Button title="My Info" onPress={() => router.push("/my-info")} />
       <Button title="My Attendance" onPress={() => router.push("/attendance")} />
       <Button title="My Reviews" onPress={() => router.push("/reviews")} />
-      {toSign.length > 0 && (
-        <Card title="Needs your signature">
-          {toSign.map((d) => (
-            <View key={d.id} style={{ gap: 6 }}>
-              <Divider />
-              <Txt>{d.name}</Txt>
-              <Button title="Review & sign" onPress={() => sign(d)} />
-            </View>
-          ))}
-        </Card>
-      )}
-      <Card title="Documents">
-        {docs.data?.length ? docs.data.map((d) => (
-          <View key={d.id}>
-            <Divider />
-            <Row>
-              <View style={{ flex: 1 }}><Txt>{d.name}</Txt><Txt muted>{d.category} · {fmtDate(d.createdAt)}</Txt></View>
-              {d.requiresSignature && <Badge value={d.signedAt ? "completed" : "pending"} />}
-            </Row>
-          </View>
-        )) : <Txt muted>No documents.</Txt>}
-      </Card>
+      <MyDocuments docs={docs.data} onChange={docs.reload} />
       <Button title="📖  Company Wiki" onPress={() => router.push("/wiki")} />
       <Button title="🎓  Training" onPress={() => router.push("/training")} />
       <Button title="Sign out" kind="secondary" onPress={signOut} />

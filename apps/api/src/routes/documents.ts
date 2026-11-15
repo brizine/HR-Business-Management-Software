@@ -19,13 +19,17 @@ const contentType = (mime: string) => (mime.startsWith("text/") && !mime.include
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
 
-  /** Managers see everything; employees see company-wide docs and their own. */
-  app.get<{ Querystring: { employeeId?: string; assetId?: string } }>("/", async (req) => {
+  /**
+   * Managers see everything; employees see company-wide docs and their own. `mine=true` (the
+   * phone app's Me tab) is just your own documents and company-wide ones, for everyone.
+   */
+  app.get<{ Querystring: { employeeId?: string; assetId?: string; mine?: string } }>("/", async (req) => {
     const { companyId, sub } = req.user;
     const filters = [eq(documents.companyId, companyId)];
     if (req.query.employeeId) filters.push(eq(documents.employeeId, req.query.employeeId));
     if (req.query.assetId) filters.push(eq(documents.assetId, req.query.assetId));
-    if (!isManager(req, AREA)) filters.push(or(eq(documents.employeeId, sub), isNull(documents.employeeId))!);
+    if (req.query.mine === "true") filters.push(or(eq(documents.employeeId, sub), and(isNull(documents.employeeId), isNull(documents.assetId)))!);
+    else if (!isManager(req, AREA)) filters.push(or(eq(documents.employeeId, sub), isNull(documents.employeeId))!);
     // With whose file it's in and which asset it's for, so lists can show and search them.
     return db
       .select({

@@ -12,7 +12,7 @@ export default function Tasks() {
   const workOrders = useApi<any[]>("/work-orders?status=active&mine=true");
   const { can } = useAuth();
   const waiting = useApi<any[]>(can("manager", "onboarding") ? "/onboarding/assigned" : null);
-  const docs = useApi<any[]>("/documents");
+  const docs = useApi<any[]>("/documents?mine=true");
   // Remounting the summary card reloads it along with the lists below.
   const [refreshKey, setRefreshKey] = useState(0);
   const reload = () => { onboarding.reload(); workOrders.reload(); waiting.reload(); docs.reload(); setRefreshKey((k) => k + 1); };
