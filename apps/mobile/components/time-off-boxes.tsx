@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { api, fmtDate } from "@/lib/api";
+import { formatMdyTyping, mdyToIso } from "@/lib/dates";
 import { useApi } from "@/lib/hooks";
 import { Badge, Button, Card, Divider, ErrorText, Input, Row, Txt, useTheme } from "./ui";
 
@@ -46,7 +47,12 @@ export function RequestTimeOffCard({ balances, onSent, showRecent = true }: { ba
     setBusy(true);
     setError(null);
     try {
-      await api("/pto/requests", { body: { policyId: chosen, startDate: form.startDate, endDate: form.endDate || form.startDate, hours: Number(form.hours), reason: form.reason || undefined } });
+      // Typed as MM-DD-YYYY; the server takes YYYY-MM-DD.
+      const startDate = mdyToIso(form.startDate);
+      if (!startDate) throw new Error("Enter the start date as MM-DD-YYYY, e.g. 12-22-2026");
+      const endDate = form.endDate ? mdyToIso(form.endDate) : startDate;
+      if (!endDate) throw new Error("Enter the end date as MM-DD-YYYY, or leave it blank for one day");
+      await api("/pto/requests", { body: { policyId: chosen, startDate, endDate, hours: Number(form.hours), reason: form.reason || undefined } });
       setForm(blank);
       setSent(true);
       mine.reload();
@@ -70,8 +76,8 @@ export function RequestTimeOffCard({ balances, onSent, showRecent = true }: { ba
         ))}
       </Row>
       {available != null && <Txt muted style={{ fontSize: 12 }}>{available}h available</Txt>}
-      <Input label="Start date (YYYY-MM-DD)" value={form.startDate} onChangeText={(v) => edit({ startDate: v })} placeholder="2026-12-22" keyboardType="numbers-and-punctuation" maxLength={10} />
-      <Input label="End date (YYYY-MM-DD, blank for one day)" value={form.endDate} onChangeText={(v) => edit({ endDate: v })} placeholder="2026-12-23" keyboardType="numbers-and-punctuation" maxLength={10} />
+      <Input label="Start date (MM-DD-YYYY)" value={form.startDate} onChangeText={(v) => edit({ startDate: formatMdyTyping(v) })} placeholder="12-22-2026" keyboardType="number-pad" maxLength={10} />
+      <Input label="End date (MM-DD-YYYY, blank for one day)" value={form.endDate} onChangeText={(v) => edit({ endDate: formatMdyTyping(v) })} placeholder="12-23-2026" keyboardType="number-pad" maxLength={10} />
       <Input label="Hours" value={form.hours} onChangeText={(v) => edit({ hours: v })} keyboardType="decimal-pad" />
       <Input label="Reason (optional)" value={form.reason} onChangeText={(v) => edit({ reason: v })} maxLength={500} />
       <ErrorText error={error} />
