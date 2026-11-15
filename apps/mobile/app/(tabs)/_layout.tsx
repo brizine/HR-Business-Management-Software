@@ -25,8 +25,8 @@ function Bell() {
 export default function TabsLayout() {
   const t = useTheme();
   const { me } = useAuth();
-  // The bar at the top of every tab shows the company name; the bottom tabs keep their short labels.
-  const headerTitle = me?.company.name ?? "";
+  // The bar at the top shows the company logo; the name only when there's no logo (they overlapped).
+  const headerTitle = me?.company.hasLogo ? "" : me?.company.name ?? "";
   return (
     <Tabs screenOptions={{ tabBarActiveTintColor: t.primary, headerStyle: { backgroundColor: t.surface }, headerTintColor: t.text, tabBarStyle: { backgroundColor: t.surface }, headerTitle, headerRight: () => <Bell />, headerLeft: () => <View style={{ marginLeft: 16 }}><CompanyLogo /></View> }}>
       <Tabs.Screen name="index" options={{ title: "Clock", tabBarIcon: icon("⏱") }} />
