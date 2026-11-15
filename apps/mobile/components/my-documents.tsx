@@ -8,8 +8,9 @@ import { Badge, Button, Card, Divider, Input, Row, Txt, useTheme } from "./ui";
 type Doc = { id: string; name: string; category: string; createdAt: string; employeeId: string | null; requiresSignature: boolean; signedAt: string | null };
 
 /**
- * Me tab: documents to sign (open it first, then sign) and every document of yours or the
- * company's, each opening on tap. Filters appear once the list is long.
+ * Me tab: documents to sign (open it first, then sign; always shown) and a Documents button that
+ * expands to every document of yours or the company's, each opening on tap. Filters appear once the
+ * list is long.
  */
 export function MyDocuments({ docs, onChange }: { docs: Doc[] | null; onChange: () => void }) {
   const { me } = useAuth();
@@ -18,6 +19,7 @@ export function MyDocuments({ docs, onChange }: { docs: Doc[] | null; onChange: 
   const [q, setQ] = useState("");
   const [onlyToSign, setOnlyToSign] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const all = docs ?? [];
   const toSign = all.filter((d) => d.requiresSignature && !d.signedAt && d.employeeId === me?.user.id);
 
@@ -61,7 +63,13 @@ export function MyDocuments({ docs, onChange }: { docs: Doc[] | null; onChange: 
           ))}
         </Card>
       )}
-      <Card title="Documents">
+      <Button
+        title={`Documents${all.length ? ` (${all.length})` : ""}  ${expanded ? "▴" : "▾"}`}
+        kind="secondary"
+        onPress={() => setExpanded(!expanded)}
+      />
+      {expanded && (
+      <Card>
         {long && (
           <View style={{ gap: 6 }}>
             <Input label="Search" value={q} onChangeText={setQ} placeholder="Name or category" autoCorrect={false} />
@@ -70,9 +78,9 @@ export function MyDocuments({ docs, onChange }: { docs: Doc[] | null; onChange: 
             </Pressable>
           </View>
         )}
-        {shown.length ? shown.map((d) => (
+        {shown.length ? shown.map((d, i) => (
           <Pressable key={d.id} onPress={() => open(d)} disabled={busy === d.id} accessibilityRole="button" accessibilityLabel={`Open ${d.name}`}>
-            <Divider />
+            {(i > 0 || long) && <Divider />}
             <Row style={{ alignItems: "center", paddingVertical: 4 }}>
               <View style={{ flex: 1 }}>
                 <Txt style={{ color: t.primary, fontWeight: "600" }}>{d.name}</Txt>
@@ -84,6 +92,7 @@ export function MyDocuments({ docs, onChange }: { docs: Doc[] | null; onChange: 
         )) : <Txt muted>{all.length ? "No documents match." : "No documents."}</Txt>}
         {all.length > 0 && <Txt muted style={{ fontSize: 12 }}>Tap a document to open it.</Txt>}
       </Card>
+      )}
     </>
   );
 }
