@@ -200,9 +200,9 @@ Job postings, a public careers page, an applicant board, and one-click hire.
 
 - **Pay schedule:** how often you pay, when periods start, payday, and who approves (owners and
   admins). Pay periods show on a calendar.
-- **Pay Approvals** (near the top of the left menu, just below **Notifications**, for people who
-  approve pay periods; the yellow number is how many are waiting): review everyone's hours when a
-  pay period ends and approve them before payday.
+- **Payroll Approval** (the blue button at the top right of the **Payroll** page; approvers who
+  aren't admins get a **Payroll** link in the left menu that opens it; the yellow number is how many
+  are waiting): review everyone's hours when a pay period ends and approve them before payday.
 - **Export hours** for a pay period (CSV) and **Timesheets to approve**. When someone's pay changed
   during the period, the line says so (for example "$18.00/hr, then $20.00/hr from Mar 4") and the
   estimated gross uses each day's rate. In a week with two rates, overtime uses the blended

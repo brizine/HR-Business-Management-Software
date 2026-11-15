@@ -103,13 +103,18 @@ export default function Payroll() {
   const rows = (preview.data ?? []).filter((l) => l.totalHours > 0 || l.ptoHours > 0 || l.holidayHours > 0 || l.holidayNotes?.length > 0 || l.payType === "salary" || l.extraPay?.length > 0);
   const unapproved = (preview.data ?? []).reduce((n, l) => n + l.unapprovedEntries, 0);
   const s = settings.data;
+  const approvals = useApi<{ isApprover: boolean; pending: number }>("/pay-periods/me");
   const usesProvider = s?.payrollProvider === "check";
   const formsToEnter = (pending.data ?? []).filter((f) => f.type !== "i9").length;
   const sum = (k: string) => rows.reduce((t, l) => t + l[k], 0).toFixed(2);
 
   return (
     <>
-      <PageHead title="Payroll" sub={usesProvider ? "Hours go to Check for you to approve there; you can still export a CSV any time." : "Export hours for each pay period and run payroll in your own system, or send the file to your accountant."} />
+      <PageHead title="Payroll" sub={usesProvider ? "Hours go to Check for you to approve there; you can still export a CSV any time." : "Export hours for each pay period and run payroll in your own system, or send the file to your accountant."}>
+        <Link href="/pay-periods" className="btn primary">
+          Payroll Approval{approvals.data?.pending ? <span className="badge warn" style={{ marginLeft: 6 }}>{approvals.data.pending}</span> : null}
+        </Link>
+      </PageHead>
       {formsToEnter > 0 && !usesProvider && (
         <div className="card stack">
           <h2 style={{ margin: 0 }}>Tax Forms to Enter</h2>

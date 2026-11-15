@@ -61,7 +61,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const path = usePathname();
   const unread = useUnreadCount(!!me);
-  // Pay period approvers who aren't admins reach their approvals from the sidebar.
+  // Pay period approvers who aren't payroll admins get a Payroll link that opens Payroll Approval.
   const [payApprovals, setPayApprovals] = useState<{ isApprover: boolean; pending: number } | null>(null);
   useEffect(() => {
     if (me) api<{ isApprover: boolean; pending: number }>("/pay-periods/me").then(setPayApprovals, () => {});
@@ -90,19 +90,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Link href="/notifications" className={path.startsWith("/notifications") ? "active" : ""}>
           Notifications {unread > 0 && <span className="badge bad" style={{ marginLeft: 4 }}>{unread > 99 ? "99+" : unread}</span>}
         </Link>
-        {payApprovals?.isApprover && (
-          <Link href="/pay-periods" className={path.startsWith("/pay-periods") ? "active" : ""}>
-            Pay Approvals {payApprovals.pending > 0 && <span className="badge warn" style={{ marginLeft: 4 }}>{payApprovals.pending}</span>}
-          </Link>
-        )}
         {NAV.map((s) => (
           <div key={s.section} style={{ display: "contents" }}>
             {s.section && <div className="navsection">{s.section}</div>}
             {s.items
+              .map((i) => (i.href === "/payroll" && !can("admin", "payroll") && payApprovals?.isApprover ? { ...i, href: "/pay-periods", min: undefined } : i))
               .filter((i) => !i.min || can(i.min, i.area))
               .map((i) => (
-                <Link key={i.href} href={i.href} className={path.startsWith(i.href) ? "active" : ""}>
+                <Link key={i.href} href={i.href} className={path.startsWith(i.href) || (i.label === "Payroll" && path.startsWith("/pay-periods")) ? "active" : ""}>
                   {i.label}
+                  {i.label === "Payroll" && !!payApprovals?.pending && <span className="badge warn" style={{ marginLeft: 4 }} title="Pay periods waiting for your approval">{payApprovals.pending}</span>}
                 </Link>
               ))}
           </div>
