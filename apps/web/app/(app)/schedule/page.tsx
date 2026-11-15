@@ -396,14 +396,12 @@ export default function Schedule() {
       if (confirm(`Pick up this shift on ${new Date(s.startsAt).toLocaleDateString()}?`)) {
         action.run(async () => { await api(`/shifts/${s.id}/claim`, { method: "POST" }); setNotice("Shift picked up. It's on your schedule."); reload(); });
       }
-    } else if (s.employeeId === me?.user.id && !s.dropRequestedAt) {
-      const reason = prompt("Ask your manager to take you off this shift. Reason (optional):");
-      if (reason !== null) action.run(async () => { await api(`/shifts/${s.id}/drop-request`, { body: { reason: reason || undefined } }); setNotice("Request sent to your manager."); reload(); });
     }
+    // Time away from a scheduled shift is requested through Time Off, not by dropping the shift.
   };
 
   const Chip = ({ s }: { s: any }) => {
-    const clickable = manager || (!s.employeeId && s.status === "published") || (s.employeeId === me?.user.id && !s.dropRequestedAt);
+    const clickable = manager || (!s.employeeId && s.status === "published");
     return (
       <div className={`shift ${s.status === "draft" ? "draft" : ""} ${!s.employeeId ? "open" : ""} ${s.employeeId === me?.user.id ? "mine" : ""}`}
         onClick={() => clickable && chipClick(s)} style={{ cursor: clickable ? "pointer" : "default" }}

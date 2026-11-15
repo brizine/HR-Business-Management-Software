@@ -113,14 +113,15 @@ Admins choose which employees can edit products, rates and mixes; every change i
   drafts. **Templates** save shifts you use often.
 - Double-booking is blocked. Approved time off, "can't work" availability and vehicles in the shop
   give warnings. Over 40 hours a week is flagged.
-- Employees can claim open shifts and ask to drop a published shift (a manager approves).
+- Employees can claim open shifts. To be off for a scheduled shift, they request time off (**Time
+  Off**); shifts can't be dropped from the schedule.
   Part-time staff set **My availability** (times they can't work).
 - The **Filters** box searches by name, job title, department, position, job site, vehicle and
   status.
 - **Phone app (Schedule → Shifts):** switch between **List**, **Week** and **Month** at the top. The
   week and month calendars show colored dots: blue = your shift, green = an open shift you can pick
   up, grey = approved time off, purple = paid holiday (today is circled). Tap a day to see its
-  shifts underneath, with **Ask to drop** or **Pick up this shift**. ‹ › change week or month; tap
+  shifts underneath, with **Pick up this shift** on open shifts (to be off, request time off). ‹ › change week or month; tap
   the title to jump back to today. **Scheduled hours** totals your week or month and warns about weeks
   over 40 hours. Managers can switch to **Whole crew** and pick a person or **Open shifts**.
 - **Subscribe in Calendar** (phone app, under the shifts): adds your published shifts, approved time

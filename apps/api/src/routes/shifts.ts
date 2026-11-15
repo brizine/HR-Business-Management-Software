@@ -556,27 +556,12 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** The assigned employee asks to give up a published shift; a manager decides. */
-  app.post<{ Params: { id: string } }>("/:id/drop-request", async (req) => {
-    const { reason } = parse(z.object({ reason: z.string().optional() }), req.body ?? {});
-    const shift = await loadShift(req.user.companyId, req.params.id);
-    if (shift.employeeId !== req.user.sub) throw new HttpError(403, "This isn't your shift");
-    if (shift.status !== "published") throw new HttpError(409, "This shift isn't published yet");
-    if (shift.startsAt <= new Date()) throw new HttpError(409, "This shift has already started");
-    if (shift.dropRequestedAt) throw new HttpError(409, "You already asked to drop this shift");
-    const [row] = await db
-      .update(shifts)
-      .set({ dropRequestedAt: new Date(), dropReason: reason ?? null })
-      .where(eq(shifts.id, shift.id))
-      .returning();
-
-    const [me] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
-    notify(req.user.companyId, except(await approversFor(req.user.companyId, req.user.sub, AREA), req.user.sub), {
-      category: "schedule",
-      title: `${me.firstName} ${me.lastName} wants to drop a shift`,
-      body: `${fmtShift(shift.startsAt, shift.endsAt, await companyTz(req.user.companyId))}${reason ? `: ${reason}` : ""}`,
-      link: { screen: "schedule" },
-    });
-    return row;
+  /**
+   * Dropping a shift is no longer offered: time away goes through Time Off (a request the manager
+   * approves). Requests made before this change can still be decided below.
+   */
+  app.post<{ Params: { id: string } }>("/:id/drop-request", async () => {
+    throw new HttpError(400, "To be off for a shift, request time off in Time Off.", "use_time_off");
   });
 
   /** Approving turns the shift into an open shift for someone else to pick up. */

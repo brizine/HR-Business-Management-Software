@@ -125,11 +125,6 @@ function ShiftList({ header, footer }: { header: React.ReactNode; footer: React.
     }
   };
 
-  const drop = (shift: any) =>
-    Alert.alert("Ask to drop this shift?", `${shiftDay(shift.startsAt)}, ${shiftTimes(shift)}\n\nYour manager has to approve it. You're still scheduled until then.`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Send request", onPress: () => act(shift.id, () => api(`/shifts/${shift.id}/drop-request`, { body: {} }), "Request sent to your manager") },
-    ]);
 
   return (
     <Screen refreshing={loading} onRefresh={reload}>
@@ -143,9 +138,6 @@ function ShiftList({ header, footer }: { header: React.ReactNode; footer: React.
               <ShiftDetails shift={shift} assetName={assetName} />
               {shift.dropRequestedAt && <Badge value="pending" />}
             </Row>
-            {!shift.dropRequestedAt && new Date(shift.startsAt) > new Date() && (
-              <Button title="Ask to drop" kind="secondary" busy={busy === shift.id} onPress={() => drop(shift)} />
-            )}
           </View>
         )) : <Txt muted>{filtering && data?.mine.length ? "None of your shifts match your filters." : "No shifts in the next two weeks."}</Txt>}
       </Card>}

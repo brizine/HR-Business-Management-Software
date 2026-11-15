@@ -118,11 +118,6 @@ export function ShiftCalendar({ mode }: { mode: "week" | "month" }) {
     setBusy(id);
     try { await fn(); Alert.alert(done); } catch (e) { Alert.alert("Couldn't do that", (e as Error).message); } finally { setBusy(null); reload(); }
   };
-  const drop = (shift: any) =>
-    Alert.alert("Ask to drop this shift?", `${shiftTimes(shift)}\n\nYour manager has to approve it. You're still scheduled until then.`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Send request", onPress: () => act(shift.id, () => api(`/shifts/${shift.id}/drop-request`, { body: {} }), "Request sent to your manager") },
-    ]);
 
   const dots = (day: string) => {
     const d = byDay(day);
@@ -215,7 +210,6 @@ export function ShiftCalendar({ mode }: { mode: "week" | "month" }) {
                 </View>
                 {shift.dropRequestedAt && <Badge value="pending" />}
               </Row>
-              {isMine && future && !shift.dropRequestedAt && <Button title="Ask to drop" kind="secondary" busy={busy === shift.id} onPress={() => drop(shift)} />}
               {open && future && <Button title="Pick up this shift" busy={busy === shift.id} onPress={() => act(shift.id, () => api(`/shifts/${shift.id}/claim`, { method: "POST" }), "It's yours! The shift is on your schedule.")} />}
             </View>
           );

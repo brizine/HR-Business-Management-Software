@@ -137,18 +137,12 @@ describe("open shifts and drop requests", () => {
     expect((await call("POST", `/shifts/${open.shift.id}/claim`, "amy")).status).toBe(409);
   });
 
-  it("drop request → approval reopens the shift for everyone else", async () => {
+  it("shifts can't be dropped: time away goes through Time Off", async () => {
     const amyShift = (await call("GET", `/shifts?from=${week.from}&to=${week.to}&employeeId=${people.amy.id}`, "amy")).body[0].shift;
-    expect((await call("POST", `/shifts/${amyShift.id}/drop-request`, "ben", {})).status).toBe(403);
-    await call("POST", `/shifts/${amyShift.id}/drop-request`, "amy", { reason: "Dentist" });
-    expect(await titlesFor("owner")).toEqual(["amy Test wants to drop a shift"]);
-    expect((await call("GET", "/shifts/drop-requests", "owner")).body).toHaveLength(1);
-
-    sent = [];
-    const decided = await call("POST", `/shifts/${amyShift.id}/drop-decision`, "owner", { approve: true });
-    expect(decided.body.employeeId).toBeNull();
-    expect(await titlesFor("amy")).toEqual(["You're off the hook: shift drop approved"]);
-    expect(await titlesFor("ben")).toEqual(["An open shift is available"]);
+    const r = await call("POST", `/shifts/${amyShift.id}/drop-request`, "amy", { reason: "Dentist" });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain("request time off");
+    expect((await call("GET", "/shifts/drop-requests", "owner")).body).toHaveLength(0);
   });
 });
 
