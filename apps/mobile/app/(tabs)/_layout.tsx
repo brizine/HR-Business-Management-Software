@@ -14,8 +14,11 @@ function Bell() {
     <Pressable onPress={() => router.push("/notifications")} hitSlop={10} style={{ marginRight: 16 }} accessibilityLabel={`Notifications, ${unread} unread`}>
       <Text style={{ fontSize: 20 }}>🔔</Text>
       {unread > 0 && (
-        <View style={{ position: "absolute", top: -4, right: -8, backgroundColor: t.bad, borderRadius: 9, minWidth: 18, height: 18, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 }}>
-          <Text style={{ color: "#fff", fontSize: 11, fontWeight: "700" }}>{unread > 99 ? "99+" : unread}</Text>
+        // Centered over the bell (a wider "99+" grows equally both ways).
+        <View pointerEvents="none" style={{ position: "absolute", top: -8, left: -12, right: -12, alignItems: "center" }}>
+          <View style={{ backgroundColor: t.bad, borderRadius: 9, minWidth: 18, height: 18, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 }}>
+            <Text style={{ color: "#fff", fontSize: 11, fontWeight: "700" }}>{unread > 99 ? "99+" : unread}</Text>
+          </View>
         </View>
       )}
     </Pressable>
