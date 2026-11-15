@@ -6,12 +6,13 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, ErrorText, Input, Row, Screen, Txt } from "@/components/ui";
 
-type Field = "phone" | (typeof EMPLOYEE_PRIVATE_CONTACT_FIELDS)[number];
-const FIELDS: Field[] = ["phone", ...EMPLOYEE_PRIVATE_CONTACT_FIELDS];
+// Date of birth isn't shown in the app (it's on the website); leaving it out here also means saving doesn't touch it.
+type Field = "phone" | Exclude<(typeof EMPLOYEE_PRIVATE_CONTACT_FIELDS)[number], "dateOfBirth">;
+const FIELDS: Field[] = ["phone", ...EMPLOYEE_PRIVATE_CONTACT_FIELDS.filter((f): f is Exclude<typeof f, "dateOfBirth"> => f !== "dateOfBirth")];
 /** Formatted as (555) 555-5555 while typing. */
 const PHONE_FIELDS: Field[] = ["phone", "emergencyPhone"];
 
-/** Your phone, date of birth, home address and emergency contact. Only managers and admins can see them. */
+/** Your email (read-only), phone, home address and emergency contact. Only managers and admins can see them. */
 export default function MyInfo() {
   const { me } = useAuth();
   const [v, setV] = useState<Record<Field, string> | null>(null);
@@ -50,7 +51,6 @@ export default function MyInfo() {
         <Input label="Email (you sign in with this)" value={me?.user.email ?? ""} editable={false} selectTextOnFocus />
         <Txt muted style={{ fontSize: 12, marginTop: -4 }}>To change it, ask an admin.</Txt>
         {field("phone", "Mobile phone", { keyboardType: "phone-pad", autoComplete: "tel" })}
-        {field("dateOfBirth", "Date of birth (YYYY-MM-DD)", { placeholder: "1990-04-23", keyboardType: "numbers-and-punctuation", autoComplete: "birthdate-full", maxLength: 10 })}
       </Card>
       <Card title="Home address">
         {field("addressLine1", "Street address", { autoComplete: "street-address" })}
