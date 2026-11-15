@@ -10,7 +10,7 @@ export default function PayPeriods() {
   return (
     <>
       <PageHead title="Payroll Approval" sub="When a pay period ends, review everyone's hours and approve them before payday.">
-        {can("admin", "payroll") && <Link href="/payroll" className="btn">← Back to Payroll</Link>}
+        {can("admin", "payroll") && <Link href="/payroll" className="btn primary">← Back to Payroll</Link>}
       </PageHead>
       <PayPeriodList />
     </>
