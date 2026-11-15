@@ -23,6 +23,8 @@ let registeredToken: string | null = null;
  * on a simulator, when the user declines, or without an EAS project ID.
  */
 export async function registerForPush(): Promise<string | null> {
+  // The browser preview has no push notifications.
+  if (Platform.OS === "web") return null;
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("default", {
       name: "Default",

@@ -1,4 +1,4 @@
-import * as SecureStore from "expo-secure-store";
+import { store as SecureStore } from "@/lib/store";
 import { useEffect, useState } from "react";
 import * as Print from "expo-print";
 import { Alert, Modal, Pressable, ScrollView, View } from "react-native";

@@ -88,6 +88,12 @@ Demo logins (password `password123`; two-factor is optional in the demo company)
 On a physical phone, set `EXPO_PUBLIC_API_URL` in `apps/mobile/.env` to your computer's LAN IP
 (e.g. `http://192.168.1.20:4000`).
 
+**Browser preview of the phone app:** `pnpm --filter @crewdesk/mobile web` opens the app in a
+browser (press `w` in a running `expo start` does the same). Use the browser's device toolbar to
+size it like a phone. The API must allow the preview's origin: add `http://localhost:8081` to
+`CORS_ORIGINS`. The camera, GPS and push notifications don't work in a browser; use Expo Go on a
+phone for those.
+
 ### Tests
 
 ```bash

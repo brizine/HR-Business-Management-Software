@@ -1,4 +1,4 @@
-import * as SecureStore from "expo-secure-store";
+import { store as SecureStore } from "@/lib/store";
 
 /**
  * The name of the company last signed in on this phone, so the sign-in screen can show it

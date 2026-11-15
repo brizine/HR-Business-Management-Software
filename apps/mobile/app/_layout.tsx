@@ -2,6 +2,7 @@ import * as Notifications from "expo-notifications";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef } from "react";
+import { Platform } from "react-native";
 import type { NotificationLink } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -9,12 +10,15 @@ import { MenusProvider } from "@/lib/menus";
 import { routeFor } from "@/lib/push";
 import { UnreadProvider, useUnread } from "@/lib/unread";
 
+// The browser preview has no notifications (and the hook throws there).
+const useLastNotificationResponse = Platform.OS === "web" ? () => null : Notifications.useLastNotificationResponse;
+
 /** Opens the right screen when a notification is tapped, including from a cold start. */
 function useNotificationTaps() {
   const { me } = useAuth();
   const { refresh } = useUnread();
   const router = useRouter();
-  const response = Notifications.useLastNotificationResponse();
+  const response = useLastNotificationResponse();
   const handled = useRef<string | null>(null);
 
   useEffect(() => {

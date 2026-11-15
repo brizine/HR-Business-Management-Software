@@ -1,6 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { AppState } from "react-native";
+import { AppState, Platform } from "react-native";
 import { api } from "./api";
 import { useAuth } from "./auth";
 
@@ -23,7 +23,7 @@ export function UnreadProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refresh();
-    const received = Notifications.addNotificationReceivedListener(refresh);
+    const received = Platform.OS === "web" ? { remove() {} } : Notifications.addNotificationReceivedListener(refresh);
     const appState = AppState.addEventListener("change", (s) => s === "active" && refresh());
     return () => {
       received.remove();

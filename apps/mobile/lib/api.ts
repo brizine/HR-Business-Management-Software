@@ -1,4 +1,4 @@
-import * as SecureStore from "expo-secure-store";
+import { store as SecureStore } from "@/lib/store";
 
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 /** The website, for links like "forgot password" (the API lives at <site>/api in production). */
