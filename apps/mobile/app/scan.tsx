@@ -1,6 +1,7 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
-import { useRef, useState } from "react";
+import { useHeaderHeight } from "expo-router/react-navigation";
+import { useRef, useState, type ComponentRef } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { api } from "@/lib/api";
 import { codeFromScan } from "@crewdesk/shared";
@@ -11,6 +12,11 @@ export default function Scan() {
   const [permission, requestPermission] = useCameraPermissions();
   const [manual, setManual] = useState("");
   const busy = useRef(false);
+  // On newer iPhones the top bar can float over the screen: push the content below it.
+  const headerHeight = useHeaderHeight();
+  const [top, setTop] = useState(0);
+  const root = useRef<ComponentRef<typeof View>>(null);
+  const measure = () => root.current?.measureInWindow((_x: number, y: number) => setTop(Math.max(0, headerHeight - y)));
 
   const open = async (code: string) => {
     if (busy.current) return;
@@ -28,23 +34,26 @@ export default function Scan() {
     if (code) open(code);
   };
 
-  if (!permission) return <Screen><Txt muted>Loading camera…</Txt></Screen>;
+  if (!permission) return <View ref={root} onLayout={measure} style={{ flex: 1, paddingTop: top }}><Screen><Txt muted>Loading camera…</Txt></Screen></View>;
   if (!permission.granted) {
     return (
-      <Screen>
-        <Card title="Camera access">
-          <Txt>Crewdesk uses the camera only to read QR labels on vehicles and equipment.</Txt>
-          <Button title="Allow camera" onPress={requestPermission} />
-        </Card>
-        <ManualEntry value={manual} onChange={setManual} onSubmit={() => open(manual)} />
-      </Screen>
+      <View ref={root} onLayout={measure} style={{ flex: 1, paddingTop: top }}>
+        <Screen>
+          <Card title="Camera access">
+            <Txt>Crewdesk uses the camera only to read QR labels on vehicles and equipment.</Txt>
+            <Button title="Allow camera" onPress={requestPermission} />
+          </Card>
+          <ManualEntry value={manual} onChange={setManual} onSubmit={() => open(manual)} />
+        </Screen>
+      </View>
     );
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#000" }}>
+    <View ref={root} onLayout={measure} style={{ flex: 1, backgroundColor: "#000" }}>
       <CameraView style={StyleSheet.absoluteFill} facing="back" barcodeScannerSettings={{ barcodeTypes: ["qr"] }} onBarcodeScanned={onScan} />
-      <View pointerEvents="none" style={styles.overlay}>
+      {/* Centered in the part of the screen below the top bar, above the manual-entry card. */}
+      <View pointerEvents="none" style={[styles.overlay, { top, bottom: 260 }]}>
         <View style={styles.frame} />
         <Txt style={styles.hint}>Point at the QR label on the equipment</Txt>
       </View>
@@ -65,8 +74,8 @@ function ManualEntry({ value, onChange, onSubmit }: { value: string; onChange: (
 }
 
 const styles = StyleSheet.create({
-  overlay: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center", gap: 16 },
+  overlay: { position: "absolute", left: 0, right: 0, alignItems: "center", justifyContent: "center", gap: 16 },
   frame: { width: 240, height: 240, borderWidth: 3, borderColor: "#fff", borderRadius: 18 },
-  hint: { color: "#fff", fontWeight: "600" },
+  hint: { color: "#fff", fontWeight: "600", textShadowColor: "#000", textShadowRadius: 4 },
   bottom: { position: "absolute", left: 16, right: 16, bottom: 32 },
 });

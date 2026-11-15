@@ -48,7 +48,7 @@ function Gate() {
   }, [me, ready, segments, router]);
 
   return (
-    <Stack>
+    <Stack screenOptions={{ headerBackTitle: "Back" }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="notifications" options={{ title: "Notifications" }} />
