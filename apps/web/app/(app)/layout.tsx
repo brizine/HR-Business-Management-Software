@@ -90,6 +90,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Link href="/notifications" className={path.startsWith("/notifications") ? "active" : ""}>
           Notifications {unread > 0 && <span className="badge bad" style={{ marginLeft: 4 }}>{unread > 99 ? "99+" : unread}</span>}
         </Link>
+        {payApprovals?.isApprover && (
+          <Link href="/pay-periods" className={path.startsWith("/pay-periods") ? "active" : ""}>
+            Pay Approvals {payApprovals.pending > 0 && <span className="badge warn" style={{ marginLeft: 4 }}>{payApprovals.pending}</span>}
+          </Link>
+        )}
         {NAV.map((s) => (
           <div key={s.section} style={{ display: "contents" }}>
             {s.section && <div className="navsection">{s.section}</div>}
@@ -102,11 +107,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               ))}
           </div>
         ))}
-        {payApprovals?.isApprover && (
-          <Link href="/pay-periods" className={path.startsWith("/pay-periods") ? "active" : ""}>
-            Pay Approvals {payApprovals.pending > 0 && <span className="badge warn" style={{ marginLeft: 4 }}>{payApprovals.pending}</span>}
-          </Link>
-        )}
         <div className="spacer" />
         <div className="company" style={{ paddingBottom: 4 }}>
           {me.user.firstName} {me.user.lastName} · {me.user.role}
