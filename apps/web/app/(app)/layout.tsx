@@ -96,8 +96,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {s.items
               .map((i) => (i.href === "/payroll" && !can("admin", "payroll") && payApprovals?.isApprover ? { ...i, href: "/pay-periods", min: undefined } : i))
               .filter((i) => !i.min || can(i.min, i.area))
+              // Payroll admins reach Pay & Tax Forms from a button on the Payroll page.
+              .filter((i) => !(i.href === "/tax-forms" && can("admin", "payroll")))
               .map((i) => (
-                <Link key={i.href} href={i.href} className={path.startsWith(i.href) || (i.label === "Payroll" && path.startsWith("/pay-periods")) ? "active" : ""}>
+                <Link key={i.href} href={i.href} className={path.startsWith(i.href) || (i.label === "Payroll" && (path.startsWith("/pay-periods") || path.startsWith("/tax-forms"))) ? "active" : ""}>
                   {i.label}
                   {i.label === "Payroll" && !!payApprovals?.pending && <span className="badge warn" style={{ marginLeft: 4 }} title="Pay periods waiting for your approval">{payApprovals.pending}</span>}
                 </Link>

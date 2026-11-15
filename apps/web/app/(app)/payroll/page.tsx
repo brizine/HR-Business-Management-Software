@@ -111,6 +111,7 @@ export default function Payroll() {
   return (
     <>
       <PageHead title="Payroll" sub={usesProvider ? "Hours go to Check for you to approve there; you can still export a CSV any time." : "Export hours for each pay period and run payroll in your own system, or send the file to your accountant."}>
+        <Link href="/tax-forms" className="btn primary">Pay &amp; Tax Forms</Link>
         <Link href="/pay-periods" className="btn primary">
           Payroll Approval{approvals.data?.pending ? <span className="badge warn" style={{ marginLeft: 6 }}>{approvals.data.pending}</span> : null}
         </Link>

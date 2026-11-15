@@ -187,6 +187,10 @@ belongs to, signature status and date.
 Employees fill out W-4, I-9 Section 1 and direct deposit online; admins complete I-9 Section 2 and
 see what needs entering in payroll.
 
+Employees and managers open it from **Pay & Tax Forms** in the left menu. Owners and admins open it
+with the blue **Pay & Tax Forms** button at the top right of the **Payroll** page (**← Back to
+Payroll** returns).
+
 ## Onboarding
 
 New-hire checklists (check off, upload and sign tasks), invite emails, and a list of what's waiting
