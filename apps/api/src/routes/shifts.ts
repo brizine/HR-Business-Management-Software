@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
+import { randomBytes } from "node:crypto";
 import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, type SQL } from "drizzle-orm";
 import { WEEKDAYS, availabilityConflicts, describeRule, isInactive, shiftBaseSchema, shiftRangeSchema, shiftSchema, shiftSegments, shiftTemplateSchema, type ShiftInput } from "@crewdesk/shared";
 import { z } from "zod";
@@ -7,6 +8,7 @@ import { assets, availability, companies, employees, ptoRequests, shiftTemplates
 import { authenticate, isManager, requireRole } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { approversFor, except, notify, staffWithRole } from "../lib/notify";
+import { WEB_URL } from "../lib/channels";
 import { addDaysYmd, fmtDayMdy, fmtShift, fmtTime, localDate, localParts, zonedTime } from "../lib/tz";
 
 /** Which area of the Permissions page controls access here. */
@@ -166,6 +168,30 @@ const routes: FastifyPluginAsync = async (app) => {
         .where(and(base, isNull(shifts.employeeId), gt(shifts.startsAt, now))).orderBy(asc(shifts.startsAt)),
     ]);
     return { mine, open };
+  });
+
+  /**
+   * Your private calendar subscription link (for Apple/Google Calendar). Made on first use; the
+   * same link after that until you reset it.
+   */
+  const calendarUrl = (token: string) => {
+    const base = process.env.API_PUBLIC_URL?.replace(/\/$/, "") ?? (app.prefix.startsWith("/api") ? `${WEB_URL}/api` : "http://localhost:4000");
+    const https = `${base}/calendar/${token}.ics`;
+    return { url: https, webcal: https.replace(/^https?:\/\//, "webcal://") };
+  };
+  app.post("/calendar-link", async (req) => {
+    const [emp] = await db.select({ token: employees.calendarToken }).from(employees).where(eq(employees.id, req.user.sub));
+    let token = emp?.token;
+    if (!token) {
+      token = randomBytes(24).toString("base64url");
+      await db.update(employees).set({ calendarToken: token }).where(eq(employees.id, req.user.sub));
+    }
+    return calendarUrl(token);
+  });
+  /** Stops the old link working (e.g. it was shared by mistake); the next request makes a new one. */
+  app.delete("/calendar-link", async (req) => {
+    await db.update(employees).set({ calendarToken: null }).where(eq(employees.id, req.user.sub));
+    return { ok: true };
   });
 
   // ---- Templates ----

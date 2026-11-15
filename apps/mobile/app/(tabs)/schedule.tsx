@@ -8,6 +8,7 @@ import { shiftDay, shiftTimes } from "@/lib/shifts";
 import { Badge, Button, Card, Divider, Input, Row, Screen, Txt, useTheme } from "@/components/ui";
 import { Chips } from "@/components/chips";
 import { TimeOffView } from "@/components/time-off-view";
+import { ShiftCalendar, subscribeToCalendar } from "@/components/shift-calendar";
 
 
 function ShiftDetails({ shift, assetName }: { shift: any; assetName: string | null }) {
@@ -72,8 +73,36 @@ const matches = (r: ShiftRow, f: Filters) => {
     (!q || `${s.position ?? ""} ${s.location ?? ""} ${r.assetName ?? ""} ${s.notes ?? ""} ${shiftDay(s.startsAt)}`.toLowerCase().includes(q));
 };
 
-/** Upcoming shifts, open shifts and availability. */
+type ShiftsMode = "list" | "week" | "month";
+
+/** Shifts as a list, or a week or month calendar; subscribe to them in the phone's calendar. */
 function ShiftsView() {
+  const { me } = useAuth();
+  const [mode, setMode] = useState<ShiftsMode>("list");
+  const switcher = (
+    <View style={{ gap: 8 }}>
+      <Chips label="View" value={mode} onChange={setMode} options={[{ value: "list", label: "List" }, { value: "week", label: "Week" }, { value: "month", label: "Month" }]} />
+    </View>
+  );
+  const footer = (
+    <>
+      {/* Availability is only tracked for part-time employees. */}
+      {me?.user.employmentType === "part_time" && <Button title="My availability" kind="secondary" onPress={() => router.push("/availability")} />}
+      <Button title="📅  Subscribe in Calendar" kind="secondary" onPress={subscribeToCalendar} />
+    </>
+  );
+  if (mode === "list") return <ShiftList header={switcher} footer={footer} />;
+  return (
+    <Screen>
+      {switcher}
+      <ShiftCalendar key={mode} mode={mode} />
+      {footer}
+    </Screen>
+  );
+}
+
+/** Upcoming shifts and open shifts, with search and filters. */
+function ShiftList({ header, footer }: { header: React.ReactNode; footer: React.ReactNode }) {
   const { me } = useAuth();
   const { data, loading, reload } = useApi<{ mine: any[]; open: any[] }>("/shifts/mine");
   const [busy, setBusy] = useState<string | null>(null);
@@ -104,6 +133,7 @@ function ShiftsView() {
 
   return (
     <Screen refreshing={loading} onRefresh={reload}>
+      {header}
       <ShiftFilters rows={[...(data?.mine ?? []), ...(data?.open ?? [])]} filters={filters} onChange={setFilters} />
       {filters.show !== "open" && <Card title="My upcoming shifts">
         {mine.length ? mine.map(({ shift, assetName }) => (
@@ -119,8 +149,6 @@ function ShiftsView() {
           </View>
         )) : <Txt muted>{filtering && data?.mine.length ? "None of your shifts match your filters." : "No shifts in the next two weeks."}</Txt>}
       </Card>}
-      {/* Availability is only tracked for part-time employees. */}
-      {me?.user.employmentType === "part_time" && <Button title="My availability" kind="secondary" onPress={() => router.push("/availability")} />}
       {filters.show !== "mine" && <Card title="Open shifts">
         {open.length ? open.map(({ shift, assetName }) => (
           <View key={shift.id} style={{ gap: 8 }}>
@@ -131,6 +159,7 @@ function ShiftsView() {
           </View>
         )) : <Txt muted>{filtering && data?.open.length ? "No open shifts match your filters." : "No open shifts right now."}</Txt>}
       </Card>}
+      {footer}
     </Screen>
   );
 }

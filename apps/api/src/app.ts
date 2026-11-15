@@ -37,6 +37,7 @@ import jobSiteRoutes from "./routes/jobSites";
 import helpRoutes from "./routes/help";
 import extraPayRoutes from "./routes/extraPay";
 import fuelRoutes from "./routes/fuel";
+import calendarRoutes from "./routes/calendar";
 import sprayMixRoutes from "./routes/sprayMix";
 
 export interface AppOptions {
@@ -117,5 +118,7 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(helpRoutes, { prefix: "/help" });
   await app.register(extraPayRoutes, { prefix: "/extra-pay" });
   await app.register(fuelRoutes, { prefix: "/fuel" });
+  // Public (the secret link is the key): calendar subscriptions.
+  await app.register(calendarRoutes, { prefix: "/calendar" });
   await app.register(sprayMixRoutes, { prefix: "/spray-mixes" });
 }

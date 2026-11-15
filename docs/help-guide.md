@@ -117,6 +117,16 @@ Admins choose which employees can edit products, rates and mixes; every change i
   Part-time staff set **My availability** (times they can't work).
 - The **Filters** box searches by name, job title, department, position, job site, vehicle and
   status.
+- **Phone app (Schedule → Shifts):** switch between **List**, **Week** and **Month** at the top. The
+  week and month calendars show colored dots: blue = your shift, green = an open shift you can pick
+  up, grey = approved time off, purple = paid holiday (today is circled). Tap a day to see its
+  shifts underneath, with **Ask to drop** or **Pick up this shift**. ‹ › change week or month; tap
+  the title to jump back to today. **Scheduled hours** totals your week or month and warns about weeks
+  over 40 hours. Managers can switch to **Whole crew** and pick a person or **Open shifts**.
+- **Subscribe in Calendar** (phone app, under the shifts): adds your published shifts, approved time
+  off and paid holidays to your phone's calendar (**Add to iPhone Calendar**, or **Share link** for
+  Google Calendar and others). It updates by itself, about every hour. The link is private to you;
+  **Reset my link** stops an old link working (then subscribe again). Draft shifts never appear.
 
 ## Time Clock
 

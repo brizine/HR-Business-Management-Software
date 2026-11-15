@@ -136,6 +136,8 @@ export const employees = pgTable(
     payrollProviderEmployeeId: text("payroll_provider_employee_id"),
     /** When the person agreed to receive texts; null means no texts. */
     smsOptInAt: timestamp("sms_opt_in_at", { withTimezone: true }),
+    /** Secret for their calendar subscription link (phone app → Subscribe in Calendar); null until made. */
+    calendarToken: text("calendar_token").unique(),
     /** When the latest invite email was sent; null if they were never invited. */
     invitedAt: timestamp("invited_at", { withTimezone: true }),
     /** Bumped to sign the person out of every device; sessions carry the version they were issued with. */

@@ -351,6 +351,13 @@
       "when": 1794765571164,
       "tag": "0049_location_pings",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1794782674762,
+      "tag": "0050_calendar_token",
+      "breakpoints": true
     }
   ]
 }
