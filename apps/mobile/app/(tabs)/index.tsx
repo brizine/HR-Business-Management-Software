@@ -16,7 +16,7 @@ function weekStartIso() {
 }
 
 /**
- * One GPS fix for this punch (never tracked in between). Uses high accuracy
+ * One GPS fix for this punch (the 5-minute points while clocked in are separate, in lib/location). Uses high accuracy
  * when the company checks job sites. Returns {} if location is off or denied;
  * the server decides whether that's allowed.
  */
@@ -54,6 +54,11 @@ export default function Clock() {
 
   const open = status.data?.openEntry;
   const totals = summarizeHours(week.data ?? []);
+  // This pay period: the company's current period (if it has a pay schedule) and your hours in it.
+  const payPeriod = useApi<{ period: { start: string; end: string; payday: string; startsAt: string; endsAt: string } | null }>("/time/pay-period");
+  const pp = payPeriod.data?.period;
+  const periodEntries = useApi<any[]>(me && pp ? `/time/entries?employeeId=${me.user.id}&from=${encodeURIComponent(pp.startsAt)}&to=${encodeURIComponent(pp.endsAt)}` : null);
+  const periodTotals = summarizeHours(periodEntries.data ?? []);
   const rule: LocationPolicy = (open ? status.data?.locationPolicy?.clockOut : status.data?.locationPolicy?.clockIn) ?? "optional";
   const [result, setResult] = useState<string | null>(null);
 
@@ -72,7 +77,7 @@ export default function Clock() {
         `${open ? "Clocked out" : "Clocked in"}${row.siteName ? ` at ${row.siteName}` : ""}.` +
           (row.clockInFlag || row.clockOutFlag ? " You're away from a job site, so this punch is flagged for your manager." : ""),
       );
-      await Promise.all([status.reload(), week.reload()]);
+      await Promise.all([status.reload(), week.reload(), periodEntries.reload()]);
     } catch (e) {
       if (e instanceof ApiError && e.code === "location_required") locationOffAlert(e.message);
       else setError((e as Error).message);
@@ -82,7 +87,7 @@ export default function Clock() {
   };
 
   return (
-    <Screen refreshing={status.loading} onRefresh={() => { status.reload(); week.reload(); shifts.reload(); }}>
+    <Screen refreshing={status.loading} onRefresh={() => { status.reload(); week.reload(); shifts.reload(); payPeriod.reload(); periodEntries.reload(); }}>
       <Txt style={{ fontSize: 22, fontWeight: "700" }}>Hi, {me?.user.firstName}</Txt>
       <Card>
         <View style={{ alignItems: "center", gap: 6, paddingVertical: 10 }}>
@@ -99,10 +104,10 @@ export default function Clock() {
           )}
           <Txt muted style={{ textAlign: "center" }}>
             {rule === "optional"
-              ? "Your location is recorded when you clock in and out, if location is on."
+              ? "Your location is recorded when you clock in and out, and every few minutes while you're clocked in."
               : usesGeofence(rule)
-                ? `📍 Clock ${open ? "out" : "in"} at a job site${rule === "geofence_flag" ? " (punches elsewhere are flagged)" : ""}. Location is only checked at this moment.`
-                : `📍 Location is required to clock ${open ? "out" : "in"}. It's only checked at this moment.`}
+                ? `📍 Clock ${open ? "out" : "in"} at a job site${rule === "geofence_flag" ? " (punches elsewhere are flagged)" : ""}. Your location is also recorded every few minutes while you're clocked in.`
+                : `📍 Location is required to clock ${open ? "out" : "in"}. It's also recorded every few minutes while you're clocked in.`}
           </Txt>
         </View>
         {result && <Txt style={{ textAlign: "center" }}>{result}</Txt>}
@@ -114,7 +119,7 @@ export default function Clock() {
         )}
         <Button title={open ? "Clock out" : "Clock in"} kind={open ? "danger" : "primary"} onPress={punch} busy={busy} />
       </Card>
-      <Card title="This week">
+      <Card title="This Week">
         <Row>
           <View><Txt muted>Regular</Txt><Txt style={{ fontSize: 20, fontWeight: "700" }}>{totals.regularHours.toFixed(2)}</Txt></View>
           <View><Txt muted>Overtime</Txt><Txt style={{ fontSize: 20, fontWeight: "700" }}>{totals.overtimeHours.toFixed(2)}</Txt></View>
@@ -131,6 +136,17 @@ export default function Clock() {
           </View>
         ))}
       </Card>
+      {pp && (
+        <Card title="This Pay Period">
+          <Txt muted>{fmtDate(pp.start)} – {fmtDate(pp.end)} · Payday {fmtDate(pp.payday)}</Txt>
+          <Row>
+            <View><Txt muted>Regular</Txt><Txt style={{ fontSize: 20, fontWeight: "700" }}>{periodTotals.regularHours.toFixed(2)}</Txt></View>
+            <View><Txt muted>Overtime</Txt><Txt style={{ fontSize: 20, fontWeight: "700" }}>{periodTotals.overtimeHours.toFixed(2)}</Txt></View>
+            <View><Txt muted>Total</Txt><Txt style={{ fontSize: 20, fontWeight: "700" }}>{periodTotals.totalHours.toFixed(2)}</Txt></View>
+          </Row>
+          {!!periodEntries.data?.length && <Txt muted style={{ fontSize: 12 }}>{new Set(periodEntries.data.map((e) => fmtDate(e.clockIn))).size} day{new Set(periodEntries.data.map((e) => fmtDate(e.clockIn))).size === 1 ? "" : "s"} worked so far</Txt>}
+        </Card>
+      )}
     </Screen>
   );
 }

@@ -70,6 +70,17 @@ describe("location while clocked in", () => {
     expect((await call("GET", `/time/locations?employeeId=${ID.crew}`, "owner")).status).toBe(400);
   });
 
+  it("tells the app the current pay period (none until a schedule is set)", async () => {
+    expect((await call("GET", "/time/pay-period", "crew")).body).toEqual({ period: null });
+    await call("PUT", "/pay-periods/schedule", "owner", { frequency: "semimonthly", paydayOffsetDays: 5, approverIds: [] });
+    const p = (await call("GET", "/time/pay-period", "crew")).body.period;
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date());
+    expect(p.start <= today && today <= p.end).toBe(true);
+    expect(p.start.endsWith("-01") || p.start.endsWith("-16")).toBe(true);
+    expect(new Date(p.startsAt).getTime()).toBeLessThan(Date.now());
+    expect(new Date(p.endsAt).getTime()).toBeGreaterThan(Date.now());
+  });
+
   it("deletes points older than the keep period", async () => {
     await db.update(locationPings).set({ recordedAt: new Date(Date.now() - 200 * 86_400_000) }).where(eq(locationPings.employeeId, ID.crew));
     await runScheduledChecks();

@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
-import { clockInSchema, locationPingsSchema, effectivePto, entryHours, formatDistance, locationPolicySchema, summarizeHours, timeEntryEditSchema, yearsOfService } from "@crewdesk/shared";
+import { clockInSchema, locationPingsSchema, periodContaining, type PayFrequency, effectivePto, entryHours, formatDistance, locationPolicySchema, summarizeHours, timeEntryEditSchema, yearsOfService } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
 import { companies, employees, jobSites, locationPings, ptoLedger, ptoPolicies, shifts, timeEntries } from "../db/schema";
@@ -36,6 +36,19 @@ const routes: FastifyPluginAsync = async (app) => {
     openEntry: (await openEntry(req.user.sub)) ?? null,
     locationPolicy: await locationPolicies(req.user.companyId),
   }));
+
+  /**
+   * The company's current pay period (for "This pay period" in the phone app), with its start and
+   * end as moments in the company's time zone. null when no pay schedule is set up.
+   */
+  app.get("/pay-period", async (req) => {
+    const [c] = await db.select({ tz: companies.timezone, frequency: companies.payFrequency, anchorDate: companies.payPeriodAnchor, paydayOffsetDays: companies.paydayOffsetDays })
+      .from(companies).where(eq(companies.id, req.user.companyId));
+    if (!c?.frequency) return { period: null };
+    const today = localParts(new Date(), c.tz).date;
+    const p = periodContaining(today, { frequency: c.frequency as PayFrequency, anchorDate: c.anchorDate, paydayOffsetDays: c.paydayOffsetDays });
+    return { period: { ...p, startsAt: zonedTime(p.start, "00:00", c.tz).toISOString(), endsAt: zonedTime(addDaysYmd(p.end, 1), "00:00", c.tz).toISOString() } };
+  });
 
   app.get("/location-policy", async (req) => {
     const sites = await activeSites(req.user.companyId);
