@@ -20,9 +20,10 @@ interface Task {
 const today = () => new Date().toISOString().slice(0, 10);
 
 /**
- * Me tab: what's waiting on you (same as "My Tasks" on the website's employee page): work orders,
- * your onboarding checklist, documents to sign, pay periods to approve and (managers) onboarding
- * steps waiting on you. `documents` is the list the Me tab already loaded.
+ * Tasks tab: what's waiting on you (same as "My Tasks" on the website's employee page): work
+ * orders, your onboarding checklist, documents to sign, pay periods to approve and (managers)
+ * onboarding steps waiting on you. Work orders and onboarding are handled further down the Tasks
+ * tab; documents are signed on the Me tab.
  */
 export function MyTasksCard({ documents }: { documents: any[] | null }) {
   const { me, can } = useAuth();
@@ -35,14 +36,14 @@ export function MyTasksCard({ documents }: { documents: any[] | null }) {
   const tasks: Task[] = [
     ...(workOrders.data ?? []).map(({ workOrder: w, assetName }) => ({
       key: `wo-${w.id}`, title: `${w.number ? `#${w.number} ` : ""}${w.title}`,
-      detail: `Work order · ${assetName}${w.dueDate ? ` · due ${fmtDate(w.dueDate)}` : ""}`, badge: w.status, badgeMenu: "workOrderStatus" as const, open: () => router.push("/tasks"),
+      detail: `Work order · ${assetName}${w.dueDate ? ` · due ${fmtDate(w.dueDate)}` : ""}`, badge: w.status, badgeMenu: "workOrderStatus" as const,
     })),
     ...(onboarding.data ?? []).filter((x) => x.assignee === "employee").map((x) => ({
       key: `ob-${x.id}`, title: x.title, detail: `Onboarding${x.dueDate ? ` · due ${fmtDate(x.dueDate)}` : ""}`,
-      badge: x.dueDate && x.dueDate < today() ? "overdue" : undefined, open: () => router.push("/tasks"),
+      badge: x.dueDate && x.dueDate < today() ? "overdue" : undefined,
     })),
     ...(documents ?? []).filter((d) => d.requiresSignature && !d.signedAt && d.employeeId === me?.user.id).map((d) => ({
-      key: `doc-${d.id}`, title: `Sign ${d.name}`, detail: "Document · sign it below", badge: "pending",
+      key: `doc-${d.id}`, title: `Sign ${d.name}`, detail: "Document · tap to sign it on the Me tab", badge: "pending", open: () => router.push("/profile"),
     })),
     ...(payPeriods.data?.canApprove ? payPeriods.data.periods.filter((p) => p.status === "pending") : []).map((p) => ({
       key: `pay-${p.id}`, title: `Approve pay period ${fmtDate(p.periodStart)} – ${fmtDate(p.periodEnd)}`,
@@ -50,7 +51,7 @@ export function MyTasksCard({ documents }: { documents: any[] | null }) {
     })),
     ...(waitingOnMe.data ?? []).map((x) => ({
       key: `obm-${x.id}`, title: `${x.title} (${x.employee.name})`, detail: `Onboarding${x.dueDate ? ` · due ${fmtDate(x.dueDate)}` : ""}`,
-      badge: x.dueDate && x.dueDate < today() ? "overdue" : undefined, open: () => router.push("/tasks"),
+      badge: x.dueDate && x.dueDate < today() ? "overdue" : undefined,
     })),
   ];
   const loading = !workOrders.data || !onboarding.data;

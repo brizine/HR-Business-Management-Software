@@ -8,7 +8,6 @@ import { Badge, Button, Card, Divider, Row, Screen, Txt } from "@/components/ui"
 import { MyPhoto } from "@/components/avatar";
 import { CompanyLogo } from "@/components/company-logo";
 import { AccruedTimeOffCard, RequestTimeOffCard } from "@/components/time-off-boxes";
-import { MyTasksCard } from "@/components/my-tasks";
 
 export default function Profile() {
   const { me, signOut } = useAuth();
@@ -39,7 +38,6 @@ export default function Profile() {
           </View>
         </Row>
       </Card>
-      <MyTasksCard documents={docs.data} />
       <AccruedTimeOffCard balances={balances.data} />
       <RequestTimeOffCard balances={balances.data} onSent={balances.reload} />
       {toSign.length > 0 && (

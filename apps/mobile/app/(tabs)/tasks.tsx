@@ -3,6 +3,8 @@ import { api, fmtDate } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { useAuth } from "@/lib/auth";
 import { OnboardingTaskItem } from "@/components/onboarding-task";
+import { MyTasksCard } from "@/components/my-tasks";
+import { useState } from "react";
 import { Badge, Button, Card, Divider, Row, Screen, Txt } from "@/components/ui";
 
 export default function Tasks() {
@@ -10,13 +12,17 @@ export default function Tasks() {
   const workOrders = useApi<any[]>("/work-orders?status=active&mine=true");
   const { can } = useAuth();
   const waiting = useApi<any[]>(can("manager", "onboarding") ? "/onboarding/assigned" : null);
-  const reload = () => { onboarding.reload(); workOrders.reload(); waiting.reload(); };
+  const docs = useApi<any[]>("/documents");
+  // Remounting the summary card reloads it along with the lists below.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const reload = () => { onboarding.reload(); workOrders.reload(); waiting.reload(); docs.reload(); setRefreshKey((k) => k + 1); };
 
   const setStatus = (id: string, status: string) =>
     api(`/work-orders/${id}`, { method: "PATCH", body: { status } }).then(reload, (e) => Alert.alert("Error", e.message));
 
   return (
     <Screen refreshing={onboarding.loading || workOrders.loading} onRefresh={reload}>
+      <MyTasksCard key={refreshKey} documents={docs.data} />
       {!!onboarding.data?.length && (
         <Card title="My onboarding checklist">
           {onboarding.data.map((t) => <OnboardingTaskItem key={t.id} task={t} mode="self" onChange={reload} />)}
