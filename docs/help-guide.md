@@ -126,6 +126,18 @@ Admins choose which employees can edit products, rates and mixes; every change i
   Required, Required and flag if away from a job site, or Required at a job site. To add a job
   site, type the address and click **Find on map** (or paste a Google/Apple Maps link, type
   latitude, longitude, or use your current location), check it on the map, then **Add site**.
+- **Location tracking (phone app):** location must be on and allowed to use the Crewdesk app; if
+  it's off, the app shows **Location is required** with a button to allow it or open Settings
+  (choose **While Using the App**). The app records where the phone is when clocking in and out, and
+  every 5 minutes while the person is clocked in with the app open. Nothing is recorded off the
+  clock or while the app is closed. Points are kept for 180 days.
+- **Location trail** (managers): on **Time Clock**, click **trail** next to someone in **On the
+  Clock Now**, or **Location trail** on one of their entries. A map shows the day's route: green =
+  clocked in, blue = every few minutes, red = clocked out (hover a dot for the time); change the
+  **Day** to look at another date, and open the list for exact times and links to Google Maps.
+  Gaps mean the app wasn't open or had no signal. Some states (for example New York, Connecticut
+  and Delaware) require telling employees in writing that their location is monitored; add it to
+  your handbook or onboarding documents.
 
 ## Attendance
 
@@ -304,5 +316,6 @@ automatically.
 
 ## Phone app
 
-Clock in and out, schedule and open shifts, time off, assigned vehicles, meter readings, fuel (with receipt photos),
+Location is required to use the app (it's recorded at clock in/out and every 5 minutes while
+clocked in with the app open). Clock in and out, schedule and open shifts, time off, assigned vehicles, meter readings, fuel (with receipt photos),
 inspections, issue reports, work orders, training, onboarding tasks and signing documents.

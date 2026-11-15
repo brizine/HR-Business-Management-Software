@@ -206,6 +206,23 @@ export const timeEntries = pgTable(
   (t) => [index("time_entries_employee_idx").on(t.employeeId, t.clockIn)],
 );
 
+/** Where someone was while clocked in: the phone app records a point every few minutes. */
+export const locationPings = pgTable(
+  "location_pings",
+  {
+    id: id(),
+    companyId: companyId(),
+    employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+    timeEntryId: uuid("time_entry_id").notNull().references(() => timeEntries.id, { onDelete: "cascade" }),
+    lat: doublePrecision("lat").notNull(),
+    lng: doublePrecision("lng").notNull(),
+    accuracy: doublePrecision("accuracy"),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("location_pings_employee_idx").on(t.employeeId, t.recordedAt)],
+);
+
 export const ptoPolicies = pgTable("pto_policies", {
   id: id(),
   companyId: companyId(),

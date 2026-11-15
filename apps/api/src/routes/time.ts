@@ -1,14 +1,14 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
-import { clockInSchema, effectivePto, entryHours, formatDistance, locationPolicySchema, summarizeHours, timeEntryEditSchema, yearsOfService } from "@crewdesk/shared";
+import { clockInSchema, locationPingsSchema, effectivePto, entryHours, formatDistance, locationPolicySchema, summarizeHours, timeEntryEditSchema, yearsOfService } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
-import { companies, employees, jobSites, ptoLedger, ptoPolicies, shifts, timeEntries } from "../db/schema";
+import { companies, employees, jobSites, locationPings, ptoLedger, ptoPolicies, shifts, timeEntries } from "../db/schema";
 import { authenticate, isManager, requireRole } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { activeSites, checkPunch, locationPolicies, type PunchCheck } from "../lib/geofence";
 import { approversFor, except, notify } from "../lib/notify";
-import { fmtTime, localParts } from "../lib/tz";
+import { addDaysYmd, fmtTime, localParts, zonedTime } from "../lib/tz";
 import { attendanceRulesFor } from "../lib/attendance";
 
 /** Which area of the Permissions page controls access here. */
@@ -131,6 +131,62 @@ const routes: FastifyPluginAsync = async (app) => {
     await accruePto(req.user.companyId, req.user.sub, entryHours(row));
     await reportOffSite(req, "out", check);
     return { ...row, siteName: check.siteName };
+  });
+
+  /**
+   * The phone app's location points while clocked in. Points outside the current shift (before
+   * clocking in, in the future) or within 2 minutes of the last one are skipped. Not clocked in:
+   * nothing is saved.
+   */
+  app.post("/locations", async (req) => {
+    const body = parse(locationPingsSchema, req.body);
+    const open = await openEntry(req.user.sub);
+    if (!open) return { recorded: 0, clockedIn: false };
+    const [last] = await db.select({ at: locationPings.recordedAt }).from(locationPings)
+      .where(eq(locationPings.timeEntryId, open.id)).orderBy(desc(locationPings.recordedAt)).limit(1);
+    let lastAt = last?.at.getTime() ?? 0;
+    const now = Date.now();
+    const rows = [];
+    for (const p of [...body.points].sort((a, b) => a.at.localeCompare(b.at))) {
+      const at = Date.parse(p.at);
+      if (at < open.clockIn.getTime() - 60_000 || at > now + 5 * 60_000 || at - lastAt < 2 * 60_000) continue;
+      rows.push({ companyId: req.user.companyId, employeeId: req.user.sub, timeEntryId: open.id, lat: p.lat, lng: p.lng, accuracy: p.accuracy ?? null, recordedAt: new Date(at) });
+      lastAt = at;
+    }
+    if (rows.length) await db.insert(locationPings).values(rows);
+    return { recorded: rows.length, clockedIn: true };
+  });
+
+  /**
+   * Someone's location trail for a day (in the company's time zone): their punches with where they
+   * clocked in and out, and the points recorded in between. Managers (time area) or yourself.
+   */
+  app.get<{ Querystring: { employeeId?: string; date?: string } }>("/locations", async (req) => {
+    const employeeId = req.query.employeeId ?? req.user.sub;
+    const date = req.query.date;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new HttpError(400, "Pick a day");
+    if (employeeId !== req.user.sub && !isManager(req, AREA)) throw new HttpError(403, "You can only see your own locations");
+    const [emp] = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.id, employeeId), eq(employees.companyId, req.user.companyId)));
+    if (!emp) notFound("Employee");
+    const [c] = await db.select({ tz: companies.timezone }).from(companies).where(eq(companies.id, req.user.companyId));
+    const start = zonedTime(date, "00:00", c.tz);
+    const end = zonedTime(addDaysYmd(date, 1), "00:00", c.tz);
+    const entries = await db.select().from(timeEntries).where(and(
+      eq(timeEntries.employeeId, employeeId), lt(timeEntries.clockIn, end), or(isNull(timeEntries.clockOut), gte(timeEntries.clockOut, start)),
+    )).orderBy(asc(timeEntries.clockIn));
+    const points = await db.select({ lat: locationPings.lat, lng: locationPings.lng, accuracy: locationPings.accuracy, at: locationPings.recordedAt, timeEntryId: locationPings.timeEntryId })
+      .from(locationPings).where(and(eq(locationPings.employeeId, employeeId), gte(locationPings.recordedAt, start), lt(locationPings.recordedAt, end)))
+      .orderBy(asc(locationPings.recordedAt));
+    return {
+      date,
+      timeZone: c.tz,
+      entries: entries.map((e) => ({
+        id: e.id, clockIn: e.clockIn, clockOut: e.clockOut,
+        clockInLat: e.clockInLat, clockInLng: e.clockInLng, clockOutLat: e.clockOutLat, clockOutLng: e.clockOutLng,
+        clockInFlag: e.clockInFlag, clockOutFlag: e.clockOutFlag,
+      })),
+      points,
+    };
   });
 
   /** Adds hours-worked based accrual for every accruing policy, respecting caps. */

@@ -7,6 +7,7 @@ import type { NotificationLink } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { MenusProvider } from "@/lib/menus";
+import { LocationRequired } from "@/lib/location";
 import { routeFor } from "@/lib/push";
 import { UnreadProvider, useUnread } from "@/lib/unread";
 
@@ -76,6 +77,7 @@ export default function RootLayout() {
         <UnreadProvider>
           <StatusBar style="auto" />
           <Gate />
+          <LocationRequired />
         </UnreadProvider>
       </MenusProvider>
     </AuthProvider>

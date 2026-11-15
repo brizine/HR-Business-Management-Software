@@ -381,6 +381,21 @@ export const workOrderUpdateSchema = z.object({
 });
 
 /** A service done in the past (before Crewdesk, or never entered), added to an asset's maintenance history. */
+/** How often the phone app records location while someone is clocked in. */
+export const LOCATION_PING_MINUTES = 5;
+/** Location points are deleted after this many days. */
+export const LOCATION_KEEP_DAYS = 180;
+
+/** Points the phone app recorded while clocked in (sent as they're taken, or in a batch after being offline). */
+export const locationPingsSchema = z.object({
+  points: z.array(z.object({
+    lat: z.number().min(-90).max(90),
+    lng: z.number().min(-180).max(180),
+    accuracy: z.number().nonnegative().max(100_000).optional(),
+    at: z.string().datetime(),
+  })).min(1).max(100),
+});
+
 export const pastServiceSchema = z.object({
   assetId: z.string().uuid(),
   scheduleId: z.string().uuid().nullable().optional(),

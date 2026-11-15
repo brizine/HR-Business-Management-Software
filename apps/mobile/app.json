@@ -11,7 +11,7 @@
       "bundleIdentifier": "com.crewdesk.app",
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Crewdesk records your location when you clock in or out to verify job-site attendance."
+        "NSLocationWhenInUseUsageDescription": "Crewdesk records your location when you clock in and out, and every few minutes while you are clocked in with the app open, to verify job-site attendance. It is not recorded when you are off the clock."
       }
     },
     "android": {
@@ -28,7 +28,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Crewdesk records your location when you clock in or out to verify job-site attendance."
+          "locationWhenInUsePermission": "Crewdesk records your location when you clock in and out, and every few minutes while you are clocked in with the app open, to verify job-site attendance. It is not recorded when you are off the clock."
         }
       ],
       [

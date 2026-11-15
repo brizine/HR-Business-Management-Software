@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
 import { Badge, Empty, PageHead } from "@/components/ui";
 import { ClockCard } from "@/components/clock-card";
+import { LocationTrail } from "@/components/location-trail";
 
 function weekStart(offset = 0) {
   const d = new Date();
@@ -33,6 +34,11 @@ function ManagerView() {
   const [selected, setSelected] = useState<string | null>(null);
   const entries = useApi<any[]>(selected ? `/time/entries?employeeId=${selected}&${range}` : null);
   const [editing, setEditing] = useState<string | null>(null);
+  const [trail, setTrail] = useState<{ employeeId: string; name: string; date?: string } | null>(null);
+  const showTrail = (t: { employeeId: string; name: string; date?: string }) => {
+    setTrail(t);
+    requestAnimationFrame(() => document.getElementById("location-trail")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
 
   const local = (d: string | null) => (d ? new Date(new Date(d).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "");
 
@@ -45,7 +51,7 @@ function ManagerView() {
             <span key={w.entryId} className="badge ok">
               {w.firstName} {w.lastName} · since {new Date(w.clockIn).toLocaleTimeString([], { timeStyle: "short" })}
               {w.site ? ` · ${w.site}` : w.flag ? ` · ⚠ ${formatDistance(w.distance)} from a job site` : ""}
-              {w.lat != null && <> · <a href={`https://maps.google.com/?q=${w.lat},${w.lng}`} target="_blank">map</a></>}
+              {" · "}<a href="#" onClick={(ev) => { ev.preventDefault(); showTrail({ employeeId: w.employeeId, name: `${w.firstName} ${w.lastName}` }); }}>trail</a>
             </span>
           ))}</div>
         ) : <Empty>No one is clocked in.</Empty>}
@@ -77,6 +83,7 @@ function ManagerView() {
           </table></div>
         ) : <Empty>No time recorded this week.</Empty>}
       </div>
+      {trail && <div id="location-trail"><LocationTrail key={`${trail.employeeId}:${trail.date ?? ""}`} {...trail} onClose={() => setTrail(null)} /></div>}
       {selected && entries.data && (
         <div className="card">
           <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
@@ -113,7 +120,10 @@ function ManagerView() {
                 <td>{e.clockOut ? fmtDateTime(e.clockOut) : <Badge value="active" />}{e.clockOut && <PunchPlace site={e.clockOutSite} flag={e.clockOutFlag} distance={e.clockOutDistance} lat={e.clockOutLat} lng={e.clockOutLng} />}</td>
                 <td>{entryHours(e).toFixed(2)}</td>
                 <td>{e.approvedAt ? <Badge value="approved" /> : <Badge value="pending" />}</td>
-                <td><button className="btn sm" onClick={() => setEditing(e.id)}>Edit</button></td>
+                <td className="row" style={{ gap: 4 }}>
+                  <button className="btn sm" onClick={() => setEditing(e.id)}>Edit</button>
+                  <button className="btn sm" onClick={() => showTrail({ employeeId: selected!, name: sheets.data?.find((s) => s.employeeId === selected)?.name ?? "", date: new Intl.DateTimeFormat("en-CA").format(new Date(e.clockIn)) })}>Location trail</button>
+                </td>
               </tr>
             ))}</tbody>
           </table>

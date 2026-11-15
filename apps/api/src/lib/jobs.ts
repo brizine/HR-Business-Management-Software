@@ -1,9 +1,9 @@
 import { and, eq, gt, sql, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or } from "drizzle-orm";
-import { DEFAULT_RENEWAL_REMIND_DAYS, DEFAULT_RENEWAL_REPEAT_DAYS, INACTIVE_STATUSES, carryoverForfeit, renewalStatus, computeDue, resolveLead, workOrderDue, type FleetSettings, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
+import { LOCATION_KEEP_DAYS, DEFAULT_RENEWAL_REMIND_DAYS, DEFAULT_RENEWAL_REPEAT_DAYS, INACTIVE_STATUSES, carryoverForfeit, renewalStatus, computeDue, resolveLead, workOrderDue, type FleetSettings, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
 import { db } from "../db";
 import { fleetSettingsFor } from "./fleet";
 import { syncCurrentPay } from "./payRates";
-import { assets, attendanceOverrides, companies, courseEnrollments, courses, employees, maintenanceSchedules, notificationLog, payRates, workOrders, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, ptoRequests, shifts, timeEntries } from "../db/schema";
+import { assets, attendanceOverrides, locationPings, companies, courseEnrollments, courses, employees, maintenanceSchedules, notificationLog, payRates, workOrders, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, ptoRequests, shifts, timeEntries } from "../db/schema";
 import { attendanceRulesFor, computeAttendance } from "./attendance";
 import { assignCourse, autoAssignees, companyToday, describeEnrollments, latestEnrollments } from "./training";
 import { taskOwners } from "../routes/onboarding";
@@ -267,6 +267,8 @@ export async function runScheduledChecks(now = new Date()) {
   sent += await attendanceAlerts(now);
   sent += await trainingChecks(now);
   sent += await reviewChecks(now);
+  // Location points are only kept for LOCATION_KEEP_DAYS.
+  await db.delete(locationPings).where(lt(locationPings.recordedAt, new Date(now.getTime() - LOCATION_KEEP_DAYS * 86_400_000)));
   return { sent };
 }
 
