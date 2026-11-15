@@ -78,7 +78,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
       <div className="card">
         <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
           <h2 style={{ margin: 0 }}>Preventive Maintenance Schedules</h2>
-          {can("manager", "fleet") && <button className="btn" onClick={() => setAddingSchedule(!addingSchedule)}>Add schedule</button>}
+          {can("manager", "fleet") && <button className="btn primary" onClick={() => setAddingSchedule(!addingSchedule)}>{addingSchedule ? "Cancel" : "Add schedule"}</button>}
         </div>
         {addingSchedule && (
           <form className="stack card" onSubmit={(e) => {

@@ -234,7 +234,8 @@ accounts on this page (admins).
 
 - The fleet list with maintenance status; click an asset for details: meters (odometer, engine
   hours), documents, QR label, work orders, inspections and **Preventive Maintenance Schedules**.
-- **Add schedule:** service name, every X miles / engine hours / days (whichever comes first), last
+- **Add schedule** opens the form (it turns into **Cancel** while open); **Save schedule** saves it:
+  service name, every X miles / engine hours / days (whichever comes first), last
   service, **Assign to** (they get its reminders and work orders made from it), optional
   **Remind … before** timing and **Notes** (oil type, part numbers, which shop…). Notes show under
   the service name; **Add note** / **Edit note** changes them later. **Create work order** turns a
