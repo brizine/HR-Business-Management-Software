@@ -47,6 +47,8 @@ export default function MyInfo() {
     <Screen>
       <Txt muted style={{ fontSize: 13 }}>Only managers and admins can see this.</Txt>
       <Card>
+        <Input label="Email (you sign in with this)" value={me?.user.email ?? ""} editable={false} selectTextOnFocus />
+        <Txt muted style={{ fontSize: 12, marginTop: -4 }}>To change it, ask an admin.</Txt>
         {field("phone", "Mobile phone", { keyboardType: "phone-pad", autoComplete: "tel" })}
         {field("dateOfBirth", "Date of birth (YYYY-MM-DD)", { placeholder: "1990-04-23", keyboardType: "numbers-and-punctuation", autoComplete: "birthdate-full", maxLength: 10 })}
       </Card>
