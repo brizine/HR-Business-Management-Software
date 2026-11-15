@@ -65,7 +65,7 @@ function ManualEntry({ value, onChange, onSubmit }: { value: string; onChange: (
 }
 
 const styles = StyleSheet.create({
-  overlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", gap: 16 },
+  overlay: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center", gap: 16 },
   frame: { width: 240, height: 240, borderWidth: 3, borderColor: "#fff", borderRadius: 18 },
   hint: { color: "#fff", fontWeight: "600" },
   bottom: { position: "absolute", left: 16, right: 16, bottom: 32 },

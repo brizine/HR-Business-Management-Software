@@ -134,8 +134,10 @@ function ManagerView() {
 }
 
 function MyEntries() {
+  const { me } = useAuth();
   const from = weekStart(-1).toISOString();
-  const { data } = useApi<any[]>(`/time/entries?from=${from}`);
+  // Your own punches (managers would otherwise get everyone's).
+  const { data } = useApi<any[]>(me ? `/time/entries?employeeId=${me.user.id}&from=${from}` : null);
   return (
     <div className="card">
       <h2>My Recent Time</h2>

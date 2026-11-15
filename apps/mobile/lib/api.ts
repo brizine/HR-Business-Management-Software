@@ -9,13 +9,16 @@ let token: string | null = null;
 /** Headers for loading protected files directly, e.g. an <Image> of an employee photo. */
 export const authHeaders = (): Record<string, string> => (token ? { Authorization: `Bearer ${token}` } : {});
 
-export async function loadToken() {
-  token = await SecureStore.getItemAsync(TOKEN_KEY);
-  return token;
+let tokenLoaded: Promise<string | null> | null = null;
+/** Reads the saved session once; every request waits for it, so a screen opened straight from a link or notification isn't "not signed in". */
+export function loadToken() {
+  tokenLoaded ??= SecureStore.getItemAsync(TOKEN_KEY).then((t) => (token = t), () => (token = null));
+  return tokenLoaded;
 }
 
 export async function saveToken(t: string | null) {
   token = t;
+  tokenLoaded = Promise.resolve(t);
   if (t) await SecureStore.setItemAsync(TOKEN_KEY, t);
   else await SecureStore.deleteItemAsync(TOKEN_KEY);
 }
@@ -36,6 +39,7 @@ export function setSessionEndedHandler(fn: (() => void) | null) {
 
 /** `token` overrides the stored session (for the short-lived two-factor sign-in tokens). */
 export async function api<T = any>(path: string, init: { method?: string; body?: unknown; token?: string } = {}): Promise<T> {
+  if (!init.token) await loadToken();
   const auth = init.token ?? token;
   const isForm = init.body instanceof FormData;
   const res = await fetch(API_URL + path, {

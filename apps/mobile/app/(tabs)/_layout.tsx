@@ -1,11 +1,11 @@
 import { Tabs, router } from "expo-router";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, View, type ColorValue } from "react-native";
 import { useTheme } from "@/components/ui";
 import { useUnread } from "@/lib/unread";
 import { CompanyLogo } from "@/components/company-logo";
 import { useAuth } from "@/lib/auth";
 
-const icon = (glyph: string) => ({ color }: { color: string }) => <Text style={{ color, fontSize: 18 }}>{glyph}</Text>;
+const icon = (glyph: string) => ({ color }: { color: ColorValue }) => <Text style={{ color, fontSize: 18 }}>{glyph}</Text>;
 
 function Bell() {
   const t = useTheme();

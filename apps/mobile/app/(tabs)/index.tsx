@@ -40,7 +40,8 @@ const locationOffAlert = (message: string) =>
 export default function Clock() {
   const { me } = useAuth();
   const status = useApi("/time/status");
-  const week = useApi<any[]>(`/time/entries?from=${encodeURIComponent(weekStartIso())}`);
+  // Your own punches (managers would otherwise get everyone's).
+  const week = useApi<any[]>(me ? `/time/entries?employeeId=${me.user.id}&from=${encodeURIComponent(weekStartIso())}` : null);
   const shifts = useApi<{ mine: any[] }>("/shifts/mine");
   const next = shifts.data?.mine[0];
   const [busy, setBusy] = useState(false);
