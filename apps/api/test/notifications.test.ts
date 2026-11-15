@@ -188,6 +188,17 @@ describe("scheduled checks", () => {
     expect((await call("PATCH", `/assets/schedules/${sched.body.id}`, owner.token, { assignedToId: null })).body.assignedToId).toBeNull();
   });
 
+  it("maintenance schedules keep notes, set when made or changed later", async () => {
+    const truck = await call("POST", "/assets", owner.token, { name: "Notes Truck", type: "truck", odometer: 1000 });
+    const sched = await call("POST", "/assets/schedules", owner.token, { assetId: truck.body.id, name: "Oil change", intervalMiles: 5000, notes: "  5W-30, 6 qts  " });
+    expect(sched.body.notes).toBe("5W-30, 6 qts");
+    expect((await call("PATCH", `/assets/schedules/${sched.body.id}`, tech.token, { notes: "x" })).status).toBe(403);
+    expect((await call("PATCH", `/assets/schedules/${sched.body.id}`, owner.token, { notes: "Filter #PH3614" })).body.notes).toBe("Filter #PH3614");
+    expect((await call("GET", `/assets/${truck.body.id}`, owner.token)).body.schedules[0].notes).toBe("Filter #PH3614");
+    expect((await call("PATCH", `/assets/schedules/${sched.body.id}`, owner.token, { notes: null })).body.notes).toBeNull();
+    expect((await call("PATCH", `/assets/schedules/${sched.body.id}`, owner.token, { notes: "x".repeat(2001) })).status).toBe(400);
+  });
+
   it("reminder timing: a company default, a per-schedule override, and repeats while overdue", async () => {
     const van = await call("POST", "/assets", owner.token, { name: "Crew Van", type: "truck", odometer: 10000 });
     const oil = await call("POST", "/assets/schedules", owner.token, { assetId: van.body.id, name: "Oil change", intervalMiles: 5000 });

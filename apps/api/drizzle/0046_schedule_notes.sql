@@ -1,0 +1,1 @@
+ALTER TABLE "maintenance_schedules" ADD COLUMN "notes" text;

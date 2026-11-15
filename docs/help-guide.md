@@ -235,8 +235,10 @@ accounts on this page (admins).
 - The fleet list with maintenance status; click an asset for details: meters (odometer, engine
   hours), documents, QR label, work orders, inspections and **Preventive Maintenance Schedules**.
 - **Add schedule:** service name, every X miles / engine hours / days (whichever comes first), last
-  service, **Assign to** (they get its reminders and work orders made from it), and optional
-  **Remind … before** timing. **Create work order** turns a due service into a work order.
+  service, **Assign to** (they get its reminders and work orders made from it), optional
+  **Remind … before** timing and **Notes** (oil type, part numbers, which shop…). Notes show under
+  the service name; **Add note** / **Edit note** changes them later. **Create work order** turns a
+  due service into a work order (its notes go in the work order's description).
 - **Reminder settings** (top of the Assets page): company default for how far ahead "due soon"
   reminders go out (miles, engine hours, days; blank = 10% of the interval) and an optional repeat
   every N days while overdue. Each schedule can override this with **Change** in its Reminder

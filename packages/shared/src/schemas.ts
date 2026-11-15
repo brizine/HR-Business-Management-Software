@@ -315,6 +315,8 @@ export const maintenanceScheduleSchema = z
     assignedToId: z.string().uuid().nullable().optional(),
     /** Send the "due soon" reminder this far ahead (null = the company default). */
     ...reminderLeadFields,
+    /** Notes for whoever does it: part numbers, oil type, where to take it… */
+    notes: z.string().trim().max(2000).nullable().optional(),
   })
   .refine((s) => s.intervalMiles || s.intervalHours || s.intervalDays, {
     message: "At least one interval (miles, hours or days) is required",
@@ -331,6 +333,7 @@ export type FleetSettings = z.infer<typeof fleetSettingsSchema>;
 /** Changing one schedule after it's made: who it's assigned to and its reminder timing. */
 export const maintenanceScheduleUpdateSchema = z.object({
   assignedToId: z.string().uuid().nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
   ...reminderLeadFields,
 });
 

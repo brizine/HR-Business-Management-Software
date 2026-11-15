@@ -9,7 +9,7 @@ import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
 import { AssetFields } from "@/components/asset-form";
 import { DocumentList } from "@/components/documents";
 import { QrCode, assetQrUrl, qrSvg } from "@/components/qr";
-import { ScheduleReminderEditor, describeLead } from "@/components/maintenance-reminders";
+import { ScheduleNoteEditor, ScheduleReminderEditor, describeLead } from "@/components/maintenance-reminders";
 
 export default function AssetDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -19,6 +19,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
   const [editing, setEditing] = useState(false);
   const [addingSchedule, setAddingSchedule] = useState(false);
   const [remindFor, setRemindFor] = useState<string | null>(null);
+  const [noteFor, setNoteFor] = useState<string | null>(null);
   const edit = useAction();
   const sched = useAction();
   const meter = useAction();
@@ -28,7 +29,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
   if (!a) return <ErrorBox error={asset.error} />;
 
   const createWorkOrder = (s: any) =>
-    api("/work-orders", { body: { assetId: a.id, scheduleId: s.id, title: s.name, priority: s.due.status === "overdue" ? "high" : "medium", assignedToId: s.assignedToId ?? null } })
+    api("/work-orders", { body: { assetId: a.id, scheduleId: s.id, title: s.name, ...(s.notes ? { description: s.notes } : {}), priority: s.due.status === "overdue" ? "high" : "medium", assignedToId: s.assignedToId ?? null } })
       .then(asset.reload, (e) => alert(e.message));
 
   return (
@@ -104,6 +105,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
                 </select>
               </label>
             </div>
+            <label>Notes<textarea name="notes" rows={3} maxLength={2000} placeholder="e.g. 5W-30 synthetic, 6 qts, filter #PH3614; done at Main St. Auto" /></label>
             <ErrorBox error={sched.error} />
             <div><button className="btn primary" disabled={sched.busy}>Save schedule</button></div>
           </form>
@@ -113,7 +115,11 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
             <thead><tr><th>Service</th><th>Interval</th><th>Last done</th><th>Next due</th><th>Status</th><th>Assigned to</th><th>Reminder</th><th /></tr></thead>
             <tbody>{a.schedules.map((s: any) => [
               <tr key={s.id}>
-                <td>{s.name}</td>
+                <td>
+                  {s.name}
+                  {s.notes && <div className="muted schedule-note" style={{ fontSize: 13, whiteSpace: "pre-wrap", maxWidth: 260, marginTop: 2 }}>📝 {s.notes}</div>}
+                  {can("manager", "fleet") && <div><button className="btn sm" style={{ marginTop: 4 }} onClick={() => setNoteFor(noteFor === s.id ? null : s.id)}>{s.notes ? "Edit note" : "Add note"}</button></div>}
+                </td>
                 <td className="muted">{[s.intervalMiles && `${s.intervalMiles.toLocaleString()} mi`, s.intervalHours && `${s.intervalHours} hrs`, s.intervalDays && `${s.intervalDays} days`].filter(Boolean).join(" / ")}</td>
                 <td>{fmtDate(s.lastServiceDate)}<div className="muted">{s.lastServiceOdometer != null && s.intervalMiles ? `${s.lastServiceOdometer.toLocaleString()} mi` : ""}{s.lastServiceHours != null && s.intervalHours ? ` ${s.lastServiceHours} hrs` : ""}</div></td>
                 <td>{[s.due.nextDueOdometer && `${s.due.nextDueOdometer.toLocaleString()} mi`, s.due.nextDueHours && `${s.due.nextDueHours} hrs`, s.due.nextDueDate && fmtDate(s.due.nextDueDate)].filter(Boolean).join(" / ")}</td>
@@ -136,6 +142,11 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
                   {can("manager", "fleet") && <button className="btn sm danger" onClick={() => confirm("Delete schedule?") && api(`/assets/schedules/${s.id}`, { method: "DELETE" }).then(asset.reload)}>×</button>}
                 </td>
               </tr>,
+              noteFor === s.id && (
+                <tr key={s.id + "-note"}><td colSpan={8}>
+                  <ScheduleNoteEditor schedule={s} onClose={() => setNoteFor(null)} onSaved={() => { setNoteFor(null); asset.reload(); }} />
+                </td></tr>
+              ),
               remindFor === s.id && (
                 <tr key={s.id + "-remind"}><td colSpan={8}>
                   <ScheduleReminderEditor schedule={s} onClose={() => setRemindFor(null)} onSaved={() => { setRemindFor(null); asset.reload(); }} />

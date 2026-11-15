@@ -82,3 +82,22 @@ export function ScheduleReminderEditor({ schedule, onSaved, onClose }: { schedul
     </div>
   );
 }
+
+/** Add, change or clear a maintenance schedule's notes. */
+export function ScheduleNoteEditor({ schedule, onSaved, onClose }: { schedule: { id: string; name: string; notes: string | null }; onSaved: () => void; onClose: () => void }) {
+  const [text, setText] = useState(schedule.notes ?? "");
+  const { busy, error, run } = useAction();
+  const save = (notes: string | null) => run(async () => { await api(`/assets/schedules/${schedule.id}`, { method: "PATCH", body: { notes } }); onSaved(); });
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <strong>Notes for {schedule.name}</strong>
+      <textarea rows={3} maxLength={2000} value={text} autoFocus onChange={(e) => setText(e.target.value)} placeholder="e.g. 5W-30 synthetic, 6 qts, filter #PH3614; done at Main St. Auto" />
+      <div className="row" style={{ gap: 8 }}>
+        <button type="button" className="btn primary sm" disabled={busy} onClick={() => save(text.trim() || null)}>Save note</button>
+        {schedule.notes && <button type="button" className="btn sm danger" disabled={busy} onClick={() => save(null)}>Remove note</button>}
+        <button type="button" className="btn sm" onClick={onClose}>Cancel</button>
+      </div>
+      <ErrorBox error={error} />
+    </div>
+  );
+}

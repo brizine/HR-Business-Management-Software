@@ -172,6 +172,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .insert(maintenanceSchedules)
       .values({
         ...body,
+        notes: body.notes || null,
         companyId: req.user.companyId,
         // Default "last service" to now so new schedules count from today's meters.
         lastServiceDate: body.lastServiceDate ?? new Date().toISOString().slice(0, 10),
@@ -182,11 +183,11 @@ const routes: FastifyPluginAsync = async (app) => {
     return withDue(row, asset, await fleetSettingsFor(req.user.companyId));
   });
 
-  /** Change who a schedule is assigned to, or when its reminder goes out (null = company default). */
+  /** Change who a schedule is assigned to, its notes, or when its reminder goes out (null = company default). */
   app.patch<{ Params: { id: string } }>("/schedules/:id", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const body = parse(maintenanceScheduleUpdateSchema, req.body);
     if (body.assignedToId !== undefined) await checkAssignee(req.user.companyId, body.assignedToId);
-    const changes = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined));
+    const changes = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined).map(([k, v]) => [k, k === "notes" && v === "" ? null : v]));
     if (!Object.keys(changes).length) throw new HttpError(400, "Nothing to change");
     const [row] = await db
       .update(maintenanceSchedules)

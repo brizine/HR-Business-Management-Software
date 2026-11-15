@@ -397,6 +397,8 @@ export const maintenanceSchedules = pgTable("maintenance_schedules", {
   remindMilesBefore: doublePrecision("remind_miles_before"),
   remindHoursBefore: doublePrecision("remind_hours_before"),
   remindDaysBefore: integer("remind_days_before"),
+  /** Notes for whoever does the service: parts, specs, where to take it… */
+  notes: text("notes"),
   createdAt: createdAt(),
 });
 

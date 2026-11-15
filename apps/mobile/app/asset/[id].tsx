@@ -90,7 +90,7 @@ export default function Asset() {
           <View key={s.id}>
             <Divider />
             <Row>
-              <View style={{ flex: 1 }}><Txt>{s.name}</Txt><Txt muted>{s.due.reasons.join(", ") || `Next: ${[s.due.nextDueOdometer && `${s.due.nextDueOdometer.toLocaleString()} mi`, s.due.nextDueHours && `${s.due.nextDueHours} hrs`, s.due.nextDueDate && fmtDate(s.due.nextDueDate)].filter(Boolean).join(" / ")}`}</Txt></View>
+              <View style={{ flex: 1 }}><Txt>{s.name}</Txt><Txt muted>{s.due.reasons.join(", ") || `Next: ${[s.due.nextDueOdometer && `${s.due.nextDueOdometer.toLocaleString()} mi`, s.due.nextDueHours && `${s.due.nextDueHours} hrs`, s.due.nextDueDate && fmtDate(s.due.nextDueDate)].filter(Boolean).join(" / ")}`}</Txt>{s.notes ? <Txt muted>📝 {s.notes}</Txt> : null}</View>
               <Badge value={s.due.status} />
             </Row>
           </View>
