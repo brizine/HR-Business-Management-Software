@@ -53,8 +53,8 @@ export function MyDocuments({ docs, onChange }: { docs: Doc[] | null; onChange: 
               <Divider />
               <Txt style={{ fontWeight: "600" }}>{d.name}</Txt>
               <Row>
-                <View style={{ flex: 1 }}><Button title={opened.has(d.id) ? "Read again" : "1. Read it"} kind={opened.has(d.id) ? "secondary" : "primary"} busy={busy === d.id} onPress={() => open(d)} /></View>
-                <View style={{ flex: 1 }}><Button title="2. Sign" disabled={!opened.has(d.id)} onPress={() => sign(d)} /></View>
+                <View style={{ flex: 1 }}><Button title={opened.has(d.id) ? "Read again" : "1. Read it"} kind="secondary" busy={busy === d.id} onPress={() => open(d)} /></View>
+                <View style={{ flex: 1 }}><Button title="2. Sign" kind="secondary" disabled={!opened.has(d.id)} onPress={() => sign(d)} /></View>
               </Row>
               {!opened.has(d.id) && <Txt muted style={{ fontSize: 12 }}>Open and read the document first; then you can sign it.</Txt>}
             </View>

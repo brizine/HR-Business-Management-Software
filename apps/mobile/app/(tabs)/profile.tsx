@@ -24,12 +24,12 @@ export default function Profile() {
           </View>
         </Row>
       </Card>
-      <Button title="My Info" onPress={() => router.push("/my-info")} />
-      <Button title="My Attendance" onPress={() => router.push("/attendance")} />
-      <Button title="My Reviews" onPress={() => router.push("/reviews")} />
+      <Button title="My Info" kind="secondary" onPress={() => router.push("/my-info")} />
+      <Button title="My Attendance" kind="secondary" onPress={() => router.push("/attendance")} />
+      <Button title="My Reviews" kind="secondary" onPress={() => router.push("/reviews")} />
       <MyDocuments docs={docs.data} onChange={docs.reload} />
-      <Button title="📖  Company Wiki" onPress={() => router.push("/wiki")} />
-      <Button title="🎓  Training" onPress={() => router.push("/training")} />
+      <Button title="📖  Company Wiki" kind="secondary" onPress={() => router.push("/wiki")} />
+      <Button title="🎓  Training" kind="secondary" onPress={() => router.push("/training")} />
       <Button title="Sign out" kind="secondary" onPress={signOut} />
       <Button title="Sign out on all devices" kind="danger" onPress={() =>
         Alert.alert("Sign out everywhere?", "Ends your Crewdesk sessions on every phone and computer, including this one. Use this if a device was lost.", [
