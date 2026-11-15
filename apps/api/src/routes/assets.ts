@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { assetSchema, fleetSettingsSchema, isInactive, maintenanceScheduleSchema, maintenanceScheduleUpdateSchema, meterReadingSchema } from "@crewdesk/shared";
 import { db } from "../db";
 import { assets, companies, employees, inspections, maintenanceSchedules, meterReadings, newAssetCode, workOrders } from "../db/schema";
@@ -108,6 +109,36 @@ const routes: FastifyPluginAsync = async (app) => {
       .returning();
     if (!row) notFound("Asset");
     return row;
+  });
+
+  /** Maintenance history: every completed work order for the asset, newest first, with who did it. */
+  app.get<{ Params: { id: string } }>("/:id/history", async (req) => {
+    const asset = await loadAsset(req.user.companyId, req.params.id);
+    const doneBy = alias(employees, "done_by");
+    const rows = await db
+      .select({ wo: workOrders, scheduleName: maintenanceSchedules.name, doneByFirst: doneBy.firstName, doneByLast: doneBy.lastName })
+      .from(workOrders)
+      .leftJoin(maintenanceSchedules, eq(maintenanceSchedules.id, workOrders.scheduleId))
+      .leftJoin(doneBy, eq(doneBy.id, workOrders.assignedToId))
+      .where(and(eq(workOrders.assetId, asset.id), eq(workOrders.status, "completed")))
+      .orderBy(desc(workOrders.completedAt), desc(workOrders.number));
+    return rows.map(({ wo, scheduleName, doneByFirst, doneByLast }) => ({
+      id: wo.id,
+      number: wo.number,
+      title: wo.title,
+      description: wo.description,
+      completedAt: wo.completedAt,
+      odometer: wo.completedOdometer,
+      hours: wo.completedHours,
+      vendor: wo.vendor,
+      doneBy: doneByFirst ? `${doneByFirst} ${doneByLast}` : null,
+      laborHours: wo.laborHours,
+      partsCostCents: wo.partsCostCents,
+      laborCostCents: wo.laborCostCents,
+      notes: wo.resolutionNotes,
+      kind: wo.scheduleId ? "scheduled" : wo.inspectionId ? "inspection" : "repair",
+      scheduleName,
+    }));
   });
 
   app.get<{ Params: { id: string } }>("/:id", async (req) => {

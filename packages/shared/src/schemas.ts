@@ -375,6 +375,21 @@ export const workOrderUpdateSchema = z.object({
   completedHours: z.number().nonnegative().optional(),
 });
 
+/** A service done in the past (before Crewdesk, or never entered), added to an asset's maintenance history. */
+export const pastServiceSchema = z.object({
+  assetId: z.string().uuid(),
+  scheduleId: z.string().uuid().nullable().optional(),
+  title: z.string().trim().min(1, "What was done?").max(200),
+  date: isoDate,
+  odometer: z.number().nonnegative().nullable().optional(),
+  hours: z.number().nonnegative().nullable().optional(),
+  vendor: z.string().trim().max(200).optional(),
+  partsCostCents: z.number().int().nonnegative().default(0),
+  laborCostCents: z.number().int().nonnegative().default(0),
+  laborHours: z.number().nonnegative().nullable().optional(),
+  notes: z.string().trim().max(4000).optional(),
+});
+
 export const inspectionSchema = z.object({
   assetId: z.string().uuid(),
   odometer: z.number().nonnegative().optional(),

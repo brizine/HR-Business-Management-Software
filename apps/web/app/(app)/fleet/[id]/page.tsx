@@ -9,6 +9,7 @@ import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
 import { AssetFields } from "@/components/asset-form";
 import { DocumentList } from "@/components/documents";
 import { QrCode, assetQrUrl, qrSvg } from "@/components/qr";
+import { MaintenanceHistory } from "@/components/maintenance-history";
 import { RenewalBadge, ScheduleNoteEditor, ScheduleReminderEditor, describeLead } from "@/components/maintenance-reminders";
 
 export default function AssetDetail({ params }: { params: Promise<{ id: string }> }) {
@@ -157,6 +158,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
           </table></div>
         ) : <Empty>No schedules yet. Add oil changes, inspections, filter swaps and so on.</Empty>}
       </div>
+      <MaintenanceHistory asset={a} onChange={asset.reload} />
       <div className="grid cols-2">
         <div className="card">
           <h2>Work Orders</h2>

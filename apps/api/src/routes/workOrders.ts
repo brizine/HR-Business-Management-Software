@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { workOrderSchema, workOrderUpdateSchema, resolveLead, workOrderDue } from "@crewdesk/shared";
+import { pastServiceSchema, workOrderSchema, workOrderUpdateSchema, resolveLead, workOrderDue } from "@crewdesk/shared";
 import { db } from "../db";
 import { assets, employees, maintenanceSchedules, workOrders } from "../db/schema";
 import { authenticate, isManager } from "../lib/auth";
@@ -98,6 +98,56 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /**
+   * Adds a service done in the past to an asset's history, as a completed work order dated then
+   * (e.g. records from before Crewdesk). If it's linked to a schedule and newer than the schedule's
+   * last service, the schedule counts from it. Not sent to accounting.
+   */
+  app.post("/past", async (req) => {
+    if (!isManager(req, AREA)) throw new HttpError(403, "Only fleet managers can add past services");
+    const body = parse(pastServiceSchema, req.body);
+    const [asset] = await db.select().from(assets).where(and(eq(assets.id, body.assetId), eq(assets.companyId, req.user.companyId)));
+    if (!asset) notFound("Asset");
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    if (body.date > tomorrow) throw new HttpError(400, "The date can't be in the future");
+    let schedule: typeof maintenanceSchedules.$inferSelect | undefined;
+    if (body.scheduleId) {
+      [schedule] = await db.select().from(maintenanceSchedules).where(and(eq(maintenanceSchedules.id, body.scheduleId), eq(maintenanceSchedules.assetId, asset.id)));
+      if (!schedule) notFound("Schedule");
+    }
+    return db.transaction(async (tx) => {
+      const [row] = await tx.insert(workOrders).values({
+        companyId: req.user.companyId,
+        number: await nextWorkOrderNumber(tx, req.user.companyId),
+        assetId: asset.id,
+        scheduleId: schedule?.id ?? null,
+        title: body.title,
+        priority: "low",
+        status: "completed",
+        reportedById: req.user.sub,
+        vendor: body.vendor || null,
+        partsCostCents: body.partsCostCents,
+        laborCostCents: body.laborCostCents,
+        laborHours: body.laborHours ?? null,
+        resolutionNotes: body.notes || null,
+        completedAt: new Date(`${body.date}T12:00:00Z`),
+        completedOdometer: body.odometer ?? null,
+        completedHours: body.hours ?? null,
+      }).returning();
+      if (schedule && (!schedule.lastServiceDate || body.date >= schedule.lastServiceDate)) {
+        await tx.update(maintenanceSchedules).set({
+          lastServiceDate: body.date,
+          lastServiceOdometer: body.odometer ?? schedule.lastServiceOdometer,
+          lastServiceHours: body.hours ?? schedule.lastServiceHours,
+        }).where(eq(maintenanceSchedules.id, schedule.id));
+      }
+      if (body.odometer != null || body.hours != null) {
+        await recordMeter(tx, asset, { odometer: body.odometer ?? undefined, engineHours: body.hours ?? undefined }, req.user.sub);
+      }
+      return row;
+    });
+  });
+
+  /**
    * Managers can change anything; the assigned technician can update progress.
    * Completing a work order linked to a schedule resets that schedule's
    * "last service" to the completion date and meters.
@@ -129,6 +179,13 @@ const routes: FastifyPluginAsync = async (app) => {
       if (completing) {
         let [asset] = await tx.select().from(assets).where(eq(assets.id, wo.assetId));
         asset = await recordMeter(tx, asset, { odometer: completedOdometer, engineHours: completedHours }, req.user.sub);
+        // Remember the meters for the maintenance history (0 = the asset doesn't track that meter).
+        await tx.update(workOrders).set({
+          completedOdometer: completedOdometer ?? (asset.odometer > 0 ? asset.odometer : null),
+          completedHours: completedHours ?? (asset.engineHours > 0 ? asset.engineHours : null),
+        }).where(eq(workOrders.id, wo.id));
+        row.completedOdometer = completedOdometer ?? (asset.odometer > 0 ? asset.odometer : null);
+        row.completedHours = completedHours ?? (asset.engineHours > 0 ? asset.engineHours : null);
         if (wo.scheduleId) {
           await tx
             .update(maintenanceSchedules)

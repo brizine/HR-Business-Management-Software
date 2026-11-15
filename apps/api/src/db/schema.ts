@@ -427,6 +427,9 @@ export const workOrders = pgTable("work_orders", {
   vendor: text("vendor"),
   resolutionNotes: text("resolution_notes"),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  /** The asset's odometer / engine hours when it was completed (maintenance history). */
+  completedOdometer: doublePrecision("completed_odometer"),
+  completedHours: doublePrecision("completed_hours"),
   createdAt: createdAt(),
 });
 

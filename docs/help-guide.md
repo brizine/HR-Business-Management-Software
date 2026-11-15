@@ -244,6 +244,15 @@ accounts on this page (admins).
   reminders go out (miles, engine hours, days; blank = 10% of the interval) and an optional repeat
   every N days while overdue. Each schedule can override this with **Change** in its Reminder
   column.
+- **Maintenance History** (on each asset's page): every completed work order and service, newest
+  first, with the date, work order number, what was done and notes, mileage / engine hours at the
+  time, who did it and the vendor, and parts, labor and total cost. **Filters**: search (service,
+  part, vendor, notes, work order number, who did it), type (scheduled service, repair, from an
+  inspection) and a date range; the totals update to match. **Export CSV** downloads what's shown
+  (for a spreadsheet, resale or warranty records); **Print** opens a printable copy. **Add past
+  service** (fleet managers) records older work, e.g. from paper records or receipts: what was done,
+  date, odometer, hours, vendor, costs, notes, and optionally which schedule it was for (a newer one
+  resets that schedule). Click a work order number to open it, for example to correct its costs.
 - **Registration & insurance renewals:** enter each asset's **Registration expires** and
   **Insurance expires** dates (**Edit** on the asset). Reminders to renew go out before each date
   (default 30 and 7 days before) and again after it expires (default every 7 days) until the date is
