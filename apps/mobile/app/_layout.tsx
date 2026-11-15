@@ -57,7 +57,6 @@ function Gate() {
       <Stack.Screen name="scan" options={{ title: "Scan equipment" }} />
       <Stack.Screen name="q/[code]" options={{ title: "Equipment" }} />
       <Stack.Screen name="availability" options={{ title: "My availability" }} />
-      <Stack.Screen name="notification-settings" options={{ title: "Notification settings" }} />
       <Stack.Screen name="my-info" options={{ title: "My info" }} />
       <Stack.Screen name="reviews" options={{ title: "My reviews" }} />
       <Stack.Screen name="attendance" options={{ title: "My attendance" }} />

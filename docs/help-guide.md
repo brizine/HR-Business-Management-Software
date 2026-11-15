@@ -43,7 +43,8 @@ question, get step-by-step answers) and **User Manual** (this guide, with conten
   **App & inbox** (the Notifications list in Crewdesk plus phone pop-ups if you have the app),
   **Email** (always, only if you don't have the app, or off) and **Text**. Owners and admins can
   pick any employee from the **Change notification settings for** drop-down at the top, or open
-  someone's profile and click **Notifications**.
+  someone's profile and click **Notifications**. These settings are changed on the website; the phone app
+  doesn't have them.
 - **Company Info:** company name, logo, address (separate boxes), phone, email, website, time zone.
 - **Layout Editor** (owner): drag boxes and fields to rearrange pages, hide items, edit drop-down
   menus (job titles, departments and so on), set **Role access**, and edit the **User Manual**
