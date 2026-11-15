@@ -63,7 +63,6 @@ export default function Profile() {
       <Button title="🎓  Training" onPress={() => router.push("/training")} />
       <Button title="My attendance" kind="secondary" onPress={() => router.push("/attendance")} />
       <Button title="My reviews" kind="secondary" onPress={() => router.push("/reviews")} />
-      <Button title="Notification settings" kind="secondary" onPress={() => router.push("/notification-settings")} />
       <Button title="Sign out" kind="secondary" onPress={signOut} />
       <Button title="Sign out on all devices" kind="danger" onPress={() =>
         Alert.alert("Sign out everywhere?", "Ends your Crewdesk sessions on every phone and computer, including this one. Use this if a device was lost.", [
