@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useContext, useRef, useState, type ComponentRef, type ReactNode } from "react";
+import { HeaderHeightContext } from "expo-router/react-navigation";
 import {
   ActivityIndicator,
   Pressable,
@@ -24,10 +25,17 @@ export function useTheme() {
 
 export function Screen({ children, refreshing, onRefresh }: { children: ReactNode; refreshing?: boolean; onRefresh?: () => void }) {
   const t = useTheme();
+  // On newer iPhones the top bar can float over the page: if the page starts under it, add room.
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
+  const [top, setTop] = useState(0);
+  const ref = useRef<ComponentRef<typeof ScrollView>>(null);
+  const measure = () => ref.current?.measureInWindow?.((_x: number, y: number) => setTop(Math.max(0, Math.round(headerHeight - y))));
   return (
     <ScrollView
+      ref={ref}
+      onLayout={measure}
       style={{ backgroundColor: t.bg }}
-      contentContainerStyle={{ padding: 16, gap: 12 }}
+      contentContainerStyle={{ padding: 16, paddingTop: 16 + top, gap: 12 }}
       refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined}
       keyboardShouldPersistTaps="handled"
     >
