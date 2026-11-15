@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import type { AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings } from "@crewdesk/shared";
+import type { AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram } from "@crewdesk/shared";
 import {
   boolean,
   primaryKey,
@@ -52,6 +52,8 @@ export const companies = pgTable("companies", {
   helpGuide: text("help_guide"),
   /** A fingerprint of the standard manual when the copy was last saved, to tell when the standard one changes. */
   helpGuideBase: text("help_guide_base"),
+  /** Review program: when performance reviews are due, and reminders (see shared/reviewProgram). */
+  reviewProgram: jsonb("review_program").$type<ReviewProgram>(),
   /** Maintenance reminder defaults (how far ahead, repeat while overdue). */
   fleetSettings: jsonb("fleet_settings").$type<FleetSettings>(),
   /** Who gets paid holidays and what working one pays (see HolidayRules in @crewdesk/shared). */

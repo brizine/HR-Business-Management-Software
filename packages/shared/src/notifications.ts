@@ -16,6 +16,8 @@ export type NotificationLink =
   | { screen: "work-order"; id: string; assetId: string }
   | { screen: "pay-period"; id: string }
   | { screen: "reviews"; id: string }
+  /** A review the program says is due: opens a new review for them. */
+  | { screen: "review-due"; employeeId: string; reviewType: string }
   | { screen: "attendance"; employeeId: string }
   | { screen: "training"; courseId: string };
 
@@ -75,6 +77,7 @@ export function webPathFor(link: NotificationLink | null | undefined): string | 
     case "work-order": return `/work-orders?highlight=${link.id}`;
     case "pay-period": return `/pay-periods/${link.id}`;
     case "reviews": return `/reviews?open=${link.id}`;
+    case "review-due": return `/reviews?new=review&employee=${link.employeeId}&type=${link.reviewType}`;
     case "attendance": return `/attendance?employee=${link.employeeId}`;
     case "training": return `/training/${link.courseId}`;
     default: return null;

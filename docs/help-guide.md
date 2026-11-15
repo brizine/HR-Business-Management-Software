@@ -157,6 +157,21 @@ Admins choose which employees can edit products, rates and mixes; every change i
 Performance reviews and disciplinary actions. Drafts are visible to managers only until shared;
 employees acknowledge each one. Filters and search at the top.
 
+- **Review Program** (the box at the top, managers and up): lists who needs a review, with the
+  due date and **Overdue** / **Due soon** status; tick **Show upcoming** to see later ones.
+  **Start review** opens a new review with the person and review type filled in.
+- **Set up review program** / **Edit program** (owners and admins): turn it on, then add, change or
+  remove reviews. For each one: a name, the review type, **When** (once, X days after hire, like a
+  90-day review; or repeating every X months, counted from the hire date, from their last review of
+  that type, or from a set date for everyone), **Remind X days before**, which employment types it
+  applies to (none ticked = everyone) and **Active**. **While overdue, remind again every X days**
+  (blank = once). **Use the standard program** restores the 90-day and annual reviews.
+- Reminders go to the person's manager and to owners/admins who manage reviews (under **Reviews**
+  in notification settings) when a review is due soon and again while it's overdue. Clicking one
+  opens a new review for that person. Writing a review of the matching type, dated up to 60 days
+  before the due date or later, marks it done. People need a hire date on their profile. Reviews
+  that were due before the program was first turned on aren't chased.
+
 ## Training
 
 Courses with lessons and quizzes, assigned to people with due dates; progress tracking and

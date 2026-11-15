@@ -72,7 +72,7 @@ ${row("Acknowledged", r.acknowledgedAt ? new Date(r.acknowledgedAt).toLocaleStri
 }
 
 /** New or edit form for a review or disciplinary action. */
-export function RecordForm({ kind, record, employeeId, onSaved, onCancel }: { kind: RecordKind; record?: EmployeeRecord; employeeId?: string; onSaved: (r: EmployeeRecord) => void; onCancel: () => void }) {
+export function RecordForm({ kind, record, employeeId, defaultType, onSaved, onCancel }: { kind: RecordKind; record?: EmployeeRecord; employeeId?: string; defaultType?: string; onSaved: (r: EmployeeRecord) => void; onCancel: () => void }) {
   const { me } = useAuth();
   const staff = useApi<any[]>("/employees");
   const { busy, error, run } = useAction();
@@ -97,14 +97,14 @@ export function RecordForm({ kind, record, employeeId, onSaved, onCancel }: { ki
       <div className="formgrid">
         <label>Employee
           {record ? <input value={name(record)} disabled /> : (
-            <select name="employeeId" required defaultValue={employeeId ?? ""}>
+            <select key={people.length} name="employeeId" required defaultValue={employeeId ?? ""}>
               <option value="" disabled>Choose…</option>
               {people.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}{e.title ? ` · ${e.title}` : ""}</option>)}
             </select>
           )}
         </label>
         <label>{kind === "review" ? "Review type" : "Action"}
-          <select name="type" required defaultValue={v.type ?? (kind === "review" ? "annual" : "verbal_warning")}>
+          <select name="type" required defaultValue={v.type ?? defaultType ?? (kind === "review" ? "annual" : "verbal_warning")}>
             {kind === "review"
               ? REVIEW_TYPES.map((t) => <option key={t} value={t}>{REVIEW_TYPE_LABELS[t]}</option>)
               : DISCIPLINE_TYPES.map((t) => <option key={t} value={t}>{DISCIPLINE_TYPE_LABELS[t]}</option>)}
@@ -219,8 +219,11 @@ const NO_FILTERS = { q: "", kind: "", type: "", status: "", person: "" };
  * Reviews and disciplinary actions: everyone's for managers (or one person's, with `employeeId`);
  * your own shared ones otherwise. `filterable` adds search and filters.
  */
-export function RecordList({ employeeId, filterable = false, openId, compact = false, newKind, onNewDone }: {
-  employeeId?: string; filterable?: boolean; openId?: string | null; compact?: boolean; newKind?: RecordKind | null; onNewDone?: () => void;
+export function RecordList({ employeeId, filterable = false, openId, compact = false, newKind, newFor, onNewDone, onSaved }: {
+  employeeId?: string; filterable?: boolean; openId?: string | null; compact?: boolean; newKind?: RecordKind | null;
+  /** Prefill the new record (e.g. from the review program's "Start review"). */
+  newFor?: { employeeId?: string; type?: string } | null;
+  onNewDone?: () => void; onSaved?: () => void;
 }) {
   const { can } = useAuth();
   const manager = can("manager", "reviews");
@@ -244,7 +247,7 @@ export function RecordList({ employeeId, filterable = false, openId, compact = f
   return (
     <>
       {newKind && (
-        <RecordForm kind={newKind} employeeId={employeeId} onCancel={() => onNewDone?.()} onSaved={(r) => { list.setData([r, ...all]); setOpen(r.id); onNewDone?.(); }} />
+        <RecordForm key={`${newKind}:${newFor?.employeeId ?? ""}:${newFor?.type ?? ""}`} kind={newKind} employeeId={employeeId ?? newFor?.employeeId} defaultType={newFor?.type} onCancel={() => onNewDone?.()} onSaved={(r) => { list.setData([r, ...all]); setOpen(r.id); onNewDone?.(); onSaved?.(); }} />
       )}
       {filterable && (
         <form className="card filters" role="search" aria-label="Filter reviews and disciplinary actions" onSubmit={(e) => e.preventDefault()}>

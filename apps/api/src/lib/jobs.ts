@@ -1,4 +1,4 @@
-import { and, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or } from "drizzle-orm";
+import { and, eq, gt, sql, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or } from "drizzle-orm";
 import { INACTIVE_STATUSES, carryoverForfeit, computeDue, resolveLead, workOrderDue, type FleetSettings, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
 import { db } from "../db";
 import { fleetSettingsFor } from "./fleet";
@@ -9,6 +9,7 @@ import { assignCourse, autoAssignees, companyToday, describeEnrollments, latestE
 import { taskOwners } from "../routes/onboarding";
 import { fmtTime, localParts } from "./tz";
 import { notify, staffWithRole } from "./notify";
+import { reviewSchedule } from "./reviewProgram";
 
 /** Hours on the clock after which we assume someone forgot to clock out. */
 export const FORGOT_CLOCK_OUT_HOURS = 12;
@@ -284,6 +285,7 @@ export async function runScheduledChecks(now = new Date()) {
 
   sent += await attendanceAlerts(now);
   sent += await trainingChecks(now);
+  sent += await reviewChecks(now);
   return { sent };
 }
 
@@ -405,4 +407,44 @@ export function startScheduler(intervalMs = 5 * 60_000) {
   const tick = () => runScheduledChecks().catch((err) => console.error("scheduled checks failed", err));
   tick();
   return setInterval(tick, intervalMs);
+}
+
+const mdy = (ymd: string) => { const [y, m, d] = ymd.split("-"); return `${m}/${d}/${y}`; };
+
+/**
+ * Review program: remind each person's manager and reviews admins when a review comes due
+ * (inside the rule's reminder window) and when it's overdue (again every repeatOverdueDays).
+ */
+async function reviewChecks(now: Date) {
+  let sent = 0;
+  const enabled = await db.select({ id: companies.id, tz: companies.timezone, program: companies.reviewProgram }).from(companies)
+    .where(sql`(${companies.reviewProgram}->>'enabled')::boolean`);
+  for (const c of enabled) {
+    if (!c.program?.enabled) continue;
+    if (localParts(now, c.tz).minutes < REMINDER_HOUR * 60) continue;
+    const { program, due } = await reviewSchedule(c.id, now);
+    const actionable = due.filter((d) => d.status !== "upcoming");
+    if (!actionable.length) continue;
+    const admins = await staffWithRole(c.id, "admin", "reviews");
+    const activeIds = new Set((await db.select({ id: employees.id }).from(employees)
+      .where(and(eq(employees.companyId, c.id), notInArray(employees.status, INACTIVE_STATUSES)))).map((e) => e.id));
+    const repeat = program.repeatOverdueDays ? `:r${Math.floor(now.getTime() / (program.repeatOverdueDays * 86_400_000))}` : "";
+    for (const d of actionable) {
+      const key = `revdue:${d.employeeId}:${d.ruleId}:${d.dueDate}:${d.status === "overdue" ? `over${repeat}` : "soon"}`;
+      if (!(await firstTime(c.id, key))) continue;
+      const to = [...new Set([...(d.managerId && activeIds.has(d.managerId) ? [d.managerId] : []), ...admins])].filter((id) => id !== d.employeeId);
+      if (!to.length) continue;
+      const name = `${d.firstName} ${d.lastName}`;
+      notify(c.id, to, {
+        category: "reviews",
+        title: d.status === "overdue" ? `${d.ruleName} overdue: ${name}` : `${d.ruleName} due soon: ${name}`,
+        body: d.status === "overdue"
+          ? `${name}'s ${d.ruleName.toLowerCase()} was due ${mdy(d.dueDate)} (${-d.daysLeft} day${d.daysLeft === -1 ? "" : "s"} ago).`
+          : `${name}'s ${d.ruleName.toLowerCase()} is due ${mdy(d.dueDate)}${d.daysLeft === 0 ? " (today)" : ` (in ${d.daysLeft} day${d.daysLeft === 1 ? "" : "s"})`}.`,
+        link: { screen: "review-due", employeeId: d.employeeId, reviewType: d.reviewType },
+      });
+      sent++;
+    }
+  }
+  return sent;
 }

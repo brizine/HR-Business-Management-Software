@@ -1,10 +1,11 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { and, desc, eq, ne, or, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { acknowledgeSchema, hasRole, recordInputSchema, recordTypeLabel, type RecordKind, type Role } from "@crewdesk/shared";
+import { acknowledgeSchema, hasRole, recordInputSchema, recordTypeLabel, reviewProgramSchema, type RecordKind, type ReviewProgram, type Role } from "@crewdesk/shared";
 import { db } from "../db";
-import { employeeRecords, employees } from "../db/schema";
-import { authenticate, isManager, roleIn } from "../lib/auth";
+import { companies, employeeRecords, employees } from "../db/schema";
+import { authenticate, isManager, requireRole, roleIn } from "../lib/auth";
+import { reviewProgramFor, reviewSchedule } from "../lib/reviewProgram";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { notify } from "../lib/notify";
 
@@ -72,6 +73,15 @@ const fields = (body: ReturnType<typeof recordInputSchema.parse>) =>
 
 const noun = (kind: string) => (kind === "review" ? "review" : "disciplinary action");
 
+/** The review program as saved: keeps the date it was first turned on (reviews due before then aren't chased). */
+async function saveProgram(companyId: string, body: Omit<ReviewProgram, "startedOn">, today: string) {
+  const current = await reviewProgramFor(companyId);
+  const startedOn = body.enabled ? current.startedOn ?? today : current.startedOn ?? null;
+  const program: ReviewProgram = { ...body, startedOn };
+  await db.update(companies).set({ reviewProgram: program }).where(eq(companies.id, companyId));
+  return program;
+}
+
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
 
@@ -86,6 +96,22 @@ const routes: FastifyPluginAsync = async (app) => {
     }
     if (req.query.kind === "review" || req.query.kind === "discipline") where.push(eq(employeeRecords.kind, req.query.kind));
     return load(and(...where)!);
+  });
+
+  /** The review program and who's due a review (managers see their reports' and everyone's, like reviews). */
+  app.get("/program", async (req) => {
+    if (!isManager(req, AREA)) throw new HttpError(403, "You don't have access to the review program");
+    return reviewSchedule(req.user.companyId);
+  });
+
+  /** Owners and admins set up the review program. */
+  app.put("/program", { preHandler: requireRole("admin", AREA) }, async (req) => {
+    const body = parse(reviewProgramSchema, req.body);
+    const ids = body.rules.map((r) => r.id);
+    if (new Set(ids).size !== ids.length) throw new HttpError(400, "Two reviews have the same id");
+    const { today } = await reviewSchedule(req.user.companyId);
+    await saveProgram(req.user.companyId, body, today);
+    return reviewSchedule(req.user.companyId);
   });
 
   app.get<{ Params: { id: string } }>("/:id", async (req) => visible(req, req.params.id));
