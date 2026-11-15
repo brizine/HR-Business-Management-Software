@@ -5,7 +5,12 @@ import { useUnread } from "@/lib/unread";
 import { CompanyLogo } from "@/components/company-logo";
 import { useAuth } from "@/lib/auth";
 
-const icon = (glyph: string) => ({ color }: { color: ColorValue }) => <Text style={{ color, fontSize: 18 }}>{glyph}</Text>;
+// Each icon sits in the same fixed box, centered, so emoji of different widths line up evenly.
+const icon = (glyph: string) => ({ color }: { color: ColorValue }) => (
+  <View style={{ width: 28, height: 26, alignItems: "center", justifyContent: "center" }}>
+    <Text style={{ color, fontSize: 18, textAlign: "center" }}>{glyph}</Text>
+  </View>
+);
 
 function Bell() {
   const t = useTheme();
@@ -31,7 +36,7 @@ export default function TabsLayout() {
   // The bar at the top shows the company logo; the name only when there's no logo (they overlapped).
   const headerTitle = me?.company.hasLogo ? "" : me?.company.name ?? "";
   return (
-    <Tabs screenOptions={{ tabBarActiveTintColor: t.primary, headerStyle: { backgroundColor: t.surface }, headerTintColor: t.text, tabBarStyle: { backgroundColor: t.surface }, headerTitle, headerRight: () => <Bell />, headerLeft: () => <View style={{ marginLeft: 16 }}><CompanyLogo /></View> }}>
+    <Tabs screenOptions={{ tabBarActiveTintColor: t.primary, headerStyle: { backgroundColor: t.surface }, headerTintColor: t.text, tabBarStyle: { backgroundColor: t.surface, paddingHorizontal: 0 }, tabBarItemStyle: { flex: 1, paddingHorizontal: 0, alignItems: "center" }, tabBarLabelPosition: "below-icon", tabBarLabelStyle: { fontSize: 11, textAlign: "center" }, headerTitle, headerRight: () => <Bell />, headerLeft: () => <View style={{ marginLeft: 16 }}><CompanyLogo /></View> }}>
       <Tabs.Screen name="index" options={{ title: "Clock", tabBarIcon: icon("⏱") }} />
       <Tabs.Screen name="schedule" options={{ title: "Schedule", tabBarIcon: icon("📅") }} />
       <Tabs.Screen name="fleet" options={{ title: "Fleet", tabBarIcon: icon("🚚") }} />
