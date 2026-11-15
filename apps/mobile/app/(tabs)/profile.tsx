@@ -33,8 +33,8 @@ export default function Profile() {
           </View>
         </Row>
       </Card>
-      <Button title="My Info" kind="secondary" onPress={() => router.push("/my-info")} />
-      <Button title="My Attendance" kind="secondary" onPress={() => router.push("/attendance")} />
+      <Button title="My Info" onPress={() => router.push("/my-info")} />
+      <Button title="My Attendance" onPress={() => router.push("/attendance")} />
       <Button title="My Reviews" kind="secondary" onPress={() => router.push("/reviews")} />
       {toSign.length > 0 && (
         <Card title="Needs your signature">
