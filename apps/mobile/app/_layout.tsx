@@ -52,6 +52,7 @@ function Gate() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="notifications" options={{ title: "Notifications" }} />
+      <Stack.Screen name="documents" options={{ title: "Documents" }} />
       <Stack.Screen name="wiki/index" options={{ title: "Company Wiki" }} />
       <Stack.Screen name="wiki/[id]" options={{ title: "" }} />
       <Stack.Screen name="scan" options={{ title: "Scan Equipment" }} />

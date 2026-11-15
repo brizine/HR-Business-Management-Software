@@ -195,9 +195,10 @@ reminders. Managers create and assign courses.
 Company-wide, per-employee and per-asset documents, with e-signatures. Filters by category, who it
 belongs to, signature status and date.
 
-In the phone app, **Me → Documents** lists your own documents and company-wide ones (everyone,
-including managers, sees only theirs there). Tap one to open it. Documents waiting for your
-signature appear in **Needs your signature**: tap **1. Read it** to open the document, then **2. Sign**
+In the phone app, the **📄 Documents** button on the **Me** tab opens the Documents page: your own
+documents and company-wide ones (everyone, including managers, sees only theirs there). Tap one to
+open it. Documents waiting for your signature appear in **Needs your signature** (on the Me tab and
+at the top of the Documents page): tap **1. Read it** to open the document, then **2. Sign**
 (signing is only possible after opening it). Search and a **Needs a signature** filter appear when
 the list is long.
 

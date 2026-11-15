@@ -23,7 +23,7 @@ const today = () => new Date().toISOString().slice(0, 10);
  * Tasks tab: what's waiting on you (same as "My Tasks" on the website's employee page): work
  * orders, your onboarding checklist, documents to sign, pay periods to approve and (managers)
  * onboarding steps waiting on you. Work orders and onboarding are handled further down the Tasks
- * tab; documents are signed on the Me tab.
+ * tab; documents open the Documents page to be read and signed.
  */
 export function MyTasksCard({ documents }: { documents: any[] | null }) {
   const { me, can } = useAuth();
@@ -43,7 +43,7 @@ export function MyTasksCard({ documents }: { documents: any[] | null }) {
       badge: x.dueDate && x.dueDate < today() ? "overdue" : undefined,
     })),
     ...(documents ?? []).filter((d) => d.requiresSignature && !d.signedAt && d.employeeId === me?.user.id).map((d) => ({
-      key: `doc-${d.id}`, title: `Sign ${d.name}`, detail: "Document · tap to sign it on the Me tab", badge: "pending", open: () => router.push("/profile"),
+      key: `doc-${d.id}`, title: `Sign ${d.name}`, detail: "Document · tap to read and sign it", badge: "pending", open: () => router.push("/documents"),
     })),
     ...(payPeriods.data?.canApprove ? payPeriods.data.periods.filter((p) => p.status === "pending") : []).map((p) => ({
       key: `pay-${p.id}`, title: `Approve pay period ${fmtDate(p.periodStart)} – ${fmtDate(p.periodEnd)}`,

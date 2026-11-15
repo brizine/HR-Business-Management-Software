@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { useState } from "react";
 import { Alert, Pressable, View } from "react-native";
 import { api, fmtDate } from "@/lib/api";
@@ -8,18 +9,17 @@ import { Badge, Button, Card, Divider, Input, Row, Txt, useTheme } from "./ui";
 type Doc = { id: string; name: string; category: string; createdAt: string; employeeId: string | null; requiresSignature: boolean; signedAt: string | null };
 
 /**
- * Me tab: documents to sign (open it first, then sign; always shown) and a Documents button that
- * expands to every document of yours or the company's, each opening on tap. Filters appear once the
- * list is long.
+ * Documents to sign (open it first, then sign) and, on the Documents page (`page`), every document
+ * of yours or the company's, each opening on tap; filters appear once the list is long. On the Me
+ * tab it shows the documents to sign and a Documents button that opens the page.
  */
-export function MyDocuments({ docs, onChange }: { docs: Doc[] | null; onChange: () => void }) {
+export function MyDocuments({ docs, onChange, page = false }: { docs: Doc[] | null; onChange: () => void; page?: boolean }) {
   const { me } = useAuth();
   const t = useTheme();
   const [opened, setOpened] = useState<Set<string>>(new Set());
   const [q, setQ] = useState("");
   const [onlyToSign, setOnlyToSign] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
   const all = docs ?? [];
   const toSign = all.filter((d) => d.requiresSignature && !d.signedAt && d.employeeId === me?.user.id);
 
@@ -63,12 +63,10 @@ export function MyDocuments({ docs, onChange }: { docs: Doc[] | null; onChange: 
           ))}
         </Card>
       )}
-      <Button
-        title={`Documents${all.length ? ` (${all.length})` : ""}  ${expanded ? "▴" : "▾"}`}
-        kind="secondary"
-        onPress={() => setExpanded(!expanded)}
-      />
-      {expanded && (
+      {!page && (
+        <Button title={`📄  Documents${all.length ? ` (${all.length})` : ""}`} kind="secondary" onPress={() => router.push("/documents")} />
+      )}
+      {page && (
       <Card>
         {long && (
           <View style={{ gap: 6 }}>
