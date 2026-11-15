@@ -81,7 +81,7 @@ function ShiftsView() {
   const [mode, setMode] = useState<ShiftsMode>("list");
   const switcher = (
     <View style={{ gap: 8 }}>
-      <Chips label="View" value={mode} onChange={setMode} options={[{ value: "list", label: "List" }, { value: "week", label: "Week" }, { value: "month", label: "Month" }]} />
+      <Chips light label="View" value={mode} onChange={setMode} options={[{ value: "list", label: "List" }, { value: "week", label: "Week" }, { value: "month", label: "Month" }]} />
     </View>
   );
   const footer = (
