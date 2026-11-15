@@ -97,6 +97,14 @@ Admins choose which employees can edit products, rates and mixes; every change i
 
 - The week grid: one row per person plus **Open shifts** (anyone can claim them). Change the week
   with the calendar drop-down at the top.
+- **Week / Month** (top right) switches to a **month calendar**: each day lists its shifts (start time
+  and who), open shifts, time off (🌴) and paid holidays (🎉); your own shifts are outlined, drafts
+  dashed. ‹ › and **Today** change the month; the Filters box applies too. Click a shift to edit it
+  (managers) or pick up an open shift; click the **+** in a day to add a shift there; click a date
+  to open that week in the week grid. The choice is remembered on that computer.
+- **📅 Subscribe in calendar** (Schedule page, everyone): a private link that puts your published
+  shifts, approved time off and paid holidays in your own calendar (Apple Calendar, Outlook, or
+  Google Calendar via **Other calendars + → From URL**). **Reset my link** stops an old link working.
 - **+ Add shift** (top) or the faint **+** in any day opens **New shift**. Pick **Days** (tick any
   days of the week, or **Mon–Fri** / **Every day**), who, start and end time, position, job site,
   vehicle and notes. **Repeat** puts the same shifts on the following weeks too (days someone is

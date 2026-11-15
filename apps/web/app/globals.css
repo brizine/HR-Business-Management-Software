@@ -548,3 +548,28 @@ tr.openrow td { background: var(--bg); }
 @media (max-width: 900px) { .manual { grid-template-columns: 1fr; } .manual-toc { position: static; max-height: none; } }
 .manual-preview { border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; max-height: 70vh; overflow-y: auto; }
 .extra-pay-people { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 12px; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+
+/* Schedule: month calendar */
+.month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
+.month-head { padding: 6px; font-size: 12px; font-weight: 600; color: var(--muted); text-align: center; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.month-day { min-height: 112px; padding: 4px 5px 6px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.month-day.outside { background: var(--bg); }
+.month-day.outside .month-date { color: var(--muted); }
+.month-date { background: none; border: 0; padding: 2px 6px; border-radius: 999px; font-weight: 600; cursor: pointer; color: var(--text); font-size: 13px; }
+.month-date:hover { background: var(--bg); }
+.month-day.today .month-date { background: var(--primary); color: #fff; }
+.month-add { background: none; border: 0; color: var(--primary); font-size: 16px; line-height: 1; cursor: pointer; opacity: 0; padding: 0 4px; }
+.month-day:hover .month-add, .month-add:focus-visible { opacity: 1; }
+@media (hover: none) { .month-add { opacity: 1; } }
+.month-shift { font-size: 12px; padding: 2px 5px; border-radius: 5px; border: 1px solid transparent; background: var(--info-bg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.month-shift.mine { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
+.month-shift.open { background: var(--warn-bg); }
+.month-shift.draft { background: transparent; border-style: dashed; border-color: var(--muted); }
+.month-more { background: none; border: 0; color: var(--primary); font-size: 12px; text-align: left; padding: 0 2px; cursor: pointer; }
+.month-off { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.month-holiday { font-size: 12px; color: #8250df; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.month-key { display: inline-block; width: 12px; height: 10px; border-radius: 3px; border: 1px solid transparent; background: var(--info-bg); vertical-align: -1px; margin-right: 3px; }
+.month-key.mine { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
+.month-key.open { background: var(--warn-bg); }
+.month-key.draft { border-style: dashed; border-color: var(--muted); background: transparent; }
+@media (max-width: 700px) { .month-day { min-height: 80px; padding: 3px; } .month-shift { font-size: 10px; padding: 1px 3px; } }

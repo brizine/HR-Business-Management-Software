@@ -9,6 +9,7 @@ import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { useMenuData } from "@/lib/menus";
 import { AvailabilityEditor } from "@/components/availability-editor";
 import { WeekPicker } from "@/components/week-picker";
+import { ScheduleMonth } from "@/components/schedule-month";
 
 const DAY = 86_400_000;
 
@@ -344,6 +345,15 @@ export default function Schedule() {
   const { me, can } = useAuth();
   const manager = can("manager", "schedule");
   const [offset, setOffset] = useState(0);
+  // Week grid (default) or month calendar; remembered on this computer.
+  const [view, setViewState] = useState<"week" | "month">(() => { try { return localStorage.getItem("crewdesk.scheduleView") === "month" ? "month" : "week"; } catch { return "week"; } });
+  const setView = (v: "week" | "month") => { setViewState(v); try { localStorage.setItem("crewdesk.scheduleView", v); } catch { /* private window */ } };
+  const [calLink, setCalLink] = useState<{ url: string; webcal: string } | null>(null);
+  /** Shows the week containing `day` (used when the month calendar opens a shift or a week). */
+  const goToWeekOf = (day: Date) => {
+    const monday = new Date(day.getFullYear(), day.getMonth(), day.getDate() - ((day.getDay() + 6) % 7));
+    setOffset(Math.round((monday.getTime() - weekStart(0).getTime()) / (7 * DAY)));
+  };
   const from = weekStart(offset);
   const to = weekStart(offset + 1);
   const days = Array.from({ length: 7 }, (_, i) => addDays(from, i));
@@ -382,6 +392,18 @@ export default function Schedule() {
     // Search matches the person's name, or anything written on the shift.
     (!q || `${nameOf(s.employeeId)} ${s.position ?? ""} ${s.location ?? ""} ${s.assetName ?? ""} ${s.notes ?? ""}`.toLowerCase().includes(q)));
   const drafts = allShifts.filter((s) => s.status === "draft").length;
+  /** For the month calendar: the filters that apply to a single shift (and its person's title / department). */
+  const keepShift = (s: any) => {
+    const person = s.employeeId ? staff.find((x) => x.id === s.employeeId) : null;
+    if (filters.position && s.position !== filters.position) return false;
+    if (filters.location && s.location !== filters.location) return false;
+    if (filters.asset && s.assetId !== filters.asset) return false;
+    if (filters.status && s.status !== filters.status) return false;
+    if (filters.title && person?.title !== filters.title) return false;
+    if (filters.dept && person?.department !== filters.dept) return false;
+    if (!manager && s.status !== "published") return false;
+    return !q || `${nameOf(s.employeeId)} ${person?.title ?? ""} ${s.position ?? ""} ${s.location ?? ""} ${s.assetName ?? ""} ${s.notes ?? ""}`.toLowerCase().includes(q);
+  };
   const reload = () => { list.reload(); drops.reload(); };
 
   const openEditor = (s: any) =>
@@ -463,8 +485,12 @@ export default function Schedule() {
 
   return (
     <>
-      <PageHead title="Schedule" sub={`Week of ${from.toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" })}`}>
-        <WeekPicker week={from} onChange={(monday) => setOffset(Math.round((monday.getTime() - weekStart(0).getTime()) / (7 * DAY)))} />
+      <PageHead title="Schedule" sub={view === "week" ? `Week of ${from.toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" })}` : "Month calendar"}>
+        <div className="row" style={{ gap: 4 }} role="tablist" aria-label="Schedule view">
+          <button role="tab" aria-selected={view === "week"} className={`btn ${view === "week" ? "primary" : ""}`} onClick={() => setView("week")}>Week</button>
+          <button role="tab" aria-selected={view === "month"} className={`btn ${view === "month" ? "primary" : ""}`} onClick={() => setView("month")}>Month</button>
+        </div>
+        {view === "week" && <WeekPicker week={from} onChange={(monday) => setOffset(Math.round((monday.getTime() - weekStart(0).getTime()) / (7 * DAY)))} />}
         {partTime && <button className="btn" onClick={() => setShowAvailability(!showAvailability)}>My availability</button>}
         {manager && <button className="btn primary" onClick={() => {
           // Today if it's in the week being shown, otherwise that week's Monday.
@@ -472,9 +498,10 @@ export default function Schedule() {
           const day = today >= from && today < to ? today : from;
           setEditing({ employeeId: "", date: ymd(day), start: "08:00", end: "16:30" });
         }}>+ Add shift</button>}
-        {manager && <button className="btn" onClick={() => { setShowRange(!showRange); setEditing(null); }}>Change or delete shifts</button>}
+        {manager && view === "week" && <button className="btn" onClick={() => { setShowRange(!showRange); setEditing(null); }}>Change or delete shifts</button>}
         {manager && <button className="btn" onClick={() => setShowTemplates(!showTemplates)}>Templates{templates.data?.length ? ` (${templates.data.length})` : ""}</button>}
-        {manager && (
+        <button className="btn" onClick={() => calLink ? setCalLink(null) : action.run(async () => setCalLink(await api("/shifts/calendar-link", { method: "POST" })))}>📅 Subscribe in calendar</button>
+        {manager && view === "week" && (
           <>
             <button className="btn" disabled={action.busy} onClick={() => confirm("Copy last week's shifts into this week as drafts?") && action.run(async () => {
               const r = await api("/shifts/copy-week", { body: { from: weekStart(offset - 1).toISOString(), to: from.toISOString() } });
@@ -499,11 +526,29 @@ export default function Schedule() {
         {pick("Location / job site", "location", asOptions(locations))}
         {pick("Vehicle / equipment", "asset", shiftAssets.map((a) => ({ value: a.id, label: a.name })))}
         {manager && pick("Shift status", "status", [{ value: "draft", label: "Drafts" }, { value: "published", label: "Published" }])}
-        {pick("Show", "show", [{ value: "scheduled", label: "People with shifts this week" }, { value: "unscheduled", label: "People with no shifts this week" }], "Everyone")}
+        {view === "week" && pick("Show", "show", [{ value: "scheduled", label: "People with shifts this week" }, { value: "unscheduled", label: "People with no shifts this week" }], "Everyone")}
         {filtering && <button type="button" className="btn" onClick={() => setFilters(NO_FILTERS)}>Clear filters</button>}
       </form>
       <ErrorBox error={action.error || list.error} />
       {notice && <div className="card row" style={{ justifyContent: "space-between" }}><span>{notice}</span><button className="btn sm" onClick={() => setNotice(null)}>×</button></div>}
+      {calLink && (
+        <div className="card stack">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <h2 style={{ margin: 0 }}>Subscribe in Calendar</h2>
+            <button className="btn sm" onClick={() => setCalLink(null)}>Close</button>
+          </div>
+          <p className="muted" style={{ margin: 0 }}>Your published shifts, approved time off and paid holidays in your own calendar app, updating about every hour. This link is private to you.</p>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <input readOnly value={calLink.url} style={{ flex: "1 1 320px" }} onFocus={(e) => e.currentTarget.select()} aria-label="Your calendar link" />
+            <button className="btn primary" onClick={() => navigator.clipboard.writeText(calLink.url).then(() => setNotice("Calendar link copied."), () => setNotice("Select the link and copy it."))}>Copy link</button>
+            <a className="btn" href={calLink.webcal}>Open in Apple Calendar / Outlook</a>
+          </div>
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+            Google Calendar: open calendar.google.com → <strong>Other calendars +</strong> → <strong>From URL</strong> → paste the link.{" "}
+            <button className="btn sm danger" onClick={() => confirm("Reset your link? Calendars using the old one stop updating.") && action.run(async () => { await api("/shifts/calendar-link", { method: "DELETE" }); setCalLink(await api("/shifts/calendar-link", { method: "POST" })); setNotice("New link made. Subscribe again with it."); })}>Reset my link</button>
+          </p>
+        </div>
+      )}
       {editing && (
         <ShiftEditor key={editing.id ?? `${editing.employeeId}-${editing.date}`} draft={editing} weekDays={days} employees={staff} assets={assets.data ?? []}
           templates={templates.data ?? []} onTemplatesChanged={() => { templates.reload(); setNotice("Template saved."); }} onClose={() => setEditing(null)}
@@ -513,7 +558,7 @@ export default function Schedule() {
         <RangeEditor week={from} employees={staff} assets={assets.data ?? []} onClose={() => setShowRange(false)}
           onDone={(m) => { setShowRange(false); setNotice(m); reload(); }} />
       )}
-      {manager && !editing && !showRange && list.data && !allShifts.length && !filtering && (
+      {manager && view === "week" && !editing && !showRange && list.data && !allShifts.length && !filtering && (
         <div className="card">
           <h2>Make This Week&apos;s Schedule</h2>
           <ol className="stack" style={{ paddingLeft: 18, margin: 0 }}>
@@ -561,7 +606,13 @@ export default function Schedule() {
           ))}</tbody></table>
         </div>
       )}
-      <div className="card tablewrap" style={{ padding: 0 }}>
+      {view === "month" && (
+        <ScheduleMonth meId={me?.user.id} manager={manager} keep={keepShift} nameOf={nameOf}
+          onShift={(s) => { goToWeekOf(new Date(s.startsAt)); chipClick(s); if (manager) window.scrollTo({ top: 0, behavior: "smooth" }); }}
+          onAdd={(date) => { const d = new Date(`${date}T12:00:00`); goToWeekOf(d); setEditing({ employeeId: "", date, start: "08:00", end: "16:30" }); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+          onOpenWeek={(d) => { goToWeekOf(d); setView("week"); }} />
+      )}
+      {view === "week" && <div className="card tablewrap" style={{ padding: 0 }}>
         <table className="schedule">
           <thead>
             <tr>
@@ -600,11 +651,11 @@ export default function Schedule() {
             )}
           </tbody>
         </table>
-      </div>
+      </div>}
       <p className="muted">
         {manager
           ? "Dashed shifts are drafts only you can see. Publish to share them and notify your team. Striped cells are times someone can't work."
-          : "Click one of your shifts to ask to drop it, or an open shift to pick it up."}
+          : "Click an open shift to pick it up. To be off for a shift, request time off under Time Off."}
       </p>
     </>
   );
