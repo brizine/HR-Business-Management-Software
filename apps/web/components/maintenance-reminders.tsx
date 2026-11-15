@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { DEFAULT_RENEWAL_REMIND_DAYS, DEFAULT_RENEWAL_REPEAT_DAYS, isInactive, renewalStatus } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -100,4 +101,78 @@ export function ScheduleNoteEditor({ schedule, onSaved, onClose }: { schedule: {
       <ErrorBox error={error} />
     </div>
   );
+}
+
+/** Assets page: when registration and insurance renewal reminders go out, and to whom. */
+export function RenewalReminderSettings() {
+  const { can } = useAuth();
+  const admin = can("admin", "fleet");
+  const data = useApi<FleetSettings & { renewalRemindDays?: number[]; renewalRepeatDays?: number | null; renewalNotifyIds?: string[] }>("/assets/settings");
+  const staff = useApi<any[]>("/employees");
+  const [days, setDays] = useState("");
+  const [repeat, setRepeat] = useState("");
+  const [who, setWho] = useState<string[]>([]);
+  const [saved, setSaved] = useState(false);
+  const { busy, error, run } = useAction();
+  useEffect(() => {
+    if (!data.data) return;
+    setDays((data.data.renewalRemindDays?.length ? data.data.renewalRemindDays : DEFAULT_RENEWAL_REMIND_DAYS).join(", "));
+    setRepeat(data.data.renewalRepeatDays === undefined ? String(DEFAULT_RENEWAL_REPEAT_DAYS) : str(data.data.renewalRepeatDays));
+    setWho(data.data.renewalNotifyIds ?? []);
+  }, [data.data]);
+  const people = (staff.data ?? []).filter((e) => !isInactive(e.status) || who.includes(e.id))
+    .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+  const changed = () => setSaved(false);
+
+  return (
+    <form className="card stack" onSubmit={(e) => {
+      e.preventDefault();
+      run(async () => {
+        const list = days.split(/[,\s]+/).filter(Boolean).map(Number);
+        if (list.some((n) => !Number.isInteger(n) || n < 1 || n > 365)) throw new Error("Days before must be whole numbers from 1 to 365, separated by commas");
+        await api("/assets/settings", { method: "PUT", body: { renewalRemindDays: list, renewalRepeatDays: num(repeat), renewalNotifyIds: who } });
+        data.reload();
+        setSaved(true);
+      });
+    }}>
+      <h2 style={{ margin: 0 }}>Registration &amp; Insurance Renewals</h2>
+      <p className="muted" style={{ margin: 0 }}>
+        Reminders to renew go out before each asset&apos;s registration or insurance expires, and again after it expires until the date is
+        updated. Enter the new expiration date on the asset once it&apos;s renewed.
+      </p>
+      <fieldset disabled={!admin || busy} style={{ border: 0, padding: 0, margin: 0 }} className="stack">
+        <div className="formgrid">
+          <label>Remind this many days before (one or more)<input value={days} onChange={(e) => { setDays(e.target.value); changed(); }} placeholder="30, 7" /></label>
+          <label>Once expired, remind again every (days)<input type="number" min="1" max="90" value={repeat} onChange={(e) => { setRepeat(e.target.value); changed(); }} placeholder="Only once" /></label>
+        </div>
+        <div className="stack" style={{ gap: 6 }}>
+          <span>Who gets them <span className="muted" style={{ fontSize: 13 }}>(none ticked: everyone who manages the fleet)</span></span>
+          <div className="extra-pay-people">
+            {people.map((e) => (
+              <label key={e.id} className="check">
+                <input type="checkbox" checked={who.includes(e.id)} onChange={(ev) => { setWho(ev.target.checked ? [...who, e.id] : who.filter((x) => x !== e.id)); changed(); }} /> {e.firstName} {e.lastName}
+                {e.title ? <span className="muted"> · {e.title}</span> : null}
+              </label>
+            ))}
+          </div>
+        </div>
+      </fieldset>
+      <ErrorBox error={error} />
+      {admin ? <div className="row"><button className="btn primary" disabled={busy}>Save renewal settings</button>{saved && <span className="muted" role="status">Saved.</span>}</div>
+        : <p className="muted" style={{ margin: 0 }}>Only owners and admins can change these.</p>}
+    </form>
+  );
+}
+
+/** "Expires in 12 days" / "Expired 3 days ago" pill for an asset's registration or insurance date. */
+export function RenewalBadge({ date, remindDays }: { date: string | null | undefined; remindDays?: number[] }) {
+  if (!date) return null;
+  const d = new Date();
+  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const r = renewalStatus(date, today, remindDays?.length ? remindDays : DEFAULT_RENEWAL_REMIND_DAYS);
+  if (r.status === "ok") return null;
+  const text = r.status === "expired"
+    ? `Expired ${-r.daysLeft} day${r.daysLeft === -1 ? "" : "s"} ago`
+    : r.daysLeft === 0 ? "Expires today" : `Expires in ${r.daysLeft} day${r.daysLeft === 1 ? "" : "s"}`;
+  return <span className={`badge ${r.status === "expired" ? "bad" : "warn"}`} style={{ marginTop: 4 }}>{text}</span>;
 }

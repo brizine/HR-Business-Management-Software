@@ -133,3 +133,21 @@ export function workOrderDue(wo: WorkOrderDueLike, meter: MeterLike, today = new
   }
   return status ? { status, notes } : null;
 }
+
+/** Registration/insurance renewal reminders: days before expiry each goes out (default 30 and 7). */
+export const DEFAULT_RENEWAL_REMIND_DAYS = [30, 7];
+/** While expired, remind again this often (days) unless the company changes it. */
+export const DEFAULT_RENEWAL_REPEAT_DAYS = 7;
+
+export type RenewalStatus = { status: "ok" | "expiring" | "expired"; daysLeft: number; threshold: number | null };
+
+/**
+ * Where an expiry date stands today: "expiring" once inside the first reminder window
+ * (`threshold` = the smallest reminder day it has reached, e.g. 7 once a week out), "expired" after.
+ */
+export function renewalStatus(expires: string, today: string, remindDays: number[] = DEFAULT_RENEWAL_REMIND_DAYS): RenewalStatus {
+  const daysLeft = Math.round((Date.parse(`${expires}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
+  if (daysLeft < 0) return { status: "expired", daysLeft, threshold: null };
+  const reached = [...remindDays].sort((a, b) => a - b).find((d) => daysLeft <= d) ?? null;
+  return { status: reached == null ? "ok" : "expiring", daysLeft, threshold: reached };
+}

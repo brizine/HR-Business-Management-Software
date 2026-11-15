@@ -244,6 +244,14 @@ accounts on this page (admins).
   reminders go out (miles, engine hours, days; blank = 10% of the interval) and an optional repeat
   every N days while overdue. Each schedule can override this with **Change** in its Reminder
   column.
+- **Registration & insurance renewals:** enter each asset's **Registration expires** and
+  **Insurance expires** dates (**Edit** on the asset). Reminders to renew go out before each date
+  (default 30 and 7 days before) and again after it expires (default every 7 days) until the date is
+  updated, so enter the new expiration date once it's renewed. The asset page shows **Expires in X
+  days** (yellow) or **Expired** (red) under each date. **Reminder settings** (top of the Assets
+  page) → **Registration & Insurance Renewals** (owners and admins): the days before (one or more,
+  e.g. 60, 30, 7), how often to repeat once expired (blank = once), and **Who gets them** (tick
+  people, e.g. the office manager; none ticked = everyone who manages the fleet).
 - **Print QR labels:** scanning a label with any phone camera opens a page to inspect, log a
   reading or report an issue.
 

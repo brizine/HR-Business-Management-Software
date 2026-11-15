@@ -327,6 +327,12 @@ export const fleetSettingsSchema = z.object({
   ...reminderLeadFields,
   /** While a service stays overdue, remind again every this many days (null = only once). */
   repeatOverdueDays: z.number().int().positive().max(90).nullable().optional(),
+  /** Registration & insurance: remind this many days before each expires (empty/missing: 30 and 7). */
+  renewalRemindDays: z.array(z.number().int().min(1).max(365)).max(5).optional(),
+  /** Once expired, remind again every this many days (null = only once; missing = 7). */
+  renewalRepeatDays: z.number().int().positive().max(90).nullable().optional(),
+  /** Who gets renewal reminders (empty/missing: everyone who manages the fleet). */
+  renewalNotifyIds: z.array(z.string().uuid()).max(20).optional(),
 });
 export type FleetSettings = z.infer<typeof fleetSettingsSchema>;
 

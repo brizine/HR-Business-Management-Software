@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { assetSchema, fleetSettingsSchema, isInactive, maintenanceScheduleSchema, maintenanceScheduleUpdateSchema, meterReadingSchema } from "@crewdesk/shared";
 import { db } from "../db";
 import { assets, companies, employees, inspections, maintenanceSchedules, meterReadings, newAssetCode, workOrders } from "../db/schema";
@@ -28,12 +28,23 @@ const routes: FastifyPluginAsync = async (app) => {
   app.get("/settings", async (req) => fleetSettingsFor(req.user.companyId));
   app.put("/settings", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const body = parse(fleetSettingsSchema, req.body);
-    const settings = {
-      remindMilesBefore: body.remindMilesBefore ?? null,
-      remindHoursBefore: body.remindHoursBefore ?? null,
-      remindDaysBefore: body.remindDaysBefore ?? null,
-      repeatOverdueDays: body.repeatOverdueDays ?? null,
-    };
+    // Two forms save here: maintenance timing and renewal reminders. Each replaces its own group
+    // (fields left out are cleared) and keeps the other.
+    const renewalKeys = ["renewalRemindDays", "renewalRepeatDays", "renewalNotifyIds"] as const;
+    const maintenanceKeys = ["remindMilesBefore", "remindHoursBefore", "remindDaysBefore", "repeatOverdueDays"] as const;
+    const renewal = renewalKeys.some((k) => body[k] !== undefined);
+    const given: Record<string, unknown> = renewal
+      ? { renewalRemindDays: body.renewalRemindDays ?? [], renewalRepeatDays: body.renewalRepeatDays ?? null, renewalNotifyIds: body.renewalNotifyIds ?? [] }
+      : Object.fromEntries(maintenanceKeys.map((k) => [k, body[k] ?? null]));
+    if (given.renewalRemindDays) given.renewalRemindDays = [...new Set(given.renewalRemindDays as number[])].sort((a, b) => b - a);
+    if ((given.renewalNotifyIds as string[] | undefined)?.length) {
+      const ids = [...new Set(given.renewalNotifyIds as string[])];
+      const found = await db.select({ id: employees.id, status: employees.status }).from(employees)
+        .where(and(eq(employees.companyId, req.user.companyId), inArray(employees.id, ids)));
+      if (found.length !== ids.length || found.some((e) => isInactive(e.status))) throw new HttpError(400, "Pick active people from your company");
+      given.renewalNotifyIds = ids;
+    }
+    const settings = { ...(await fleetSettingsFor(req.user.companyId)), ...given };
     await db.update(companies).set({ fleetSettings: settings }).where(eq(companies.id, req.user.companyId));
     return settings;
   });

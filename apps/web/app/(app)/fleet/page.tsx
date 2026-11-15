@@ -8,7 +8,7 @@ import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
 import { AssetFields } from "@/components/asset-form";
 import { useMenus } from "@/components/menu-select";
 import { useMenuData } from "@/lib/menus";
-import { MaintenanceReminderDefaults } from "@/components/maintenance-reminders";
+import { MaintenanceReminderDefaults, RenewalReminderSettings } from "@/components/maintenance-reminders";
 
 const NO_FILTERS = { q: "", type: "", status: "", maintenance: "", assigned: "" };
 const NONE = "__none";
@@ -52,6 +52,7 @@ export default function Fleet() {
         {can("manager", "fleet") && <button className="btn primary" onClick={() => setAdding(!adding)}>Add asset</button>}
       </PageHead>
       {reminders && <MaintenanceReminderDefaults onClose={() => setReminders(false)} />}
+      {reminders && <RenewalReminderSettings />}
       <form className="card filters" role="search" aria-label="Filter assets" onSubmit={(e) => e.preventDefault()}>
         <label>Search
           <input type="search" placeholder="Name, make, VIN, plate, person…" value={filters.q} onChange={(e) => setFilter({ q: e.target.value })} />

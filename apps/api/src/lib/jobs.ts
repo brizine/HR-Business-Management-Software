@@ -1,5 +1,5 @@
 import { and, eq, gt, sql, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or } from "drizzle-orm";
-import { INACTIVE_STATUSES, carryoverForfeit, computeDue, resolveLead, workOrderDue, type FleetSettings, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
+import { DEFAULT_RENEWAL_REMIND_DAYS, DEFAULT_RENEWAL_REPEAT_DAYS, INACTIVE_STATUSES, carryoverForfeit, renewalStatus, computeDue, resolveLead, workOrderDue, type FleetSettings, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
 import { db } from "../db";
 import { fleetSettingsFor } from "./fleet";
 import { syncCurrentPay } from "./payRates";
@@ -13,7 +13,6 @@ import { reviewSchedule } from "./reviewProgram";
 
 /** Hours on the clock after which we assume someone forgot to clock out. */
 export const FORGOT_CLOCK_OUT_HOURS = 12;
-const EXPIRY_WARNING_DAYS = 30;
 /** Onboarding reminders go out from this local hour, so nobody is pinged at midnight. */
 export const REMINDER_HOUR = 7;
 
@@ -95,26 +94,8 @@ export async function runScheduledChecks(now = new Date()) {
     for (const r of recent) await syncCurrentPay(db, r.employeeId, today);
   }
 
-  // Registration and insurance expiring soon.
-  const cutoff = new Date(now.getTime() + EXPIRY_WARNING_DAYS * 86_400_000).toISOString().slice(0, 10);
-  for (const asset of await db.select().from(assets)) {
-    if (asset.status === "retired") continue;
-    for (const [label, date] of [
-      ["Registration", asset.registrationExpires],
-      ["Insurance", asset.insuranceExpires],
-    ] as const) {
-      if (!date || date > cutoff) continue;
-      if (!(await firstTime(asset.companyId, `expiry:${asset.id}:${label}:${date}`))) continue;
-      const expired = date < now.toISOString().slice(0, 10);
-      notify(asset.companyId, await staffWithRole(asset.companyId, "manager", "fleet"), {
-        category: "fleet",
-        title: `${asset.name}: ${label.toLowerCase()} ${expired ? "expired" : "expiring"}`,
-        body: `${label} ${expired ? "expired" : "expires"} on ${date}.`,
-        link: { screen: "asset", id: asset.id },
-      });
-      sent++;
-    }
-  }
+  // Registration and insurance: reminders to renew as each date nears, and while expired.
+  sent += await renewalReminders(now, settingsFor);
 
   // Forgotten clock-outs: remind the employee and let their manager know.
   const stale = await db
@@ -442,6 +423,52 @@ async function reviewChecks(now: Date) {
           ? `${name}'s ${d.ruleName.toLowerCase()} was due ${mdy(d.dueDate)} (${-d.daysLeft} day${d.daysLeft === -1 ? "" : "s"} ago).`
           : `${name}'s ${d.ruleName.toLowerCase()} is due ${mdy(d.dueDate)}${d.daysLeft === 0 ? " (today)" : ` (in ${d.daysLeft} day${d.daysLeft === 1 ? "" : "s"})`}.`,
         link: { screen: "review-due", employeeId: d.employeeId, reviewType: d.reviewType },
+      });
+      sent++;
+    }
+  }
+  return sent;
+}
+
+/**
+ * Registration and insurance renewals: a reminder at each "days before" the company set
+ * (default 30 and 7), then while expired every few days (default 7), after REMINDER_HOUR local
+ * time. Changing the expiry date (renewing) starts over for the new date.
+ */
+async function renewalReminders(now: Date, settingsFor: (companyId: string) => Promise<FleetSettings>) {
+  let sent = 0;
+  const rows = await db.select({ asset: assets, tz: companies.timezone }).from(assets).innerJoin(companies, eq(companies.id, assets.companyId))
+    .where(and(ne(assets.status, "retired"), or(isNotNull(assets.registrationExpires), isNotNull(assets.insuranceExpires))));
+  const recipients = new Map<string, string[]>();
+  for (const { asset, tz } of rows) {
+    const local = localParts(now, tz);
+    if (local.minutes < REMINDER_HOUR * 60) continue;
+    const settings = await settingsFor(asset.companyId);
+    const days = settings.renewalRemindDays?.length ? settings.renewalRemindDays : DEFAULT_RENEWAL_REMIND_DAYS;
+    const repeat = settings.renewalRepeatDays === undefined ? DEFAULT_RENEWAL_REPEAT_DAYS : settings.renewalRepeatDays;
+    for (const [label, date] of [["Registration", asset.registrationExpires], ["Insurance", asset.insuranceExpires]] as const) {
+      if (!date) continue;
+      const r = renewalStatus(date, local.date, days);
+      if (r.status === "ok") continue;
+      const stage = r.status === "expired" ? `expired${repeat ? `:r${Math.floor(-r.daysLeft / repeat)}` : ""}` : `d${r.threshold}`;
+      if (!(await firstTime(asset.companyId, `renew:${asset.id}:${label}:${date}:${stage}`))) continue;
+      if (!recipients.has(asset.companyId)) {
+        const picked = settings.renewalNotifyIds?.length
+          ? (await db.select({ id: employees.id }).from(employees)
+              .where(and(eq(employees.companyId, asset.companyId), inArray(employees.id, settings.renewalNotifyIds), notInArray(employees.status, INACTIVE_STATUSES)))).map((e) => e.id)
+          : [];
+        recipients.set(asset.companyId, picked.length ? picked : await staffWithRole(asset.companyId, "manager", "fleet"));
+      }
+      const [y, m, d] = date.split("-");
+      const when = `${m}/${d}/${y}`;
+      const left = r.daysLeft === 0 ? "today" : `in ${r.daysLeft} day${r.daysLeft === 1 ? "" : "s"}`;
+      notify(asset.companyId, recipients.get(asset.companyId)!, {
+        category: "fleet",
+        title: r.status === "expired" ? `Renew now: ${asset.name} ${label.toLowerCase()} expired` : `Renew soon: ${asset.name} ${label.toLowerCase()} expires ${left}`,
+        body: r.status === "expired"
+          ? `${asset.name}'s ${label.toLowerCase()} expired on ${when}. Renew it, then update the date on the asset.`
+          : `${asset.name}'s ${label.toLowerCase()} expires on ${when}. Renew it, then update the date on the asset.`,
+        link: { screen: "asset", id: asset.id },
       });
       sent++;
     }

@@ -263,10 +263,51 @@ describe("scheduled checks", () => {
     expect((await pushesTo(tokens.owner)).map((m) => m.title)).toContain("Ted Tech may have forgotten to clock out");
   });
 
-  it("warns about registrations expiring within 30 days", async () => {
-    const soon = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
-    await call("POST", "/assets", owner.token, { name: "Trailer 4", type: "trailer", registrationExpires: soon });
-    await runScheduledChecks();
-    expect((await pushesTo(tokens.owner)).map((m) => m.title)).toContain("Trailer 4: registration expiring");
-  });
+  it("registration & insurance: reminders to renew before and after expiry, with company settings", async () => {
+    // Noon in the company's time zone, so reminders (after 7am) go out.
+    const today = new Date().toISOString().slice(0, 10);
+    const at = (d: number) => new Date(Date.parse(`${today}T18:00:00Z`) + d * 86_400_000);
+    const ymd = (d: number) => at(d).toISOString().slice(0, 10);
+    const titles = async (token: string) => (await pushesTo(token)).map((m) => m.title).filter((t) => t.includes("Trailer 4"));
+    const trailer = await call("POST", "/assets", owner.token, { name: "Trailer 4", type: "trailer", registrationExpires: ymd(20) });
+
+    sent = [];
+    await runScheduledChecks(at(0));
+    expect(await titles(tokens.owner)).toEqual(["Renew soon: Trailer 4 registration expires in 20 days"]);
+    sent = [];
+    await runScheduledChecks(at(0));
+    expect(await titles(tokens.owner)).toEqual([]);
+    // A week out: the 7-day reminder.
+    await runScheduledChecks(at(14));
+    expect(await titles(tokens.owner)).toEqual(["Renew soon: Trailer 4 registration expires in 6 days"]);
+    // Expired: right away, then every 7 days.
+    sent = [];
+    await runScheduledChecks(at(21));
+    await runScheduledChecks(at(22));
+    expect(await titles(tokens.owner)).toEqual(["Renew now: Trailer 4 registration expired"]);
+    sent = [];
+    await runScheduledChecks(at(29));
+    expect(await titles(tokens.owner)).toEqual(["Renew now: Trailer 4 registration expired"]);
+    // Renewed (new date): quiet until the new date nears.
+    await call("PATCH", `/assets/${trailer.body.id}`, owner.token, { registrationExpires: ymd(400) });
+    sent = [];
+    await runScheduledChecks(at(30));
+    expect(await titles(tokens.owner)).toEqual([]);
+
+    // Company settings: 60 days ahead, sent only to the person picked. Maintenance settings are kept.
+    expect((await call("PUT", "/assets/settings", tech.token, { renewalRemindDays: [60] })).status).toBe(403);
+    await call("PUT", "/assets/settings", owner.token, { remindMilesBefore: 750 });
+    const saved = await call("PUT", "/assets/settings", owner.token, { renewalRemindDays: [7, 60, 60], renewalRepeatDays: null, renewalNotifyIds: [tech.id] });
+    expect(saved.body).toEqual({ remindMilesBefore: 750, remindHoursBefore: null, remindDaysBefore: null, repeatOverdueDays: null, renewalRemindDays: [60, 7], renewalRepeatDays: null, renewalNotifyIds: [tech.id] });
+    // Saving maintenance timing keeps the renewal settings.
+    expect((await call("PUT", "/assets/settings", owner.token, { remindMilesBefore: 750 })).body.renewalNotifyIds).toEqual([tech.id]);
+    expect((await call("PUT", "/assets/settings", owner.token, { renewalNotifyIds: ["00000000-0000-4000-8000-000000000000"] })).status).toBe(400);
+    await call("PATCH", `/assets/${trailer.body.id}`, owner.token, { insuranceExpires: ymd(80) });
+    sent = [];
+    await runScheduledChecks(at(30));
+    expect(await titles(tokens.tech)).toEqual(["Renew soon: Trailer 4 insurance expires in 50 days"]);
+    expect(await titles(tokens.owner)).toEqual([]);
+    await call("PUT", "/assets/settings", owner.token, { renewalRemindDays: [], renewalRepeatDays: 7, renewalNotifyIds: [] });
+    await call("PUT", "/assets/settings", owner.token, {});
+  }, 180_000);
 });

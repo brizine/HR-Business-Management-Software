@@ -9,7 +9,7 @@ import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
 import { AssetFields } from "@/components/asset-form";
 import { DocumentList } from "@/components/documents";
 import { QrCode, assetQrUrl, qrSvg } from "@/components/qr";
-import { ScheduleNoteEditor, ScheduleReminderEditor, describeLead } from "@/components/maintenance-reminders";
+import { RenewalBadge, ScheduleNoteEditor, ScheduleReminderEditor, describeLead } from "@/components/maintenance-reminders";
 
 export default function AssetDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -20,6 +20,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
   const [addingSchedule, setAddingSchedule] = useState(false);
   const [remindFor, setRemindFor] = useState<string | null>(null);
   const [noteFor, setNoteFor] = useState<string | null>(null);
+  const fleet = useApi<{ renewalRemindDays?: number[] }>("/assets/settings");
   const edit = useAction();
   const sched = useAction();
   const meter = useAction();
@@ -58,8 +59,8 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
         <div className="stat"><div className="v">{a.odometer.toLocaleString()}</div><div className="l">Odometer (mi)</div></div>
         <div className="stat"><div className="v">{a.engineHours.toLocaleString()}</div><div className="l">Engine hours</div></div>
         <div className="stat"><div className="v">{money(a.totalMaintenanceCostCents)}</div><div className="l">Lifetime maintenance cost</div></div>
-        <div className="stat"><div className="v" style={{ fontSize: 16 }}>{fmtDate(a.registrationExpires)}</div><div className="l">Registration expires</div></div>
-        <div className="stat"><div className="v" style={{ fontSize: 16 }}>{fmtDate(a.insuranceExpires)}</div><div className="l">Insurance expires</div></div>
+        <div className="stat"><div className="v" style={{ fontSize: 16 }}>{fmtDate(a.registrationExpires)}</div><div className="l">Registration expires</div><RenewalBadge date={a.registrationExpires} remindDays={fleet.data?.renewalRemindDays} /></div>
+        <div className="stat"><div className="v" style={{ fontSize: 16 }}>{fmtDate(a.insuranceExpires)}</div><div className="l">Insurance expires</div><RenewalBadge date={a.insuranceExpires} remindDays={fleet.data?.renewalRemindDays} /></div>
       </div>
       <div className="card">
         <h2>Log Meter Reading</h2>
