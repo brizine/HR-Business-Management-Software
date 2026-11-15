@@ -171,7 +171,7 @@ export default function TimeOff() {
                 <label>Reason<input name="reason" placeholder="annual grant" /></label>
               </div>
               <ErrorBox error={adj.error} />
-              <div><button className="btn" disabled={adj.busy}>Apply</button></div>
+              <div><button className="btn primary" disabled={adj.busy}>Apply</button></div>
             </form>
           </div>
         </div>
