@@ -36,6 +36,7 @@ import wikiRoutes from "./routes/wiki";
 import jobSiteRoutes from "./routes/jobSites";
 import helpRoutes from "./routes/help";
 import extraPayRoutes from "./routes/extraPay";
+import fuelRoutes from "./routes/fuel";
 import sprayMixRoutes from "./routes/sprayMix";
 
 export interface AppOptions {
@@ -115,5 +116,6 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(jobSiteRoutes, { prefix: "/job-sites" });
   await app.register(helpRoutes, { prefix: "/help" });
   await app.register(extraPayRoutes, { prefix: "/extra-pay" });
+  await app.register(fuelRoutes, { prefix: "/fuel" });
   await app.register(sprayMixRoutes, { prefix: "/spray-mixes" });
 }

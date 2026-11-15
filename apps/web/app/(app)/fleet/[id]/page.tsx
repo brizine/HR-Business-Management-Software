@@ -6,7 +6,8 @@ import { api, fmtDate, fmtDateTime, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
-import { AssetFields } from "@/components/asset-form";
+import { AssetFields, assetBody } from "@/components/asset-form";
+import { FuelLog, TotalCostOfOwnership } from "@/components/fuel-log";
 import { DocumentList } from "@/components/documents";
 import { QrCode, assetQrUrl, qrSvg } from "@/components/qr";
 import { MaintenanceHistory } from "@/components/maintenance-history";
@@ -44,10 +45,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
         <div className="card">
           <form className="stack" onSubmit={(e) => {
             e.preventDefault();
-            const body = formValues(e.currentTarget);
-            body.assignedEmployeeId ??= null;
-            body.registrationExpires ??= null;
-            body.insuranceExpires ??= null;
+            const body = assetBody(formValues(e.currentTarget));
             edit.run(async () => { await api(`/assets/${id}`, { method: "PATCH", body }); setEditing(false); asset.reload(); });
           }}>
             <AssetFields initial={a} employees={employees.data ?? []} />
@@ -159,6 +157,8 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
         ) : <Empty>No schedules yet. Add oil changes, inspections, filter swaps and so on.</Empty>}
       </div>
       <MaintenanceHistory asset={a} onChange={asset.reload} />
+      <FuelLog asset={a} onChange={asset.reload} />
+      <TotalCostOfOwnership asset={a} />
       <div className="grid cols-2">
         <div className="card">
           <h2>Work Orders</h2>

@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
-import { AssetFields } from "@/components/asset-form";
+import { AssetFields, assetBody } from "@/components/asset-form";
 import { useMenus } from "@/components/menu-select";
 import { useMenuData } from "@/lib/menus";
 import { MaintenanceReminderDefaults, RenewalReminderSettings } from "@/components/maintenance-reminders";
@@ -47,6 +47,7 @@ export default function Fleet() {
   return (
     <>
       <PageHead title="Vehicles & Equipment" sub={<span role="status">{filtering ? `Showing ${rows.length} of ${all.length} assets` : `${all.length} assets`}</span>}>
+        {can("manager", "fleet") && <Link className="btn primary" href="/fleet/costs">Fuel &amp; Costs</Link>}
         <Link className="btn" href="/fleet/labels">Print QR labels</Link>
         {can("manager", "fleet") && <button className="btn" onClick={() => setReminders(!reminders)}>Reminder settings</button>}
         {can("manager", "fleet") && <button className="btn primary" onClick={() => setAdding(!adding)}>Add asset</button>}
@@ -90,8 +91,7 @@ export default function Fleet() {
         <div className="card">
           <form className="stack" onSubmit={(e) => {
             e.preventDefault();
-            const body = formValues(e.currentTarget);
-            body.assignedEmployeeId ??= null;
+            const body = assetBody(formValues(e.currentTarget));
             run(async () => { await api("/assets", { body }); setAdding(false); reload(); });
           }}>
             <AssetFields employees={employees.data ?? []} />

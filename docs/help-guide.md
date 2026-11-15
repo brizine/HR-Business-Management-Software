@@ -253,6 +253,28 @@ accounts on this page (admins).
   service** (fleet managers) records older work, e.g. from paper records or receipts: what was done,
   date, odometer, hours, vendor, costs, notes, and optionally which schedule it was for (a newer one
   resets that schedule). Click a work order number to open it, for example to correct its costs.
+- **Fuel** (on each asset's page): **Log fuel** after each fill-up: date, fuel (Gasoline, Diesel,
+  **CNG**, Propane, DEF, Other), amount (gallons, or GGE for CNG, as the CNG pump shows), price per
+  gallon or total (enter any two and the third fills in), odometer and/or engine hours, station,
+  **Filled to full**, notes and a receipt photo or PDF. The odometer/hours also update the asset's
+  meters, which keeps mileage-based maintenance reminders current. The box shows fuel cost, gallons,
+  average price, **fuel economy** (MPG, or gallons per engine hour for equipment) and fuel cost per
+  mile or hour, with **Filters** (search, fuel type, dates), **Export CSV** and **Print**. Economy
+  uses full fill-ups with a meter reading (miles since the last full fill ÷ fuel added), so tick
+  **Filled to full** when you fill up all the way; DEF isn't counted as fuel. Whoever logged a fill-up
+  can fix or remove it for 24 hours; fleet managers any time. **Receipt** opens the receipt.
+- **Phone app:** **Log fuel** on the asset (from My vehicles or by scanning its QR label): tap the
+  fuel type, enter gallons (or GGE) and the total, the odometer, and take a photo of the receipt.
+- **Total Cost of Ownership** (on each asset's page): purchase price + all maintenance + all fuel,
+  and the cost per mile (or engine hour) and per year since it was bought, plus what it costs to run
+  (without the purchase price). Add **Purchase price**, **Purchase date** and **Odometer / Engine
+  hours at purchase** with **Edit** on the asset.
+- **Fuel & Costs** (blue button at the top of the Assets page, fleet managers): every asset for a
+  period (this month, last month, this year, last 12 months, last year or custom dates): fuel used
+  and cost, average price, fuel economy (and its usual), maintenance, total, miles or hours run,
+  cost per mile or hour, and lifetime cost of ownership. Search, sort and **Export CSV**. Assets
+  whose fuel economy is 15% or more worse than usual are flagged; check for maintenance problems or
+  fuel going elsewhere.
 - **Registration & insurance renewals:** enter each asset's **Registration expires** and
   **Insurance expires** dates (**Edit** on the asset). Reminders to renew go out before each date
   (default 30 and 7 days before) and again after it expires (default every 7 days) until the date is
@@ -282,5 +304,5 @@ automatically.
 
 ## Phone app
 
-Clock in and out, schedule and open shifts, time off, assigned vehicles, meter readings,
+Clock in and out, schedule and open shifts, time off, assigned vehicles, meter readings, fuel (with receipt photos),
 inspections, issue reports, work orders, training, onboarding tasks and signing documents.

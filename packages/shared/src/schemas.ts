@@ -287,6 +287,11 @@ export const assetSchema = z.object({
   assignedEmployeeId: z.string().uuid().nullable().optional(),
   registrationExpires: isoDate.nullable().optional(),
   insuranceExpires: isoDate.nullable().optional(),
+  /** For total cost of ownership: what it cost, when, and its meters then. */
+  purchasePriceCents: z.number().int().nonnegative().max(100_000_000).nullable().optional(),
+  purchaseDate: isoDate.nullable().optional(),
+  purchaseOdometer: z.number().nonnegative().nullable().optional(),
+  purchaseHours: z.number().nonnegative().nullable().optional(),
 });
 
 export const meterReadingSchema = z.object({

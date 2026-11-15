@@ -359,6 +359,11 @@ export const assets = pgTable(
     assignedEmployeeId: uuid("assigned_employee_id").references(() => employees.id, { onDelete: "set null" }),
     registrationExpires: date("registration_expires"),
     insuranceExpires: date("insurance_expires"),
+    /** For total cost of ownership. */
+    purchasePriceCents: integer("purchase_price_cents"),
+    purchaseDate: date("purchase_date"),
+    purchaseOdometer: doublePrecision("purchase_odometer"),
+    purchaseHours: doublePrecision("purchase_hours"),
     /** Printed on the asset's QR label. Regenerating it retires old labels. */
     qrCode: text("qr_code").unique().$defaultFn(newAssetCode),
     createdAt: createdAt(),
@@ -377,6 +382,32 @@ export const meterReadings = pgTable("meter_readings", {
   recordedById: uuid("recorded_by_id").references(() => employees.id, { onDelete: "set null" }),
   createdAt: createdAt(),
 });
+
+/** Fuel log: one row per fill-up (gas, diesel, CNG, propane, DEF…). */
+export const fuelEntries = pgTable(
+  "fuel_entries",
+  {
+    id: id(),
+    companyId: companyId(),
+    assetId: uuid("asset_id").notNull().references(() => assets.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    fuelType: text("fuel_type").notNull(),
+    /** Gallons (GGE for CNG). */
+    quantity: doublePrecision("quantity").notNull(),
+    totalCostCents: integer("total_cost_cents").notNull(),
+    odometer: doublePrecision("odometer"),
+    hours: doublePrecision("hours"),
+    fullTank: boolean("full_tank").notNull().default(true),
+    vendor: text("vendor"),
+    notes: text("notes"),
+    /** Receipt photo or PDF in storage. */
+    receiptKey: text("receipt_key"),
+    receiptMime: text("receipt_mime"),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("fuel_entries_asset_idx").on(t.assetId, t.date)],
+);
 
 export const maintenanceSchedules = pgTable("maintenance_schedules", {
   id: id(),

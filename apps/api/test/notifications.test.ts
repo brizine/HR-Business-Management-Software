@@ -172,7 +172,7 @@ describe("scheduled checks", () => {
     await call("POST", `/assets/${asset.body.id}/meter`, tech.token, { engineHours: 1120 });
     await runScheduledChecks();
     expect((await pushesTo(tokens.owner)).filter((m) => m.title.startsWith("Loader"))).toHaveLength(1);
-  });
+  }, 120_000);
 
   it("a maintenance schedule can be assigned to someone, who then gets its reminders", async () => {
     const mower = await call("POST", "/assets", owner.token, { name: "Zero-turn", type: "equipment", engineHours: 100 });

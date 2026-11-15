@@ -9,7 +9,7 @@ import { Badge, Button, Divider, Row, Txt } from "./ui";
 type Upload = { uri: string; name: string; type: string };
 
 /** Lets the person photograph a document, or pick a photo or PDF. */
-async function pickFile(source: "camera" | "photos" | "files"): Promise<Upload | null> {
+export async function pickFile(source: "camera" | "photos" | "files"): Promise<Upload | null> {
   if (source === "files") {
     const res = await DocumentPicker.getDocumentAsync({ type: ["application/pdf", "image/*"], copyToCacheDirectory: true });
     if (res.canceled) return null;

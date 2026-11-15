@@ -1,9 +1,9 @@
 import type { FastifyPluginAsync } from "fastify";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { assetSchema, fleetSettingsSchema, isInactive, maintenanceScheduleSchema, maintenanceScheduleUpdateSchema, meterReadingSchema } from "@crewdesk/shared";
 import { db } from "../db";
-import { assets, companies, employees, inspections, maintenanceSchedules, meterReadings, newAssetCode, workOrders } from "../db/schema";
+import { assets, companies, employees, fuelEntries, inspections, maintenanceSchedules, meterReadings, newAssetCode, workOrders } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { fleetSettingsFor, recordMeter, withDue } from "../lib/fleet";
@@ -144,7 +144,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { id: string } }>("/:id", async (req) => {
     const asset = await loadAsset(req.user.companyId, req.params.id);
     const settings = await fleetSettingsFor(req.user.companyId);
-    const [schedules, orders, recentInspections, readings] = await Promise.all([
+    const [schedules, orders, recentInspections, readings, fuel] = await Promise.all([
       db.select().from(maintenanceSchedules).where(eq(maintenanceSchedules.assetId, asset.id)),
       db.select().from(workOrders).where(eq(workOrders.assetId, asset.id)).orderBy(desc(workOrders.createdAt)),
       db
@@ -159,6 +159,7 @@ const routes: FastifyPluginAsync = async (app) => {
         .where(eq(meterReadings.assetId, asset.id))
         .orderBy(desc(meterReadings.createdAt))
         .limit(20),
+      db.select({ total: sql<number>`coalesce(sum(${fuelEntries.totalCostCents}), 0)::int` }).from(fuelEntries).where(eq(fuelEntries.assetId, asset.id)),
     ]);
     const completed = orders.filter((o) => o.status === "completed");
     return {
@@ -168,6 +169,7 @@ const routes: FastifyPluginAsync = async (app) => {
       inspections: recentInspections,
       meterReadings: readings,
       totalMaintenanceCostCents: completed.reduce((s, o) => s + o.partsCostCents + o.laborCostCents, 0),
+      totalFuelCostCents: fuel[0]?.total ?? 0,
     };
   });
 

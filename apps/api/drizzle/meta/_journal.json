@@ -337,6 +337,13 @@
       "when": 1794760718555,
       "tag": "0047_work_order_meters",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1794763010500,
+      "tag": "0048_fuel_log",
+      "breakpoints": true
     }
   ]
 }

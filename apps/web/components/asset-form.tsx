@@ -26,6 +26,18 @@ export function AssetFields({ initial = {} as any, employees = [] as any[] }) {
       </label>
       <label>Registration expires<input name="registrationExpires" type="date" defaultValue={initial.registrationExpires ?? ""} /></label>
       <label>Insurance expires<input name="insuranceExpires" type="date" defaultValue={initial.insuranceExpires ?? ""} /></label>
+      <label>Purchase price ($)<input name="purchasePrice" type="number" min="0" step="0.01" defaultValue={initial.purchasePriceCents != null ? (initial.purchasePriceCents / 100).toFixed(2) : ""} /></label>
+      <label>Purchase date<input name="purchaseDate" type="date" defaultValue={initial.purchaseDate ?? ""} /></label>
+      <label>Odometer at purchase<input name="purchaseOdometer" type="number" min="0" defaultValue={initial.purchaseOdometer ?? ""} /></label>
+      <label>Engine hours at purchase<input name="purchaseHours" type="number" min="0" step="0.1" defaultValue={initial.purchaseHours ?? ""} /></label>
     </div>
   );
+}
+
+/** The asset form's values for the API: blanks clear optional fields, the price goes in cents. */
+export function assetBody(values: Record<string, any>) {
+  const { purchasePrice, ...body } = values;
+  body.purchasePriceCents = purchasePrice == null ? null : Math.round(Number(purchasePrice) * 100);
+  for (const k of ["assignedEmployeeId", "registrationExpires", "insuranceExpires", "purchaseDate", "purchaseOdometer", "purchaseHours"]) body[k] ??= null;
+  return body;
 }

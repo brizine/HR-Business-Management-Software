@@ -5,6 +5,7 @@ import { api, fmtDate } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { useMenuLabel } from "@/lib/menus";
 import { Badge, Button, Card, Divider, ErrorText, Input, Row, Screen, Txt, useTheme } from "@/components/ui";
+import { FuelForm } from "@/components/fuel-form";
 
 export default function Asset() {
   const label = useMenuLabel();
@@ -15,6 +16,7 @@ export default function Asset() {
   const [hours, setHours] = useState("");
   const [issue, setIssue] = useState<{ title: string; description: string; priority: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [fueling, setFueling] = useState(false);
 
   const saveMeter = async () => {
     setBusy(true);
@@ -56,6 +58,9 @@ export default function Asset() {
       </Card>
 
       <Button title="Start pre-trip inspection" onPress={() => router.push(`/inspect/${a.id}`)} />
+
+      {fueling ? <FuelForm asset={a} onCancel={() => setFueling(false)} onDone={() => { setFueling(false); reload(); }} />
+        : <Button title="Log fuel" onPress={() => setFueling(true)} />}
 
       <Card title="Log meter reading">
         <Row>

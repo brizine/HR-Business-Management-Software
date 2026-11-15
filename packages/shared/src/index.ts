@@ -22,3 +22,4 @@ export * from "./phone";
 export * from "./payRates";
 export * from "./extraPay";
 export * from "./reviewProgram";
+export * from "./fuel";
