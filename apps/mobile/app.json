@@ -16,9 +16,10 @@
     "android": {
       "package": "net.prospray.crewdesk",
       "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "POST_NOTIFICATIONS"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.CAMERA"
       ],
       "googleServicesFile": "./google-services.json"
     },
@@ -55,8 +56,14 @@
     ],
     "extra": {
       "eas": {
-        "projectId": ""
+        "projectId": "6af1de0c-3800-4a5a-bc73-83425b579167"
+      },
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
       }
-    }
+    },
+    "owner": "brizines-team"
   }
 }
