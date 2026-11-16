@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert, Pressable, Share, View, Linking } from "react-native";
+import { Alert, Linking, Platform, Pressable, Share, View } from "react-native";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
@@ -21,24 +21,38 @@ type ShiftRow = { shift: any; employee: { id: string; firstName: string; lastNam
 type Off = { id: string; startDate: string; endDate: string; who?: string; policy?: string };
 type Holiday = { name: string; date: string };
 
-/** Ask for your private subscription link, then add it to Apple Calendar or share it (Google Calendar, others). */
+/** Google Calendar's "add calendar by link" page for a feed (works in the Google Calendar app's browser sign-in too). */
+export const googleCalendarAddUrl = (webcal: string) => `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcal)}`;
+
+/**
+ * Ask for your private subscription link, then add it to the phone's calendar: Apple Calendar on
+ * iPhone, Google Calendar on Android, or share the link for anything else.
+ */
 export async function subscribeToCalendar() {
   try {
     const link = await api<{ url: string; webcal: string }>("/shifts/calendar-link", { method: "POST" });
-    Alert.alert(
-      "Subscribe in Calendar",
-      "Your published shifts, approved time off and paid holidays show up in your phone's calendar and update on their own. This link is private to you.",
-      [
-        { text: "Add to iPhone Calendar", onPress: () => Linking.openURL(link.webcal).catch(() => Linking.openURL(link.url)) },
-        { text: "Share link (Google Calendar…)", onPress: () => Share.share({ message: link.url }) },
-        { text: "Reset my link", style: "destructive", onPress: () =>
-          Alert.alert("Reset your calendar link?", "Calendars using the old link stop updating. Subscribe again afterwards.", [
-            { text: "Cancel", style: "cancel" },
-            { text: "Reset", style: "destructive", onPress: () => api("/shifts/calendar-link", { method: "DELETE" }).then(() => Alert.alert("Done", "Tap Subscribe in Calendar to get a new link."), (e) => Alert.alert("Couldn't reset", e.message)) },
-          ]) },
+    const reset = () =>
+      Alert.alert("Reset your calendar link?", "Calendars using the old link stop updating. Subscribe again afterwards.", [
         { text: "Cancel", style: "cancel" },
-      ],
-    );
+        { text: "Reset", style: "destructive", onPress: () => api("/shifts/calendar-link", { method: "DELETE" }).then(() => Alert.alert("Done", "Tap Subscribe in Calendar to get a new link."), (e) => Alert.alert("Couldn't reset", e.message)) },
+      ]);
+    const message = "Your published shifts, approved time off and paid holidays show up in your phone's calendar and update on their own. This link is private to you.";
+    if (Platform.OS === "android") {
+      // Android pop-ups hold three buttons; tapping outside closes it.
+      Alert.alert("Subscribe in Calendar", `${message}\n\nAdd to Google Calendar opens Google Calendar to confirm (sign in with the Google account your phone's calendar uses). It can take a few minutes to appear on the phone.`, [
+        { text: "Reset my link", onPress: reset },
+        { text: "Share link", onPress: () => Share.share({ message: link.url }) },
+        { text: "Add to Google Calendar", onPress: () => Linking.openURL(googleCalendarAddUrl(link.webcal)) },
+      ], { cancelable: true });
+      return;
+    }
+    Alert.alert("Subscribe in Calendar", message, [
+      { text: "Add to iPhone Calendar", onPress: () => Linking.openURL(link.webcal).catch(() => Linking.openURL(link.url)) },
+      { text: "Add to Google Calendar", onPress: () => Linking.openURL(googleCalendarAddUrl(link.webcal)) },
+      { text: "Share link", onPress: () => Share.share({ message: link.url }) },
+      { text: "Reset my link", style: "destructive", onPress: reset },
+      { text: "Cancel", style: "cancel" },
+    ]);
   } catch (e) {
     Alert.alert("Couldn't get your calendar link", (e as Error).message);
   }

@@ -545,10 +545,11 @@ export default function Schedule() {
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             <input readOnly value={calLink.url} style={{ flex: "1 1 320px" }} onFocus={(e) => e.currentTarget.select()} aria-label="Your calendar link" />
             <button className="btn primary" onClick={() => navigator.clipboard.writeText(calLink.url).then(() => setNotice("Calendar link copied."), () => setNotice("Select the link and copy it."))}>Copy link</button>
+            <a className="btn" href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(calLink.webcal)}`} target="_blank" rel="noreferrer">Add to Google Calendar</a>
             <a className="btn" href={calLink.webcal}>Open in Apple Calendar / Outlook</a>
           </div>
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-            Google Calendar: open calendar.google.com → <strong>Other calendars +</strong> → <strong>From URL</strong> → paste the link.{" "}
+            If Add to Google Calendar doesn&apos;t work: open calendar.google.com → <strong>Other calendars +</strong> → <strong>From URL</strong> → paste the link. New calendars can take a few minutes to show up on your phone.{" "}
             <button className="btn sm danger" onClick={() => confirm("Reset your link? Calendars using the old one stop updating.") && action.run(async () => { await api("/shifts/calendar-link", { method: "DELETE" }); setCalLink(await api("/shifts/calendar-link", { method: "POST" })); setNotice("New link made. Subscribe again with it."); })}>Reset my link</button>
           </p>
         </div>

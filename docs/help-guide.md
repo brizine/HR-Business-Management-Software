@@ -104,8 +104,9 @@ Admins choose which employees can edit products, rates and mixes; every change i
   to open that week in the week grid. **Change or delete shifts** works here too and starts with the
   month you're looking at. The choice is remembered on that computer.
 - **📅 Subscribe in calendar** (Schedule page, everyone): a private link that puts your published
-  shifts, approved time off and paid holidays in your own calendar (Apple Calendar, Outlook, or
-  Google Calendar via **Other calendars + → From URL**). **Reset my link** stops an old link working.
+  shifts, approved time off and paid holidays in your own calendar: **Add to Google Calendar**,
+  **Open in Apple Calendar / Outlook**, or **Copy link** (Google Calendar: **Other calendars + → From
+  URL**). **Reset my link** stops an old link working.
 - **+ Add shift** (top) or the faint **+** in any day opens **New shift**. Pick **Days** (tick any
   days of the week, or **Mon–Fri** / **Every day**), who, start and end time, position, job site,
   vehicle and notes. **Repeat** puts the same shifts on the following weeks too (days someone is
@@ -134,8 +135,9 @@ Admins choose which employees can edit products, rates and mixes; every change i
   the title to jump back to today. **Scheduled hours** totals your week or month and warns about weeks
   over 40 hours. Managers can switch to **Whole crew** and pick a person or **Open shifts**.
 - **Subscribe in Calendar** (phone app, under the shifts): adds your published shifts, approved time
-  off and paid holidays to your phone's calendar (**Add to iPhone Calendar**, or **Share link** for
-  Google Calendar and others). It updates by itself, about every hour. The link is private to you;
+  off and paid holidays to your phone's calendar: **Add to iPhone Calendar** on iPhone, **Add to
+  Google Calendar** (on Android and iPhone; Google Calendar asks you to confirm, sign in with the
+  Google account your phone uses), or **Share link** for anything else. It updates by itself, about every hour. The link is private to you;
   **Reset my link** stops an old link working (then subscribe again). Draft shifts never appear.
 
 ## Time Clock
