@@ -7,14 +7,14 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "com.crewdesk.app",
+      "bundleIdentifier": "net.prospray.crewdesk",
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Crewdesk records your location when you clock in and out, and every few minutes while you are clocked in with the app open, to verify job-site attendance. It is not recorded when you are off the clock."
       }
     },
     "android": {
-      "package": "com.crewdesk.app",
+      "package": "net.prospray.crewdesk",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
