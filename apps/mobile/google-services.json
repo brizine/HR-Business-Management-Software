@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "611274267837",
+    "project_id": "prospray-ec850",
+    "storage_bucket": "prospray-ec850.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:611274267837:android:3e1f9890bdafb15c04abd4",
+        "android_client_info": {
+          "package_name": "net.prospray.crewdesk"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDMiDrV3DC9Ud0j3WYehX4Kl0a0zylEjQw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
