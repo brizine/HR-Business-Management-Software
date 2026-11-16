@@ -225,12 +225,13 @@ function ShiftEditor({ draft, weekDays, employees, assets, templates, onClose, o
 }
 
 /** Change or delete every shift in a date range at once (a week, a month…). */
-function RangeEditor({ week, employees, assets, onClose, onDone }: {
-  week: Date; employees: any[]; assets: any[]; onClose: () => void; onDone: (message: string) => void;
+function RangeEditor({ week, month, employees, assets, onClose, onDone }: {
+  /** Starts on this week, or (from the month calendar) on this whole month. */
+  week: Date; month?: Date; employees: any[]; assets: any[]; onClose: () => void; onDone: (message: string) => void;
 }) {
   const { busy, error, run } = useAction();
-  const [from, setFrom] = useState(ymd(week));
-  const [to, setTo] = useState(ymd(addDays(week, 6)));
+  const [from, setFrom] = useState(ymd(month ?? week));
+  const [to, setTo] = useState(ymd(month ? new Date(month.getFullYear(), month.getMonth() + 1, 0) : addDays(week, 6)));
   const [who, setWho] = useState("all");
   const [status, setStatus] = useState("");
   const [count, setCount] = useState<{ count: number; published: number } | null>(null);
@@ -349,6 +350,9 @@ export default function Schedule() {
   const [view, setViewState] = useState<"week" | "month">(() => { try { return localStorage.getItem("crewdesk.scheduleView") === "month" ? "month" : "week"; } catch { return "week"; } });
   const setView = (v: "week" | "month") => { setViewState(v); try { localStorage.setItem("crewdesk.scheduleView", v); } catch { /* private window */ } };
   const [calLink, setCalLink] = useState<{ url: string; webcal: string } | null>(null);
+  // The month shown in the month calendar, and a counter that makes it reload after changes.
+  const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+  const [monthKey, setMonthKey] = useState(0);
   /** Shows the week containing `day` (used when the month calendar opens a shift or a week). */
   const goToWeekOf = (day: Date) => {
     const monday = new Date(day.getFullYear(), day.getMonth(), day.getDate() - ((day.getDay() + 6) % 7));
@@ -404,7 +408,7 @@ export default function Schedule() {
     if (!manager && s.status !== "published") return false;
     return !q || `${nameOf(s.employeeId)} ${person?.title ?? ""} ${s.position ?? ""} ${s.location ?? ""} ${s.assetName ?? ""} ${s.notes ?? ""}`.toLowerCase().includes(q);
   };
-  const reload = () => { list.reload(); drops.reload(); };
+  const reload = () => { list.reload(); drops.reload(); setMonthKey((k) => k + 1); };
 
   const openEditor = (s: any) =>
     setEditing({
@@ -498,7 +502,7 @@ export default function Schedule() {
           const day = today >= from && today < to ? today : from;
           setEditing({ employeeId: "", date: ymd(day), start: "08:00", end: "16:30" });
         }}>+ Add shift</button>}
-        {manager && view === "week" && <button className="btn" onClick={() => { setShowRange(!showRange); setEditing(null); }}>Change or delete shifts</button>}
+        {manager && <button className="btn" onClick={() => { setShowRange(!showRange); setEditing(null); }}>Change or delete shifts</button>}
         {manager && <button className="btn" onClick={() => setShowTemplates(!showTemplates)}>Templates{templates.data?.length ? ` (${templates.data.length})` : ""}</button>}
         <button className="btn" onClick={() => calLink ? setCalLink(null) : action.run(async () => setCalLink(await api("/shifts/calendar-link", { method: "POST" })))}>📅 Subscribe in calendar</button>
         {manager && view === "week" && (
@@ -555,7 +559,7 @@ export default function Schedule() {
           onSaved={(w) => { setEditing(null); setNotice(w.length ? `Saved. ${w.map((x) => x[0].toUpperCase() + x.slice(1)).join(". ")}.` : null); reload(); }} />
       )}
       {manager && showRange && (
-        <RangeEditor week={from} employees={staff} assets={assets.data ?? []} onClose={() => setShowRange(false)}
+        <RangeEditor key={view === "month" ? `m-${ymd(month)}` : `w-${ymd(from)}`} week={from} month={view === "month" ? month : undefined} employees={staff} assets={assets.data ?? []} onClose={() => setShowRange(false)}
           onDone={(m) => { setShowRange(false); setNotice(m); reload(); }} />
       )}
       {manager && view === "week" && !editing && !showRange && list.data && !allShifts.length && !filtering && (
@@ -607,7 +611,7 @@ export default function Schedule() {
         </div>
       )}
       {view === "month" && (
-        <ScheduleMonth meId={me?.user.id} manager={manager} keep={keepShift} nameOf={nameOf}
+        <ScheduleMonth month={month} onMonthChange={setMonth} refreshKey={monthKey} meId={me?.user.id} manager={manager} keep={keepShift} nameOf={nameOf}
           onShift={(s) => { goToWeekOf(new Date(s.startsAt)); chipClick(s); if (manager) window.scrollTo({ top: 0, behavior: "smooth" }); }}
           onAdd={(date) => { const d = new Date(`${date}T12:00:00`); goToWeekOf(d); setEditing({ employeeId: "", date, start: "08:00", end: "16:30" }); window.scrollTo({ top: 0, behavior: "smooth" }); }}
           onOpenWeek={(d) => { goToWeekOf(d); setView("week"); }} />

@@ -101,7 +101,8 @@ Admins choose which employees can edit products, rates and mixes; every change i
   and who), open shifts, time off (🌴) and paid holidays (🎉); your own shifts are outlined, drafts
   dashed. ‹ › and **Today** change the month; the Filters box applies too. Click a shift to edit it
   (managers) or pick up an open shift; click the **+** in a day to add a shift there; click a date
-  to open that week in the week grid. The choice is remembered on that computer.
+  to open that week in the week grid. **Change or delete shifts** works here too and starts with the
+  month you're looking at. The choice is remembered on that computer.
 - **📅 Subscribe in calendar** (Schedule page, everyone): a private link that puts your published
   shifts, approved time off and paid holidays in your own calendar (Apple Calendar, Outlook, or
   Google Calendar via **Other calendars + → From URL**). **Reset my link** stops an old link working.

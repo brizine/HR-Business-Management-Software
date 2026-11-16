@@ -18,7 +18,12 @@ type Shift = { id: string; employeeId: string | null; startsAt: string; endsAt: 
  * and paid holidays. Click a shift to edit it (managers) or pick it up (open shifts); click a day's
  * date to open that week; managers add shifts with the + in a day.
  */
-export function ScheduleMonth({ meId, manager, keep, nameOf, onShift, onAdd, onOpenWeek }: {
+export function ScheduleMonth({ month, onMonthChange: setMonth, refreshKey = 0, meId, manager, keep, nameOf, onShift, onAdd, onOpenWeek }: {
+  /** First day of the month shown (the page keeps it, so Change or delete shifts can use it). */
+  month: Date;
+  onMonthChange: (first: Date) => void;
+  /** Changes when shifts were edited elsewhere on the page, to reload. */
+  refreshKey?: number;
   meId: string | undefined;
   manager: boolean;
   /** The page's filters: true to show the shift. */
@@ -28,14 +33,13 @@ export function ScheduleMonth({ meId, manager, keep, nameOf, onShift, onAdd, onO
   onAdd: (date: string) => void;
   onOpenWeek: (day: Date) => void;
 }) {
-  const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [expanded, setExpanded] = useState<string | null>(null);
   const { start, end, days } = useMemo(() => {
     const s = startOfWeek(month);
     const e = addDays(startOfWeek(new Date(month.getFullYear(), month.getMonth() + 1, 0)), 7);
     return { start: s, end: e, days: Array.from({ length: Math.round((e.getTime() - s.getTime()) / 86_400_000) }, (_, i) => addDays(s, i)) };
   }, [month]);
-  const list = useApi<{ shift: Shift; assetName: string | null }[]>(`/shifts?from=${start.toISOString()}&to=${end.toISOString()}`);
+  const list = useApi<{ shift: Shift; assetName: string | null }[]>(`/shifts?from=${start.toISOString()}&to=${end.toISOString()}&k=${refreshKey}`);
   const off = useApi<{ id: string; startDate: string; endDate: string; firstName: string; lastName: string; policyName: string }[]>(`/pto/calendar?from=${ymd(start)}&to=${ymd(addDays(end, -1))}`);
   const hol = useApi<{ upcoming: { name: string; date: string }[] }>(`/holidays?from=${ymd(start)}&to=${ymd(addDays(end, -1))}`);
   const shifts = (list.data ?? []).map((r) => ({ ...r.shift, assetName: r.assetName })).filter(keep);
