@@ -3,14 +3,15 @@
     "name": "Crewdesk",
     "slug": "crewdesk",
     "scheme": "crewdesk",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "net.prospray.crewdesk",
-      "supportsTablet": true,
+      "supportsTablet": false,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Crewdesk records your location when you clock in and out, and every few minutes while you are clocked in with the app open, to verify job-site attendance. It is not recorded when you are off the clock."
+        "NSLocationWhenInUseUsageDescription": "Crewdesk records your location when you clock in and out, and every few minutes while you are clocked in with the app open, to verify job-site attendance. It is not recorded when you are off the clock.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -41,15 +42,15 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Crewdesk uses the camera to scan QR labels on vehicles and equipment.",
+          "cameraPermission": "Crewdesk uses the camera to scan QR labels on vehicles and equipment, and to photograph documents, fuel receipts and your profile photo.",
           "recordAudioAndroid": false
         }
       ],
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Crewdesk uses the camera to photograph documents for your onboarding, like your driver's license.",
-          "photosPermission": "Crewdesk lets you pick a photo of a document to upload for your onboarding.",
+          "cameraPermission": "Crewdesk uses the camera to scan QR labels on vehicles and equipment, and to photograph documents, fuel receipts and your profile photo.",
+          "photosPermission": "Crewdesk lets you choose a photo to upload, such as a document, a fuel receipt or your profile photo.",
           "microphonePermission": false
         }
       ]
