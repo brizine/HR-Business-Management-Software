@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Crewdesk",
+    "name": "ProSpray",
     "slug": "crewdesk",
     "scheme": "crewdesk",
     "version": "1.0.0",
@@ -10,7 +10,7 @@
       "bundleIdentifier": "net.prospray.crewdesk",
       "supportsTablet": false,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Crewdesk records your location when you clock in and out, and every few minutes while you are clocked in with the app open, to verify job-site attendance. It is not recorded when you are off the clock.",
+        "NSLocationWhenInUseUsageDescription": "ProSpray records your location when you clock in and out, and every few minutes while you are clocked in with the app open, to verify job-site attendance. It is not recorded when you are off the clock.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -30,7 +30,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Crewdesk records your location when you clock in and out, and every few minutes while you are clocked in with the app open, to verify job-site attendance. It is not recorded when you are off the clock."
+          "locationWhenInUsePermission": "ProSpray records your location when you clock in and out, and every few minutes while you are clocked in with the app open, to verify job-site attendance. It is not recorded when you are off the clock."
         }
       ],
       [
@@ -42,15 +42,15 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Crewdesk uses the camera to scan QR labels on vehicles and equipment, and to photograph documents, fuel receipts and your profile photo.",
+          "cameraPermission": "ProSpray uses the camera to scan QR labels on vehicles and equipment, and to photograph documents, fuel receipts and your profile photo.",
           "recordAudioAndroid": false
         }
       ],
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Crewdesk uses the camera to scan QR labels on vehicles and equipment, and to photograph documents, fuel receipts and your profile photo.",
-          "photosPermission": "Crewdesk lets you choose a photo to upload, such as a document, a fuel receipt or your profile photo.",
+          "cameraPermission": "ProSpray uses the camera to scan QR labels on vehicles and equipment, and to photograph documents, fuel receipts and your profile photo.",
+          "photosPermission": "ProSpray lets you choose a photo to upload, such as a document, a fuel receipt or your profile photo.",
           "microphonePermission": false
         }
       ]

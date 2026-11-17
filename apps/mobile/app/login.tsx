@@ -116,6 +116,9 @@ export default function Login() {
         <Pressable onPress={() => Linking.openURL(`${WEB_URL}/forgot-password`)}>
           <Txt style={{ color: t.primary, textAlign: "center" }}>Forgot your password?</Txt>
         </Pressable>
+        <Pressable onPress={() => Linking.openURL(`${WEB_URL}/privacy`)}>
+          <Txt muted style={{ textAlign: "center", fontSize: 12 }}>Privacy Policy</Txt>
+        </Pressable>
       </Card>
     );
   }

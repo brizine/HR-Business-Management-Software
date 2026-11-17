@@ -69,6 +69,7 @@ function Login() {
             </form>
             <p className="muted"><Link href="/forgot-password">Forgot your password?</Link></p>
             <p className="muted">New business? <Link href="/signup">Create an account</Link></p>
+            <p className="muted" style={{ fontSize: 12 }}><Link href="/privacy">Privacy Policy</Link></p>
           </>
         )}
 

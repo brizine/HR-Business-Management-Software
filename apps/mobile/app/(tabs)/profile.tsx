@@ -1,6 +1,6 @@
 import { router } from "expo-router";
-import { Alert, View } from "react-native";
-import { api, fmtDate } from "@/lib/api";
+import { Alert, Linking, View } from "react-native";
+import { WEB_URL, api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
 import { useMenuLabel } from "@/lib/menus";
@@ -37,6 +37,7 @@ export default function Profile() {
           { text: "Sign out everywhere", style: "destructive", onPress: () => api("/auth/logout-all", { method: "POST" }).then(signOut, signOut) },
         ])} />
       <Txt muted style={{ fontSize: 12, textAlign: "center" }}>Password and two-factor settings are under Settings → Security on the website.</Txt>
+      <Txt style={{ fontSize: 12, textAlign: "center", color: "#1f6feb" }} onPress={() => Linking.openURL(`${WEB_URL}/privacy`)}>Privacy Policy</Txt>
     </Screen>
   );
 }
