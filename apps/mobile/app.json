@@ -22,7 +22,11 @@
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.CAMERA"
       ],
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
     },
     "plugins": [
       "expo-router",
@@ -36,7 +40,8 @@
       [
         "expo-notifications",
         {
-          "color": "#1f6feb"
+          "color": "#1f6feb",
+          "icon": "./assets/notification-icon.png"
         }
       ],
       [
@@ -53,6 +58,15 @@
           "photosPermission": "ProSpray lets you choose a photo to upload, such as a document, a fuel receipt or your profile photo.",
           "microphonePermission": false
         }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
       ]
     ],
     "extra": {
@@ -65,6 +79,7 @@
         }
       }
     },
-    "owner": "brizines-team"
+    "owner": "brizines-team",
+    "icon": "./assets/icon.png"
   }
 }
