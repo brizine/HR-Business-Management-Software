@@ -14,6 +14,7 @@ import { db } from "../db";
 import { companies, employees, notificationPreferences, notifications, pushTokens } from "../db/schema";
 import { authenticate, requireRole, roleIn } from "../lib/auth";
 import { emailTransport, smsTransport } from "../lib/channels";
+import { sendTestPush } from "../lib/notify";
 import { HttpError, notFound, parse } from "../lib/errors";
 
 /** Which area of the Permissions page controls access here. */
@@ -142,6 +143,15 @@ const routes: FastifyPluginAsync = async (app) => {
       .onConflictDoUpdate({ target: pushTokens.token, set: values })
       .returning();
     return { id: row.id };
+  });
+
+  /** Sends a test push to your own phones and says what happened (Settings → Notifications). */
+  app.post("/test-push", async (req) => {
+    try {
+      return await sendTestPush(req.user.sub);
+    } catch (e) {
+      throw new HttpError(502, `The push service didn't accept it: ${(e as Error).message}`);
+    }
   });
 
   /** Called on sign-out so the device stops receiving this user's alerts. */

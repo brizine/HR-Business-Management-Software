@@ -55,6 +55,32 @@ export interface NotificationInput {
   link?: NotificationLink;
 }
 
+/**
+ * Push straight to someone's phones, ignoring their notification settings, and report what Apple /
+ * Google (via Expo) said for each device. For "Send a test notification" in Settings.
+ */
+export async function sendTestPush(employeeId: string) {
+  const devices = await db.select().from(pushTokens).where(eq(pushTokens.employeeId, employeeId));
+  if (!devices.length) return { devices: 0, results: [] as { platform: string; lastSeenAt: Date; ok: boolean; error: string | null }[] };
+  const tickets = await transport.send(devices.map((d) => ({
+    to: d.token,
+    title: "Test notification",
+    body: "Push notifications are working on this phone. 🎉",
+    data: { notificationId: "", link: null },
+    sound: "default" as const,
+    channelId: "default" as const,
+  })));
+  const results = devices.map((d, i) => {
+    const t = tickets[i];
+    const error = !t ? "No answer from the push service" : t.status === "error" ? (t.details?.error ? `${t.details.error}: ${t.message}` : t.message) : null;
+    return { platform: d.platform, lastSeenAt: d.lastSeenAt, ok: !error, error };
+  });
+  // A phone that uninstalled the app or turned notifications off for good: forget it.
+  const gone = devices.filter((_, i) => tickets[i]?.status === "error" && (tickets[i] as { details?: { error?: string } }).details?.error === "DeviceNotRegistered");
+  if (gone.length) await db.delete(pushTokens).where(inArray(pushTokens.id, gone.map((d) => d.id)));
+  return { devices: devices.length, results };
+}
+
 const pending = new Set<Promise<void>>();
 
 /**
