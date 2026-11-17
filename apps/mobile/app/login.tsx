@@ -1,17 +1,22 @@
 import { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Share, View } from "react-native";
-import { WEB_URL, api } from "@/lib/api";
+import { Image, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Share, View } from "react-native";
+import { API_URL, WEB_URL, api } from "@/lib/api";
 import { useAuth, type SignInStep } from "@/lib/auth";
-import { loadLastCompanyName } from "@/lib/last-company";
+import { loadLastCompany, type LastCompany } from "@/lib/last-company";
 import { Button, Card, ErrorText, Input, Txt, useTheme } from "@/components/ui";
 
 /** Sign in, including the two-factor code step and first-time two-factor setup. */
 export default function Login() {
-  // The company last signed in on this phone; a phone that's never signed in just says "Sign in".
-  const [companyName, setCompanyName] = useState<string | null>(null);
+  // The company last signed in on this phone: its logo (or its name if it has none). A phone that's
+  // never signed in just says "Sign in".
+  const [company, setCompany] = useState<LastCompany | null>(null);
+  const [logoFailed, setLogoFailed] = useState(false);
   useEffect(() => {
-    loadLastCompanyName().then(setCompanyName);
+    loadLastCompany().then(setCompany);
   }, []);
+  const logoUri = company?.id && company.hasLogo && !logoFailed
+    ? `${API_URL}/public/company/${company.id}/logo${company.logoUpdatedAt ? `?v=${encodeURIComponent(company.logoUpdatedAt)}` : ""}`
+    : null;
   const { signIn, completeSignIn } = useAuth();
   const t = useTheme();
   const [email, setEmail] = useState("");
@@ -119,8 +124,13 @@ export default function Login() {
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: t.bg }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 20, gap: 16 }} keyboardShouldPersistTaps="handled">
         <View>
-          <Txt style={{ fontSize: 30, fontWeight: "800" }}>{companyName ?? "Sign in"}</Txt>
-          <Txt muted>Clock in, request time off, and inspect equipment.</Txt>
+          {logoUri ? (
+            <Image source={{ uri: logoUri }} style={{ height: 72, width: "100%", marginBottom: 6 }} resizeMode="contain"
+              onError={() => setLogoFailed(true)} accessibilityLabel={`${company!.name} logo`} />
+          ) : (
+            <Txt style={{ fontSize: 30, fontWeight: "800" }}>{company?.name ?? "Sign in"}</Txt>
+          )}
+          <Txt muted style={logoUri ? { textAlign: "center", fontSize: 16 } : undefined}>Management App</Txt>
         </View>
         {body}
       </ScrollView>

@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { hasRole, roleInArea, type AreaLevels, type PermissionArea, type Role } from "@crewdesk/shared";
 import { api, loadToken, saveToken, setSessionEndedHandler } from "./api";
 import { registerForPush, unregisterForPush } from "./push";
-import { saveLastCompanyName } from "./last-company";
+import { saveLastCompany } from "./last-company";
 
 interface Me {
   user: { id: string; firstName: string; lastName: string; email: string; role: Role; employmentType?: string };
@@ -43,10 +43,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  // Remember the company name for the sign-in screen (it stays after signing out).
+  // Remember the company (name and logo) for the sign-in screen; it stays after signing out.
   useEffect(() => {
-    if (me?.company.name) saveLastCompanyName(me.company.name);
-  }, [me?.company.name]);
+    if (me?.company) saveLastCompany({ id: me.company.id, name: me.company.name, hasLogo: !!me.company.hasLogo, logoUpdatedAt: me.company.logoUpdatedAt ?? null });
+  }, [me?.company.id, me?.company.name, me?.company.hasLogo, me?.company.logoUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Register this device for push whenever someone is signed in.
   useEffect(() => {
