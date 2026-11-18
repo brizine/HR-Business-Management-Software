@@ -1,8 +1,8 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
-import { useRef, useState, type ComponentRef } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { useRef, useState } from "react";
+import { Alert, Platform, StyleSheet, View } from "react-native";
 import { api } from "@/lib/api";
 import { codeFromScan } from "@crewdesk/shared";
 import { Button, Card, Input, Screen, Txt } from "@/components/ui";
@@ -12,11 +12,10 @@ export default function Scan() {
   const [permission, requestPermission] = useCameraPermissions();
   const [manual, setManual] = useState("");
   const busy = useRef(false);
-  // On newer iPhones the top bar can float over the screen: push the content below it.
+  // On iPhone this screen's top bar floats over it (the camera shows through); keep the frame and the
+  // text below the bar. The permission screen scrolls, and iOS makes room there by itself.
   const headerHeight = useHeaderHeight();
-  const [top, setTop] = useState(0);
-  const root = useRef<ComponentRef<typeof View>>(null);
-  const measure = () => root.current?.measureInWindow((_x: number, y: number) => setTop(headerHeight > 0 && y < 2 ? Math.round(headerHeight) : 0));
+  const top = Platform.OS === "ios" ? headerHeight : 0;
 
   const open = async (code: string) => {
     if (busy.current) return;
@@ -34,10 +33,10 @@ export default function Scan() {
     if (code) open(code);
   };
 
-  if (!permission) return <View ref={root} onLayout={measure} style={{ flex: 1, paddingTop: top }}><Screen><Txt muted>Loading camera…</Txt></Screen></View>;
+  if (!permission) return <Screen><Txt muted>Loading camera…</Txt></Screen>;
   if (!permission.granted) {
     return (
-      <View ref={root} onLayout={measure} style={{ flex: 1, paddingTop: top }}>
+      <View style={{ flex: 1 }}>
         <Screen>
           <Card title="Camera access">
             <Txt>Crewdesk uses the camera only to read QR labels on vehicles and equipment.</Txt>
@@ -50,7 +49,7 @@ export default function Scan() {
   }
 
   return (
-    <View ref={root} onLayout={measure} style={{ flex: 1, backgroundColor: "#000" }}>
+    <View style={{ flex: 1, backgroundColor: "#000" }}>
       <CameraView style={StyleSheet.absoluteFill} facing="back" barcodeScannerSettings={{ barcodeTypes: ["qr"] }} onBarcodeScanned={onScan} />
       {/* Centered in the part of the screen below the top bar, above the manual-entry card. */}
       <View pointerEvents="none" style={[styles.overlay, { top, bottom: 260 }]}>

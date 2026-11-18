@@ -1,5 +1,4 @@
-import { useContext, useRef, useState, type ComponentRef, type ReactNode } from "react";
-import { HeaderHeightContext } from "expo-router/react-navigation";
+import type { ReactNode } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -25,19 +24,13 @@ export function useTheme() {
 
 export function Screen({ children, refreshing, onRefresh }: { children: ReactNode; refreshing?: boolean; onRefresh?: () => void }) {
   const t = useTheme();
-  // On newer iPhones the top bar can float over the page: if the page starts under it, add room.
-  const headerHeight = useContext(HeaderHeightContext) ?? 0;
-  const [top, setTop] = useState(0);
-  const ref = useRef<ComponentRef<typeof ScrollView>>(null);
-  // Only when the page truly starts at the very top of the screen (the bar drawn over it); a page that
-  // starts lower is fine as it is, even if measured mid-transition.
-  const measure = () => ref.current?.measureInWindow?.((_x: number, y: number) => setTop(headerHeight > 0 && y < 2 ? Math.round(headerHeight) : 0));
   return (
     <ScrollView
-      ref={ref}
-      onLayout={measure}
+      // iOS makes room for the top bar (and home indicator) only where they actually cover the page:
+      // pages opened from a tab sit under the floating bar on newer iPhones; tab pages don't.
+      contentInsetAdjustmentBehavior="automatic"
       style={{ backgroundColor: t.bg }}
-      contentContainerStyle={{ padding: 16, paddingTop: 16 + top, gap: 12 }}
+      contentContainerStyle={{ padding: 16, gap: 12 }}
       refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined}
       keyboardShouldPersistTaps="handled"
     >
