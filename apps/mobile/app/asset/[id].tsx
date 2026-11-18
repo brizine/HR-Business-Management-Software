@@ -49,7 +49,10 @@ export default function Asset() {
     <Screen refreshing={loading} onRefresh={reload}>
       <Stack.Screen options={{ title: a.name }} />
       <Card>
-        <Row><Txt style={{ fontSize: 20, fontWeight: "700" }}>{a.name}</Txt><Badge value={a.status} menu="assetStatus" /></Row>
+        <Row style={{ alignItems: "flex-start", gap: 8 }}>
+          <Txt style={{ fontSize: 20, fontWeight: "700", flex: 1 }}>{a.name}</Txt>
+          <View style={{ flexShrink: 0 }}><Badge value={a.status} menu="assetStatus" /></View>
+        </Row>
         <Txt muted>{[a.year, a.make, a.model, a.licensePlate].filter(Boolean).join(" · ")}</Txt>
         <Row>
           <View><Txt muted>Odometer</Txt><Txt style={{ fontWeight: "700" }}>{a.odometer.toLocaleString()} mi</Txt></View>

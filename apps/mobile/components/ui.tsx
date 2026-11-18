@@ -29,7 +29,9 @@ export function Screen({ children, refreshing, onRefresh }: { children: ReactNod
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const [top, setTop] = useState(0);
   const ref = useRef<ComponentRef<typeof ScrollView>>(null);
-  const measure = () => ref.current?.measureInWindow?.((_x: number, y: number) => setTop(Math.max(0, Math.round(headerHeight - y))));
+  // Only when the page truly starts at the very top of the screen (the bar drawn over it); a page that
+  // starts lower is fine as it is, even if measured mid-transition.
+  const measure = () => ref.current?.measureInWindow?.((_x: number, y: number) => setTop(headerHeight > 0 && y < 2 ? Math.round(headerHeight) : 0));
   return (
     <ScrollView
       ref={ref}

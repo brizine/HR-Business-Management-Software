@@ -164,7 +164,7 @@ export function ShiftCalendar({ mode }: { mode: "week" | "month" }) {
           <Chips label="Person" value={person} onChange={setPerson} options={[{ value: "", label: "Everyone" }, { value: "open", label: "Open shifts" }, ...people.map(([id, name]) => ({ value: id, label: name }))]} />
         )}
         <View style={{ flexDirection: "row" }}>
-          {WEEKDAYS.map((w) => <Txt key={w} muted style={{ flex: 1, textAlign: "center", fontSize: 12 }}>{w}</Txt>)}
+          {WEEKDAYS.map((w) => <Txt key={w} muted allowFontScaling={false} style={{ flex: 1, textAlign: "center", fontSize: 12 }}>{w}</Txt>)}
         </View>
         <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
           {days.map((d) => {
@@ -177,10 +177,11 @@ export function ShiftCalendar({ mode }: { mode: "week" | "month" }) {
                 accessibilityLabel={d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}
                 style={{ width: `${100 / 7}%`, alignItems: "center", paddingVertical: mode === "week" ? 8 : 5, borderRadius: 10, backgroundColor: isSel ? t.primary + "22" : "transparent" }}>
                 <View style={{ width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", borderWidth: key === today ? 2 : 0, borderColor: t.primary }}>
-                  <Txt style={{ fontWeight: isSel ? "700" : "500", color: outside ? t.muted : t.text }}>{d.getDate()}</Txt>
+                  {/* Fixed size: with a larger text setting two-digit dates would overflow the circle. */}
+                  <Txt allowFontScaling={false} style={{ fontSize: 15, fontWeight: isSel ? "700" : "500", color: outside ? t.muted : t.text }}>{d.getDate()}</Txt>
                 </View>
                 {mode === "week" && !crew && (
-                  <Txt muted style={{ fontSize: 10, marginTop: 2 }}>{myFirst ? new Date(myFirst.shift.startsAt).toLocaleTimeString([], { hour: "numeric" }).replace(" ", "").toLowerCase() : "Off"}</Txt>
+                  <Txt muted allowFontScaling={false} style={{ fontSize: 10, marginTop: 2 }}>{myFirst ? new Date(myFirst.shift.startsAt).toLocaleTimeString([], { hour: "numeric" }).replace(" ", "").toLowerCase() : "Off"}</Txt>
                 )}
                 <View style={{ flexDirection: "row", gap: 3, height: 8, marginTop: 3 }}>
                   {dots(key).map((c) => <View key={c} style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c }} />)}

@@ -16,7 +16,7 @@ export default function Scan() {
   const headerHeight = useHeaderHeight();
   const [top, setTop] = useState(0);
   const root = useRef<ComponentRef<typeof View>>(null);
-  const measure = () => root.current?.measureInWindow((_x: number, y: number) => setTop(Math.max(0, headerHeight - y)));
+  const measure = () => root.current?.measureInWindow((_x: number, y: number) => setTop(headerHeight > 0 && y < 2 ? Math.round(headerHeight) : 0));
 
   const open = async (code: string) => {
     if (busy.current) return;
