@@ -93,7 +93,7 @@ describe("location rules", () => {
     const far = await punch("in", FAR);
     expect(far.status).toBe(403);
     expect(far.body.code).toBe("outside_job_site");
-    expect(far.body.error).toMatch(/You're 2\.5 km from the nearest job site \(North yard\)/);
+    expect(far.body.error).toMatch(/You're 1\.\d mi from the nearest job site \(North yard\)/);
     expect((await punch("in")).body.code).toBe("location_required");
 
     // ~200 m out is refused with a precise fix, accepted when the phone reports 60 m uncertainty.
@@ -114,7 +114,7 @@ describe("location rules", () => {
     expect(out.body.clockOutDistance).toBeGreaterThan(2000);
     await flushNotifications();
     expect(pushes.map((p) => p.title)).toEqual(["Cal Crew clocked out away from a job site"]);
-    expect(pushes[0].body).toMatch(/^2\.5 km from the nearest job site/);
+    expect(pushes[0].body).toMatch(/^1\.\d mi from the nearest job site/);
 
     pushes = [];
     await punch("in", ON_SITE);

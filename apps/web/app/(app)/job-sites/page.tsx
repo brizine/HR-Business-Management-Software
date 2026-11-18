@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { LOCATION_POLICIES, LOCATION_POLICY_LABELS, parseCoordinates, usesGeofence, type LocationPolicy } from "@crewdesk/shared";
+import { LOCATION_POLICIES, LOCATION_POLICY_LABELS, formatDistance, parseCoordinates, usesGeofence, type LocationPolicy } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -113,7 +113,7 @@ function SiteForm({ onSaved }: { onSaved: () => void }) {
         </label>
         <label>Radius
           <select name="radiusMeters" defaultValue="150">
-            {[50, 100, 150, 250, 500, 1000, 2000].map((m) => <option key={m} value={m}>{m >= 1000 ? `${m / 1000} km` : `${m} m`} ({Math.round(m * 3.281)} ft)</option>)}
+            {[50, 100, 150, 250, 500, 1000, 2000].map((m) => <option key={m} value={m}>{formatDistance(m)}</option>)}
           </select>
         </label>
       </div>
@@ -149,9 +149,9 @@ export default function JobSites() {
                 <td>
                   {can("manager", "time") ? (
                     <select aria-label={`Radius for ${s.name}`} value={s.radiusMeters} onChange={(e) => api(`/job-sites/${s.id}`, { method: "PATCH", body: { radiusMeters: Number(e.target.value) } }).then(sites.reload)} style={{ width: 120 }}>
-                      {[...new Set([50, 100, 150, 250, 500, 1000, 2000, s.radiusMeters])].sort((a, b) => a - b).map((m) => <option key={m} value={m}>{m >= 1000 ? `${m / 1000} km` : `${m} m`}</option>)}
+                      {[...new Set([50, 100, 150, 250, 500, 1000, 2000, s.radiusMeters])].sort((a, b) => a - b).map((m) => <option key={m} value={m}>{formatDistance(m)}</option>)}
                     </select>
-                  ) : `${s.radiusMeters} m`}
+                  ) : formatDistance(s.radiusMeters)}
                 </td>
                 <td>{s.active ? <Badge value="active" /> : <span className="badge">inactive</span>}</td>
                 <td className="row">
@@ -162,7 +162,7 @@ export default function JobSites() {
             ))}</tbody>
           </table>
         ) : <Empty>No job sites yet.</Empty>}
-        <p className="muted" style={{ fontSize: 13 }}>Deactivate a seasonal client site instead of deleting it. A punch counts as on site within the radius, plus up to 100 m for the phone&apos;s GPS uncertainty.</p>
+        <p className="muted" style={{ fontSize: 13 }}>Deactivate a seasonal client site instead of deleting it. A punch counts as on site within the radius, plus up to about 330 ft for the phone&apos;s GPS uncertainty.</p>
       </div>
       {can("manager", "time") && <SiteForm onSaved={sites.reload} />}
     </>

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
+import { formatDistance } from "@crewdesk/shared";
 import { useApi } from "@/lib/hooks";
 import { Empty, ErrorBox } from "./ui";
 
@@ -84,7 +85,7 @@ export function LocationTrail({ employeeId, name, date: initialDate, timeZone = 
                   <td>{time(s.at)}</td>
                   <td>{s.kind === "in" ? "Clocked in" : s.kind === "out" ? "Clocked out" : "Location"}</td>
                   <td><a href={`https://maps.google.com/?q=${s.lat},${s.lng}`} target="_blank" rel="noreferrer">{s.lat.toFixed(5)}, {s.lng.toFixed(5)}</a></td>
-                  <td className="muted">{s.accuracy != null ? `±${Math.round(s.accuracy)} m` : ""}</td>
+                  <td className="muted">{s.accuracy != null ? `±${formatDistance(s.accuracy)}` : ""}</td>
                 </tr>
               ))}</tbody>
             </table>

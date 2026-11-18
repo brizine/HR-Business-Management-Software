@@ -58,7 +58,11 @@ export function nearestSite<S extends SiteLike>(point: { lat: number; lng: numbe
 }
 
 /** "120 m" / "2.3 km" */
-export const formatDistance = (m: number) => (m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`);
+/** Distances shown to people, in US units: feet up to about a tenth of a mile, then miles. */
+export const formatDistance = (m: number) => {
+  const feet = m * 3.28084;
+  return feet < 528 ? `${Math.round(feet / 10) * 10} ft` : `${(m / 1609.344).toFixed(1)} mi`;
+};
 
 /**
  * Pulls coordinates out of a pasted Google/Apple Maps link or a "lat, lng" pair.

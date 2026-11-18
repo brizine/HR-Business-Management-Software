@@ -162,8 +162,8 @@ describe("geofencing", () => {
   it("measures distance", () => {
     // Austin → Dallas is about 293 km as the crow flies.
     expect(distanceMeters({ lat: 30.2672, lng: -97.7431 }, { lat: 32.7767, lng: -96.797 }) / 1000).toBeCloseTo(293, -1);
-    expect(formatDistance(120.4)).toBe("120 m");
-    expect(formatDistance(2345)).toBe("2.3 km");
+    expect(formatDistance(120.4)).toBe("400 ft");
+    expect(formatDistance(2345)).toBe("1.5 mi");
   });
 
   it("finds the site you're at, forgiving reported GPS inaccuracy (capped)", () => {
