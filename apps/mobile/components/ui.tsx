@@ -1,7 +1,9 @@
-import type { ReactNode } from "react";
+import { useContext, type ReactNode } from "react";
 import { useNavigation } from "expo-router";
+import { HeaderHeightContext } from "expo-router/react-navigation";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -25,14 +27,17 @@ export function useTheme() {
 
 export function Screen({ children, refreshing, onRefresh }: { children: ReactNode; refreshing?: boolean; onRefresh?: () => void }) {
   const t = useTheme();
-  // Pages opened with a Back button sit under the iPhone's floating top bar, so iOS makes room for it
-  // there. Tab pages never do (and iOS would wrongly add room when switching back to a tab).
-  const inTabs = useNavigation().getState()?.type === "tab";
+  // On iPhone, pages opened with a Back button sit under the floating top bar: start them below it.
+  // Tab pages already start below their bar. (A fixed amount: iOS's automatic insets carried over
+  // between pages when React Native reused a scroll view, leaving a gap on tab pages.)
+  const inStack = useNavigation().getState()?.type === "stack";
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
+  const top = Platform.OS === "ios" && inStack ? Math.round(headerHeight) : 0;
   return (
     <ScrollView
-      contentInsetAdjustmentBehavior={inTabs ? "never" : "automatic"}
       style={{ backgroundColor: t.bg }}
-      contentContainerStyle={{ padding: 16, gap: 12 }}
+      contentContainerStyle={{ padding: 16, paddingTop: 16 + top, gap: 12 }}
+      scrollIndicatorInsets={top ? { top } : undefined}
       refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined}
       keyboardShouldPersistTaps="handled"
     >
