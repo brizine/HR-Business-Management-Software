@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useNavigation } from "expo-router";
 import {
   ActivityIndicator,
   Pressable,
@@ -24,11 +25,12 @@ export function useTheme() {
 
 export function Screen({ children, refreshing, onRefresh }: { children: ReactNode; refreshing?: boolean; onRefresh?: () => void }) {
   const t = useTheme();
+  // Pages opened with a Back button sit under the iPhone's floating top bar, so iOS makes room for it
+  // there. Tab pages never do (and iOS would wrongly add room when switching back to a tab).
+  const inTabs = useNavigation().getState()?.type === "tab";
   return (
     <ScrollView
-      // iOS makes room for the top bar (and home indicator) only where they actually cover the page:
-      // pages opened from a tab sit under the floating bar on newer iPhones; tab pages don't.
-      contentInsetAdjustmentBehavior="automatic"
+      contentInsetAdjustmentBehavior={inTabs ? "never" : "automatic"}
       style={{ backgroundColor: t.bg }}
       contentContainerStyle={{ padding: 16, gap: 12 }}
       refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined}
