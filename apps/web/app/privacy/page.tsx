@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Privacy Policy · Crewdesk" };
 const COMPANY = "ProSpray Lawn & Pest";
 const EFFECTIVE = "November 17, 2026";
 /** Where people send privacy questions and requests. */
-const CONTACT_EMAIL = process.env.NEXT_PUBLIC_PRIVACY_EMAIL || "";
+const CONTACT_EMAIL = process.env.NEXT_PUBLIC_PRIVACY_EMAIL || "info@prospraylawns.com";
 
 export default function Privacy() {
   return (
