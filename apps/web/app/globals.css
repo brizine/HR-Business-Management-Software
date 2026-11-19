@@ -597,3 +597,4 @@ tr.openrow td { background: var(--bg); }
 .leaflet-tooltip.measure-label::before { display: none; }
 .measure-handle { background: #fff; border: 2px solid #1f6feb; border-radius: 3px; box-sizing: border-box; cursor: move; }
 .measure-handle.mid { opacity: 0.6; border-radius: 50%; transform: scale(0.75); border-color: #fff; background: #1f6feb; }
+.measure-layers { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; }

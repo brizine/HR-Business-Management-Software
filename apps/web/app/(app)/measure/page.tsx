@@ -273,6 +273,35 @@ export default function MeasurePage() {
             )}
           </div>
           {message && <p className="muted" role="status" style={{ margin: 0 }}>{message}</p>}
+          <div className="card stack" style={{ gap: 8 }}>
+            <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+              <h2 style={{ margin: 0 }}>Aerial Photo</h2>
+              <button className="btn sm" onClick={() => findDates(center.current)} disabled={wayback.loading}>
+                {wayback.loading ? "Looking up Esri photo dates…" : wayback.searched ? "Find Esri photo dates here again" : "Find more photo dates here (Esri)"}
+              </button>
+            </div>
+            <div className="measure-layers">
+              {layers.map((l) => (
+                <label key={l.key} className={`measure-layer${l.key === imagery.key ? " selected" : ""}`}>
+                  <input type="radio" name="imagery" checked={l.key === imagery.key} onChange={() => setImageryKey(l.key)} />
+                  <span>
+                    <strong>{l.label}</strong>{l.leafOff && <span className="badge ok" style={{ marginLeft: 6 }}>Leaf-off</span>}
+                    <span className="muted" style={{ display: "block", fontSize: 12 }}>{l.detail}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {wayback.searched && !wayback.loading && !wayback.versions.length && !wayback.error && <span className="muted" style={{ fontSize: 13 }}>No Esri photos found here.</span>}
+            <ErrorBox error={wayback.error} />
+            <span className="muted" style={{ fontSize: 12 }}>Photos marked Leaf-off were taken December to March. Your shapes stay put when you switch photos, so you can trace on a winter photo and check on another.</span>
+            <div className="row" style={{ gap: 6, flexWrap: "wrap", borderTop: "1px solid var(--border)", paddingTop: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>Look at this spot in</span>
+              {OUTSIDE_MAPS.map((m) => (
+                <button key={m.label} className="btn sm" onClick={() => window.open(m.url(center.current), "_blank", "noopener")} title={m.hint}>{m.label} ↗</button>
+              ))}
+              <span className="muted" style={{ fontSize: 12, flexBasis: "100%" }}>Opens in a new tab at the spot shown on this map. Google Earth has past photos (the clock button) for finding a winter view.</span>
+            </div>
+          </div>
         </div>
 
         <div className="stack" style={{ gap: 12 }}>
@@ -304,34 +333,6 @@ export default function MeasurePage() {
                 <button className="btn sm" onClick={(e) => { e.stopPropagation(); removeShape(s.id); }} aria-label="Remove shape" title="Remove">✕</button>
               </div>
             ))}
-          </div>
-
-          <div className="card stack" style={{ gap: 6 }}>
-            <h2 style={{ margin: 0 }}>Aerial Photo</h2>
-            {layers.map((l) => (
-              <label key={l.key} className={`measure-layer${l.key === imagery.key ? " selected" : ""}`}>
-                <input type="radio" name="imagery" checked={l.key === imagery.key} onChange={() => setImageryKey(l.key)} />
-                <span>
-                  <strong>{l.label}</strong>{l.leafOff && <span className="badge ok" style={{ marginLeft: 6 }}>Leaf-off</span>}
-                  <span className="muted" style={{ display: "block", fontSize: 12 }}>{l.detail}</span>
-                </span>
-              </label>
-            ))}
-            <button className="btn sm" onClick={() => findDates(center.current)} disabled={wayback.loading}>
-              {wayback.loading ? "Looking up Esri photo dates…" : wayback.searched ? "Find Esri photo dates here again" : "Find more photo dates here (Esri)"}
-            </button>
-            {wayback.searched && !wayback.loading && !wayback.versions.length && !wayback.error && <span className="muted" style={{ fontSize: 13 }}>No Esri photos found here.</span>}
-            <ErrorBox error={wayback.error} />
-            <span className="muted" style={{ fontSize: 12 }}>Photos marked Leaf-off were taken December to March. Your shapes stay put when you switch photos, so you can trace on a winter photo and check on another.</span>
-            <div className="stack" style={{ gap: 4, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>Look at this spot in</span>
-              <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                {OUTSIDE_MAPS.map((m) => (
-                  <button key={m.label} className="btn sm" onClick={() => window.open(m.url(center.current), "_blank", "noopener")} title={m.hint}>{m.label} ↗</button>
-                ))}
-              </div>
-              <span className="muted" style={{ fontSize: 12 }}>Opens in a new tab at the spot shown on this map. Google Earth has past photos (the clock button) for finding a winter view.</span>
-            </div>
           </div>
 
           <div className="card stack" style={{ gap: 8 }}>
