@@ -87,6 +87,8 @@ Measure turf square footage from aerial photos, choosing photos taken in winter 
    OpenStreetMap. The 911 list for your counties (Cleveland, Oklahoma and McClain to start) is kept in
    Crewdesk and refreshed every 30 days; admins can add or remove counties under **Photo and address
    sources (admins)**. Addresses in other Oklahoma counties are still found with **Find**, just more slowly.
+   A red pin marks the house. If it's not quite on the house, drag it there; it's saved with the measurement
+   and shows when you print or export.
 2. Pick a photo under **Aerial Photo**. **Oklahoma 2025 leaf-off** (February–March 2025, 6-inch detail)
    is the default. **Find more photo dates here** lists older Esri photos of that spot with the date each
    was taken; the ones marked **Leaf-off** were taken December to March.

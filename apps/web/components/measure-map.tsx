@@ -5,6 +5,9 @@ import type * as Leaflet from "leaflet";
 import { formatFeet, formatSqFt, type LatLng, type MeasureKind, type MeasureResult, type MeasureShape, type MeasureZone } from "@crewdesk/shared";
 import type { ImageryLayer } from "@/lib/imagery";
 
+/** A red map pin with a white dot, tip at the bottom center. */
+export const PIN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="36" viewBox="0 0 26 36"><path d="M13 35s11-12.6 11-21.5A11 11 0 0 0 2 13.5C2 22.4 13 35 13 35z" fill="#e5383b" stroke="#fff" stroke-width="2"/><circle cx="13" cy="13.5" r="4.2" fill="#fff"/></svg>';
+
 export const SHAPE_COLORS: Record<MeasureKind, string> = { turf: "#2ea043", cut: "#f85149", line: "#f0b429" };
 export const ZONE_COLORS: Record<MeasureZone, string> = { front: "#2f81f7", back: "#a371f7" };
 /** Areas are green, front-yard areas blue, back-yard areas purple; cut-outs red, lines yellow. */
@@ -35,6 +38,9 @@ interface Props {
   /** Points: the corner squares and midpoint circles for adjusting the selected measurement, and the dots
    *  placed while drawing (default on). */
   showHandles?: boolean;
+  /** A pin on the property's house (from the address search); dragging it calls onMovePin. */
+  pin?: { lat: number; lng: number; label?: string } | null;
+  onMovePin?: (lat: number, lng: number) => void;
 }
 
 /**
@@ -50,6 +56,7 @@ export function MeasureMap(p: Props) {
   const shapesLayer = useRef<Leaflet.LayerGroup | null>(null);
   const editLayer = useRef<Leaflet.LayerGroup | null>(null);
   const draftLayer = useRef<Leaflet.LayerGroup | null>(null);
+  const pinMarker = useRef<Leaflet.Marker | null>(null);
   const props = useRef(p);
   props.current = p;
   const ready = useRef(false);
@@ -76,6 +83,7 @@ export function MeasureMap(p: Props) {
       m.on("moveend", () => { const c = m.getCenter(); props.current.onMove({ lat: c.lat, lng: c.lng, zoom: m.getZoom() }); });
       ready.current = true;
       props.current.onReady?.(m, mod);
+      drawPin.current();
       setBase();
       redraw.current();
     });
@@ -185,6 +193,28 @@ export function MeasureMap(p: Props) {
   }
 
   useEffect(() => { redraw.current(); }, [p.shapes, p.selectedId, p.drawing, p.draft, p.result, p.showHandles]);
+
+  // The house pin: draggable to fix where the address search put it; clicks go through to the map while drawing.
+  const drawPin = useRef<() => void>(() => {});
+  drawPin.current = () => {
+    const mod = L.current, m = map.current;
+    if (!mod || !m) return;
+    pinMarker.current?.remove();
+    pinMarker.current = null;
+    const pin = props.current.pin;
+    if (!pin) return;
+    const drawing = !!props.current.drawing;
+    const marker = mod.marker([pin.lat, pin.lng], {
+      icon: mod.divIcon({ className: "measure-pin", html: PIN_SVG, iconSize: [26, 36], iconAnchor: [13, 35], tooltipAnchor: [0, -32] }),
+      draggable: !drawing, interactive: !drawing, keyboard: false, zIndexOffset: 1000,
+      title: drawing ? undefined : "Drag the pin onto the house",
+    });
+    if (pin.label && !drawing) marker.bindTooltip(pin.label, { direction: "top" });
+    marker.on("dragend", () => { const ll = marker.getLatLng(); props.current.onMovePin?.(ll.lat, ll.lng); });
+    marker.addTo(m);
+    pinMarker.current = marker;
+  };
+  useEffect(() => { if (ready.current) drawPin.current(); }, [p.pin?.lat, p.pin?.lng, p.pin?.label, p.drawing]);
 
   return <div ref={el} className="measure-map" />;
 }

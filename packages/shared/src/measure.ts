@@ -45,6 +45,9 @@ export const measurementSchema = z.object({
   lng: z.number().min(-180).max(180),
   zoom: z.number().int().min(1).max(23),
   imagery: z.string().trim().max(160).optional().nullable(),
+  /** The pin on the house (where the address search put it, or where it was dragged). */
+  pinLat: z.number().min(-90).max(90).optional().nullable(),
+  pinLng: z.number().min(-180).max(180).optional().nullable(),
   shapes: z.array(measureShapeSchema).max(200),
 });
 export type MeasurementInput = z.infer<typeof measurementSchema>;

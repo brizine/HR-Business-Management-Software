@@ -1076,6 +1076,9 @@ export const measurements = pgTable(
     zoom: integer("zoom").notNull(),
     /** Which photo the shapes were traced on, e.g. "Oklahoma 2025 leaf-off (Feb–Mar 2025)". */
     imagery: text("imagery"),
+    /** The pin on the house. */
+    pinLat: doublePrecision("pin_lat"),
+    pinLng: doublePrecision("pin_lng"),
     shapes: jsonb("shapes").$type<MeasureShape[]>().notNull(),
     /** Areas minus cut-outs, in square feet (kept for the list and sorting). */
     netSqFt: doublePrecision("net_sq_ft").notNull().default(0),

@@ -88,6 +88,9 @@ export default function MeasurePage() {
   const [notes, setNotes] = useState("");
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  /** The pin on the house of the property that was searched for. */
+  const [pin, setPin] = useState<{ lat: number; lng: number; label?: string } | null>(null);
+  const onMovePin = useCallback((lat: number, lng: number) => { setPin((p) => (p ? { ...p, lat, lng } : p)); setDirty(true); }, []);
   const mapRef = useRef<{ map: Leaflet.Map; L: typeof Leaflet } | null>(null);
   const onReady = useCallback((map: Leaflet.Map, L: typeof Leaflet) => { mapRef.current = { map, L }; }, []);
   const exporter = useAction();
@@ -235,6 +238,7 @@ export default function MeasurePage() {
     finder.run(async () => {
       const r = await api("/measurements/geocode", { body: { query: q } });
       goTo({ lat: r.lat, lng: r.lng, zoom: 19 });
+      setPin({ lat: r.lat, lng: r.lng, label: r.label ?? q });
       if (!address && r.source !== "coordinates" && r.source !== "link") setAddress(r.label ?? q);
     });
   };
@@ -248,6 +252,8 @@ export default function MeasurePage() {
       else setMessage("Couldn't find that exact house number; showing the street.");
     }
     goTo({ ...at, zoom: sug.kind === "place" ? 15 : sug.kind === "street" ? 17 : 19 });
+    // A pin on the house (not on a whole street or town).
+    setPin(sug.kind === "address" ? { ...at, label: sug.label } : null);
     if (!address && sug.kind !== "place") setAddress(sug.label);
   });
 
@@ -257,11 +263,11 @@ export default function MeasurePage() {
     if (!m) throw new Error("The map is still loading.");
     if (drawing) throw new Error("Finish or cancel the measurement you're drawing first.");
     const lib = await import("@/lib/measure-export");
-    const info: ExportInfo = { name, address, notes, imagery, shapes, result: totals };
+    const info: ExportInfo = { name, address, notes, imagery, shapes, result: totals, pin };
     if (format === "print") await lib.printReport(m.map, m.L, info);
     else if (format === "png" || format === "jpeg") await lib.exportImage(m.map, m.L, info, format);
     else if (format === "pdf") await lib.exportPdf(m.map, m.L, info);
-    else if (!shapes.length) throw new Error("Draw a measurement first; KML and GeoJSON save only the outlines.");
+    else if (!shapes.length && !pin) throw new Error("Draw a measurement first; KML and GeoJSON save only the outlines and the pin.");
     else if (format === "kml") lib.exportKml(info);
     else lib.exportGeoJson(info);
   });
@@ -270,7 +276,7 @@ export default function MeasurePage() {
 
   const startNew = () => {
     if (!confirmDiscard()) return;
-    setShapes([]); setSelectedId(null); setSaved(null); setName(""); setAddress(""); setNotes(""); setDirty(false); cancelDrawing(); setMessage(null);
+    setShapes([]); setSelectedId(null); setSaved(null); setName(""); setAddress(""); setNotes(""); setPin(null); setDirty(false); cancelDrawing(); setMessage(null);
   };
 
   const open = (id: string) => {
@@ -280,6 +286,7 @@ export default function MeasurePage() {
       setShapes(m.shapes ?? []); setSelectedId(null); cancelDrawing();
       setSaved({ id: m.id, canEdit: m.canEdit });
       setName(m.name); setAddress(m.address ?? ""); setNotes(m.notes ?? ""); setDirty(false);
+      setPin(m.pinLat != null && m.pinLng != null ? { lat: m.pinLat, lng: m.pinLng, label: m.address ?? m.name } : null);
       const usedLayer = layers.find((l) => imageryName(l) === m.imagery);
       if (usedLayer) setImageryKey(usedLayer.key);
       else if (m.imagery) wantImagery.current = m.imagery;
@@ -293,7 +300,7 @@ export default function MeasurePage() {
     if (!name.trim()) throw new Error("Give the measurement a name (customer or property) before saving.");
     if (drawing) throw new Error("Finish or cancel the measurement you're drawing first.");
     const v = center.current;
-    const body = { name, address: address || null, notes: notes || null, lat: v.lat, lng: v.lng, zoom: Math.round(v.zoom), imagery: imageryName(imagery), shapes };
+    const body = { name, address: address || null, notes: notes || null, lat: v.lat, lng: v.lng, zoom: Math.round(v.zoom), imagery: imageryName(imagery), shapes, pinLat: pin?.lat ?? null, pinLng: pin?.lng ?? null };
     const m = saved && saved.canEdit && !asNew
       ? await api(`/measurements/${saved.id}`, { method: "PUT", body })
       : await api("/measurements", { body });
@@ -344,7 +351,7 @@ export default function MeasurePage() {
           <MeasureMap
             view={view} viewKey={viewKey} imagery={imagery} shapes={shapes} selectedId={selectedId}
             drawing={drawing} drawZone={drawZone} draft={draft} onAddPoint={onAddPoint} onFinish={finish} onSelect={setSelectedId}
-            onChangeShape={onChangeShape} onMove={onMove} result={totals} onReady={onReady} showHandles={showHandles}
+            onChangeShape={onChangeShape} onMove={onMove} result={totals} onReady={onReady} showHandles={showHandles} pin={pin} onMovePin={onMovePin}
           />
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             {drawing ? (

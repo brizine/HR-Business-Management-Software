@@ -386,6 +386,13 @@
       "when": 1795094701421,
       "tag": "0054_address_points",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1795123658623,
+      "tag": "0055_measurement_pin",
+      "breakpoints": true
     }
   ]
 }

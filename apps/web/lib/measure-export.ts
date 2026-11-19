@@ -6,7 +6,7 @@ import {
 } from "@crewdesk/shared";
 import { API_URL } from "./api";
 import type { ImageryLayer } from "./imagery";
-import { shapeColor } from "@/components/measure-map";
+import { PIN_SVG, shapeColor } from "@/components/measure-map";
 
 /**
  * Printing and exporting a measurement from the Measure page: the aerial photo as shown on screen with the
@@ -20,6 +20,8 @@ export interface ExportInfo {
   imagery: ImageryLayer;
   shapes: MeasureShape[];
   result: MeasureResult;
+  /** The pin on the house. */
+  pin?: { lat: number; lng: number } | null;
 }
 
 const SCALE = 2;
@@ -134,6 +136,20 @@ function paintShapes(ctx: CanvasRenderingContext2D, map: Leaflet.Map, shapes: Me
   }
 }
 
+/** The house pin, drawn from the same picture as on screen (tip on the spot). */
+async function paintPin(ctx: CanvasRenderingContext2D, map: Leaflet.Map, pin: { lat: number; lng: number }) {
+  const img = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(PIN_SVG)}`);
+  if (!img) return;
+  const p = map.latLngToContainerPoint([pin.lat, pin.lng]);
+  const w = 26 * SCALE, h = 36 * SCALE;
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.35)";
+  ctx.shadowBlur = 3 * SCALE;
+  ctx.shadowOffsetY = 2 * SCALE;
+  ctx.drawImage(img, p.x * SCALE - w / 2, p.y * SCALE - h + SCALE, w, h);
+  ctx.restore();
+}
+
 /** A scale bar in feet, bottom left. */
 function paintScale(ctx: CanvasRenderingContext2D, map: Leaflet.Map, h: number) {
   const size = map.getSize();
@@ -170,6 +186,7 @@ export async function renderMap(map: Leaflet.Map, L: typeof Leaflet, info: Expor
   ctx.fillRect(0, 0, w, h);
   await paintPhoto(ctx, map, L, info.imagery, w, h);
   paintShapes(ctx, map, info.shapes, info.result);
+  if (info.pin) await paintPin(ctx, map, info.pin);
   paintScale(ctx, map, h);
   return canvas;
 }
@@ -341,6 +358,9 @@ export function exportKml(info: ExportInfo) {
     }
     return `<Placemark><name>${xml(title)}</name><description>${xml(type)}</description>${style}${geom}</Placemark>`;
   });
+  if (info.pin) {
+    placemarks.unshift(`<Placemark><name>${xml(info.address || info.name || "Property")}</name><Style><IconStyle><color>ff3b38e5</color></IconStyle></Style><Point><coordinates>${info.pin.lng},${info.pin.lat},0</coordinates></Point></Placemark>`);
+  }
   const summary = totalsRows(info.result).map(([k, v]) => `${k}: ${v}`).join("\n");
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${xml(info.name || "Property measurement")}</name><description>${xml([info.address, summary, info.notes].filter(Boolean).join("\n\n"))}</description>
@@ -351,7 +371,7 @@ ${placemarks.join("\n")}
 
 export function exportGeoJson(info: ExportInfo) {
   const ring = (pts: LatLng[]) => closed(pts).map(([lat, lng]) => [lng, lat]);
-  const features = info.shapes.map((s) => {
+  const features: object[] = info.shapes.map((s) => {
     let geometry: object;
     if (s.kind === "line") geometry = { type: "LineString", coordinates: s.points.map(([lat, lng]) => [lng, lat]) };
     else {
@@ -364,6 +384,7 @@ export function exportGeoJson(info: ExportInfo) {
       properties: { name: s.label || null, kind: s.kind, zone: s.zone ?? null, ...(s.kind === "line" ? { feet: Math.round(n) } : { squareFeet: Math.round(n) }) },
     };
   });
+  if (info.pin) features.unshift({ type: "Feature", geometry: { type: "Point", coordinates: [info.pin.lng, info.pin.lat] }, properties: { name: info.address || info.name || null, kind: "pin" } });
   const r = info.result;
   const body = {
     type: "FeatureCollection",

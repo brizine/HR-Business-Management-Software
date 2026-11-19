@@ -15,7 +15,7 @@ async function call(method: string, url: string, who: string, payload?: unknown)
 }
 
 const yard = (name: string) => ({
-  name, address: "123 Main St, Norman, OK", lat: 35.2226, lng: -97.4395, zoom: 20, imagery: "Oklahoma 2025 leaf-off",
+  name, address: "123 Main St, Norman, OK", lat: 35.2226, lng: -97.4395, zoom: 20, imagery: "Oklahoma 2025 leaf-off", pinLat: 35.2229, pinLng: -97.4391,
   shapes: [
     { id: "a", kind: "turf", zone: "front", label: "Front", points: [[35.2226, -97.4395], [35.2235, -97.4395], [35.2235, -97.4384], [35.2226, -97.4384]] },
     { id: "b", kind: "cut", points: [[35.2227, -97.4394], [35.2228, -97.4394], [35.2228, -97.4393]] },
@@ -53,7 +53,7 @@ describe("measurements", () => {
     expect(list.body[0].backSqFt).toBe(0);
     expect((await call("GET", "/measurements?q=nobody", "crew2")).body).toEqual([]);
 
-    expect((await call("GET", `/measurements/${id}`, "crew2")).body.canEdit).toBe(false);
+    expect((await call("GET", `/measurements/${id}`, "crew2")).body).toMatchObject({ canEdit: false, pinLat: 35.2229, pinLng: -97.4391 });
     expect((await call("PUT", `/measurements/${id}`, "crew2", yard("Hijacked"))).status).toBe(403);
     expect((await call("DELETE", `/measurements/${id}`, "crew2")).status).toBe(403);
 
