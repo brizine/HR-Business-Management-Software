@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { measureShapeSchema, measureTotals, pathLengthM, polygonAreaSqM, SQ_FT_PER_SQ_M, type LatLng } from "../src/measure";
+import { measureShapeSchema, measureShapes, measureTotals, pathLengthM, polygonAreaSqM, SQ_FT_PER_SQ_M, type LatLng } from "../src/measure";
 
 /** A square `side` meters across, centered near Norman, OK. */
 function square(side: number, lat = 35.2226, lng = -97.4395): LatLng[] {
@@ -36,8 +36,8 @@ describe("measure math", () => {
       { kind: "line", points: square(100).slice(0, 2) },
     ]);
     const expected = (polygonAreaSqM(square(100)) - polygonAreaSqM(square(20))) * SQ_FT_PER_SQ_M;
-    expect(t.netSqFt).toBeCloseTo(expected, 3);
-    expect(t.acres).toBeCloseTo(expected / 43_560, 6);
+    expect(t.netSqFt).toBeCloseTo(expected, -1);
+    expect(t.acres).toBeCloseTo(expected / 43_560, 3);
     expect(t.lineFt).toBeGreaterThan(325);
     expect(t.lineFt).toBeLessThan(332);
   });
@@ -50,5 +50,45 @@ describe("measure math", () => {
     const two = square(10).slice(0, 2);
     expect(measureShapeSchema.safeParse({ id: "a", kind: "turf", points: two }).success).toBe(false);
     expect(measureShapeSchema.safeParse({ id: "a", kind: "line", points: two }).success).toBe(true);
+  });
+});
+
+describe("cut-outs subtract from the area they cut", () => {
+  const big = square(100);
+  const sq = (pts: LatLng[]) => polygonAreaSqM(pts) * SQ_FT_PER_SQ_M;
+  /** A square `side` m across whose corner is `east` m east and `north` m north of the big square's corner. */
+  const at = (side: number, north: number, east: number) => {
+    const [lat, lng] = big[0];
+    return square(side, lat + north / 111_320, lng + east / (111_320 * Math.cos((lat * Math.PI) / 180)));
+  };
+
+  it("removes a cut-out fully inside the area, and shows it on that area", () => {
+    const r = measureShapes([{ id: "lawn", kind: "turf", points: big }, { id: "bed", kind: "cut", points: at(20, 10, 10) }]);
+    expect(r.netSqFt).toBeCloseTo(sq(big) - sq(at(20, 10, 10)), -1);
+    expect(r.byId.lawn).toBeCloseTo(r.netSqFt, 3);
+    expect(r.byId.bed).toBeCloseTo(sq(at(20, 10, 10)), -1);
+    expect(r.shapesWithHoles.lawn[0]).toHaveLength(2); // outer ring + hole
+  });
+
+  it("only removes the part of a cut-out that overlaps the area", () => {
+    const r = measureShapes([{ id: "lawn", kind: "turf", points: big }, { id: "drive", kind: "cut", points: at(20, 40, 90) }]);
+    // Half of the 20 m square hangs past the lawn's east edge.
+    expect(r.byId.drive / sq(at(20, 40, 90))).toBeCloseTo(0.5, 1);
+    expect(r.netSqFt).toBeCloseTo(sq(big) - r.byId.drive, -1);
+  });
+
+  it("ignores a cut-out outside every area", () => {
+    const r = measureShapes([{ id: "lawn", kind: "turf", points: big }, { id: "x", kind: "cut", points: at(10, 300, 300) }]);
+    expect(r.byId.x).toBe(0);
+    expect(r.netSqFt).toBeCloseTo(sq(big), -1);
+  });
+
+  it("counts overlapping areas and overlapping cut-outs once", () => {
+    const r = measureShapes([
+      { id: "a", kind: "turf", points: big }, { id: "b", kind: "turf", points: at(100, 50, 0) },
+      { id: "c1", kind: "cut", points: at(20, 60, 10) }, { id: "c2", kind: "cut", points: at(20, 60, 10) },
+    ]);
+    expect(r.turfSqFt / sq(big)).toBeCloseTo(1.5, 2);
+    expect(r.cutSqFt).toBeCloseTo(sq(at(20, 60, 10)), -1);
   });
 });

@@ -1,4 +1,7 @@
 import { z } from "zod";
+import * as clipModule from "polygon-clipping";
+/** The package's ES build exports only a default object, although its types declare named functions. */
+const clip = ((clipModule as unknown as { default?: typeof clipModule }).default ?? clipModule) as typeof clipModule;
 import { distanceMeters } from "./location";
 
 /**
@@ -66,16 +69,96 @@ export function pathLengthM(points: readonly LatLng[], closed = false) {
 export const shapeSqFt = (s: Pick<MeasureShape, "kind" | "points">) => (s.kind === "line" ? 0 : polygonAreaSqM(s.points) * SQ_FT_PER_SQ_M);
 export const shapeFeet = (s: Pick<MeasureShape, "kind" | "points">) => pathLengthM(s.points, s.kind !== "line") * FT_PER_M;
 
-/** Totals for a measurement: areas minus cut-outs (never below zero), and total line length. */
-export function measureTotals(shapes: readonly Pick<MeasureShape, "kind" | "points">[]) {
-  let turf = 0, cut = 0, lineFt = 0;
-  for (const s of shapes) {
-    if (s.kind === "turf") turf += shapeSqFt(s);
-    else if (s.kind === "cut") cut += shapeSqFt(s);
-    else lineFt += shapeFeet(s);
+type Flat = clipModule.MultiPolygon;
+
+/** A flat map in meters around `origin` (accurate to a tiny fraction of a percent across a property). */
+function projector(origin: LatLng) {
+  const k = Math.cos(rad(origin[0]));
+  const m = (EARTH_RADIUS_M * Math.PI) / 180;
+  return {
+    to: ([lat, lng]: LatLng): clipModule.Pair => [(lng - origin[1]) * m * k, (lat - origin[0]) * m],
+    from: ([x, y]: clipModule.Pair): LatLng => [origin[0] + y / m, origin[1] + x / (m * k)],
+  };
+}
+
+function flatArea(mp: Flat) {
+  let total = 0;
+  for (const poly of mp) {
+    poly.forEach((ring, i) => {
+      let a = 0;
+      for (let j = 0; j < ring.length; j++) {
+        const [x1, y1] = ring[j];
+        const [x2, y2] = ring[(j + 1) % ring.length];
+        a += x1 * y2 - x2 * y1;
+      }
+      total += (i === 0 ? 1 : -1) * Math.abs(a / 2);
+    });
   }
-  const netSqFt = Math.max(0, turf - cut);
-  return { turfSqFt: turf, cutSqFt: cut, netSqFt, acres: netSqFt / SQ_FT_PER_ACRE, lineFt };
+  return Math.max(0, total);
+}
+
+export interface MeasureResult {
+  /** Areas (overlaps counted once). */
+  turfSqFt: number;
+  /** What the cut-outs actually removed from the areas. */
+  cutSqFt: number;
+  /** Areas minus cut-outs. */
+  netSqFt: number;
+  acres: number;
+  lineFt: number;
+  /**
+   * Per shape: an area's square feet after its cut-outs, a cut-out's square feet that fall inside an area
+   * (what it removes), a line's feet.
+   */
+  byId: Record<string, number>;
+  /** Each area as drawn after its cut-outs, as [outer ring, holes…] polygons in lat/lng (for the map). */
+  shapesWithHoles: Record<string, LatLng[][][]>;
+}
+
+/**
+ * Totals for a measurement. A cut-out takes away only the part of it that lies inside an area, and
+ * overlapping areas (or overlapping cut-outs) are counted once.
+ */
+export function measureShapes(shapes: readonly Pick<MeasureShape, "id" | "kind" | "points">[]): MeasureResult {
+  const byId: Record<string, number> = {};
+  const shapesWithHoles: Record<string, LatLng[][][]> = {};
+  let lineFt = 0;
+  for (const s of shapes) if (s.kind === "line") { byId[s.id] = shapeFeet(s); lineFt += byId[s.id]; }
+  const turfs = shapes.filter((s) => s.kind === "turf" && s.points.length >= 3);
+  const cuts = shapes.filter((s) => s.kind === "cut" && s.points.length >= 3);
+  const result = (turfSqFt: number, netSqFt: number): MeasureResult =>
+    ({ turfSqFt, cutSqFt: Math.max(0, turfSqFt - netSqFt), netSqFt, acres: netSqFt / SQ_FT_PER_ACRE, lineFt, byId, shapesWithHoles });
+  if (!turfs.length) {
+    for (const c of cuts) byId[c.id] = 0;
+    return result(0, 0);
+  }
+  const proj = projector(turfs[0].points[0]);
+  const flat = (s: Pick<MeasureShape, "points">): clipModule.Polygon => [s.points.map(proj.to)];
+  const sqFt = (mp: Flat) => flatArea(mp) * SQ_FT_PER_SQ_M;
+  try {
+    const turfUnion = clip.union(flat(turfs[0]), ...turfs.slice(1).map(flat));
+    const cutUnion: Flat = cuts.length ? clip.union(flat(cuts[0]), ...cuts.slice(1).map(flat)) : [];
+    const net = cutUnion.length ? clip.difference(turfUnion, cutUnion) : turfUnion;
+    for (const t of turfs) {
+      const left = cutUnion.length ? clip.difference(flat(t), cutUnion) : [flat(t)];
+      byId[t.id] = sqFt(left);
+      shapesWithHoles[t.id] = left.map((poly) => poly.map((ring) => ring.map(proj.from)));
+    }
+    for (const c of cuts) byId[c.id] = sqFt(clip.intersection(flat(c), turfUnion));
+    return result(sqFt(turfUnion), sqFt(net));
+  } catch {
+    // Badly tangled shapes can defeat the clipper: fall back to simple sums.
+    let turf = 0, cut = 0;
+    for (const t of turfs) { byId[t.id] = shapeSqFt(t); turf += byId[t.id]; shapesWithHoles[t.id] = [[[...t.points]]]; }
+    for (const c of cuts) { byId[c.id] = shapeSqFt(c); cut += byId[c.id]; }
+    return result(turf, Math.max(0, turf - cut));
+  }
+}
+
+/** Totals only (see measureShapes). */
+export function measureTotals(shapes: readonly Pick<MeasureShape, "kind" | "points">[]) {
+  const { turfSqFt, cutSqFt, netSqFt, acres, lineFt } = measureShapes(shapes.map((s, i) => ({ ...s, id: `s${i}` })));
+  return { turfSqFt, cutSqFt, netSqFt, acres, lineFt };
 }
 
 export const formatSqFt = (sqFt: number) => `${Math.round(sqFt).toLocaleString("en-US")} ft²`;

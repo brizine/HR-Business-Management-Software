@@ -2,7 +2,7 @@
 import { useEffect, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 import type * as Leaflet from "leaflet";
-import { formatFeet, formatSqFt, shapeFeet, shapeSqFt, type LatLng, type MeasureKind, type MeasureShape } from "@crewdesk/shared";
+import { formatFeet, formatSqFt, type LatLng, type MeasureKind, type MeasureResult, type MeasureShape } from "@crewdesk/shared";
 import type { ImageryLayer } from "@/lib/imagery";
 
 export const SHAPE_COLORS: Record<MeasureKind, string> = { turf: "#2ea043", cut: "#f85149", line: "#f0b429" };
@@ -23,6 +23,8 @@ interface Props {
   onSelect: (id: string | null) => void;
   onChangeShape: (id: string, points: LatLng[]) => void;
   onMove: (v: MapView) => void;
+  /** Sizes after cut-outs, and each area's outline with its cut-outs as holes. */
+  result: MeasureResult;
 }
 
 /**
@@ -107,9 +109,12 @@ export function MeasureMap(p: Props) {
     for (const s of cur.shapes) {
       const selected = s.id === cur.selectedId;
       const color = SHAPE_COLORS[s.kind];
-      const style = { color, weight: selected ? 4 : 2.5, fillColor: color, fillOpacity: s.kind === "cut" ? 0.35 : 0.22, dashArray: s.kind === "cut" ? "6 4" : undefined };
-      const layer = s.kind === "line" ? mod.polyline(s.points, style) : mod.polygon(s.points, style);
-      const size = s.kind === "line" ? formatFeet(shapeFeet(s)) : `${s.kind === "cut" ? "−" : ""}${formatSqFt(shapeSqFt(s))}`;
+      const style = { color, weight: selected ? 4 : 2.5, fillColor: color, fillOpacity: s.kind === "cut" ? 0.08 : 0.25, dashArray: s.kind === "cut" ? "6 4" : undefined };
+      // An area is drawn with its cut-outs as holes, so the photo shows through where it's been cut.
+      const holed = s.kind === "turf" ? cur.result.shapesWithHoles[s.id] : undefined;
+      const layer = s.kind === "line" ? mod.polyline(s.points, style) : mod.polygon(holed?.length ? holed : s.points, style);
+      const n = cur.result.byId[s.id] ?? 0;
+      const size = s.kind === "line" ? formatFeet(n) : `${s.kind === "cut" ? "−" : ""}${formatSqFt(n)}`;
       layer.bindTooltip(`${s.label ? `${escapeHtml(s.label)}: ` : ""}${size}`, { permanent: true, direction: "center", className: "measure-label" });
       layer.on("click", (e: Leaflet.LeafletMouseEvent) => {
         if (props.current.drawing) return;
@@ -168,7 +173,7 @@ export function MeasureMap(p: Props) {
     }
   }
 
-  useEffect(() => { redraw.current(); }, [p.shapes, p.selectedId, p.drawing, p.draft]);
+  useEffect(() => { redraw.current(); }, [p.shapes, p.selectedId, p.drawing, p.draft, p.result]);
 
   return <div ref={el} className="measure-map" />;
 }

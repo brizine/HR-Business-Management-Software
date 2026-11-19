@@ -85,8 +85,10 @@ Measure turf square footage from aerial photos, choosing photos taken in winter 
    is the default. **Find more photo dates here** lists older Esri photos of that spot with the date each
    was taken; the ones marked **Leaf-off** were taken December to March.
 3. Click **Add Area** and click each corner of the turf. Double-click, press Enter, or click the first
-   point to finish. Use **Add Cut-out** for beds, driveways, patios and the house (subtracted from the
-   total), and **Measure Line** for lengths such as a perimeter barrier.
+   point to finish. Use **Add Cut-out** for beds, driveways, patios and the house: draw it over an area
+   and the part inside the area is cut out of it (shown as a hole, and that area's size goes down). A
+   cut-out that hangs past the edge only removes the overlapping part. **Measure Line** measures lengths
+   such as a perimeter barrier.
 4. Click a shape to adjust it: drag a corner to move it, drag a small dot between corners to add one,
    right-click a corner to remove it. Your shapes stay in place when you switch photos, so you can trace
    on one photo and check on another.

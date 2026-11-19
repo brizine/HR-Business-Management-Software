@@ -2,7 +2,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  MEASURE_KIND_LABELS, formatAcres, formatFeet, formatSqFt, measureTotals, shapeFeet, shapeSqFt,
+  MEASURE_KIND_LABELS, formatAcres, formatFeet, formatSqFt, measureShapes, shapeSqFt,
   type LatLng, type MeasureKind, type MeasureShape,
 } from "@crewdesk/shared";
 import { api, fmtDate } from "@/lib/api";
@@ -33,7 +33,7 @@ type ListRow = { id: string; name: string; address: string | null; netSqFt: numb
 
 const HINT: Record<MeasureKind, string> = {
   turf: "Click each corner of the turf. Double-click, press Enter, or click the first point to finish.",
-  cut: "Trace a bed, driveway, patio or the house inside an area; it's subtracted from the total.",
+  cut: "Trace a bed, driveway, patio or the house over an area; the part inside the area is cut out of it.",
   line: "Click along the path (e.g. a perimeter barrier). Double-click or press Enter to finish.",
 };
 
@@ -162,7 +162,7 @@ export default function MeasurePage() {
   const removeShape = (id: string) => { setShapes((s) => s.filter((x) => x.id !== id)); setSelectedId((sel) => (sel === id ? null : sel)); setDirty(true); };
   const onChangeShape = useCallback((id: string, points: LatLng[]) => { setShapes((s) => s.map((x) => (x.id === id ? { ...x, points } : x))); setDirty(true); }, []);
 
-  const totals = measureTotals(shapes);
+  const totals = useMemo(() => measureShapes(shapes), [shapes]);
   const sheet = mixes.data?.sheets.find((s) => s.id === sheetId) ?? mixes.data?.sheets[0];
 
   // Address search
@@ -242,7 +242,7 @@ export default function MeasurePage() {
           <MeasureMap
             view={view} viewKey={viewKey} imagery={imagery} shapes={shapes} selectedId={selectedId}
             drawing={drawing} draft={draft} onAddPoint={onAddPoint} onFinish={finish} onSelect={setSelectedId}
-            onChangeShape={onChangeShape} onMove={onMove}
+            onChangeShape={onChangeShape} onMove={onMove} result={totals}
           />
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             {drawing ? (
@@ -291,7 +291,9 @@ export default function MeasurePage() {
               <div key={s.id} className={`measure-shape${s.id === selectedId ? " selected" : ""}`} onClick={() => !drawing && setSelectedId(s.id)}>
                 <span className="measure-dot" style={{ background: SHAPE_COLORS[s.kind] }} title={MEASURE_KIND_LABELS[s.kind]} />
                 <input value={s.label ?? ""} onChange={(e) => updateShape(s.id, { label: e.target.value })} placeholder={MEASURE_KIND_LABELS[s.kind]} aria-label="Shape name" maxLength={80} />
-                <span className="measure-size">{s.kind === "line" ? formatFeet(shapeFeet(s)) : `${s.kind === "cut" ? "−" : ""}${formatSqFt(shapeSqFt(s))}`}</span>
+                <span className="measure-size" title={s.kind === "turf" && shapeSqFt(s) - (totals.byId[s.id] ?? 0) > 0.5 ? `${formatSqFt(shapeSqFt(s))} before cut-outs` : undefined}>
+                  {s.kind === "line" ? formatFeet(totals.byId[s.id] ?? 0) : `${s.kind === "cut" ? "−" : ""}${formatSqFt(totals.byId[s.id] ?? 0)}`}
+                </span>
                 <button className="btn sm" onClick={(e) => { e.stopPropagation(); removeShape(s.id); }} aria-label="Remove shape" title="Remove">✕</button>
               </div>
             ))}
