@@ -53,7 +53,7 @@ and leave it on the Employee role.
 - **Subtitle** (30 characters): `ProSpray team management`
 - **Category:** Business (secondary: Productivity)
 - **Privacy Policy URL:** https://management.prospray.net/privacy
-- **Support URL:** https://management.prospray.net (or a contact page on prospray.net)
+- **Support URL:** https://management.prospray.net/support (public page with contact email and common questions)
 - **Keywords** (100 characters): `time clock,schedule,timesheet,time off,crew,fleet,maintenance,fuel log,inspection,employee`
 - **Promotional text** (optional): `Clock in, check your schedule and log fuel from the field.`
 
