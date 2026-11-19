@@ -31,6 +31,13 @@ const samePoint = (a: LatLng, b: LatLng) => Math.abs(a[0] - b[0]) < 3e-6 && Math
 type Saved = { id: string; canEdit: boolean };
 type ListRow = { id: string; name: string; address: string | null; netSqFt: number; updatedAt: string; createdByFirst: string | null; createdByLast: string | null; imagery: string | null };
 
+/** Google's and Apple's own maps, opened at the current spot (their photos can't be traced inside this map). */
+const OUTSIDE_MAPS: { label: string; hint: string; url: (v: MapView) => string }[] = [
+  { label: "Google Maps", hint: "Google satellite view", url: (v) => `https://www.google.com/maps/@?api=1&map_action=map&center=${v.lat.toFixed(6)},${v.lng.toFixed(6)}&zoom=${Math.min(21, Math.round(v.zoom))}&basemap=satellite` },
+  { label: "Google Earth", hint: "Google Earth on the web, with past photos", url: (v) => `https://earth.google.com/web/@${v.lat.toFixed(6)},${v.lng.toFixed(6)},300a,${Math.round(120 * 2 ** (19 - Math.min(21, v.zoom)))}d,35y,0h,0t,0r` },
+  { label: "Apple Maps", hint: "Apple satellite view", url: (v) => `https://maps.apple.com/?ll=${v.lat.toFixed(6)},${v.lng.toFixed(6)}&z=${Math.min(20, Math.round(v.zoom))}&t=k` },
+];
+
 const HINT: Record<MeasureKind, string> = {
   turf: "Click each corner of the turf. Double-click, press Enter, or click the first point to finish.",
   cut: "Trace a bed, driveway, patio or the house over an area; the part inside the area is cut out of it.",
@@ -316,6 +323,15 @@ export default function MeasurePage() {
             {wayback.searched && !wayback.loading && !wayback.versions.length && !wayback.error && <span className="muted" style={{ fontSize: 13 }}>No Esri photos found here.</span>}
             <ErrorBox error={wayback.error} />
             <span className="muted" style={{ fontSize: 12 }}>Photos marked Leaf-off were taken December to March. Your shapes stay put when you switch photos, so you can trace on a winter photo and check on another.</span>
+            <div className="stack" style={{ gap: 4, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>Look at this spot in</span>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                {OUTSIDE_MAPS.map((m) => (
+                  <button key={m.label} className="btn sm" onClick={() => window.open(m.url(center.current), "_blank", "noopener")} title={m.hint}>{m.label} ↗</button>
+                ))}
+              </div>
+              <span className="muted" style={{ fontSize: 12 }}>Opens in a new tab at the spot shown on this map. Google Earth has past photos (the clock button) for finding a winter view.</span>
+            </div>
           </div>
 
           <div className="card stack" style={{ gap: 8 }}>

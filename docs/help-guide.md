@@ -84,6 +84,8 @@ Measure turf square footage from aerial photos, choosing photos taken in winter 
 2. Pick a photo under **Aerial Photo**. **Oklahoma 2025 leaf-off** (February–March 2025, 6-inch detail)
    is the default. **Find more photo dates here** lists older Esri photos of that spot with the date each
    was taken; the ones marked **Leaf-off** were taken December to March.
+   **Look at this spot in** opens the same place in Google Maps, Google Earth (which has past photos
+   under its clock button) or Apple Maps in a new tab, to compare. Their photos can't be traced here.
 3. Click **Add Area** and click each corner of the turf. Double-click, press Enter, or click the first
    point to finish. Use **Add Cut-out** for beds, driveways, patios and the house: draw it over an area
    and the part inside the area is cut out of it (shown as a hole, and that area's size goes down). A
