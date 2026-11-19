@@ -32,6 +32,8 @@ interface Props {
   result: MeasureResult;
   /** Gives the page the map (for printing and exporting what's on screen). */
   onReady?: (map: Leaflet.Map, L: typeof Leaflet) => void;
+  /** Corner squares and midpoint circles on the selected measurement, for adjusting it (default on). */
+  showHandles?: boolean;
 }
 
 /**
@@ -130,7 +132,7 @@ export function MeasureMap(p: Props) {
         props.current.onSelect(s.id);
       });
       layer.addTo(shapesLayer.current);
-      if (selected && !cur.drawing) addHandles(mod, s, layer as Leaflet.Polyline);
+      if (selected && !cur.drawing && cur.showHandles !== false) addHandles(mod, s, layer as Leaflet.Polyline);
     }
 
     if (cur.drawing && cur.draft.length) {
@@ -181,7 +183,7 @@ export function MeasureMap(p: Props) {
     }
   }
 
-  useEffect(() => { redraw.current(); }, [p.shapes, p.selectedId, p.drawing, p.draft, p.result]);
+  useEffect(() => { redraw.current(); }, [p.shapes, p.selectedId, p.drawing, p.draft, p.result, p.showHandles]);
 
   return <div ref={el} className="measure-map" />;
 }

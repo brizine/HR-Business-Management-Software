@@ -19,6 +19,7 @@ const MeasureMap = dynamic(() => import("@/components/measure-map").then((m) => 
 
 const DEFAULT_VIEW: MapView = { lat: 35.2226, lng: -97.4395, zoom: 12 };
 const VIEW_KEY = "measure.view";
+const HANDLES_KEY = "measure.handles";
 
 const loadView = (): MapView => {
   try {
@@ -90,6 +91,10 @@ export default function MeasurePage() {
   const mapRef = useRef<{ map: Leaflet.Map; L: typeof Leaflet } | null>(null);
   const onReady = useCallback((map: Leaflet.Map, L: typeof Leaflet) => { mapRef.current = { map, L }; }, []);
   const exporter = useAction();
+  /** Show the corner squares and midpoint circles for adjusting a measurement (remembered on this device). */
+  const [showHandles, setShowHandles] = useState(true);
+  useEffect(() => { try { if (localStorage.getItem(HANDLES_KEY) === "off") setShowHandles(false); } catch { /* storage unavailable */ } }, []);
+  const toggleHandles = (on: boolean) => { setShowHandles(on); try { localStorage.setItem(HANDLES_KEY, on ? "on" : "off"); } catch { /* ignore */ } };
   const [exportOpen, setExportOpen] = useState(false);
 
   const [search, setSearch] = useState("");
@@ -332,7 +337,7 @@ export default function MeasurePage() {
           <MeasureMap
             view={view} viewKey={viewKey} imagery={imagery} shapes={shapes} selectedId={selectedId}
             drawing={drawing} drawZone={drawZone} draft={draft} onAddPoint={onAddPoint} onFinish={finish} onSelect={setSelectedId}
-            onChangeShape={onChangeShape} onMove={onMove} result={totals} onReady={onReady}
+            onChangeShape={onChangeShape} onMove={onMove} result={totals} onReady={onReady} showHandles={showHandles}
           />
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             {drawing ? (
@@ -349,8 +354,15 @@ export default function MeasurePage() {
                     <span className="measure-dot" style={{ background: shapeColor(t.kind, t.zone) }} /> {t.label}
                   </button>
                 ))}
+                <label className="measure-toggle" title="Show or hide the corner squares and circles used to adjust a measurement">
+                  <input type="checkbox" role="switch" checked={showHandles} onChange={(e) => toggleHandles(e.target.checked)} />
+                  <span className="measure-toggle-track" aria-hidden><span /></span>
+                  Show handles
+                </label>
                 <span className="muted" style={{ fontSize: 13 }}>
-                  {selectedId ? "Drag corners to adjust · drag a small dot to add a corner · right-click a corner to remove it · Delete removes it" : "Click a measurement on the map to adjust it."}
+                  {!selectedId ? "Click a measurement on the map to adjust it." : showHandles
+                    ? "Drag corners to adjust · drag a small dot to add a corner · right-click a corner to remove it · Delete removes it"
+                    : "Handles are hidden; turn on Show handles to adjust corners · Delete removes it"}
                 </span>
               </>
             )}
