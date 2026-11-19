@@ -81,6 +81,32 @@ const routes: FastifyPluginAsync = async (app) => {
     return imageryFor(req.user.companyId);
   });
 
+  /**
+   * One photo image for printing and exporting the map (OKMaps doesn't let browsers copy its images, so the
+   * server fetches it). Only for the company's known WMS photo sources; `bbox` is in web-mercator meters.
+   */
+  app.get<{ Params: { key: string }; Querystring: { bbox?: string; width?: string; height?: string } }>("/imagery/:key/wms", async (req, reply) => {
+    const { sources } = await imageryFor(req.user.companyId);
+    const source = sources.find((s) => s.key === req.params.key && s.kind === "wms");
+    if (!source || !source.layers) return notFound("Photo source");
+    const bbox = (req.query.bbox ?? "").split(",").map(Number);
+    const width = Math.round(Number(req.query.width)), height = Math.round(Number(req.query.height));
+    if (bbox.length !== 4 || bbox.some((n) => !Number.isFinite(n) || Math.abs(n) > 20_100_000) || bbox[0] >= bbox[2] || bbox[1] >= bbox[3]) {
+      throw new HttpError(400, "Bad map area");
+    }
+    if (!(width >= 16 && width <= 4096 && height >= 16 && height <= 4096)) throw new HttpError(400, "Image must be 16 to 4096 pixels across");
+    const url = new URL(source.url);
+    for (const [k, v] of Object.entries({
+      service: "WMS", version: "1.1.1", request: "GetMap", layers: source.layers, styles: "", srs: "EPSG:3857",
+      bbox: bbox.join(","), width: String(width), height: String(height), format: "image/jpeg",
+    })) url.searchParams.set(k, v);
+    const res = await fetch(url, { headers: { "User-Agent": "Crewdesk/1.0 (self-hosted HR and fleet software)" }, signal: AbortSignal.timeout(45_000) }).catch(() => null);
+    const type = res?.headers.get("content-type") ?? "";
+    if (!res?.ok || !type.startsWith("image/")) throw new HttpError(502, "The photo server didn't send an image. Try again, or switch photos.");
+    reply.header("Content-Type", type).header("Cache-Control", "private, max-age=3600");
+    return reply.send(Buffer.from(await res.arrayBuffer()));
+  });
+
   /** Turns an address, a maps link or "lat, lng" into coordinates for centering the map. */
   app.post("/geocode", async (req) => {
     const { query } = parse(z.object({ query: z.string().trim().min(1, "Type an address or paste a map link").max(1000) }), req.body);

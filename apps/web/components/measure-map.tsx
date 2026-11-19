@@ -30,6 +30,8 @@ interface Props {
   onMove: (v: MapView) => void;
   /** Sizes after cut-outs, and each area's outline with its cut-outs as holes. */
   result: MeasureResult;
+  /** Gives the page the map (for printing and exporting what's on screen). */
+  onReady?: (map: Leaflet.Map, L: typeof Leaflet) => void;
 }
 
 /**
@@ -70,6 +72,7 @@ export function MeasureMap(p: Props) {
       m.on("dblclick", () => { if (props.current.drawing) props.current.onFinish(); });
       m.on("moveend", () => { const c = m.getCenter(); props.current.onMove({ lat: c.lat, lng: c.lng, zoom: m.getZoom() }); });
       ready.current = true;
+      props.current.onReady?.(m, mod);
       setBase();
       redraw.current();
     });

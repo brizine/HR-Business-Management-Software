@@ -608,3 +608,26 @@ tr.openrow td { background: var(--bg); }
 .measure-zone-totals > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 15px; }
 .measure-zone-totals .measure-dot { margin-right: 4px; }
 .measure-shape select.measure-zone { width: auto; padding: 4px 2px; font-size: 13px; }
+
+/* Property Measure: printed report (only the report prints while it's on the page) */
+.measure-print-root { display: none; }
+@media print {
+  body:has(.measure-print-root) > *:not(.measure-print-root) { display: none !important; }
+  body:has(.measure-print-root) { background: #fff; }
+  .measure-print-root { display: block; color: #111; font-size: 12px; }
+  .measure-print-root h1 { font-size: 20px; margin: 0 0 2px; }
+  .measure-print-root .sub { color: #555; margin: 0 0 10px; }
+  .measure-print-root img { display: block; width: 100%; max-height: 60vh; object-fit: contain; margin-bottom: 12px; }
+  .measure-print-root .cols { display: flex; gap: 24px; align-items: flex-start; }
+  .measure-print-root table { width: auto; border-collapse: collapse; }
+  .measure-print-root th, .measure-print-root td { padding: 3px 10px 3px 0; border-bottom: 1px solid #ddd; font-size: 12px; color: #111; text-align: left; }
+  .measure-print-root .r { text-align: right; }
+  .measure-print-root tr.big th, .measure-print-root tr.big td { font-size: 14px; font-weight: 700; }
+  .measure-print-root .src { color: #666; font-size: 10px; margin-top: 12px; }
+  @page { margin: 0.5in; }
+}
+.measure-export { position: relative; }
+.measure-export-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 1000; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); padding: 4px; min-width: 290px; display: grid; }
+.measure-export-menu button { display: grid; text-align: left; gap: 1px; padding: 8px 10px; border: 0; background: none; border-radius: 6px; cursor: pointer; color: var(--text); font: inherit; }
+.measure-export-menu button:hover { background: var(--bg); }
+.measure-export-menu .muted { font-size: 12px; }

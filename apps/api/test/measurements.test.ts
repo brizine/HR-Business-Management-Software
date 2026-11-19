@@ -99,6 +99,10 @@ describe("aerial photo sources", () => {
     const list = (await call("GET", "/measurements/imagery", "crew")).body;
     expect(list.sources.map((s: any) => s.key)).toEqual(["ok-2027", "ok-2025", "county-2026", "naip-2025"]);
     expect((await call("GET", "/measurements/imagery", "owner")).body.canManage).toBe(true);
+    // The export image endpoint only serves known WMS sources, with a sane area and size.
+    expect((await call("GET", "/measurements/imagery/not-a-source/wms?bbox=0,0,10,10&width=100&height=100", "crew")).status).toBe(404);
+    expect((await call("GET", "/measurements/imagery/ok-2025/wms?bbox=10,10,0,0&width=100&height=100", "crew")).status).toBe(400);
+    expect((await call("GET", "/measurements/imagery/ok-2025/wms?bbox=0,0,10,10&width=99999&height=100", "crew")).status).toBe(400);
     resetImageryCache();
   });
 });

@@ -11,6 +11,8 @@ import { Empty, ErrorBox, PageHead } from "@/components/ui";
 import { OK_LEAF_OFF, OK_NAIP_2025, STREET_MAP, findWaybackVersions, sourceLayer, waybackLayer, type ImageryLayer, type WaybackVersion } from "@/lib/imagery";
 import { PhotoSources, type ImageryList } from "@/components/photo-sources";
 import { shapeColor, type MapView } from "@/components/measure-map";
+import type * as Leaflet from "leaflet";
+import type { ExportInfo } from "@/lib/measure-export";
 
 const MeasureMap = dynamic(() => import("@/components/measure-map").then((m) => m.MeasureMap), { ssr: false, loading: () => <div className="measure-map" /> });
 
@@ -37,6 +39,15 @@ const OUTSIDE_MAPS: { label: string; hint: string; url: (v: MapView) => string }
   { label: "Google Maps", hint: "Google satellite view", url: (v) => `https://www.google.com/maps/@?api=1&map_action=map&center=${v.lat.toFixed(6)},${v.lng.toFixed(6)}&zoom=${Math.min(21, Math.round(v.zoom))}&basemap=satellite` },
   { label: "Google Earth", hint: "Google Earth on the web, with past photos", url: (v) => `https://earth.google.com/web/@${v.lat.toFixed(6)},${v.lng.toFixed(6)},300a,${Math.round(120 * 2 ** (19 - Math.min(21, v.zoom)))}d,35y,0h,0t,0r` },
   { label: "Apple Maps", hint: "Apple satellite view", url: (v) => `https://maps.apple.com/?ll=${v.lat.toFixed(6)},${v.lng.toFixed(6)}&z=${Math.min(20, Math.round(v.zoom))}&t=k` },
+];
+
+type ExportFormat = "print" | "png" | "jpeg" | "pdf" | "kml" | "geojson";
+const EXPORTS: { format: ExportFormat; label: string; hint: string }[] = [
+  { format: "pdf", label: "PDF report", hint: "Photo with outlines, totals and the list" },
+  { format: "png", label: "Photo (PNG)", hint: "Best quality image with outlines and totals" },
+  { format: "jpeg", label: "Photo (JPEG)", hint: "Smaller image file, for email and texts" },
+  { format: "kml", label: "Outlines for Google Earth (KML)", hint: "Opens in Google Earth with the sizes" },
+  { format: "geojson", label: "Outlines (GeoJSON)", hint: "For GIS and mapping software" },
 ];
 
 /** The drawing buttons under the map: kind of shape, and front/back yard for areas. */
@@ -75,6 +86,10 @@ export default function MeasurePage() {
   const [notes, setNotes] = useState("");
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const mapRef = useRef<{ map: Leaflet.Map; L: typeof Leaflet } | null>(null);
+  const onReady = useCallback((map: Leaflet.Map, L: typeof Leaflet) => { mapRef.current = { map, L }; }, []);
+  const exporter = useAction();
+  const [exportOpen, setExportOpen] = useState(false);
 
   const [search, setSearch] = useState("");
   const [listQuery, setListQuery] = useState("");
@@ -212,6 +227,21 @@ export default function MeasurePage() {
     });
   };
 
+  /** Print or save what's on the map now (the photo shown, outlines and sizes) plus the totals. */
+  const runExport = (format: ExportFormat) => exporter.run(async () => {
+    const m = mapRef.current;
+    if (!m) throw new Error("The map is still loading.");
+    if (drawing) throw new Error("Finish or cancel the measurement you're drawing first.");
+    const lib = await import("@/lib/measure-export");
+    const info: ExportInfo = { name, address, notes, imagery, shapes, result: totals };
+    if (format === "print") await lib.printReport(m.map, m.L, info);
+    else if (format === "png" || format === "jpeg") await lib.exportImage(m.map, m.L, info, format);
+    else if (format === "pdf") await lib.exportPdf(m.map, m.L, info);
+    else if (!shapes.length) throw new Error("Draw a measurement first; KML and GeoJSON save only the outlines.");
+    else if (format === "kml") lib.exportKml(info);
+    else lib.exportGeoJson(info);
+  });
+
   const confirmDiscard = () => !dirty || !shapes.length || window.confirm("Discard the unsaved changes to this measurement?");
 
   const startNew = () => {
@@ -262,8 +292,22 @@ export default function MeasurePage() {
   return (
     <>
       <PageHead title="Property Measure" sub="Trace turf on winter aerial photos to measure square footage.">
+        <button className="btn" onClick={() => runExport("print")} disabled={exporter.busy}>{exporter.busy ? "Preparing…" : "Print"}</button>
+        <div className="measure-export">
+          <button className="btn" onClick={() => setExportOpen((o) => !o)} disabled={exporter.busy} aria-expanded={exportOpen} aria-haspopup="menu">Export ▾</button>
+          {exportOpen && (
+            <div className="measure-export-menu" role="menu" onMouseLeave={() => setExportOpen(false)}>
+              {EXPORTS.map((e) => (
+                <button key={e.format} role="menuitem" onClick={() => { setExportOpen(false); runExport(e.format); }}>
+                  <strong>{e.label}</strong><span className="muted">{e.hint}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <button className="btn" onClick={startNew}>New Measurement</button>
       </PageHead>
+      <ErrorBox error={exporter.error} />
 
       <form className="card row" style={{ gap: 8, flexWrap: "wrap", alignItems: "flex-end" }} onSubmit={find}>
         <label style={{ flex: "1 1 320px" }}>Find a property
@@ -278,7 +322,7 @@ export default function MeasurePage() {
           <MeasureMap
             view={view} viewKey={viewKey} imagery={imagery} shapes={shapes} selectedId={selectedId}
             drawing={drawing} drawZone={drawZone} draft={draft} onAddPoint={onAddPoint} onFinish={finish} onSelect={setSelectedId}
-            onChangeShape={onChangeShape} onMove={onMove} result={totals}
+            onChangeShape={onChangeShape} onMove={onMove} result={totals} onReady={onReady}
           />
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             {drawing ? (

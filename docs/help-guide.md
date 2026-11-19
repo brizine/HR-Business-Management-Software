@@ -99,7 +99,12 @@ Measure turf square footage from aerial photos, choosing photos taken in winter 
 5. **Total Area** is everything (plain, front and back areas, minus cut-outs) in square feet and acres, with
    **Total Front Area** and **Total Back Area** below it, and the gallons of mix needed at any Spray Mix
    sheet's rate.
-6. Give it a name and **Save**. Everyone can open saved measurements under **Saved Measurements**; the
+6. **Print** (top of the page) prints a one-page report: the photo with your outlines and sizes, the
+   totals, the list of measurements, notes and the photo's source. **Export** saves the same thing as a
+   **PDF report**, or the photo with outlines and totals as a **PNG** (best quality) or **JPEG** (smaller,
+   for email and texts), or just the outlines as **KML** (opens in Google Earth) or **GeoJSON** (for GIS
+   software). The photo is saved as it's shown on the map, so zoom and pan to frame the property first.
+7. Give it a name and **Save**. Everyone can open saved measurements under **Saved Measurements**; the
    person who saved one, or a Spray Mix manager, can change or delete it.
 
 **New photos:** Oklahoma's statewide photos are found automatically. When the page is opened (at most twice a
