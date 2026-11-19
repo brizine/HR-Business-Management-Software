@@ -216,7 +216,7 @@ export default function MeasurePage() {
 
   const save = (asNew: boolean) => action.run(async () => {
     if (!name.trim()) throw new Error("Give the measurement a name (customer or property) before saving.");
-    if (drawing) throw new Error("Finish or cancel the shape you're drawing first.");
+    if (drawing) throw new Error("Finish or cancel the measurement you're drawing first.");
     const v = center.current;
     const body = { name, address: address || null, notes: notes || null, lat: v.lat, lng: v.lng, zoom: Math.round(v.zoom), imagery: imageryName(imagery), shapes };
     const m = saved && saved.canEdit && !asNew
@@ -233,7 +233,7 @@ export default function MeasurePage() {
     action.run(async () => {
       await api(`/measurements/${saved.id}`, { method: "DELETE" });
       setSaved(null); setDirty(true);
-      setMessage("Deleted. The shapes are still on the map until you start a new measurement.");
+      setMessage("Deleted. The measurements are still on the map until you start a new one.");
       list.reload();
     });
   };
@@ -275,7 +275,7 @@ export default function MeasurePage() {
                   </button>
                 ))}
                 <span className="muted" style={{ fontSize: 13 }}>
-                  {selectedId ? "Drag corners to adjust · drag a small dot to add a corner · right-click a corner to remove it · Delete removes the shape" : "Click a shape to adjust it."}
+                  {selectedId ? "Drag corners to adjust · drag a small dot to add a corner · right-click a corner to remove it · Delete removes it" : "Click a measurement on the map to adjust it."}
                 </span>
               </>
             )}
@@ -304,7 +304,7 @@ export default function MeasurePage() {
             </div>
             {wayback.searched && !wayback.loading && !wayback.versions.length && !wayback.error && <span className="muted" style={{ fontSize: 13 }}>No Esri photos found here.</span>}
             <ErrorBox error={wayback.error} />
-            <span className="muted" style={{ fontSize: 12 }}>Photos marked Leaf-off were taken December to March. Your shapes stay put when you switch photos, so you can trace on a winter photo and check on another.</span>
+            <span className="muted" style={{ fontSize: 12 }}>Photos marked Leaf-off were taken December to March. Your measurements stay put when you switch photos, so you can trace on a winter photo and check on another.</span>
             <div className="row" style={{ gap: 6, flexWrap: "wrap", borderTop: "1px solid var(--border)", paddingTop: 8 }}>
               <span style={{ fontSize: 14, fontWeight: 600 }}>Look at this spot in</span>
               {OUTSIDE_MAPS.map((m) => (
@@ -332,16 +332,16 @@ export default function MeasurePage() {
           </div>
 
           <div className="card stack" style={{ gap: 6 }}>
-            <h2 style={{ margin: 0 }}>Shapes</h2>
+            <h2 style={{ margin: 0 }}>Measurements</h2>
             {!shapes.length && <span className="muted" style={{ fontSize: 14 }}>None yet. Use Add Area below the map and click around the turf.</span>}
             {shapes.map((s) => (
               <div key={s.id} className={`measure-shape${s.id === selectedId ? " selected" : ""}`} onClick={() => !drawing && setSelectedId(s.id)}>
                 <span className="measure-dot" style={{ background: SHAPE_COLORS[s.kind] }} title={MEASURE_KIND_LABELS[s.kind]} />
-                <input value={s.label ?? ""} onChange={(e) => updateShape(s.id, { label: e.target.value })} placeholder={MEASURE_KIND_LABELS[s.kind]} aria-label="Shape name" maxLength={80} />
+                <input value={s.label ?? ""} onChange={(e) => updateShape(s.id, { label: e.target.value })} placeholder={MEASURE_KIND_LABELS[s.kind]} aria-label="Measurement name" maxLength={80} />
                 <span className="measure-size" title={s.kind === "turf" && shapeSqFt(s) - (totals.byId[s.id] ?? 0) > 0.5 ? `${formatSqFt(shapeSqFt(s))} before cut-outs` : undefined}>
                   {s.kind === "line" ? formatFeet(totals.byId[s.id] ?? 0) : `${s.kind === "cut" ? "−" : ""}${formatSqFt(totals.byId[s.id] ?? 0)}`}
                 </span>
-                <button className="btn sm" onClick={(e) => { e.stopPropagation(); removeShape(s.id); }} aria-label="Remove shape" title="Remove">✕</button>
+                <button className="btn sm" onClick={(e) => { e.stopPropagation(); removeShape(s.id); }} aria-label="Remove measurement" title="Remove">✕</button>
               </div>
             ))}
           </div>
