@@ -32,7 +32,8 @@ interface Props {
   result: MeasureResult;
   /** Gives the page the map (for printing and exporting what's on screen). */
   onReady?: (map: Leaflet.Map, L: typeof Leaflet) => void;
-  /** Corner squares and midpoint circles on the selected measurement, for adjusting it (default on). */
+  /** Points: the corner squares and midpoint circles for adjusting the selected measurement, and the dots
+   *  placed while drawing (default on). */
   showHandles?: boolean;
 }
 
@@ -139,7 +140,7 @@ export function MeasureMap(p: Props) {
       const color = shapeColor(cur.drawing, cur.drawZone);
       const closed = cur.drawing !== "line" && cur.draft.length >= 3;
       (closed ? mod.polygon(cur.draft, { color, weight: 1.5, dashArray: "4 4", fillOpacity: 0.15 }) : mod.polyline(cur.draft, { color, weight: 1.5, dashArray: "4 4" })).addTo(draftLayer.current);
-      cur.draft.forEach((pt, i) => {
+      if (cur.showHandles !== false) cur.draft.forEach((pt, i) => {
         const first = i === 0 && cur.drawing !== "line" && cur.draft.length >= 3;
         const dot = mod.circleMarker(pt, { radius: first ? 5.5 : 3.5, color: "#fff", weight: 1.5, fillColor: color, fillOpacity: 1 });
         if (first) {

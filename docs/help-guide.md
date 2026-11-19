@@ -99,9 +99,11 @@ Measure turf square footage from aerial photos, choosing photos taken in winter 
    and the part inside the area is cut out of it (shown as a hole, and that area's size goes down). A
    cut-out that hangs past the edge only removes the overlapping part. **Measure Line** measures lengths
    such as a perimeter barrier.
-4. Click a measurement on the map to adjust it (turn **Show handles** off, next to the drawing buttons, to hide
-   the corner squares and circles while you look the outline over): drag a corner to move it, drag a small dot between corners to add one,
-   right-click a corner to remove it. Your measurements stay in place when you switch photos, so you can trace
+4. Click a measurement on the map to adjust it: drag a corner to move it, drag a small dot between corners to
+   add one, right-click a corner to remove it. Turn **Show points** off (next to the drawing buttons, and while
+   drawing next to Finish) to hide the points, both the dots you place while drawing and the corner squares and
+   circles, so you can see the outline clearly; while they're hidden, finish a shape with Finish, Enter or a
+   double-click. Your measurements stay in place when you switch photos, so you can trace
    on one photo and check on another.
 5. **Total Area** is everything (plain, front and back areas, minus cut-outs) in square feet and acres, with
    **Total Front Area** and **Total Back Area** below it, and the gallons of mix needed at any Spray Mix
