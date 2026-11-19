@@ -1,3 +1,5 @@
+import type { ImagerySource } from "@crewdesk/shared";
+
 /**
  * Aerial photo sources for the Measure page.
  *
@@ -10,20 +12,27 @@
  */
 
 export type ImageryLayer =
-  | { key: string; kind: "wms"; label: string; detail: string; url: string; layers: string; attribution: string; leafOff?: boolean }
-  | { key: string; kind: "tiles"; label: string; detail: string; url: string; attribution: string; maxNativeZoom: number; leafOff?: boolean };
+  | { key: string; kind: "wms"; label: string; detail: string; url: string; layers: string; attribution: string; leafOff?: boolean; isNew?: boolean }
+  | { key: string; kind: "tiles"; label: string; detail: string; url: string; attribution: string; maxNativeZoom: number; leafOff?: boolean; isNew?: boolean };
+
+/** A photo source from the API (Oklahoma's found automatically on OKMaps, or one an admin added) as a map layer. */
+export function sourceLayer(s: ImagerySource): ImageryLayer {
+  const common = { key: s.key, label: s.label, detail: s.detail, url: s.url, attribution: s.attribution ?? "", leafOff: s.leafOff, isNew: s.isNew };
+  return s.kind === "wms" ? { ...common, kind: "wms", layers: s.layers ?? "" } : { ...common, kind: "tiles", maxNativeZoom: s.maxNativeZoom ?? 19 };
+}
 
 const OKMAPS_WMS = "https://okmaps.org/geoserver/ogi/wms";
 const OKMAPS_ATTR = 'Aerial photos: <a href="https://okmaps.org/" target="_blank" rel="noreferrer">OKMaps</a> (Oklahoma Office of Geographic Information)';
 const ESRI_ATTR = "Imagery: Esri, Vantor, Earthstar Geographics, and the GIS User Community (World Imagery Wayback)";
 const WAYBACK = "https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery";
 
+/** Used until the API's list (which finds newer Oklahoma photos automatically) has loaded, or if it can't. */
 export const OK_LEAF_OFF: ImageryLayer = {
-  key: "ok2025", kind: "wms", label: "Oklahoma 2025 leaf-off", detail: "Feb–Mar 2025 · 6-inch · Oklahoma only",
+  key: "ok-2025", kind: "wms", label: "Oklahoma 2025 leaf-off", detail: "Feb–Mar 2025 · 6-inch · Oklahoma only",
   url: OKMAPS_WMS, layers: "ogi:Aerial2025_Composite", attribution: OKMAPS_ATTR, leafOff: true,
 };
 export const OK_NAIP_2025: ImageryLayer = {
-  key: "naip2025", kind: "wms", label: "USDA NAIP 2025", detail: "Summer 2025 · leaves on · 2-foot",
+  key: "naip-2025", kind: "wms", label: "USDA NAIP 2025", detail: "Summer 2025 · leaves on · 2-foot",
   url: OKMAPS_WMS, layers: "ogi:NAIP2025_Statewide_Composite", attribution: OKMAPS_ATTR,
 };
 export const STREET_MAP: ImageryLayer = {

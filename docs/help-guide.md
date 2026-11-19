@@ -98,6 +98,13 @@ Measure turf square footage from aerial photos, choosing photos taken in winter 
 6. Give it a name and **Save**. Everyone can open saved measurements under **Saved Measurements**; the
    person who saved one, or a Spray Mix manager, can change or delete it.
 
+**New photos:** Oklahoma's statewide photos are found automatically. When the page is opened (at most twice a
+day), Crewdesk checks OKMaps for newly released years; a new leaf-off year joins the list, is marked **New** for
+60 days, and becomes the default. Esri's newest photos appear under **Find more photo dates here** as soon as Esri
+publishes them. Admins can open **Photo sources (admins)** at the bottom of the Aerial Photo box to check now, or
+to add other photos (a county's aerials, a paid service, or an Oklahoma release the automatic check doesn't
+recognize) by WMS address and layer name, or a tile address with {z}/{x}/{y}.
+
 Photos are from OKMaps (Oklahoma Office of Geographic Information), Esri World Imagery Wayback, and USDA
 NAIP (summer photos, for comparison). Measurements are typically within a few percent, depending on the
 photo and how carefully the edges are traced.

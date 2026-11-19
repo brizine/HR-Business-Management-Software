@@ -1,12 +1,13 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { and, desc, eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
-import { hasRole, measureTotals, measurementSchema } from "@crewdesk/shared";
+import { customImagerySchema, hasRole, measureTotals, measurementSchema } from "@crewdesk/shared";
 import { db } from "../db";
-import { employees, measurements } from "../db/schema";
+import { companies, employees, measurements } from "../db/schema";
 import { authenticate, roleIn } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { geocode } from "../lib/geocode";
+import { imageryFor } from "../lib/imagery";
 
 /** Which area of the Permissions page controls editing other people's measurements. */
 const AREA = "spray" as const;
@@ -35,6 +36,30 @@ const routes: FastifyPluginAsync = async (app) => {
       .where(and(...where))
       .orderBy(desc(measurements.updatedAt))
       .limit(200);
+  });
+
+  const canManageImagery = (req: FastifyRequest) => hasRole(roleIn(req, AREA), "admin");
+
+  /** The aerial photos to choose from (Oklahoma's found automatically, plus the company's own). `refresh=1` (admins) re-checks OKMaps now. */
+  app.get<{ Querystring: { refresh?: string } }>("/imagery", async (req) => {
+    const refresh = req.query.refresh === "1" && canManageImagery(req);
+    const result = await imageryFor(req.user.companyId, refresh);
+    const [company] = await db.select({ measureImagery: companies.measureImagery }).from(companies).where(eq(companies.id, req.user.companyId));
+    return { ...result, canManage: canManageImagery(req), custom: company?.measureImagery?.custom ?? [] };
+  });
+
+  /** Admins: replace the company's own photo sources. */
+  app.put("/imagery/custom", async (req) => {
+    if (!canManageImagery(req)) throw new HttpError(403, "Only admins can change photo sources");
+    const { custom } = parse(customImagerySchema, req.body);
+    const keys = new Set<string>();
+    for (const c of custom) {
+      if (keys.has(c.key)) throw new HttpError(400, "Two photo sources have the same key");
+      keys.add(c.key);
+    }
+    const [company] = await db.select({ measureImagery: companies.measureImagery }).from(companies).where(eq(companies.id, req.user.companyId));
+    await db.update(companies).set({ measureImagery: { ...(company?.measureImagery ?? {}), custom } }).where(eq(companies.id, req.user.companyId));
+    return imageryFor(req.user.companyId);
   });
 
   /** Turns an address, a maps link or "lat, lng" into coordinates for centering the map. */

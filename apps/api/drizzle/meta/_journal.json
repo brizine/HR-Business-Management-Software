@@ -365,6 +365,13 @@
       "when": 1795057841837,
       "tag": "0051_measurements",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1795063091427,
+      "tag": "0052_measure_imagery",
+      "breakpoints": true
     }
   ]
 }

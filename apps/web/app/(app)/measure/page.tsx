@@ -8,7 +8,8 @@ import {
 import { api, fmtDate } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
-import { OK_LEAF_OFF, OK_NAIP_2025, STREET_MAP, findWaybackVersions, waybackLayer, type ImageryLayer, type WaybackVersion } from "@/lib/imagery";
+import { OK_LEAF_OFF, OK_NAIP_2025, STREET_MAP, findWaybackVersions, sourceLayer, waybackLayer, type ImageryLayer, type WaybackVersion } from "@/lib/imagery";
+import { PhotoSources, type ImageryList } from "@/components/photo-sources";
 import { SHAPE_COLORS, type MapView } from "@/components/measure-map";
 
 const MeasureMap = dynamic(() => import("@/components/measure-map").then((m) => m.MeasureMap), { ssr: false, loading: () => <div className="measure-map" /> });
@@ -48,7 +49,8 @@ export default function MeasurePage() {
   const [view, setView] = useState<MapView>(DEFAULT_VIEW);
   const [viewKey, setViewKey] = useState(0);
   const center = useRef<MapView>(DEFAULT_VIEW);
-  const [imageryKey, setImageryKey] = useState(OK_LEAF_OFF.key);
+  const [imageryKey, setImageryKey] = useState("");
+  const imageryList = useApi<ImageryList>("/measurements/imagery");
   const [wayback, setWayback] = useState<{ loading: boolean; versions: WaybackVersion[]; error: string | null; searched: boolean }>({ loading: false, versions: [], error: null, searched: false });
   const waybackAbort = useRef<AbortController | null>(null);
   const wantImagery = useRef<string | null>(null);
@@ -79,8 +81,14 @@ export default function MeasurePage() {
     setViewKey((k) => k + 1);
   }, []);
 
-  const layers: ImageryLayer[] = useMemo(() => [OK_LEAF_OFF, ...wayback.versions.map(waybackLayer), OK_NAIP_2025, STREET_MAP], [wayback.versions]);
-  const imagery = layers.find((l) => l.key === imageryKey) ?? OK_LEAF_OFF;
+  // Leaf-off and admin-added photos first (the newest Oklahoma leaf-off is the default), then Esri's, then summer and streets.
+  const layers: ImageryLayer[] = useMemo(() => {
+    const sources = imageryList.data?.sources;
+    const main = sources ? sources.filter((s) => s.origin === "custom" || s.leafOff).map(sourceLayer) : [OK_LEAF_OFF];
+    const summer = sources ? sources.filter((s) => s.origin === "okmaps" && !s.leafOff).map(sourceLayer) : [OK_NAIP_2025];
+    return [...main, ...wayback.versions.map(waybackLayer), ...summer, STREET_MAP];
+  }, [imageryList.data, wayback.versions]);
+  const imagery = layers.find((l) => l.key === imageryKey) ?? layers[0];
   const imageryName = (l: ImageryLayer) => `${l.label} (${l.detail})`;
 
   const findDates = useCallback(async (at: MapView) => {
@@ -111,7 +119,7 @@ export default function MeasurePage() {
     waybackAbort.current?.abort();
     wantImagery.current = null;
     setWayback({ loading: false, versions: [], error: null, searched: false });
-    setImageryKey((k) => (k.startsWith("wb-") ? OK_LEAF_OFF.key : k));
+    setImageryKey((k) => (k.startsWith("wb-") ? "" : k));
   };
 
   const goTo = (v: MapView) => {
@@ -206,7 +214,8 @@ export default function MeasurePage() {
       setShapes(m.shapes ?? []); setSelectedId(null); cancelDrawing();
       setSaved({ id: m.id, canEdit: m.canEdit });
       setName(m.name); setAddress(m.address ?? ""); setNotes(m.notes ?? ""); setDirty(false);
-      if (m.imagery === imageryName(OK_LEAF_OFF)) setImageryKey(OK_LEAF_OFF.key);
+      const usedLayer = layers.find((l) => imageryName(l) === m.imagery);
+      if (usedLayer) setImageryKey(usedLayer.key);
       else if (m.imagery) wantImagery.current = m.imagery;
       goTo({ lat: m.lat, lng: m.lng, zoom: m.zoom });
       setMessage(`Opened “${m.name}”.`);
@@ -296,7 +305,7 @@ export default function MeasurePage() {
                 <label key={l.key} className={`measure-layer${l.key === imagery.key ? " selected" : ""}`}>
                   <input type="radio" name="imagery" checked={l.key === imagery.key} onChange={() => setImageryKey(l.key)} />
                   <span>
-                    <strong>{l.label}</strong>{l.leafOff && <span className="badge ok" style={{ marginLeft: 6 }}>Leaf-off</span>}
+                    <strong>{l.label}</strong>{l.leafOff && <span className="badge ok" style={{ marginLeft: 6 }}>Leaf-off</span>}{l.isNew && <span className="badge warn" style={{ marginLeft: 6 }}>New</span>}
                     <span className="muted" style={{ display: "block", fontSize: 12 }}>{l.detail}</span>
                   </span>
                 </label>
@@ -312,6 +321,7 @@ export default function MeasurePage() {
               ))}
               <span className="muted" style={{ fontSize: 12, flexBasis: "100%" }}>Opens in a new tab at the spot shown on this map. Google Earth has past photos (the clock button) for finding a winter view.</span>
             </div>
+            {imageryList.data?.canManage && <PhotoSources list={imageryList.data} onChange={(next) => imageryList.setData(next)} />}
           </div>
         </div>
 

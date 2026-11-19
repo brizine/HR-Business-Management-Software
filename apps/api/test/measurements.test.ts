@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";
 import { pool } from "../src/db";
+import { resetImageryCache } from "../src/lib/imagery";
 
 let app: FastifyInstance;
 const suffix = Date.now();
@@ -66,5 +67,36 @@ describe("measurements", () => {
   it("rejects an area with fewer than 3 points", async () => {
     const bad = { ...yard("Bad"), shapes: [{ id: "x", kind: "turf", points: [[35, -97], [35.001, -97]] }] };
     expect((await call("POST", "/measurements", "crew", bad)).status).toBe(400);
+  });
+});
+
+describe("aerial photo sources", () => {
+  const found = (leafOffYears: number[]) => ({
+    at: Date.now(), error: null,
+    found: { leafOff: leafOffYears.map((year) => ({ year, layer: `ogi:Aerial${year}_Composite` })), naip: [{ year: 2025, layer: "ogi:NAIP2025_Statewide_Composite" }] },
+  });
+
+  it("lists OKMaps years newest first and marks a newly released year New", async () => {
+    resetImageryCache(found([2025]));
+    const first = (await call("GET", "/measurements/imagery", "crew")).body;
+    expect(first.sources.map((s: any) => s.key)).toEqual(["ok-2025", "naip-2025"]);
+    expect(first.sources.every((s: any) => !s.isNew)).toBe(true);
+    expect(first.canManage).toBe(false);
+
+    resetImageryCache(found([2027, 2025]));
+    const next = (await call("GET", "/measurements/imagery", "crew")).body;
+    expect(next.sources[0]).toMatchObject({ key: "ok-2027", label: "Oklahoma 2027 leaf-off", leafOff: true, isNew: true, layers: "ogi:Aerial2027_Composite" });
+    expect(next.sources[1]).toMatchObject({ key: "ok-2025", isNew: false, detail: "Feb–Mar 2025 · 6-inch · Oklahoma only" });
+  });
+
+  it("lets admins add their own sources", async () => {
+    const county = { key: "county-2026", kind: "wms", label: "County 2026", detail: "Mar 2026", url: "https://gis.example.com/wms", layers: "aerial2026", leafOff: true };
+    expect((await call("PUT", "/measurements/imagery/custom", "crew", { custom: [county] })).status).toBe(403);
+    expect((await call("PUT", "/measurements/imagery/custom", "owner", { custom: [{ ...county, layers: "" }] })).status).toBe(400);
+    expect((await call("PUT", "/measurements/imagery/custom", "owner", { custom: [county] })).status).toBe(200);
+    const list = (await call("GET", "/measurements/imagery", "crew")).body;
+    expect(list.sources.map((s: any) => s.key)).toEqual(["ok-2027", "ok-2025", "county-2026", "naip-2025"]);
+    expect((await call("GET", "/measurements/imagery", "owner")).body.canManage).toBe(true);
+    resetImageryCache();
   });
 });

@@ -164,3 +164,70 @@ export function measureTotals(shapes: readonly Pick<MeasureShape, "kind" | "poin
 export const formatSqFt = (sqFt: number) => `${Math.round(sqFt).toLocaleString("en-US")} ft²`;
 export const formatAcres = (sqFt: number) => `${(sqFt / SQ_FT_PER_ACRE).toFixed(sqFt >= SQ_FT_PER_ACRE * 10 ? 1 : 2)} acres`;
 export const formatFeet = (ft: number) => (ft >= 5280 ? `${(ft / 5280).toFixed(2)} mi` : `${Math.round(ft).toLocaleString("en-US")} ft`);
+
+/* ---------- Aerial photo sources ---------- */
+
+/**
+ * A photo layer for the Measure page: found automatically on OKMaps (the State of Oklahoma's map server),
+ * or added by an admin (another WMS server, or a tile URL with {z}/{x}/{y}).
+ */
+export const imagerySourceSchema = z
+  .object({
+    key: z.string().trim().min(1).max(60),
+    kind: z.enum(["wms", "tiles"]),
+    label: z.string().trim().min(1, "Give the photo a name").max(80),
+    detail: z.string().trim().max(120).default(""),
+    url: z.string().trim().url("Enter the full web address, starting with https://").max(500).refine((u) => u.startsWith("https://"), "The address must start with https://"),
+    layers: z.string().trim().max(200).optional().nullable(),
+    attribution: z.string().trim().max(300).optional().nullable(),
+    leafOff: z.boolean().default(false),
+    maxNativeZoom: z.number().int().min(10).max(23).optional().nullable(),
+  })
+  .superRefine((s, ctx) => {
+    if (s.kind === "wms" && !s.layers) ctx.addIssue({ code: "custom", path: ["layers"], message: "Enter the WMS layer name" });
+    if (s.kind === "tiles" && !(s.url.includes("{z}") && s.url.includes("{x}") && s.url.includes("{y}"))) {
+      ctx.addIssue({ code: "custom", path: ["url"], message: "A tile address needs {z}, {x} and {y} in it" });
+    }
+  });
+export type ImagerySourceInput = z.infer<typeof imagerySourceSchema>;
+export type ImagerySource = ImagerySourceInput & {
+  origin: "okmaps" | "custom";
+  year?: number;
+  /** True for a few weeks after a newly released photo first shows up. */
+  isNew?: boolean;
+};
+
+export const customImagerySchema = z.object({ custom: z.array(imagerySourceSchema).max(20) });
+
+/** Stored per company: admins' own photo sources, and when each automatically found photo first appeared. */
+export interface MeasureImagerySettings {
+  custom?: ImagerySourceInput[];
+  seen?: Record<string, string>;
+}
+
+/**
+ * Picks the statewide photo layers out of OKMaps' layer names, one per year, newest first:
+ * leaf-off aerials ("Aerial2025_Composite", "OK2026_RGB", …) and USDA NAIP ("NAIP2025_Statewide_Composite", …).
+ * Color-infrared, tile indexes, overviews, single-county and test layers are skipped.
+ */
+export function pickOkMapsLayers(names: readonly string[]) {
+  const skip = /cir|index|overview|_hl|test|mosaic|doqq|tile/i;
+  const best = (re: RegExp, rank: (name: string) => number) => {
+    const byYear = new Map<number, string>();
+    for (const name of names) {
+      if (skip.test(name)) continue;
+      const m = name.match(re);
+      if (!m) continue;
+      const year = Number(m[1]);
+      const cur = byYear.get(year);
+      if (!cur || rank(name) > rank(cur)) byYear.set(year, name);
+    }
+    return [...byYear].map(([year, layer]) => ({ year, layer })).sort((a, b) => b.year - a.year);
+  };
+  // Prefer the "Composite" (all zoom levels) layer, then a plain RGB one.
+  const rank = (n: string) => (/composite$/i.test(n) ? 2 : /rgb$/i.test(n) ? 1 : 0);
+  return {
+    leafOff: best(/^ogi(?:_raster)?:(?:Aerial|OK)_?(20\d\d)(?:_RGB)?(?:_Composite)?$/i, rank),
+    naip: best(/^ogi(?:_raster)?:NAIP_?(20\d\d)(?:_NC)?(?:_Statewide)?(?:_Composite)?$/i, (n) => (/statewide_composite$/i.test(n) ? 3 : rank(n))),
+  };
+}

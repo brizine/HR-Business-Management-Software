@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import type { AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape } from "@crewdesk/shared";
+import type { AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
 import {
   boolean,
   primaryKey,
@@ -58,6 +58,8 @@ export const companies = pgTable("companies", {
   fleetSettings: jsonb("fleet_settings").$type<FleetSettings>(),
   /** Who gets paid holidays and what working one pays (see HolidayRules in @crewdesk/shared). */
   holidayRules: jsonb("holiday_rules").$type<HolidayRules>(),
+  /** Measure page: admins' own aerial photo sources, and when each automatically found photo appeared. */
+  measureImagery: jsonb("measure_imagery").$type<MeasureImagerySettings>(),
   /** Access by area for each role (Settings → Layout Editor): { manager: { payroll: "admin" }, … }. */
   roleAccess: jsonb("role_access").$type<RoleAccess>().notNull().default({}),
   /** The business address on one line (printed on tax forms), kept in step with the boxes below. */

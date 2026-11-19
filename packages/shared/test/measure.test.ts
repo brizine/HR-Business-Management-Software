@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { measureShapeSchema, measureShapes, measureTotals, pathLengthM, polygonAreaSqM, SQ_FT_PER_SQ_M, type LatLng } from "../src/measure";
+import { imagerySourceSchema, measureShapeSchema, measureShapes, measureTotals, pickOkMapsLayers, pathLengthM, polygonAreaSqM, SQ_FT_PER_SQ_M, type LatLng } from "../src/measure";
 
 /** A square `side` meters across, centered near Norman, OK. */
 function square(side: number, lat = 35.2226, lng = -97.4395): LatLng[] {
@@ -90,5 +90,31 @@ describe("cut-outs subtract from the area they cut", () => {
     ]);
     expect(r.turfSqFt / sq(big)).toBeCloseTo(1.5, 2);
     expect(r.cutSqFt).toBeCloseTo(sq(at(20, 60, 10)), -1);
+  });
+});
+
+describe("OKMaps layer discovery", () => {
+  // Layer names as OKMaps lists them (Nov 2026), plus a made-up future year.
+  const names = [
+    "ogi:Aerial2025_Composite", "ogi:NAIP2008_Composite", "ogi:NAIP2013_Statewide_Composite", "ogi:NAIP2023_NC_Statewide_Composite",
+    "ogi:NAIP2025_Statewide_Composite", "ogi:NAIP2025", "ogi:NAIP2025_DegreeOverviews", "ogi_raster:OK2025_CIR_Composite", "ogi_raster:Aerial2025_CIR",
+    "ogi:Aerial2025_Ottawa_RGB", "ogi:OK2025_RGB", "ogi:OK2025_rgb", "ogi:aerial2025_tile_index_rgb75_4326", "ogi:okng911_counties_2019_aerial2025_rgb_mosaics",
+    "ogi:ok1950-59_aerial_photos_ss_9-15-15", "ogi:OK2027_RGB", "ogi:Aerial2027_Composite",
+  ];
+  it("finds one statewide leaf-off layer per year, newest first, preferring Composite", () => {
+    expect(pickOkMapsLayers(names).leafOff).toEqual([{ year: 2027, layer: "ogi:Aerial2027_Composite" }, { year: 2025, layer: "ogi:Aerial2025_Composite" }]);
+  });
+  it("finds NAIP years, preferring the statewide composite", () => {
+    const naip = pickOkMapsLayers(names).naip;
+    expect(naip[0]).toEqual({ year: 2025, layer: "ogi:NAIP2025_Statewide_Composite" });
+    expect(naip.map((n) => n.year)).toEqual([2025, 2023, 2013, 2008]);
+  });
+  it("checks custom sources", () => {
+    const base = { key: "c1", label: "County 2026", url: "https://example.com/wms" };
+    expect(imagerySourceSchema.safeParse({ ...base, kind: "wms" }).success).toBe(false);
+    expect(imagerySourceSchema.safeParse({ ...base, kind: "wms", layers: "aerial" }).success).toBe(true);
+    expect(imagerySourceSchema.safeParse({ ...base, kind: "tiles" }).success).toBe(false);
+    expect(imagerySourceSchema.safeParse({ ...base, kind: "tiles", url: "https://t.example.com/{z}/{x}/{y}.jpg" }).success).toBe(true);
+    expect(imagerySourceSchema.safeParse({ ...base, kind: "wms", layers: "a", url: "http://example.com/wms" }).success).toBe(false);
   });
 });
