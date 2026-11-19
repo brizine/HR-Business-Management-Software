@@ -8,6 +8,7 @@ import { authenticate, roleIn } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { geocode } from "../lib/geocode";
 import { imageryFor } from "../lib/imagery";
+import { suggestAddresses } from "../lib/suggest";
 
 /** Which area of the Permissions page controls editing other people's measurements. */
 const AREA = "spray" as const;
@@ -105,6 +106,14 @@ const routes: FastifyPluginAsync = async (app) => {
     if (!res?.ok || !type.startsWith("image/")) throw new HttpError(502, "The photo server didn't send an image. Try again, or switch photos.");
     reply.header("Content-Type", type).header("Cache-Control", "private, max-age=3600");
     return reply.send(Buffer.from(await res.arrayBuffer()));
+  });
+
+  /** Address suggestions while typing, near the map's center. */
+  app.get<{ Querystring: { q?: string; lat?: string; lng?: string } }>("/suggest", async (req) => {
+    const q = (req.query.q ?? "").trim().slice(0, 200);
+    if (q.length < 3 || /^https?:/i.test(q) || /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(q)) return [];
+    const lat = Number(req.query.lat), lng = Number(req.query.lng);
+    return suggestAddresses(q, Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : { lat: 35.22, lng: -97.44 });
   });
 
   /** Turns an address, a maps link or "lat, lng" into coordinates for centering the map. */

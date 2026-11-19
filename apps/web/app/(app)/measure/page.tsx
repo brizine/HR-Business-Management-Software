@@ -10,6 +10,7 @@ import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
 import { OK_LEAF_OFF, OK_NAIP_2025, STREET_MAP, findWaybackVersions, sourceLayer, waybackLayer, type ImageryLayer, type WaybackVersion } from "@/lib/imagery";
 import { PhotoSources, type ImageryList } from "@/components/photo-sources";
+import { AddressSearch, type AddressSuggestion } from "@/components/address-search";
 import { shapeColor, type MapView } from "@/components/measure-map";
 import type * as Leaflet from "leaflet";
 import type { ExportInfo } from "@/lib/measure-export";
@@ -216,9 +217,8 @@ export default function MeasurePage() {
   const sheet = mixes.data?.sheets.find((s) => s.id === sheetId) ?? mixes.data?.sheets[0];
 
   // Address search
-  const find = (e: React.FormEvent) => {
-    e.preventDefault();
-    const q = search.trim();
+  /** Find with what was typed (an address, a maps link or "lat, lng"). */
+  const find = (q: string) => {
     if (!q) return;
     finder.run(async () => {
       const r = await api("/measurements/geocode", { body: { query: q } });
@@ -226,6 +226,18 @@ export default function MeasurePage() {
       if (!address && r.source !== "coordinates" && r.source !== "link") setAddress(r.label ?? q);
     });
   };
+
+  /** A picked suggestion: go there (looking up the exact spot when only the street was known). */
+  const pickSuggestion = (sug: AddressSuggestion) => finder.run(async () => {
+    let at = { lat: sug.lat, lng: sug.lng };
+    if (sug.lookUp) {
+      const r = await api("/measurements/geocode", { body: { query: sug.label } }).catch(() => null);
+      if (r) at = { lat: r.lat, lng: r.lng };
+      else setMessage("Couldn't find that exact house number; showing the street.");
+    }
+    goTo({ ...at, zoom: sug.kind === "place" ? 15 : sug.kind === "street" ? 17 : 19 });
+    if (!address && sug.kind !== "place") setAddress(sug.label);
+  });
 
   /** Print or save what's on the map now (the photo shown, outlines and sizes) plus the totals. */
   const runExport = (format: ExportFormat) => exporter.run(async () => {
@@ -309,13 +321,11 @@ export default function MeasurePage() {
       </PageHead>
       <ErrorBox error={exporter.error} />
 
-      <form className="card row" style={{ gap: 8, flexWrap: "wrap", alignItems: "flex-end" }} onSubmit={find}>
-        <label style={{ flex: "1 1 320px" }}>Find a property
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Street address, Google Maps link, or latitude, longitude" />
-        </label>
-        <button className="btn primary" disabled={finder.busy}>{finder.busy ? "Finding…" : "Find"}</button>
-        <ErrorBox error={finder.error} />
-      </form>
+      <AddressSearch
+        value={search} onChange={setSearch} near={() => center.current} onPick={pickSuggestion} onSubmit={find} busy={finder.busy}
+        placeholder="Start typing an address, or paste a Google Maps link or latitude, longitude"
+      />
+      <ErrorBox error={finder.error} />
 
       <div className="measure-layout">
         <div className="stack" style={{ gap: 8, minWidth: 0 }}>

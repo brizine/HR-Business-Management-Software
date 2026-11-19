@@ -80,7 +80,11 @@ Admins choose which employees can edit products, rates and mixes; every change i
 
 Measure turf square footage from aerial photos, choosing photos taken in winter when the leaves are off.
 
-1. Type the property's address (or paste a Google Maps link) under **Find a property** and click **Find**.
+1. Start typing the property's address under **Find a property**: after a few letters, matching addresses
+   near the map drop down; pick one with the mouse, or the arrow keys and Enter. You can also type the full
+   address (or paste a Google Maps link, or latitude, longitude) and click **Find**. Suggestions come from
+   OpenStreetMap, which is missing some house numbers; when you pick a street with the number you typed,
+   the exact spot is looked up from the address.
 2. Pick a photo under **Aerial Photo**. **Oklahoma 2025 leaf-off** (February–March 2025, 6-inch detail)
    is the default. **Find more photo dates here** lists older Esri photos of that spot with the date each
    was taken; the ones marked **Leaf-off** were taken December to March.
