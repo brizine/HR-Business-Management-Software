@@ -114,7 +114,7 @@ export function MeasureMap(p: Props) {
     for (const s of cur.shapes) {
       const selected = s.id === cur.selectedId;
       const color = shapeColor(s.kind, s.zone);
-      const style = { color, weight: selected ? 4 : 2.5, fillColor: color, fillOpacity: s.kind === "cut" ? 0.08 : 0.25, dashArray: s.kind === "cut" ? "6 4" : undefined };
+      const style = { color, weight: selected ? 2.5 : 1.5, fillColor: color, fillOpacity: s.kind === "cut" ? 0.08 : 0.25, dashArray: s.kind === "cut" ? "5 4" : undefined };
       // An area is drawn with its cut-outs as holes, so the photo shows through where it's been cut.
       const holed = s.kind === "turf" ? cur.result.shapesWithHoles[s.id] : undefined;
       const layer = s.kind === "line" ? mod.polyline(s.points, style) : mod.polygon(holed?.length ? holed : s.points, style);
@@ -133,10 +133,10 @@ export function MeasureMap(p: Props) {
     if (cur.drawing && cur.draft.length) {
       const color = shapeColor(cur.drawing, cur.drawZone);
       const closed = cur.drawing !== "line" && cur.draft.length >= 3;
-      (closed ? mod.polygon(cur.draft, { color, weight: 2, dashArray: "5 5", fillOpacity: 0.15 }) : mod.polyline(cur.draft, { color, weight: 2, dashArray: "5 5" })).addTo(draftLayer.current);
+      (closed ? mod.polygon(cur.draft, { color, weight: 1.5, dashArray: "4 4", fillOpacity: 0.15 }) : mod.polyline(cur.draft, { color, weight: 1.5, dashArray: "4 4" })).addTo(draftLayer.current);
       cur.draft.forEach((pt, i) => {
         const first = i === 0 && cur.drawing !== "line" && cur.draft.length >= 3;
-        const dot = mod.circleMarker(pt, { radius: first ? 8 : 5, color: "#fff", weight: 2, fillColor: color, fillOpacity: 1 });
+        const dot = mod.circleMarker(pt, { radius: first ? 5.5 : 3.5, color: "#fff", weight: 1.5, fillColor: color, fillOpacity: 1 });
         if (first) {
           dot.bindTooltip("Click to finish", { direction: "top" });
           dot.on("click", (e: Leaflet.LeafletMouseEvent) => { mod.DomEvent.stopPropagation(e); props.current.onFinish(); });
@@ -149,11 +149,11 @@ export function MeasureMap(p: Props) {
   function addHandles(mod: typeof Leaflet, s: MeasureShape, layer: Leaflet.Polyline) {
     const closed = s.kind !== "line";
     const pts = s.points.map((x) => [...x] as LatLng);
-    const icon = (cls: string) => mod.divIcon({ className: cls, iconSize: [14, 14] });
+    const icon = (cls: string, size: number) => mod.divIcon({ className: cls, iconSize: [size, size] });
     const commit = (next: LatLng[]) => props.current.onChangeShape(s.id, next);
 
     pts.forEach((pt, i) => {
-      const h = mod.marker(pt, { icon: icon("measure-handle"), draggable: true, keyboard: false, title: "Drag to move · right-click to remove" });
+      const h = mod.marker(pt, { icon: icon("measure-handle", 9), draggable: true, keyboard: false, title: "Drag to move · right-click to remove" });
       h.on("drag", (e) => { const ll = (e.target as Leaflet.Marker).getLatLng(); pts[i] = [ll.lat, ll.lng]; layer.setLatLngs(pts); });
       h.on("dragend", () => commit(pts));
       h.on("contextmenu", (e: Leaflet.LeafletMouseEvent) => {
@@ -167,7 +167,7 @@ export function MeasureMap(p: Props) {
     for (let i = 0; i < (closed ? n : n - 1); i++) {
       const a = pts[i], b = pts[(i + 1) % n];
       const mid: LatLng = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-      const h = mod.marker(mid, { icon: icon("measure-handle mid"), draggable: true, keyboard: false, title: "Drag to add a corner" });
+      const h = mod.marker(mid, { icon: icon("measure-handle mid", 7), draggable: true, keyboard: false, title: "Drag to add a corner" });
       h.on("dragend", (e) => {
         const ll = (e.target as Leaflet.Marker).getLatLng();
         const next = [...pts];
