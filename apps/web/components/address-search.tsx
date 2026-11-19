@@ -43,7 +43,8 @@ export function AddressSearch({ value, onChange, near, onPick, onSubmit, busy, p
       try {
         const c = near();
         const res = await api<AddressSuggestion[]>(`/measurements/suggest?q=${encodeURIComponent(q)}&lat=${c.lat.toFixed(4)}&lng=${c.lng.toFixed(4)}`);
-        if (ctrl.signal.aborted) return;
+        // Stop if a search or pick happened while this was on its way.
+        if (ctrl.signal.aborted || !typed.current) return;
         setItems(res);
         setActive(-1);
         setOpen(true);
@@ -75,7 +76,9 @@ export function AddressSearch({ value, onChange, near, onPick, onSubmit, busy, p
         e.preventDefault();
         if (open && active >= 0 && items[active]) return pick(items[active]);
         typed.current = false;
+        abort.current?.abort();
         setOpen(false);
+        setItems([]);
         onSubmit(value.trim());
       }}
     >

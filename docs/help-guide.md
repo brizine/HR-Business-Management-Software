@@ -94,7 +94,8 @@ Measure turf square footage from aerial photos, choosing photos taken in winter 
    was taken; the ones marked **Leaf-off** were taken December to March.
    **Look at this spot in** opens the same place in Google Maps, Google Earth (which has past photos
    under its clock button) or Apple Maps in a new tab, to compare. Their photos can't be traced here.
-3. Click **Add Area** and click each corner of the turf. Double-click, press Enter, or click the first
+3. Click **Add Area** and click each corner of the turf. After the first point, a dashed line follows the
+   crosshair (with its length in feet) to help line up the next point. Double-click, press Enter, or click the first
    point to finish. **Add Front Area** (blue) and **Add Back Area** (purple) work the same way and count
    toward the front or back yard; you can change any area to Front, Back or plain Area in the
    **Measurements** list. Use **Add Cut-out** for beds, driveways, patios and the house: draw it over an area

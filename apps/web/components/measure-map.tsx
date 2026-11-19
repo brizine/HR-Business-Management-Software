@@ -60,6 +60,10 @@ export function MeasureMap(p: Props) {
   const editLayer = useRef<Leaflet.LayerGroup | null>(null);
   const draftLayer = useRef<Leaflet.LayerGroup | null>(null);
   const pinMarker = useRef<Leaflet.Marker | null>(null);
+  /** While drawing: a line from the last point to the crosshair (and back to the first point for areas), with its length. */
+  const previewLayer = useRef<Leaflet.LayerGroup | null>(null);
+  const lastMouse = useRef<Leaflet.LatLng | null>(null);
+  const previewLabel = useRef<Leaflet.Tooltip | null>(null);
   const props = useRef(p);
   props.current = p;
   const ready = useRef(false);
@@ -76,6 +80,9 @@ export function MeasureMap(p: Props) {
       shapesLayer.current = mod.layerGroup().addTo(m);
       editLayer.current = mod.layerGroup().addTo(m);
       draftLayer.current = mod.layerGroup().addTo(m);
+      previewLayer.current = mod.layerGroup().addTo(m);
+      m.on("mousemove", (e: Leaflet.LeafletMouseEvent) => { lastMouse.current = e.latlng; drawPreview.current(); });
+      m.on("mouseout", () => { lastMouse.current = null; drawPreview.current(); });
       mod.control.scale({ imperial: true, metric: false }).addTo(m);
       m.on("click", (e: Leaflet.LeafletMouseEvent) => {
         const cur = props.current;
@@ -120,6 +127,29 @@ export function MeasureMap(p: Props) {
     if (el.current) el.current.style.cursor = p.drawing ? "crosshair" : "";
   }, [p.drawing]);
 
+  // The line that follows the crosshair while drawing, so the next point can be lined up.
+  const drawPreview = useRef<() => void>(() => {});
+  drawPreview.current = () => {
+    const mod = L.current, layer = previewLayer.current, m = map.current;
+    if (!mod || !layer || !m) return;
+    layer.clearLayers();
+    const cur = props.current;
+    const at = lastMouse.current;
+    if (!cur.drawing || !cur.draft.length || !at) { previewLabel.current?.remove(); return; }
+    const color = shapeColor(cur.drawing, cur.drawZone);
+    const last = cur.draft[cur.draft.length - 1];
+    const opts = { color, weight: 1.5, dashArray: "4 4", interactive: false };
+    mod.polyline([last, [at.lat, at.lng]], opts).addTo(layer);
+    if (cur.drawing !== "line" && cur.draft.length >= 2) {
+      mod.polyline([[at.lat, at.lng], cur.draft[0]], { ...opts, opacity: 0.45 }).addTo(layer);
+    }
+    const feet = mod.latLng(last[0], last[1]).distanceTo(at) * 3.28084;
+    // One label, moved along with the crosshair.
+    previewLabel.current ??= mod.tooltip({ permanent: true, direction: "right", offset: [14, 0], className: "measure-preview-label", interactive: false });
+    previewLabel.current.setLatLng(at).setContent(formatFeet(feet));
+    if (!m.hasLayer(previewLabel.current)) previewLabel.current.addTo(m);
+  };
+
   redraw.current = () => {
     const mod = L.current;
     if (!mod || !shapesLayer.current || !editLayer.current || !draftLayer.current) return;
@@ -127,6 +157,7 @@ export function MeasureMap(p: Props) {
     shapesLayer.current.clearLayers();
     editLayer.current.clearLayers();
     draftLayer.current.clearLayers();
+    drawPreview.current();
 
     for (const s of cur.shapes) {
       const selected = s.id === cur.selectedId;

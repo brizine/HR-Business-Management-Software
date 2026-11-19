@@ -648,3 +648,5 @@ tr.openrow td { background: var(--bg); }
 .measure-toggle input:focus-visible + .measure-toggle-track { outline: 2px solid var(--primary); outline-offset: 2px; }
 .measure-pin { background: none; border: 0; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.35)); }
 .measure-pin svg { display: block; }
+.leaflet-tooltip.measure-preview-label { background: rgba(0, 0, 0, 0.72); color: #fff; border: none; box-shadow: none; font-weight: 600; font-size: 11px; padding: 1px 5px; pointer-events: none; }
+.leaflet-tooltip.measure-preview-label::before { display: none; }
