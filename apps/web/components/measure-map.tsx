@@ -5,6 +5,9 @@ import type * as Leaflet from "leaflet";
 import { formatFeet, formatSqFt, type LatLng, type MeasureKind, type MeasureResult, type MeasureShape, type MeasureZone } from "@crewdesk/shared";
 import type { ImageryLayer } from "@/lib/imagery";
 
+/** How big the invisible grab area around each adjusting point is, in pixels. */
+const HIT = 24;
+
 /** A red map pin with a white dot, tip at the bottom center. */
 export const PIN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="36" viewBox="0 0 26 36"><path d="M13 35s11-12.6 11-21.5A11 11 0 0 0 2 13.5C2 22.4 13 35 13 35z" fill="#e5383b" stroke="#fff" stroke-width="2"/><circle cx="13" cy="13.5" r="4.2" fill="#fff"/></svg>';
 
@@ -163,7 +166,9 @@ export function MeasureMap(p: Props) {
   function addHandles(mod: typeof Leaflet, s: MeasureShape, layer: Leaflet.Polyline) {
     const closed = s.kind !== "line";
     const pts = s.points.map((x) => [...x] as LatLng);
-    const icon = (cls: string, size: number) => mod.divIcon({ className: cls, iconSize: [size, size] });
+    // The point looks small, but sits in a larger invisible grab area so it's easy to press and drag.
+    const icon = (cls: string, size: number) =>
+      mod.divIcon({ className: "measure-handle-hit", html: `<span class="${cls}" style="width:${size}px;height:${size}px"></span>`, iconSize: [HIT, HIT] });
     const commit = (next: LatLng[]) => props.current.onChangeShape(s.id, next);
 
     pts.forEach((pt, i) => {
