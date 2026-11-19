@@ -1089,3 +1089,32 @@ export const measurements = pgTable(
   },
   (t) => [index("measurements_company_idx").on(t.companyId, t.updatedAt)],
 );
+
+/**
+ * Oklahoma 911 address points (OKMaps) for the counties companies work in, kept locally so address search is
+ * instant; refreshed about monthly. Public data, shared by all companies. `key` is addressKey() in @crewdesk/shared.
+ */
+export const addressPoints = pgTable(
+  "address_points",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    county: text("county").notNull(),
+    key: text("key").notNull(),
+    fullAddress: text("full_address").notNull(),
+    city: text("city"),
+    zip: text("zip"),
+    lat: doublePrecision("lat").notNull(),
+    lng: doublePrecision("lng").notNull(),
+  },
+  (t) => [index("address_points_key_idx").on(t.key.op("text_pattern_ops")), index("address_points_county_idx").on(t.county)],
+);
+
+/** When each county's address points were last downloaded. */
+export const addressCounties = pgTable("address_counties", {
+  county: text("county").primaryKey(),
+  count: integer("count").notNull().default(0),
+  loadedAt: timestamp("loaded_at", { withTimezone: true }),
+  /** "loading" while downloading; the last error if it failed. */
+  status: text("status"),
+  error: text("error"),
+});

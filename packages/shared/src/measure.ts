@@ -224,6 +224,8 @@ export const customImagerySchema = z.object({ custom: z.array(imagerySourceSchem
 export interface MeasureImagerySettings {
   custom?: ImagerySourceInput[];
   seen?: Record<string, string>;
+  /** Oklahoma counties whose 911 address points are kept for address search (default Cleveland, Oklahoma, McClain). */
+  addressCounties?: string[];
 }
 
 /**

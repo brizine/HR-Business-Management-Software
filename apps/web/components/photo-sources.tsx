@@ -4,6 +4,7 @@ import type { ImagerySource, ImagerySourceInput } from "@crewdesk/shared";
 import { api, fmtDateTime } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
 import { ErrorBox } from "./ui";
+import { AddressCounties } from "./address-counties";
 
 export interface ImageryList {
   sources: ImagerySource[];
@@ -44,7 +45,7 @@ export function PhotoSources({ list, onChange }: { list: ImageryList; onChange: 
 
   return (
     <details className="photo-sources">
-      <summary>Photo sources (admins)</summary>
+      <summary>Photo and address sources (admins)</summary>
       <div className="stack" style={{ gap: 10, marginTop: 8 }}>
         <div className="stack" style={{ gap: 4 }}>
           <strong style={{ fontSize: 14 }}>Oklahoma photos: updated automatically</strong>
@@ -111,6 +112,7 @@ export function PhotoSources({ list, onChange }: { list: ImageryList; onChange: 
             </form>
           )}
         </div>
+        <AddressCounties />
       </div>
     </details>
   );

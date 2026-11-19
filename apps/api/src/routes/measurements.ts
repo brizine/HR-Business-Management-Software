@@ -1,14 +1,15 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { and, desc, eq, ilike, isNull, or } from "drizzle-orm";
 import { z } from "zod";
-import { customImagerySchema, hasRole, measureTotals, measurementSchema } from "@crewdesk/shared";
+import { OK_COUNTIES, customImagerySchema, hasRole, measureTotals, measurementSchema } from "@crewdesk/shared";
 import { db } from "../db";
 import { companies, employees, measurements } from "../db/schema";
 import { authenticate, roleIn } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { geocode } from "../lib/geocode";
 import { imageryFor } from "../lib/imagery";
-import { suggestAddresses } from "../lib/suggest";
+import { suggestAddresses, type AddressSuggestion } from "../lib/suggest";
+import { addressStatus, countiesFor, isRefreshing, refreshAddresses, searchAddresses } from "../lib/addresses";
 
 /** Which area of the Permissions page controls editing other people's measurements. */
 const AREA = "spray" as const;
@@ -113,7 +114,41 @@ const routes: FastifyPluginAsync = async (app) => {
     const q = (req.query.q ?? "").trim().slice(0, 200);
     if (q.length < 3 || /^https?:/i.test(q) || /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(q)) return [];
     const lat = Number(req.query.lat), lng = Number(req.query.lng);
-    return suggestAddresses(q, Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : { lat: 35.22, lng: -97.44 });
+    const near = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : { lat: 35.22, lng: -97.44 };
+    // Oklahoma's 911 addresses first (complete, including new streets), then OpenStreetMap's.
+    const [ok911, osm] = await Promise.all([searchAddresses(q, near, 6).catch(() => []), suggestAddresses(q, near)]);
+    const out: AddressSuggestion[] = ok911.map((m) => ({ label: m.label, lat: m.lat, lng: m.lng, kind: "address", lookUp: false }));
+    const norm = (l: string) => l.toLowerCase().replace(/\b(street|st|drive|dr|avenue|ave|road|rd)\b/g, "").replace(/[^a-z0-9]/g, "");
+    const seen = new Set(out.map((s) => norm(s.label)));
+    // A street-only guess from OpenStreetMap isn't needed once 911 has the real address.
+    for (const s of osm) if (!seen.has(norm(s.label)) && !(s.lookUp && out.length)) { out.push(s); seen.add(norm(s.label)); }
+    return out.slice(0, 6);
+  });
+
+  /** Address search's Oklahoma 911 counties and when each was downloaded. */
+  app.get("/addresses", async (req) => {
+    const [company] = await db.select({ measureImagery: companies.measureImagery }).from(companies).where(eq(companies.id, req.user.companyId));
+    const counties = countiesFor(company?.measureImagery);
+    return { counties: await addressStatus(counties), all: OK_COUNTIES, refreshing: isRefreshing(), canManage: canManageImagery(req) };
+  });
+
+  /** Admins: which counties' addresses to keep (new ones download in the background). */
+  app.put("/addresses/counties", async (req) => {
+    if (!canManageImagery(req)) throw new HttpError(403, "Only admins can change this");
+    const { counties } = parse(z.object({ counties: z.array(z.enum(OK_COUNTIES)).max(20) }), req.body);
+    const [company] = await db.select({ measureImagery: companies.measureImagery }).from(companies).where(eq(companies.id, req.user.companyId));
+    await db.update(companies).set({ measureImagery: { ...(company?.measureImagery ?? {}), addressCounties: [...new Set(counties)] } }).where(eq(companies.id, req.user.companyId));
+    void refreshAddresses();
+    return { counties: await addressStatus([...new Set(counties)]), all: OK_COUNTIES, refreshing: true, canManage: true };
+  });
+
+  /** Admins: download the company's counties again now (in the background). */
+  app.post("/addresses/refresh", async (req) => {
+    if (!canManageImagery(req)) throw new HttpError(403, "Only admins can do this");
+    const [company] = await db.select({ measureImagery: companies.measureImagery }).from(companies).where(eq(companies.id, req.user.companyId));
+    const counties = countiesFor(company?.measureImagery);
+    void refreshAddresses(counties);
+    return { counties: await addressStatus(counties), all: OK_COUNTIES, refreshing: true, canManage: true };
   });
 
   /** Turns an address, a maps link or "lat, lng" into coordinates for centering the map. */

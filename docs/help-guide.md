@@ -82,9 +82,11 @@ Measure turf square footage from aerial photos, choosing photos taken in winter 
 
 1. Start typing the property's address under **Find a property**: after a few letters, matching addresses
    near the map drop down; pick one with the mouse, or the arrow keys and Enter. You can also type the full
-   address (or paste a Google Maps link, or latitude, longitude) and click **Find**. Suggestions come from
-   OpenStreetMap, which is missing some house numbers; when you pick a street with the number you typed,
-   the exact spot is looked up from the address.
+   address (or paste a Google Maps link, or latitude, longitude) and click **Find**. Addresses come first
+   from the State of Oklahoma's 911 address list (the most complete, including new streets), then from
+   OpenStreetMap. The 911 list for your counties (Cleveland, Oklahoma and McClain to start) is kept in
+   Crewdesk and refreshed every 30 days; admins can add or remove counties under **Photo and address
+   sources (admins)**. Addresses in other Oklahoma counties are still found with **Find**, just more slowly.
 2. Pick a photo under **Aerial Photo**. **Oklahoma 2025 leaf-off** (February–March 2025, 6-inch detail)
    is the default. **Find more photo dates here** lists older Esri photos of that spot with the date each
    was taken; the ones marked **Leaf-off** were taken December to March.
@@ -114,7 +116,7 @@ Measure turf square footage from aerial photos, choosing photos taken in winter 
 **New photos:** Oklahoma's statewide photos are found automatically. When the page is opened (at most twice a
 day), Crewdesk checks OKMaps for newly released years; a new leaf-off year joins the list, is marked **New** for
 60 days, and becomes the default. Esri's newest photos appear under **Find more photo dates here** as soon as Esri
-publishes them. Admins can open **Photo sources (admins)** at the bottom of the Aerial Photo box to check now, or
+publishes them. Admins can open **Photo and address sources (admins)** at the bottom of the Aerial Photo box to check now, or
 to add other photos (a county's aerials, a paid service, or an Oklahoma release the automatic check doesn't
 recognize) by WMS address and layer name, or a tile address with {z}/{x}/{y}.
 

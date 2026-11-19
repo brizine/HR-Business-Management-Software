@@ -24,3 +24,4 @@ export * from "./extraPay";
 export * from "./reviewProgram";
 export * from "./fuel";
 export * from "./measure";
+export * from "./addresses";

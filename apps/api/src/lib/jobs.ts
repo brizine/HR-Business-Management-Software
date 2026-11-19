@@ -1,3 +1,4 @@
+import { refreshAddresses } from "./addresses";
 import { and, eq, gt, sql, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or } from "drizzle-orm";
 import { LOCATION_KEEP_DAYS, DEFAULT_RENEWAL_REMIND_DAYS, DEFAULT_RENEWAL_REPEAT_DAYS, INACTIVE_STATUSES, carryoverForfeit, renewalStatus, computeDue, resolveLead, workOrderDue, type FleetSettings, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
 import { db } from "../db";
@@ -389,6 +390,11 @@ async function attendanceAlerts(now: Date) {
 export function startScheduler(intervalMs = 5 * 60_000) {
   const tick = () => runScheduledChecks().catch((err) => console.error("scheduled checks failed", err));
   tick();
+  // Oklahoma 911 address points for address search: download missing counties and refresh monthly (hourly check).
+  // These timers don't keep the process running at shutdown.
+  const addresses = () => refreshAddresses().catch((err) => console.error("address refresh failed", err));
+  setTimeout(addresses, 60_000).unref();
+  setInterval(addresses, 3_600_000).unref();
   return setInterval(tick, intervalMs);
 }
 

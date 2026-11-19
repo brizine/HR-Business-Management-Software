@@ -1,13 +1,15 @@
 import { parseCoordinates } from "@crewdesk/shared";
+import { lookUpOk911, searchAddresses } from "./addresses";
 
 /**
  * Finds map coordinates for what someone typed when adding a job site:
  *   - "lat, lng" or a full Google / Apple Maps link: read directly;
  *   - a short share link (maps.app.goo.gl, goo.gl/maps, maps.apple.com): followed to the full link;
- *   - a street address or place name: looked up with the US Census geocoder (street addresses),
- *     then OpenStreetMap (anything else). Neither needs an account or key.
+ *   - a street address or place name: Oklahoma's 911 address list (kept locally for the counties companies
+ *     work in), the US Census geocoder, Oklahoma's 911 list on OKMaps (any county, slower), then
+ *     OpenStreetMap (anything else). None needs an account or key.
  */
-export interface GeocodeResult { lat: number; lng: number; label: string; source: "coordinates" | "link" | "census" | "openstreetmap" }
+export interface GeocodeResult { lat: number; lng: number; label: string; source: "coordinates" | "link" | "census" | "openstreetmap" | "ok911" }
 
 const UA = "Crewdesk/1.0 (self-hosted HR and fleet software)";
 const TIMEOUT = 8000;
@@ -64,8 +66,18 @@ async function openStreetMap(text: string): Promise<GeocodeResult | null> {
   return m ? { lat: Number(m.lat), lng: Number(m.lon), label: m.display_name, source: "openstreetmap" } : null;
 }
 
+async function ok911Local(text: string): Promise<GeocodeResult | null> {
+  const [m] = await searchAddresses(text, undefined, 1, { strict: true });
+  return m ? { lat: m.lat, lng: m.lng, label: m.label, source: "ok911" } : null;
+}
+
+async function ok911Live(text: string): Promise<GeocodeResult | null> {
+  const m = await lookUpOk911(text);
+  return m ? { lat: m.lat, lng: m.lng, label: m.label, source: "ok911" } : null;
+}
+
 async function lookUp(text: string) {
-  for (const find of [census, openStreetMap]) {
+  for (const find of [ok911Local, census, ok911Live, openStreetMap]) {
     try {
       const r = await find(text);
       if (r) return r;

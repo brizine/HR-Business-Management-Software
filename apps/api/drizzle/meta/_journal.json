@@ -379,6 +379,13 @@
       "when": 1795088955547,
       "tag": "0053_measurement_zone_totals",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1795094701421,
+      "tag": "0054_address_points",
+      "breakpoints": true
     }
   ]
 }
