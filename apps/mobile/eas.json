@@ -1,14 +1,25 @@
 {
-  "cli": { "version": ">= 16.0.0", "appVersionSource": "remote" },
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
   "build": {
     "preview": {
       "distribution": "internal",
-      "env": { "EXPO_PUBLIC_API_URL": "https://management.prospray.net/api" }
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://management.prospray.net/api"
+      },
+      "pnpm": "10.28.0"
     },
     "production": {
       "autoIncrement": true,
-      "env": { "EXPO_PUBLIC_API_URL": "https://management.prospray.net/api" }
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://management.prospray.net/api"
+      },
+      "pnpm": "10.28.0"
     }
   },
-  "submit": { "production": {} }
+  "submit": {
+    "production": {}
+  }
 }

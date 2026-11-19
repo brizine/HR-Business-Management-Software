@@ -3,3 +3,5 @@ packages:
   - packages/*
 onlyBuiltDependencies:
   - esbuild
+# Newer pnpm versions stop the install for unapproved setup scripts; esbuild's is approved above.
+strictDepBuilds: false
