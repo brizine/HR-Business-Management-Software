@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useRef, type ComponentRef, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useFocusEffect, useNavigation } from "expo-router";
 import { HeaderHeightContext } from "expo-router/react-navigation";
 import {
@@ -34,36 +34,32 @@ export function Screen({ children, refreshing, onRefresh }: { children: ReactNod
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const top = Platform.OS === "ios" && inStack ? Math.round(headerHeight) : 0;
 
-  // iOS quirk: after leaving a screen that has pull-to-refresh and coming back, the page can be left
-  // resting slightly pulled down (a gap at the top). If it's below its top without the person
-  // pulling or a refresh running, put it back.
-  const ref = useRef<ComponentRef<typeof ScrollView>>(null);
-  const dragging = useRef(false);
-  const offset = useRef(0);
-  // Just after a pull (bouncing back, or the refresh spinner settling) the page is legitimately below its top.
-  const settleUntil = useRef(0);
-  const snapBack = () => {
-    if (!dragging.current && !refreshing && Date.now() > settleUntil.current && offset.current < -1) ref.current?.scrollTo({ y: 0, animated: false });
-  };
-  useEffect(() => { settleUntil.current = Date.now() + 1000; }, [refreshing]);
+  // iOS quirk: after leaving a screen with pull-to-refresh and coming back, the refresh control can
+  // leave its space at the top (a gap) until it's pulled again. Each time the page comes back into
+  // view, give it a fresh refresh control.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const seen = useRef(false);
   useFocusEffect(useCallback(() => {
-    const timer = setTimeout(snapBack, 60);
+    if (seen.current && Platform.OS === "ios") setRefreshKey((k) => k + 1);
+    seen.current = true;
+  }, []));
+
+  // The spinner shows only for a refresh the person started by pulling down. Screens also reload
+  // quietly whenever they come back into view; showing the spinner for those made iOS shift the page
+  // down (and sometimes leave it there).
+  const [pulled, setPulled] = useState(false);
+  useEffect(() => {
+    if (!pulled || refreshing) return;
+    const timer = setTimeout(() => setPulled(false), 400);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshing]));
+  }, [pulled, refreshing]);
 
   return (
     <ScrollView
-      ref={ref}
-      scrollEventThrottle={32}
-      onScroll={(e) => { offset.current = e.nativeEvent.contentOffset.y; if (Platform.OS === "ios") snapBack(); }}
-      onScrollBeginDrag={() => { dragging.current = true; }}
-      onScrollEndDrag={() => { dragging.current = false; settleUntil.current = Date.now() + 1000; }}
-      onMomentumScrollEnd={() => { dragging.current = false; snapBack(); }}
       style={{ backgroundColor: t.bg }}
       contentContainerStyle={{ padding: 16, paddingTop: 16 + top, gap: 12 }}
       scrollIndicatorInsets={top ? { top } : undefined}
-      refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined}
+      refreshControl={onRefresh ? <RefreshControl key={refreshKey} refreshing={pulled} onRefresh={() => { setPulled(true); onRefresh(); }} /> : undefined}
       keyboardShouldPersistTaps="handled"
     >
       {children}
