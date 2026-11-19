@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import type { AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram } from "@crewdesk/shared";
+import type { AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape } from "@crewdesk/shared";
 import {
   boolean,
   primaryKey,
@@ -1058,4 +1058,29 @@ export const mixChanges = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("mix_changes_sheet_idx").on(t.sheetId, t.createdAt)],
+);
+
+/** Property measurements from the Measure page: turf areas, cut-outs and lines traced on aerial photos. */
+export const measurements = pgTable(
+  "measurements",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    address: text("address"),
+    notes: text("notes"),
+    lat: doublePrecision("lat").notNull(),
+    lng: doublePrecision("lng").notNull(),
+    zoom: integer("zoom").notNull(),
+    /** Which photo the shapes were traced on, e.g. "Oklahoma 2025 leaf-off (Feb–Mar 2025)". */
+    imagery: text("imagery"),
+    shapes: jsonb("shapes").$type<MeasureShape[]>().notNull(),
+    /** Areas minus cut-outs, in square feet (kept for the list and sorting). */
+    netSqFt: doublePrecision("net_sq_ft").notNull().default(0),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("measurements_company_idx").on(t.companyId, t.updatedAt)],
 );

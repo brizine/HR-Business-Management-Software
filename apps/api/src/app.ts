@@ -40,6 +40,7 @@ import fuelRoutes from "./routes/fuel";
 import calendarRoutes from "./routes/calendar";
 import publicCompanyRoutes from "./routes/publicCompany";
 import sprayMixRoutes from "./routes/sprayMix";
+import measurementRoutes from "./routes/measurements";
 
 export interface AppOptions {
   logger?: boolean;
@@ -123,4 +124,5 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(calendarRoutes, { prefix: "/calendar" });
   await app.register(publicCompanyRoutes, { prefix: "/public/company" });
   await app.register(sprayMixRoutes, { prefix: "/spray-mixes" });
+  await app.register(measurementRoutes, { prefix: "/measurements" });
 }

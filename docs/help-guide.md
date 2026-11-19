@@ -76,6 +76,28 @@ Enter the tank size in gallons and tap **Update total** to see how much of each 
 Admins choose which employees can edit products, rates and mixes; every change is logged under
 **Change history**.
 
+## Property Measure
+
+Measure turf square footage from aerial photos, choosing photos taken in winter when the leaves are off.
+
+1. Type the property's address (or paste a Google Maps link) under **Find a property** and click **Find**.
+2. Pick a photo under **Aerial Photo**. **Oklahoma 2025 leaf-off** (February–March 2025, 6-inch detail)
+   is the default. **Find more photo dates here** lists older Esri photos of that spot with the date each
+   was taken; the ones marked **Leaf-off** were taken December to March.
+3. Click **Add Area** and click each corner of the turf. Double-click, press Enter, or click the first
+   point to finish. Use **Add Cut-out** for beds, driveways, patios and the house (subtracted from the
+   total), and **Measure Line** for lengths such as a perimeter barrier.
+4. Click a shape to adjust it: drag a corner to move it, drag a small dot between corners to add one,
+   right-click a corner to remove it. Your shapes stay in place when you switch photos, so you can trace
+   on one photo and check on another.
+5. The **Total** shows square feet and acres, and the gallons of mix needed at any Spray Mix sheet's rate.
+6. Give it a name and **Save**. Everyone can open saved measurements under **Saved Measurements**; the
+   person who saved one, or a Spray Mix manager, can change or delete it.
+
+Photos are from OKMaps (Oklahoma Office of Geographic Information), Esri World Imagery Wayback, and USDA
+NAIP (summer photos, for comparison). Measurements are typically within a few percent, depending on the
+photo and how carefully the edges are traced.
+
 ## Team
 
 - The employee directory, with search and filters. Click a person to open their profile.

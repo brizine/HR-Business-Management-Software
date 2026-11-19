@@ -579,3 +579,21 @@ tr.openrow td { background: var(--bg); }
 .legal h1 { margin-bottom: 4px; }
 .legal h2 { margin-top: 28px; font-size: 19px; }
 .legal li { margin-bottom: 6px; }
+
+/* Property Measure page */
+.measure-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; margin: 16px 0; align-items: start; }
+@media (max-width: 1000px) { .measure-layout { grid-template-columns: minmax(0, 1fr); } }
+.measure-map { height: 70vh; min-height: 420px; border-radius: 10px; border: 1px solid var(--border); background: #1b1f24; z-index: 0; }
+.measure-total { font-size: 30px; font-weight: 700; line-height: 1.1; }
+.measure-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.measure-shape { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; }
+.measure-shape.selected { border-color: var(--primary); }
+.measure-shape input { flex: 1; min-width: 0; padding: 4px 6px; }
+.measure-size { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 14px; }
+.measure-layer { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; font-weight: normal; }
+.measure-layer.selected { border-color: var(--primary); }
+.measure-layer input { width: auto; margin-top: 3px; }
+.leaflet-tooltip.measure-label { background: rgba(0, 0, 0, 0.72); color: #fff; border: none; box-shadow: none; font-weight: 600; font-size: 12px; padding: 2px 6px; }
+.leaflet-tooltip.measure-label::before { display: none; }
+.measure-handle { background: #fff; border: 2px solid #1f6feb; border-radius: 3px; box-sizing: border-box; cursor: move; }
+.measure-handle.mid { opacity: 0.6; border-radius: 50%; transform: scale(0.75); border-color: #fff; background: #1f6feb; }

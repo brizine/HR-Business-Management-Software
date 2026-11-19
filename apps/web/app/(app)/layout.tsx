@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { PageLayoutRoot } from "@/components/page-layout";
 
 const NAV: { section: string; items: { href: string; label: string; min?: Role; area?: PermissionArea }[] }[] = [
-  { section: "", items: [{ href: "/dashboard", label: "Dashboard", min: "manager", area: "dashboard" }, { href: "/wiki", label: "Company Wiki" }, { href: "/spray-mix", label: "Spray Mix Calculator" }] },
+  { section: "", items: [{ href: "/dashboard", label: "Dashboard", min: "manager", area: "dashboard" }, { href: "/wiki", label: "Company Wiki" }, { href: "/spray-mix", label: "Spray Mix Calculator" }, { href: "/measure", label: "Property Measure" }] },
   {
     section: "People",
     items: [
