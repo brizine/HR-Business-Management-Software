@@ -118,3 +118,31 @@ describe("OKMaps layer discovery", () => {
     expect(imagerySourceSchema.safeParse({ ...base, kind: "wms", layers: "a", url: "http://example.com/wms" }).success).toBe(false);
   });
 });
+
+describe("front and back totals", () => {
+  const big = square(100);
+  const sq = (pts: LatLng[]) => polygonAreaSqM(pts) * SQ_FT_PER_SQ_M;
+  const at = (side: number, north: number, east: number) => {
+    const [lat, lng] = big[0];
+    return square(side, lat + north / 111_320, lng + east / (111_320 * Math.cos((lat * Math.PI) / 180)));
+  };
+
+  it("totals front and back areas separately, after their cut-outs, and everything together", () => {
+    const front = at(30, 0, 0), back = at(40, 60, 0), side = at(10, 0, 50), bed = at(10, 5, 5);
+    const r = measureShapes([
+      { id: "f", kind: "turf", zone: "front", points: front },
+      { id: "b", kind: "turf", zone: "back", points: back },
+      { id: "s", kind: "turf", points: side },
+      { id: "c", kind: "cut", points: bed },
+    ]);
+    expect(r.frontSqFt).toBeCloseTo(sq(front) - sq(bed), -1);
+    expect(r.backSqFt).toBeCloseTo(sq(back), -1);
+    expect(r.netSqFt).toBeCloseTo(r.frontSqFt + r.backSqFt + sq(side), -1);
+  });
+
+  it("is zero when there are no front or back areas", () => {
+    const r = measureShapes([{ id: "s", kind: "turf", points: big }]);
+    expect(r.frontSqFt).toBe(0);
+    expect(r.backSqFt).toBe(0);
+  });
+});

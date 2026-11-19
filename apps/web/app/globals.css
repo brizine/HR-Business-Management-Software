@@ -604,3 +604,7 @@ tr.openrow td { background: var(--bg); }
 .measure-saved tbody tr:last-child td { border-bottom: 0; }
 .photo-sources { border-top: 1px solid var(--border); padding-top: 8px; }
 .photo-sources > summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.measure-zone-totals { display: grid; gap: 4px; padding: 8px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.measure-zone-totals > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 15px; }
+.measure-zone-totals .measure-dot { margin-right: 4px; }
+.measure-shape select.measure-zone { width: auto; padding: 4px 2px; font-size: 13px; }

@@ -12,6 +12,11 @@ export const MEASURE_KINDS = ["turf", "cut", "line"] as const;
 export type MeasureKind = (typeof MEASURE_KINDS)[number];
 export const MEASURE_KIND_LABELS: Record<MeasureKind, string> = { turf: "Area", cut: "Cut-out", line: "Line" };
 
+/** Which part of the property an area is: the front or back yard, or neither (counted only in the overall total). */
+export const MEASURE_ZONES = ["front", "back"] as const;
+export type MeasureZone = (typeof MEASURE_ZONES)[number];
+export const MEASURE_ZONE_LABELS: Record<MeasureZone, string> = { front: "Front area", back: "Back area" };
+
 export type LatLng = [number, number];
 
 export const SQ_FT_PER_SQ_M = 10.763910417;
@@ -25,6 +30,8 @@ export const measureShapeSchema = z
     id: z.string().trim().min(1).max(40),
     kind: z.enum(MEASURE_KINDS),
     label: z.string().trim().max(80).optional().nullable(),
+    /** Areas only: front or back yard. */
+    zone: z.enum(MEASURE_ZONES).optional().nullable(),
     points: z.array(point).min(2).max(1000),
   })
   .refine((s) => s.kind === "line" || s.points.length >= 3, { message: "An area needs at least 3 points", path: ["points"] });
@@ -104,6 +111,10 @@ export interface MeasureResult {
   cutSqFt: number;
   /** Areas minus cut-outs. */
   netSqFt: number;
+  /** Front-yard areas minus cut-outs. */
+  frontSqFt: number;
+  /** Back-yard areas minus cut-outs. */
+  backSqFt: number;
   acres: number;
   lineFt: number;
   /**
@@ -119,15 +130,18 @@ export interface MeasureResult {
  * Totals for a measurement. A cut-out takes away only the part of it that lies inside an area, and
  * overlapping areas (or overlapping cut-outs) are counted once.
  */
-export function measureShapes(shapes: readonly Pick<MeasureShape, "id" | "kind" | "points">[]): MeasureResult {
+export function measureShapes(shapes: readonly (Pick<MeasureShape, "id" | "kind" | "points"> & { zone?: MeasureZone | null })[]): MeasureResult {
   const byId: Record<string, number> = {};
   const shapesWithHoles: Record<string, LatLng[][][]> = {};
   let lineFt = 0;
   for (const s of shapes) if (s.kind === "line") { byId[s.id] = shapeFeet(s); lineFt += byId[s.id]; }
   const turfs = shapes.filter((s) => s.kind === "turf" && s.points.length >= 3);
   const cuts = shapes.filter((s) => s.kind === "cut" && s.points.length >= 3);
-  const result = (turfSqFt: number, netSqFt: number): MeasureResult =>
-    ({ turfSqFt, cutSqFt: Math.max(0, turfSqFt - netSqFt), netSqFt, acres: netSqFt / SQ_FT_PER_ACRE, lineFt, byId, shapesWithHoles });
+  const zoneSqFt = { front: 0, back: 0 };
+  const result = (turfSqFt: number, netSqFt: number): MeasureResult => ({
+    turfSqFt, cutSqFt: Math.max(0, turfSqFt - netSqFt), netSqFt, frontSqFt: zoneSqFt.front, backSqFt: zoneSqFt.back,
+    acres: netSqFt / SQ_FT_PER_ACRE, lineFt, byId, shapesWithHoles,
+  });
   if (!turfs.length) {
     for (const c of cuts) byId[c.id] = 0;
     return result(0, 0);
@@ -145,20 +159,27 @@ export function measureShapes(shapes: readonly Pick<MeasureShape, "id" | "kind" 
       shapesWithHoles[t.id] = left.map((poly) => poly.map((ring) => ring.map(proj.from)));
     }
     for (const c of cuts) byId[c.id] = sqFt(clip.intersection(flat(c), turfUnion));
+    // Each zone on its own (overlaps within a zone counted once), after the cut-outs.
+    for (const zone of MEASURE_ZONES) {
+      const inZone = turfs.filter((t) => t.zone === zone);
+      if (!inZone.length) continue;
+      const union = clip.union(flat(inZone[0]), ...inZone.slice(1).map(flat));
+      zoneSqFt[zone] = sqFt(cutUnion.length ? clip.difference(union, cutUnion) : union);
+    }
     return result(sqFt(turfUnion), sqFt(net));
   } catch {
     // Badly tangled shapes can defeat the clipper: fall back to simple sums.
     let turf = 0, cut = 0;
-    for (const t of turfs) { byId[t.id] = shapeSqFt(t); turf += byId[t.id]; shapesWithHoles[t.id] = [[[...t.points]]]; }
+    for (const t of turfs) { byId[t.id] = shapeSqFt(t); turf += byId[t.id]; shapesWithHoles[t.id] = [[[...t.points]]]; if (t.zone) zoneSqFt[t.zone] += byId[t.id]; }
     for (const c of cuts) { byId[c.id] = shapeSqFt(c); cut += byId[c.id]; }
     return result(turf, Math.max(0, turf - cut));
   }
 }
 
 /** Totals only (see measureShapes). */
-export function measureTotals(shapes: readonly Pick<MeasureShape, "kind" | "points">[]) {
-  const { turfSqFt, cutSqFt, netSqFt, acres, lineFt } = measureShapes(shapes.map((s, i) => ({ ...s, id: `s${i}` })));
-  return { turfSqFt, cutSqFt, netSqFt, acres, lineFt };
+export function measureTotals(shapes: readonly (Pick<MeasureShape, "kind" | "points"> & { zone?: MeasureZone | null })[]) {
+  const { turfSqFt, cutSqFt, netSqFt, frontSqFt, backSqFt, acres, lineFt } = measureShapes(shapes.map((s, i) => ({ ...s, id: `s${i}` })));
+  return { turfSqFt, cutSqFt, netSqFt, frontSqFt, backSqFt, acres, lineFt };
 }
 
 export const formatSqFt = (sqFt: number) => `${Math.round(sqFt).toLocaleString("en-US")} ft²`;

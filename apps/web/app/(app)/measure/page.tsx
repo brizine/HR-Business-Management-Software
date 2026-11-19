@@ -2,7 +2,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  MEASURE_KIND_LABELS, formatAcres, formatFeet, formatSqFt, measureShapes, shapeSqFt,
+  MEASURE_KIND_LABELS, MEASURE_ZONE_LABELS, formatAcres, formatFeet, formatSqFt, measureShapes, shapeSqFt, type MeasureZone,
   type LatLng, type MeasureKind, type MeasureShape,
 } from "@crewdesk/shared";
 import { api, fmtDate } from "@/lib/api";
@@ -10,7 +10,7 @@ import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
 import { OK_LEAF_OFF, OK_NAIP_2025, STREET_MAP, findWaybackVersions, sourceLayer, waybackLayer, type ImageryLayer, type WaybackVersion } from "@/lib/imagery";
 import { PhotoSources, type ImageryList } from "@/components/photo-sources";
-import { SHAPE_COLORS, type MapView } from "@/components/measure-map";
+import { shapeColor, type MapView } from "@/components/measure-map";
 
 const MeasureMap = dynamic(() => import("@/components/measure-map").then((m) => m.MeasureMap), { ssr: false, loading: () => <div className="measure-map" /> });
 
@@ -39,6 +39,15 @@ const OUTSIDE_MAPS: { label: string; hint: string; url: (v: MapView) => string }
   { label: "Apple Maps", hint: "Apple satellite view", url: (v) => `https://maps.apple.com/?ll=${v.lat.toFixed(6)},${v.lng.toFixed(6)}&z=${Math.min(20, Math.round(v.zoom))}&t=k` },
 ];
 
+/** The drawing buttons under the map: kind of shape, and front/back yard for areas. */
+const TOOLS: { label: string; kind: MeasureKind; zone: MeasureZone | null }[] = [
+  { label: "Add Area", kind: "turf", zone: null },
+  { label: "Add Front Area", kind: "turf", zone: "front" },
+  { label: "Add Back Area", kind: "turf", zone: "back" },
+  { label: "Add Cut-out", kind: "cut", zone: null },
+  { label: "Measure Line", kind: "line", zone: null },
+];
+
 const HINT: Record<MeasureKind, string> = {
   turf: "Click each corner of the turf. Double-click, press Enter, or click the first point to finish.",
   cut: "Trace a bed, driveway, patio or the house over an area; the part inside the area is cut out of it.",
@@ -58,6 +67,7 @@ export default function MeasurePage() {
   const [shapes, setShapes] = useState<MeasureShape[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawing, setDrawing] = useState<MeasureKind | null>(null);
+  const [drawZone, setDrawZone] = useState<MeasureZone | null>(null);
   const [draft, setDraft] = useState<LatLng[]>([]);
   const [saved, setSaved] = useState<Saved | null>(null);
   const [name, setName] = useState("");
@@ -135,7 +145,8 @@ export default function MeasurePage() {
   }, []);
 
   // Drawing
-  const startDrawing = (kind: MeasureKind) => { setDrawing(kind); setDraft([]); setSelectedId(null); setMessage(null); };
+  const startDrawing = (kind: MeasureKind, zone: MeasureZone | null = null) => { setDrawing(kind); setDrawZone(zone); drawZoneRef.current = zone; setDraft([]); setSelectedId(null); setMessage(null); };
+  const drawZoneRef = useRef<MeasureZone | null>(null);
   const cancelDrawing = () => { setDrawing(null); setDraft([]); };
   const onAddPoint = useCallback((pt: LatLng) => setDraft((d) => (d.length && samePoint(d[d.length - 1], pt) ? d : [...d, pt])), []);
   const drawingRef = useRef(drawing);
@@ -151,7 +162,8 @@ export default function MeasurePage() {
       setMessage(kind === "line" ? "A line needs at least 2 points." : "An area needs at least 3 corners.");
       return;
     }
-    const shape: MeasureShape = { id: newId(), kind, label: "", points: pts };
+    const zone = kind === "turf" ? drawZoneRef.current : null;
+    const shape: MeasureShape = { id: newId(), kind, label: "", points: pts, ...(zone ? { zone } : {}) };
     drawingRef.current = null;
     draftRef.current = [];
     setShapes((s) => [...s, shape]);
@@ -265,22 +277,22 @@ export default function MeasurePage() {
         <div className="stack" style={{ gap: 8, minWidth: 0 }}>
           <MeasureMap
             view={view} viewKey={viewKey} imagery={imagery} shapes={shapes} selectedId={selectedId}
-            drawing={drawing} draft={draft} onAddPoint={onAddPoint} onFinish={finish} onSelect={setSelectedId}
+            drawing={drawing} drawZone={drawZone} draft={draft} onAddPoint={onAddPoint} onFinish={finish} onSelect={setSelectedId}
             onChangeShape={onChangeShape} onMove={onMove} result={totals}
           />
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             {drawing ? (
               <>
-                <span className="muted" style={{ flex: "1 1 260px", fontSize: 14 }}>{HINT[drawing]}</span>
+                <span className="muted" style={{ flex: "1 1 260px", fontSize: 14 }}>{drawing === "turf" && drawZone ? `${MEASURE_ZONE_LABELS[drawZone]}: ` : ""}{HINT[drawing]}</span>
                 <button className="btn sm primary" onClick={finish}>Finish</button>
                 <button className="btn sm" onClick={() => setDraft((d) => d.slice(0, -1))} disabled={!draft.length}>Undo Point</button>
                 <button className="btn sm" onClick={cancelDrawing}>Cancel</button>
               </>
             ) : (
               <>
-                {(["turf", "cut", "line"] as const).map((k) => (
-                  <button key={k} className="btn sm" onClick={() => startDrawing(k)}>
-                    <span className="measure-dot" style={{ background: SHAPE_COLORS[k] }} /> {k === "turf" ? "Add Area" : k === "cut" ? "Add Cut-out" : "Measure Line"}
+                {TOOLS.map((t) => (
+                  <button key={t.label} className="btn sm" onClick={() => startDrawing(t.kind, t.zone)}>
+                    <span className="measure-dot" style={{ background: shapeColor(t.kind, t.zone) }} /> {t.label}
                   </button>
                 ))}
                 <span className="muted" style={{ fontSize: 13 }}>
@@ -327,9 +339,17 @@ export default function MeasurePage() {
 
         <div className="stack" style={{ gap: 12 }}>
           <div className="card stack" style={{ gap: 8 }}>
-            <h2 style={{ margin: 0 }}>Total</h2>
+            <h2 style={{ margin: 0 }}>Total Area</h2>
             <div className="measure-total">{formatSqFt(totals.netSqFt)}</div>
             <div className="muted">{formatAcres(totals.netSqFt)}{totals.cutSqFt > 0 && ` · areas ${formatSqFt(totals.turfSqFt)} − cut-outs ${formatSqFt(totals.cutSqFt)}`}</div>
+            <div className="measure-zone-totals">
+              {(["front", "back"] as const).map((z) => (
+                <div key={z}>
+                  <span><span className="measure-dot" style={{ background: shapeColor("turf", z) }} /> Total {z === "front" ? "Front" : "Back"} Area</span>
+                  <strong>{formatSqFt(z === "front" ? totals.frontSqFt : totals.backSqFt)}</strong>
+                </div>
+              ))}
+            </div>
             {totals.lineFt > 0 && <div>Lines: <strong>{formatFeet(totals.lineFt)}</strong></div>}
             {!!mixes.data?.sheets.length && totals.netSqFt > 0 && (
               <div className="muted" style={{ fontSize: 14 }}>
@@ -346,8 +366,15 @@ export default function MeasurePage() {
             {!shapes.length && <span className="muted" style={{ fontSize: 14 }}>None yet. Use Add Area below the map and click around the turf.</span>}
             {shapes.map((s) => (
               <div key={s.id} className={`measure-shape${s.id === selectedId ? " selected" : ""}`} onClick={() => !drawing && setSelectedId(s.id)}>
-                <span className="measure-dot" style={{ background: SHAPE_COLORS[s.kind] }} title={MEASURE_KIND_LABELS[s.kind]} />
-                <input value={s.label ?? ""} onChange={(e) => updateShape(s.id, { label: e.target.value })} placeholder={MEASURE_KIND_LABELS[s.kind]} aria-label="Measurement name" maxLength={80} />
+                <span className="measure-dot" style={{ background: shapeColor(s.kind, s.zone) }} title={s.kind === "turf" && s.zone ? MEASURE_ZONE_LABELS[s.zone] : MEASURE_KIND_LABELS[s.kind]} />
+                <input value={s.label ?? ""} onChange={(e) => updateShape(s.id, { label: e.target.value })} placeholder={s.kind === "turf" && s.zone ? MEASURE_ZONE_LABELS[s.zone] : MEASURE_KIND_LABELS[s.kind]} aria-label="Measurement name" maxLength={80} />
+                {s.kind === "turf" && (
+                  <select className="measure-zone" value={s.zone ?? ""} onClick={(e) => e.stopPropagation()} onChange={(e) => updateShape(s.id, { zone: (e.target.value || null) as MeasureZone | null })} aria-label="Front or back">
+                    <option value="">Area</option>
+                    <option value="front">Front</option>
+                    <option value="back">Back</option>
+                  </select>
+                )}
                 <span className="measure-size" title={s.kind === "turf" && shapeSqFt(s) - (totals.byId[s.id] ?? 0) > 0.5 ? `${formatSqFt(shapeSqFt(s))} before cut-outs` : undefined}>
                   {s.kind === "line" ? formatFeet(totals.byId[s.id] ?? 0) : `${s.kind === "cut" ? "−" : ""}${formatSqFt(totals.byId[s.id] ?? 0)}`}
                 </span>

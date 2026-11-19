@@ -2,10 +2,13 @@
 import { useEffect, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 import type * as Leaflet from "leaflet";
-import { formatFeet, formatSqFt, type LatLng, type MeasureKind, type MeasureResult, type MeasureShape } from "@crewdesk/shared";
+import { formatFeet, formatSqFt, type LatLng, type MeasureKind, type MeasureResult, type MeasureShape, type MeasureZone } from "@crewdesk/shared";
 import type { ImageryLayer } from "@/lib/imagery";
 
 export const SHAPE_COLORS: Record<MeasureKind, string> = { turf: "#2ea043", cut: "#f85149", line: "#f0b429" };
+export const ZONE_COLORS: Record<MeasureZone, string> = { front: "#2f81f7", back: "#a371f7" };
+/** Areas are green, front-yard areas blue, back-yard areas purple; cut-outs red, lines yellow. */
+export const shapeColor = (kind: MeasureKind, zone?: MeasureZone | null) => (kind === "turf" && zone ? ZONE_COLORS[zone] : SHAPE_COLORS[kind]);
 
 export interface MapView { lat: number; lng: number; zoom: number }
 
@@ -17,6 +20,8 @@ interface Props {
   shapes: MeasureShape[];
   selectedId: string | null;
   drawing: MeasureKind | null;
+  /** Front or back yard, for an area being drawn. */
+  drawZone?: MeasureZone | null;
   draft: LatLng[];
   onAddPoint: (p: LatLng) => void;
   onFinish: () => void;
@@ -108,7 +113,7 @@ export function MeasureMap(p: Props) {
 
     for (const s of cur.shapes) {
       const selected = s.id === cur.selectedId;
-      const color = SHAPE_COLORS[s.kind];
+      const color = shapeColor(s.kind, s.zone);
       const style = { color, weight: selected ? 4 : 2.5, fillColor: color, fillOpacity: s.kind === "cut" ? 0.08 : 0.25, dashArray: s.kind === "cut" ? "6 4" : undefined };
       // An area is drawn with its cut-outs as holes, so the photo shows through where it's been cut.
       const holed = s.kind === "turf" ? cur.result.shapesWithHoles[s.id] : undefined;
@@ -126,7 +131,7 @@ export function MeasureMap(p: Props) {
     }
 
     if (cur.drawing && cur.draft.length) {
-      const color = SHAPE_COLORS[cur.drawing];
+      const color = shapeColor(cur.drawing, cur.drawZone);
       const closed = cur.drawing !== "line" && cur.draft.length >= 3;
       (closed ? mod.polygon(cur.draft, { color, weight: 2, dashArray: "5 5", fillOpacity: 0.15 }) : mod.polyline(cur.draft, { color, weight: 2, dashArray: "5 5" })).addTo(draftLayer.current);
       cur.draft.forEach((pt, i) => {

@@ -87,14 +87,18 @@ Measure turf square footage from aerial photos, choosing photos taken in winter 
    **Look at this spot in** opens the same place in Google Maps, Google Earth (which has past photos
    under its clock button) or Apple Maps in a new tab, to compare. Their photos can't be traced here.
 3. Click **Add Area** and click each corner of the turf. Double-click, press Enter, or click the first
-   point to finish. Use **Add Cut-out** for beds, driveways, patios and the house: draw it over an area
+   point to finish. **Add Front Area** (blue) and **Add Back Area** (purple) work the same way and count
+   toward the front or back yard; you can change any area to Front, Back or plain Area in the
+   **Measurements** list. Use **Add Cut-out** for beds, driveways, patios and the house: draw it over an area
    and the part inside the area is cut out of it (shown as a hole, and that area's size goes down). A
    cut-out that hangs past the edge only removes the overlapping part. **Measure Line** measures lengths
    such as a perimeter barrier.
 4. Click a measurement on the map to adjust it: drag a corner to move it, drag a small dot between corners to add one,
    right-click a corner to remove it. Your measurements stay in place when you switch photos, so you can trace
    on one photo and check on another.
-5. The **Total** shows square feet and acres, and the gallons of mix needed at any Spray Mix sheet's rate.
+5. **Total Area** is everything (plain, front and back areas, minus cut-outs) in square feet and acres, with
+   **Total Front Area** and **Total Back Area** below it, and the gallons of mix needed at any Spray Mix
+   sheet's rate.
 6. Give it a name and **Save**. Everyone can open saved measurements under **Saved Measurements**; the
    person who saved one, or a Spray Mix manager, can change or delete it.
 
