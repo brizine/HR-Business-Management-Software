@@ -650,3 +650,12 @@ tr.openrow td { background: var(--bg); }
 .measure-pin svg { display: block; }
 .leaflet-tooltip.measure-preview-label { background: rgba(0, 0, 0, 0.72); color: #fff; border: none; box-shadow: none; font-weight: 600; font-size: 11px; padding: 1px 5px; pointer-events: none; }
 .leaflet-tooltip.measure-preview-label::before { display: none; }
+/* Drawing crosshair (follows the mouse; the normal cursor is hidden over the map while drawing) */
+.measure-map.drawing, .measure-map.drawing .leaflet-interactive, .measure-map.drawing .leaflet-grab { cursor: none !important; }
+.measure-crosshair { position: absolute; left: 0; top: 0; width: 180px; height: 180px; pointer-events: none; z-index: 800; display: none; }
+.measure-crosshair svg { display: block; filter: drop-shadow(0 0 1px rgba(0,0,0,0.6)); }
+.measure-crosshair.snapped .xh-box { stroke: #7ee787; stroke-width: 3; }
+.measure-crosshair .xh-labels { position: absolute; left: 50px; bottom: 132px; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.measure-crosshair .xh-labels span { background: rgba(0, 0, 0, 0.75); color: #fff; border: 1.5px solid #3fb950; font: 600 12px/1.25 system-ui, sans-serif; padding: 1px 6px; white-space: nowrap; }
+.measure-crosshair .xh-labels .xh-angle { color: #d0d7de; }
+.measure-crosshair .xh-labels .xh-snap { border-color: #7ee787; color: #7ee787; }

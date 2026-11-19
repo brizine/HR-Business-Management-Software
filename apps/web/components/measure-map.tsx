@@ -2,11 +2,25 @@
 import { useEffect, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 import type * as Leaflet from "leaflet";
-import { formatFeet, formatSqFt, type LatLng, type MeasureKind, type MeasureResult, type MeasureShape, type MeasureZone } from "@crewdesk/shared";
+import { SNAP_LABELS, bearingDeg, formatFeet, formatSqFt, snapDrawPoint, type LatLng, type MeasureKind, type MeasureResult, type MeasureShape, type MeasureZone, type SnapKind } from "@crewdesk/shared";
 import type { ImageryLayer } from "@/lib/imagery";
 
 /** How big the invisible grab area around each adjusting point is, in pixels. */
 const HIT = 24;
+
+/** The drawing crosshair: long red lines with a gap, a green box with red corner ticks, a green dot in the middle. */
+const XH = 180;
+const CROSSHAIR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="${XH}" height="${XH}" viewBox="0 0 180 180">
+  <g stroke="#ff2d2d" stroke-width="1.5" fill="none">
+    <line x1="0" y1="90" x2="58" y2="90"/><line x1="122" y1="90" x2="180" y2="90"/>
+    <line x1="90" y1="0" x2="90" y2="58"/><line x1="90" y1="122" x2="90" y2="180"/>
+    <line x1="56" y1="56" x2="74" y2="74"/><line x1="124" y1="56" x2="106" y2="74"/>
+    <line x1="56" y1="124" x2="74" y2="106"/><line x1="124" y1="124" x2="106" y2="106"/>
+  </g>
+  <rect class="xh-box" x="50" y="50" width="80" height="80" fill="none" stroke="#3fb950" stroke-width="2"/>
+  <g stroke="#3fb950" stroke-width="1.5"><line x1="84" y1="90" x2="96" y2="90"/><line x1="90" y1="84" x2="90" y2="96"/></g>
+  <circle cx="90" cy="90" r="2" fill="#3fb950"/>
+</svg>`;
 
 /** A red map pin with a white dot, tip at the bottom center. */
 export const PIN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="36" viewBox="0 0 26 36"><path d="M13 35s11-12.6 11-21.5A11 11 0 0 0 2 13.5C2 22.4 13 35 13 35z" fill="#e5383b" stroke="#fff" stroke-width="2"/><circle cx="13" cy="13.5" r="4.2" fill="#fff"/></svg>';
@@ -44,6 +58,8 @@ interface Props {
   /** A pin on the property's house (from the address search); dragging it calls onMovePin. */
   pin?: { lat: number; lng: number; label?: string } | null;
   onMovePin?: (lat: number, lng: number) => void;
+  /** Snap the next point to square corners, straight runs, 45°, north–south/east–west and nearby corners (default on). */
+  snap?: boolean;
 }
 
 /**
@@ -63,7 +79,10 @@ export function MeasureMap(p: Props) {
   /** While drawing: a line from the last point to the crosshair (and back to the first point for areas), with its length. */
   const previewLayer = useRef<Leaflet.LayerGroup | null>(null);
   const lastMouse = useRef<Leaflet.LatLng | null>(null);
-  const previewLabel = useRef<Leaflet.Tooltip | null>(null);
+  const lastSnap = useRef<SnapKind | null>(null);
+  /** Where the mouse is on the map, in pixels (to re-snap when the map moves under it). */
+  const cursorPx = useRef<Leaflet.Point | null>(null);
+  const crosshair = useRef<HTMLDivElement | null>(null);
   const props = useRef(p);
   props.current = p;
   const ready = useRef(false);
@@ -81,13 +100,24 @@ export function MeasureMap(p: Props) {
       editLayer.current = mod.layerGroup().addTo(m);
       draftLayer.current = mod.layerGroup().addTo(m);
       previewLayer.current = mod.layerGroup().addTo(m);
-      m.on("mousemove", (e: Leaflet.LeafletMouseEvent) => { lastMouse.current = e.latlng; drawPreview.current(); });
-      m.on("mouseout", () => { lastMouse.current = null; drawPreview.current(); });
+      // The crosshair that follows the mouse while drawing (CSS hides the normal cursor then).
+      const xh = document.createElement("div");
+      xh.className = "measure-crosshair";
+      xh.innerHTML = `${CROSSHAIR_SVG}<div class="xh-labels"><span class="xh-angle"></span><span class="xh-dist"></span><span class="xh-snap"></span></div>`;
+      m.getContainer().appendChild(xh);
+      crosshair.current = xh;
+      m.on("mousemove", (e: Leaflet.LeafletMouseEvent) => { cursorPx.current = e.containerPoint; track.current(); });
+      m.on("move zoom", () => track.current());
+      m.on("mouseout", () => { cursorPx.current = null; track.current(); });
       mod.control.scale({ imperial: true, metric: false }).addTo(m);
       m.on("click", (e: Leaflet.LeafletMouseEvent) => {
         const cur = props.current;
-        if (cur.drawing) cur.onAddPoint([e.latlng.lat, e.latlng.lng]);
-        else cur.onSelect(null);
+        if (!cur.drawing) return cur.onSelect(null);
+        const s = snapAt(e.containerPoint);
+        // Snapping onto the first point closes the shape.
+        const first = cur.draft[0];
+        if (s.kind === "corner" && first && cur.drawing !== "line" && cur.draft.length >= 3 && s.latlng.equals(mod.latLng(first[0], first[1]), 1e-9)) return cur.onFinish();
+        cur.onAddPoint([s.latlng.lat, s.latlng.lng]);
       });
       m.on("dblclick", () => { if (props.current.drawing) props.current.onFinish(); });
       m.on("moveend", () => { const c = m.getCenter(); props.current.onMove({ lat: c.lat, lng: c.lng, zoom: m.getZoom() }); });
@@ -124,8 +154,67 @@ export function MeasureMap(p: Props) {
     const m = map.current;
     if (!m) return;
     if (p.drawing) m.doubleClickZoom.disable(); else m.doubleClickZoom.enable();
-    if (el.current) el.current.style.cursor = p.drawing ? "crosshair" : "";
+    el.current?.classList.toggle("drawing", !!p.drawing);
+    track.current();
   }, [p.drawing]);
+
+  /** Where the next point would go for the mouse at `pt`: snapped (if Snap is on) or exactly there. */
+  function snapAt(pt: Leaflet.Point): { latlng: Leaflet.LatLng; kind: SnapKind | null } {
+    const m = map.current!;
+    const cur = props.current;
+    if (cur.snap === false || !cur.drawing) return { latlng: m.containerPointToLatLng(pt), kind: null };
+    const px = (ll: LatLng) => m.latLngToContainerPoint(ll);
+    const d = cur.draft;
+    const area = cur.drawing !== "line";
+    const r = snapDrawPoint({ x: pt.x, y: pt.y }, {
+      last: d.length ? px(d[d.length - 1]) : null,
+      prev: d.length >= 2 ? px(d[d.length - 2]) : null,
+      first: area && d.length >= 3 ? px(d[0]) : null,
+      second: area && d.length >= 3 ? px(d[1]) : null,
+      vertices: cur.shapes.flatMap((s) => s.points.map(px)),
+    });
+    // Snapped onto a corner: use that corner's exact spot, not the pixel round-trip.
+    if (r.kind === "corner" && r.corner) {
+      const all: LatLng[] = [...cur.shapes.flatMap((s) => s.points), ...(d.length ? [d[0]] : [])];
+      const hit = all.find((ll) => { const q = px(ll); return Math.abs(q.x - r.corner!.x) < 0.5 && Math.abs(q.y - r.corner!.y) < 0.5; });
+      if (hit) return { latlng: L.current!.latLng(hit[0], hit[1]), kind: "corner" };
+    }
+    return { latlng: m.containerPointToLatLng(L.current!.point(r.point.x, r.point.y)), kind: r.kind };
+  }
+
+  // Follow the mouse while drawing: work out the snapped spot, move the crosshair there, redraw the preview line.
+  const track = useRef<() => void>(() => {});
+  track.current = () => {
+    const m = map.current, xh = crosshair.current;
+    if (!m || !xh) return;
+    const cur = props.current;
+    if (!cur.drawing || !cursorPx.current) {
+      xh.style.display = "none";
+      lastMouse.current = null;
+      lastSnap.current = null;
+      drawPreview.current();
+      return;
+    }
+    const s = snapAt(cursorPx.current);
+    lastMouse.current = s.latlng;
+    lastSnap.current = s.kind;
+    const at = m.latLngToContainerPoint(s.latlng);
+    xh.style.display = "block";
+    xh.style.transform = `translate(${Math.round(at.x - XH / 2)}px, ${Math.round(at.y - XH / 2)}px)`;
+    xh.classList.toggle("snapped", !!s.kind);
+    const last = cur.draft[cur.draft.length - 1];
+    const labels = xh.querySelector(".xh-labels") as HTMLElement;
+    labels.style.display = last ? "" : "none";
+    if (last) {
+      const to: LatLng = [s.latlng.lat, s.latlng.lng];
+      (xh.querySelector(".xh-angle") as HTMLElement).textContent = `${bearingDeg(last, to).toFixed(1)}°`;
+      (xh.querySelector(".xh-dist") as HTMLElement).textContent = formatFeet(s.latlng.distanceTo(L.current!.latLng(last[0], last[1])) * 3.28084);
+    }
+    const snapTag = xh.querySelector(".xh-snap") as HTMLElement;
+    snapTag.textContent = s.kind ? SNAP_LABELS[s.kind] : "";
+    snapTag.style.display = s.kind ? "" : "none";
+    drawPreview.current();
+  };
 
   // The line that follows the crosshair while drawing, so the next point can be lined up.
   const drawPreview = useRef<() => void>(() => {});
@@ -135,19 +224,15 @@ export function MeasureMap(p: Props) {
     layer.clearLayers();
     const cur = props.current;
     const at = lastMouse.current;
-    if (!cur.drawing || !cur.draft.length || !at) { previewLabel.current?.remove(); return; }
+    if (!cur.drawing || !cur.draft.length || !at) return;
     const color = shapeColor(cur.drawing, cur.drawZone);
     const last = cur.draft[cur.draft.length - 1];
-    const opts = { color, weight: 1.5, dashArray: "4 4", interactive: false };
+    // Solid while snapped, so it's clear the line has locked.
+    const opts = { color, weight: lastSnap.current ? 2 : 1.5, dashArray: lastSnap.current ? undefined : "4 4", interactive: false };
     mod.polyline([last, [at.lat, at.lng]], opts).addTo(layer);
     if (cur.drawing !== "line" && cur.draft.length >= 2) {
       mod.polyline([[at.lat, at.lng], cur.draft[0]], { ...opts, opacity: 0.45 }).addTo(layer);
     }
-    const feet = mod.latLng(last[0], last[1]).distanceTo(at) * 3.28084;
-    // One label, moved along with the crosshair.
-    previewLabel.current ??= mod.tooltip({ permanent: true, direction: "right", offset: [14, 0], className: "measure-preview-label", interactive: false });
-    previewLabel.current.setLatLng(at).setContent(formatFeet(feet));
-    if (!m.hasLayer(previewLabel.current)) previewLabel.current.addTo(m);
   };
 
   redraw.current = () => {
@@ -157,7 +242,7 @@ export function MeasureMap(p: Props) {
     shapesLayer.current.clearLayers();
     editLayer.current.clearLayers();
     draftLayer.current.clearLayers();
-    drawPreview.current();
+    track.current();
 
     for (const s of cur.shapes) {
       const selected = s.id === cur.selectedId;
@@ -229,6 +314,7 @@ export function MeasureMap(p: Props) {
   }
 
   useEffect(() => { redraw.current(); }, [p.shapes, p.selectedId, p.drawing, p.draft, p.result, p.showHandles]);
+  useEffect(() => { track.current(); }, [p.snap]);
 
   // The house pin: draggable to fix where the address search put it; clicks go through to the map while drawing.
   const drawPin = useRef<() => void>(() => {});

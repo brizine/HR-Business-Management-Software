@@ -20,6 +20,18 @@ const MeasureMap = dynamic(() => import("@/components/measure-map").then((m) => 
 const DEFAULT_VIEW: MapView = { lat: 35.2226, lng: -97.4395, zoom: 12 };
 const VIEW_KEY = "measure.view";
 const HANDLES_KEY = "measure.handles";
+const SNAP_KEY = "measure.snap";
+
+/** An on/off switch for the drawing toolbar. */
+function Switch({ on, onChange, label, title }: { on: boolean; onChange: (on: boolean) => void; label: string; title: string }) {
+  return (
+    <label className="measure-toggle" title={title}>
+      <input type="checkbox" role="switch" checked={on} onChange={(e) => onChange(e.target.checked)} />
+      <span className="measure-toggle-track" aria-hidden><span /></span>
+      {label}
+    </label>
+  );
+}
 
 const loadView = (): MapView => {
   try {
@@ -98,12 +110,15 @@ export default function MeasurePage() {
   const [showHandles, setShowHandles] = useState(true);
   useEffect(() => { try { if (localStorage.getItem(HANDLES_KEY) === "off") setShowHandles(false); } catch { /* storage unavailable */ } }, []);
   const toggleHandles = (on: boolean) => { setShowHandles(on); try { localStorage.setItem(HANDLES_KEY, on ? "on" : "off"); } catch { /* ignore */ } };
+  /** Snap the next point to square corners, straight runs, 45° and nearby corners while drawing (remembered on this device). */
+  const [snap, setSnap] = useState(true);
+  useEffect(() => { try { if (localStorage.getItem(SNAP_KEY) === "off") setSnap(false); } catch { /* storage unavailable */ } }, []);
+  const toggleSnap = (on: boolean) => { setSnap(on); try { localStorage.setItem(SNAP_KEY, on ? "on" : "off"); } catch { /* ignore */ } };
   const pointsToggle = (
-    <label className="measure-toggle" title="Show or hide the points: the dots placed while drawing, and the corner squares and circles used to adjust a measurement">
-      <input type="checkbox" role="switch" checked={showHandles} onChange={(e) => toggleHandles(e.target.checked)} />
-      <span className="measure-toggle-track" aria-hidden><span /></span>
-      Show points
-    </label>
+    <>
+      <Switch on={showHandles} onChange={toggleHandles} label="Show points" title="Show or hide the points: the dots placed while drawing, and the corner squares and circles used to adjust a measurement" />
+      <Switch on={snap} onChange={toggleSnap} label="Snap" title="While drawing, lock the next point to square corners, straight runs, 45°, north–south / east–west, and nearby corners" />
+    </>
   );
   const [exportOpen, setExportOpen] = useState(false);
 
@@ -351,7 +366,7 @@ export default function MeasurePage() {
           <MeasureMap
             view={view} viewKey={viewKey} imagery={imagery} shapes={shapes} selectedId={selectedId}
             drawing={drawing} drawZone={drawZone} draft={draft} onAddPoint={onAddPoint} onFinish={finish} onSelect={setSelectedId}
-            onChangeShape={onChangeShape} onMove={onMove} result={totals} onReady={onReady} showHandles={showHandles} pin={pin} onMovePin={onMovePin}
+            onChangeShape={onChangeShape} onMove={onMove} result={totals} onReady={onReady} showHandles={showHandles} pin={pin} onMovePin={onMovePin} snap={snap}
           />
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             {drawing ? (
