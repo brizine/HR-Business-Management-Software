@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
-import { and, desc, eq, ilike, or } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { customImagerySchema, hasRole, measureTotals, measurementSchema } from "@crewdesk/shared";
 import { db } from "../db";
@@ -21,11 +21,30 @@ const routes: FastifyPluginAsync = async (app) => {
 
   const listColumns = {
     id: measurements.id, name: measurements.name, address: measurements.address, netSqFt: measurements.netSqFt,
+    frontSqFt: measurements.frontSqFt, backSqFt: measurements.backSqFt,
     lat: measurements.lat, lng: measurements.lng, imagery: measurements.imagery, updatedAt: measurements.updatedAt,
     createdById: measurements.createdById, createdByFirst: employees.firstName, createdByLast: employees.lastName,
   };
 
+  /** Works out the front/back totals of measurements saved before they were stored. */
+  async function fillZoneTotals(companyId: string) {
+    const rows = await db
+      .select({ id: measurements.id, shapes: measurements.shapes })
+      .from(measurements)
+      .where(and(eq(measurements.companyId, companyId), or(isNull(measurements.frontSqFt), isNull(measurements.backSqFt))));
+    for (const r of rows) {
+      const t = measureTotals(r.shapes ?? []);
+      await db.update(measurements).set({ frontSqFt: t.frontSqFt, backSqFt: t.backSqFt }).where(eq(measurements.id, r.id));
+    }
+  }
+
+  const totalsOf = (shapes: Parameters<typeof measureTotals>[0]) => {
+    const t = measureTotals(shapes);
+    return { netSqFt: t.netSqFt, frontSqFt: t.frontSqFt, backSqFt: t.backSqFt };
+  };
+
   app.get<{ Querystring: { q?: string } }>("/", async (req) => {
+    await fillZoneTotals(req.user.companyId);
     const q = (req.query.q ?? "").trim().slice(0, 100);
     const where = [eq(measurements.companyId, req.user.companyId)];
     if (q) where.push(or(ilike(measurements.name, `%${q}%`), ilike(measurements.address, `%${q}%`))!);
@@ -91,7 +110,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const body = parse(measurementSchema, req.body);
     const [row] = await db
       .insert(measurements)
-      .values({ ...body, netSqFt: measureTotals(body.shapes).netSqFt, companyId: req.user.companyId, createdById: req.user.sub, updatedById: req.user.sub })
+      .values({ ...body, ...totalsOf(body.shapes), companyId: req.user.companyId, createdById: req.user.sub, updatedById: req.user.sub })
       .returning();
     return { ...row, canEdit: true };
   });
@@ -102,7 +121,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const body = parse(measurementSchema, req.body);
     const [updated] = await db
       .update(measurements)
-      .set({ ...body, netSqFt: measureTotals(body.shapes).netSqFt, updatedById: req.user.sub, updatedAt: new Date() })
+      .set({ ...body, ...totalsOf(body.shapes), updatedById: req.user.sub, updatedAt: new Date() })
       .where(eq(measurements.id, row.id))
       .returning();
     return { ...updated, canEdit: true };

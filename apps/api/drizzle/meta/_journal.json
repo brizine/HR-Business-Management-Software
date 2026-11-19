@@ -372,6 +372,13 @@
       "when": 1795063091427,
       "tag": "0052_measure_imagery",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1795088955547,
+      "tag": "0053_measurement_zone_totals",
+      "breakpoints": true
     }
   ]
 }

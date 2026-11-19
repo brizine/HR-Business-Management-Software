@@ -17,7 +17,7 @@ async function call(method: string, url: string, who: string, payload?: unknown)
 const yard = (name: string) => ({
   name, address: "123 Main St, Norman, OK", lat: 35.2226, lng: -97.4395, zoom: 20, imagery: "Oklahoma 2025 leaf-off",
   shapes: [
-    { id: "a", kind: "turf", label: "Front", points: [[35.2226, -97.4395], [35.2235, -97.4395], [35.2235, -97.4384], [35.2226, -97.4384]] },
+    { id: "a", kind: "turf", zone: "front", label: "Front", points: [[35.2226, -97.4395], [35.2235, -97.4395], [35.2235, -97.4384], [35.2226, -97.4384]] },
     { id: "b", kind: "cut", points: [[35.2227, -97.4394], [35.2228, -97.4394], [35.2228, -97.4393]] },
   ],
 });
@@ -49,6 +49,8 @@ describe("measurements", () => {
     const list = await call("GET", "/measurements?q=smith", "crew2");
     expect(list.body.map((m: any) => m.name)).toEqual(["Smith residence"]);
     expect(list.body[0].createdByFirst).toBe("crew");
+    expect(list.body[0].frontSqFt).toBeCloseTo(saved.body.netSqFt, 0);
+    expect(list.body[0].backSqFt).toBe(0);
     expect((await call("GET", "/measurements?q=nobody", "crew2")).body).toEqual([]);
 
     expect((await call("GET", `/measurements/${id}`, "crew2")).body.canEdit).toBe(false);

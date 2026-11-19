@@ -1079,6 +1079,9 @@ export const measurements = pgTable(
     shapes: jsonb("shapes").$type<MeasureShape[]>().notNull(),
     /** Areas minus cut-outs, in square feet (kept for the list and sorting). */
     netSqFt: doublePrecision("net_sq_ft").notNull().default(0),
+    /** Front- and back-yard areas minus cut-outs, in square feet (null until worked out for older rows). */
+    frontSqFt: doublePrecision("front_sq_ft"),
+    backSqFt: doublePrecision("back_sq_ft"),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
     updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

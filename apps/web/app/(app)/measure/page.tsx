@@ -30,7 +30,7 @@ const newId = () => Math.random().toString(36).slice(2, 10);
 const samePoint = (a: LatLng, b: LatLng) => Math.abs(a[0] - b[0]) < 3e-6 && Math.abs(a[1] - b[1]) < 3e-6;
 
 type Saved = { id: string; canEdit: boolean };
-type ListRow = { id: string; name: string; address: string | null; netSqFt: number; updatedAt: string; createdByFirst: string | null; createdByLast: string | null; imagery: string | null };
+type ListRow = { id: string; name: string; address: string | null; netSqFt: number; frontSqFt: number | null; backSqFt: number | null; updatedAt: string; createdByFirst: string | null; createdByLast: string | null; imagery: string | null };
 
 /** Google's and Apple's own maps, opened at the current spot (their photos can't be traced inside this map). */
 const OUTSIDE_MAPS: { label: string; hint: string; url: (v: MapView) => string }[] = [
@@ -412,12 +412,14 @@ export default function MeasurePage() {
         {list.data && !list.data.length && <Empty>{listQuery ? "No measurements match." : "No saved measurements yet."}</Empty>}
         {!!list.data?.length && (
           <div className="measure-saved"><table>
-            <thead><tr><th>Name</th><th>Address</th><th style={{ textAlign: "right" }}>Area</th><th>Saved by</th><th>Updated</th><th /></tr></thead>
+            <thead><tr><th>Name</th><th>Address</th><th style={{ textAlign: "right" }}>Front</th><th style={{ textAlign: "right" }}>Back</th><th style={{ textAlign: "right" }}>Total Area</th><th>Saved by</th><th>Updated</th><th /></tr></thead>
             <tbody>{list.data.map((m) => (
               <tr key={m.id}>
                 <td>{m.name}</td>
                 <td className="muted">{m.address}</td>
-                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{formatSqFt(m.netSqFt)}</td>
+                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{m.frontSqFt ? formatSqFt(m.frontSqFt) : <span className="muted">—</span>}</td>
+                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{m.backSqFt ? formatSqFt(m.backSqFt) : <span className="muted">—</span>}</td>
+                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}><strong>{formatSqFt(m.netSqFt)}</strong></td>
                 <td className="muted">{[m.createdByFirst, m.createdByLast].filter(Boolean).join(" ")}</td>
                 <td className="muted">{fmtDate(m.updatedAt)}</td>
                 <td><button className="btn sm" onClick={() => open(m.id)}>Open</button></td>
