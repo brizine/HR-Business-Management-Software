@@ -117,11 +117,13 @@ describe("event notifications", () => {
     const alert = (await pushesTo(tokens.owner)).find((m) => m.title === "Truck 9 failed inspection");
     expect(alert?.data.link).toMatchObject({ screen: "work-order", assetId: asset.body.id });
 
+    await flushNotifications(); // let notifications from earlier steps finish first
     sent = [];
     const wo = await call("POST", "/work-orders", owner.token, { assetId: asset.body.id, title: "Fix brakes", assignedToId: tech.id });
     expect((await pushesTo(tokens.tech))[0].title).toBe(`Work order #${wo.body.number} assigned to you`);
 
     // The technician finishing their own job doesn't notify themselves; the reporter (owner) hears about it.
+    await flushNotifications(); // let notifications from earlier steps finish first
     sent = [];
     await call("PATCH", `/work-orders/${wo.body.id}`, tech.token, { status: "completed" });
     expect(await pushesTo(tokens.tech)).toHaveLength(0);
@@ -163,6 +165,7 @@ describe("scheduled checks", () => {
     expect(first.map((m) => m.title)).toEqual(["Loader: Grease overdue"]);
     expect((await pushesTo(tokens.tech)).some((m) => m.title === "Loader: Grease overdue")).toBe(true);
 
+    await flushNotifications(); // let notifications from earlier steps finish first
     sent = [];
     await runScheduledChecks();
     expect((await pushesTo(tokens.owner)).filter((m) => m.title.startsWith("Loader"))).toHaveLength(0);
@@ -181,6 +184,7 @@ describe("scheduled checks", () => {
     // Only managers change it, and only to someone who works here.
     expect((await call("PATCH", `/assets/schedules/${sched.body.id}`, tech.token, { assignedToId: null })).status).toBe(403);
     expect((await call("PATCH", `/assets/schedules/${sched.body.id}`, owner.token, { assignedToId: "00000000-0000-4000-8000-000000000000" })).status).toBe(404);
+    await flushNotifications(); // let notifications from earlier steps finish first
     sent = [];
     await call("POST", `/assets/${mower.body.id}/meter`, owner.token, { engineHours: 125 });
     await runScheduledChecks();
@@ -219,7 +223,7 @@ describe("scheduled checks", () => {
     await call("POST", `/assets/${van.body.id}/meter`, owner.token, { odometer: 15200 });
     // Start just after a 3-day boundary, so "a day later" stays in the same 3-day window.
     const t0 = Math.floor(Date.UTC(2031, 0, 1) / (3 * 86_400_000)) * 3 * 86_400_000 + 3_600_000;
-    const overdue = async (at: number) => { sent = []; await runScheduledChecks(new Date(at)); return (await pushesTo(tokens.owner)).filter((m) => m.title === "Crew Van: Oil change overdue").length; };
+    const overdue = async (at: number) => { await flushNotifications(); sent = []; await runScheduledChecks(new Date(at)); return (await pushesTo(tokens.owner)).filter((m) => m.title === "Crew Van: Oil change overdue").length; };
     expect(await overdue(t0)).toBe(1);
     expect(await overdue(t0 + 86_400_000)).toBe(0);
     expect(await overdue(t0 + 3 * 86_400_000)).toBe(1);
@@ -238,6 +242,7 @@ describe("scheduled checks", () => {
     const row = (await call("GET", "/work-orders?status=active", owner.token)).body.find((r: any) => r.workOrder.id === wo.body.id);
     expect(row.assetMeter).toEqual({ odometer: 40000, engineHours: 0 });
 
+    await flushNotifications(); // let notifications from earlier steps finish first
     sent = [];
     await runScheduledChecks();
     expect((await pushesTo(tokens.owner)).filter((m) => m.title.startsWith("Spray Truck"))).toHaveLength(0); // 5,000 miles to go
@@ -271,9 +276,11 @@ describe("scheduled checks", () => {
     const titles = async (token: string) => (await pushesTo(token)).map((m) => m.title).filter((t) => t.includes("Trailer 4"));
     const trailer = await call("POST", "/assets", owner.token, { name: "Trailer 4", type: "trailer", registrationExpires: ymd(20) });
 
+    await flushNotifications(); // let notifications from earlier steps finish first
     sent = [];
     await runScheduledChecks(at(0));
     expect(await titles(tokens.owner)).toEqual(["Renew soon: Trailer 4 registration expires in 20 days"]);
+    await flushNotifications(); // let notifications from earlier steps finish first
     sent = [];
     await runScheduledChecks(at(0));
     expect(await titles(tokens.owner)).toEqual([]);
@@ -281,15 +288,18 @@ describe("scheduled checks", () => {
     await runScheduledChecks(at(14));
     expect(await titles(tokens.owner)).toEqual(["Renew soon: Trailer 4 registration expires in 6 days"]);
     // Expired: right away, then every 7 days.
+    await flushNotifications(); // let notifications from earlier steps finish first
     sent = [];
     await runScheduledChecks(at(21));
     await runScheduledChecks(at(22));
     expect(await titles(tokens.owner)).toEqual(["Renew now: Trailer 4 registration expired"]);
+    await flushNotifications(); // let notifications from earlier steps finish first
     sent = [];
     await runScheduledChecks(at(29));
     expect(await titles(tokens.owner)).toEqual(["Renew now: Trailer 4 registration expired"]);
     // Renewed (new date): quiet until the new date nears.
     await call("PATCH", `/assets/${trailer.body.id}`, owner.token, { registrationExpires: ymd(400) });
+    await flushNotifications(); // let notifications from earlier steps finish first
     sent = [];
     await runScheduledChecks(at(30));
     expect(await titles(tokens.owner)).toEqual([]);
@@ -303,6 +313,7 @@ describe("scheduled checks", () => {
     expect((await call("PUT", "/assets/settings", owner.token, { remindMilesBefore: 750 })).body.renewalNotifyIds).toEqual([tech.id]);
     expect((await call("PUT", "/assets/settings", owner.token, { renewalNotifyIds: ["00000000-0000-4000-8000-000000000000"] })).status).toBe(400);
     await call("PATCH", `/assets/${trailer.body.id}`, owner.token, { insuranceExpires: ymd(80) });
+    await flushNotifications(); // let notifications from earlier steps finish first
     sent = [];
     await runScheduledChecks(at(30));
     expect(await titles(tokens.tech)).toEqual(["Renew soon: Trailer 4 insurance expires in 50 days"]);
