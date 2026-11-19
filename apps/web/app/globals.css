@@ -652,10 +652,19 @@ tr.openrow td { background: var(--bg); }
 .leaflet-tooltip.measure-preview-label::before { display: none; }
 /* Drawing crosshair (follows the mouse; the normal cursor is hidden over the map while drawing) */
 .measure-map.drawing, .measure-map.drawing .leaflet-interactive, .measure-map.drawing .leaflet-grab { cursor: none !important; }
-.measure-crosshair { position: absolute; left: 0; top: 0; width: 180px; height: 180px; pointer-events: none; z-index: 800; display: none; }
+.measure-crosshair { position: absolute; left: 0; top: 0; width: 124px; height: 124px; pointer-events: none; z-index: 800; display: none; }
 .measure-crosshair svg { display: block; filter: drop-shadow(0 0 1px rgba(0,0,0,0.6)); }
 .measure-crosshair.snapped .xh-box { stroke: #7ee787; stroke-width: 3; }
-.measure-crosshair .xh-labels { position: absolute; left: 50px; bottom: 132px; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
-.measure-crosshair .xh-labels span { background: rgba(0, 0, 0, 0.75); color: #fff; border: 1.5px solid #3fb950; font: 600 12px/1.25 system-ui, sans-serif; padding: 1px 6px; white-space: nowrap; }
+.measure-crosshair .xh-labels { position: absolute; left: 34px; bottom: 91px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.measure-crosshair .xh-labels span { background: rgba(0, 0, 0, 0.75); color: #fff; border: 1.5px solid #3fb950; font: 600 11px/1.25 system-ui, sans-serif; padding: 1px 5px; white-space: nowrap; }
 .measure-crosshair .xh-labels .xh-angle { color: #d0d7de; }
 .measure-crosshair .xh-labels .xh-snap { border-color: #7ee787; color: #7ee787; }
+/* Touchscreens: drag the crosshair by its box; Drop Point places the point */
+.measure-crosshair .xh-grab { display: none; position: absolute; left: 34px; top: 34px; width: 56px; height: 56px; touch-action: none; }
+.measure-map.touch .measure-crosshair .xh-grab { display: block; pointer-events: auto; cursor: grab; }
+.measure-drop { position: absolute; left: 50%; bottom: 44px; transform: translateX(-50%); z-index: 850; display: none; align-items: center; gap: 6px; padding: 12px 22px; border-radius: 999px; border: 2px solid #fff; background: #2ea043; color: #fff; font: 700 16px system-ui, sans-serif; box-shadow: 0 4px 14px rgba(0,0,0,0.35); cursor: pointer; touch-action: manipulation; }
+.measure-drop span { font-size: 20px; line-height: 1; }
+.measure-drop:active { transform: translateX(-50%) scale(0.96); }
+/* Drawing hint: mouse wording, or touch wording on touchscreens */
+.hint-touch { display: none; }
+@media (pointer: coarse) { .hint-mouse { display: none; } .hint-touch { display: inline; } }

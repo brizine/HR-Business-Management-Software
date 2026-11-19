@@ -9,7 +9,7 @@ import type { ImageryLayer } from "@/lib/imagery";
 const HIT = 24;
 
 /** The drawing crosshair: long red lines with a gap, a green box with red corner ticks, a green dot in the middle. */
-const XH = 180;
+const XH = 124;
 const CROSSHAIR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="${XH}" height="${XH}" viewBox="0 0 180 180">
   <g stroke="#ff2d2d" stroke-width="1.5" fill="none">
     <line x1="0" y1="90" x2="58" y2="90"/><line x1="122" y1="90" x2="180" y2="90"/>
@@ -83,6 +83,12 @@ export function MeasureMap(p: Props) {
   /** Where the mouse is on the map, in pixels (to re-snap when the map moves under it). */
   const cursorPx = useRef<Leaflet.Point | null>(null);
   const crosshair = useRef<HTMLDivElement | null>(null);
+  /**
+   * Touchscreens: the crosshair stays put on the map's screen (starting in the middle); pan the map under it,
+   * drag the crosshair, or tap to move it there, then press Drop Point. With a mouse it follows the mouse.
+   */
+  const touchMode = useRef(false);
+  const dropButton = useRef<HTMLButtonElement | null>(null);
   const props = useRef(p);
   props.current = p;
   const ready = useRef(false);
@@ -106,18 +112,56 @@ export function MeasureMap(p: Props) {
       xh.innerHTML = `${CROSSHAIR_SVG}<div class="xh-labels"><span class="xh-angle"></span><span class="xh-dist"></span><span class="xh-snap"></span></div>`;
       m.getContainer().appendChild(xh);
       crosshair.current = xh;
-      m.on("mousemove", (e: Leaflet.LeafletMouseEvent) => { cursorPx.current = e.containerPoint; track.current(); });
+      // Touch: drag the crosshair by its box (without moving the map).
+      const grab = document.createElement("div");
+      grab.className = "xh-grab";
+      xh.appendChild(grab);
+      mod.DomEvent.disableClickPropagation(grab);
+      grab.addEventListener("pointerdown", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        grab.setPointerCapture(ev.pointerId);
+        const start = cursorPx.current ?? m.getSize().divideBy(2);
+        const from = { x: ev.clientX, y: ev.clientY };
+        const move = (e: PointerEvent) => {
+          const size = m.getSize();
+          cursorPx.current = mod.point(Math.max(0, Math.min(size.x, start.x + e.clientX - from.x)), Math.max(0, Math.min(size.y, start.y + e.clientY - from.y)));
+          track.current();
+        };
+        const up = () => { grab.removeEventListener("pointermove", move); grab.removeEventListener("pointerup", up); grab.removeEventListener("pointercancel", up); };
+        grab.addEventListener("pointermove", move);
+        grab.addEventListener("pointerup", up);
+        grab.addEventListener("pointercancel", up);
+      });
+      // Touch: the Drop Point button places a point where the crosshair is.
+      const drop = document.createElement("button");
+      drop.type = "button";
+      drop.className = "measure-drop";
+      drop.innerHTML = "<span>+</span> Drop Point";
+      mod.DomEvent.disableClickPropagation(drop);
+      drop.addEventListener("click", () => { if (cursorPx.current) placeAt(cursorPx.current); });
+      m.getContainer().appendChild(drop);
+      dropButton.current = drop;
+      const setTouch = (on: boolean) => {
+        if (touchMode.current === on) return;
+        touchMode.current = on;
+        el.current?.classList.toggle("touch", on);
+        if (on && props.current.drawing) cursorPx.current = m.getSize().divideBy(2);
+        track.current();
+      };
+      if (window.matchMedia?.("(pointer: coarse)").matches) setTouch(true);
+      m.getContainer().addEventListener("touchstart", () => setTouch(true), { passive: true });
+      m.getContainer().addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") setTouch(false); });
+      m.on("mousemove", (e: Leaflet.LeafletMouseEvent) => { if (touchMode.current) return; cursorPx.current = e.containerPoint; track.current(); });
       m.on("move zoom", () => track.current());
-      m.on("mouseout", () => { cursorPx.current = null; track.current(); });
+      m.on("mouseout", () => { if (touchMode.current) return; cursorPx.current = null; track.current(); });
       mod.control.scale({ imperial: true, metric: false }).addTo(m);
       m.on("click", (e: Leaflet.LeafletMouseEvent) => {
         const cur = props.current;
         if (!cur.drawing) return cur.onSelect(null);
-        const s = snapAt(e.containerPoint);
-        // Snapping onto the first point closes the shape.
-        const first = cur.draft[0];
-        if (s.kind === "corner" && first && cur.drawing !== "line" && cur.draft.length >= 3 && s.latlng.equals(mod.latLng(first[0], first[1]), 1e-9)) return cur.onFinish();
-        cur.onAddPoint([s.latlng.lat, s.latlng.lng]);
+        // Touch: a tap moves the crosshair there; Drop Point places the point.
+        if (touchMode.current) { cursorPx.current = e.containerPoint; return track.current(); }
+        placeAt(e.containerPoint);
       });
       m.on("dblclick", () => { if (props.current.drawing) props.current.onFinish(); });
       m.on("moveend", () => { const c = m.getCenter(); props.current.onMove({ lat: c.lat, lng: c.lng, zoom: m.getZoom() }); });
@@ -155,15 +199,30 @@ export function MeasureMap(p: Props) {
     if (!m) return;
     if (p.drawing) m.doubleClickZoom.disable(); else m.doubleClickZoom.enable();
     el.current?.classList.toggle("drawing", !!p.drawing);
+    // Touch: start each shape with the crosshair in the middle of the map.
+    if (p.drawing && touchMode.current) cursorPx.current = m.getSize().divideBy(2);
     track.current();
   }, [p.drawing]);
+
+  /** Places the next point for the crosshair at `pt` (snapped); snapping onto the first point closes the shape. */
+  function placeAt(pt: Leaflet.Point) {
+    const cur = props.current;
+    if (!cur.drawing) return;
+    const s = snapAt(pt);
+    const first = cur.draft[0];
+    if (s.kind === "corner" && first && cur.drawing !== "line" && cur.draft.length >= 3 && s.latlng.equals(L.current!.latLng(first[0], first[1]), 1e-9)) return cur.onFinish();
+    cur.onAddPoint([s.latlng.lat, s.latlng.lng]);
+  }
 
   /** Where the next point would go for the mouse at `pt`: snapped (if Snap is on) or exactly there. */
   function snapAt(pt: Leaflet.Point): { latlng: Leaflet.LatLng; kind: SnapKind | null } {
     const m = map.current!;
     const cur = props.current;
     if (cur.snap === false || !cur.drawing) return { latlng: m.containerPointToLatLng(pt), kind: null };
-    const px = (ll: LatLng) => m.latLngToContainerPoint(ll);
+    // Exact (unrounded) screen positions: Leaflet's latLngToContainerPoint rounds to whole pixels, which would
+    // tilt a snapped line by a fraction of a degree.
+    const origin = m.getPixelOrigin();
+    const px = (ll: LatLng) => m.layerPointToContainerPoint(m.project(ll).subtract(origin));
     const d = cur.draft;
     const area = cur.drawing !== "line";
     const r = snapDrawPoint({ x: pt.x, y: pt.y }, {
@@ -188,6 +247,7 @@ export function MeasureMap(p: Props) {
     const m = map.current, xh = crosshair.current;
     if (!m || !xh) return;
     const cur = props.current;
+    if (dropButton.current) dropButton.current.style.display = cur.drawing && touchMode.current ? "inline-flex" : "none";
     if (!cur.drawing || !cursorPx.current) {
       xh.style.display = "none";
       lastMouse.current = null;

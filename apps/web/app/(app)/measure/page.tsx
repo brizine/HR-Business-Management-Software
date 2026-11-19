@@ -371,7 +371,8 @@ export default function MeasurePage() {
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             {drawing ? (
               <>
-                <span className="muted" style={{ flex: "1 1 260px", fontSize: 14 }}>{drawing === "turf" && drawZone ? `${MEASURE_ZONE_LABELS[drawZone]}: ` : ""}{showHandles ? HINT[drawing] : HINT[drawing].replace(", press Enter, or click the first point to finish", " or press Enter to finish")}</span>
+                <span className="muted" style={{ flex: "1 1 260px", fontSize: 14 }}>{drawing === "turf" && drawZone ? `${MEASURE_ZONE_LABELS[drawZone]}: ` : ""}<span className="hint-mouse">{showHandles ? HINT[drawing] : HINT[drawing].replace(", press Enter, or click the first point to finish", " or press Enter to finish")}</span>
+                  <span className="hint-touch">Move the crosshair onto the next corner (move the map, drag the crosshair, or tap the spot), then press Drop Point. Press Finish when done.</span></span>
                 <button className="btn sm primary" onClick={finish}>Finish</button>
                 <button className="btn sm" onClick={() => setDraft((d) => d.slice(0, -1))} disabled={!draft.length}>Undo Point</button>
                 <button className="btn sm" onClick={cancelDrawing}>Cancel</button>
