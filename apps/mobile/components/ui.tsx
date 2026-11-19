@@ -1,5 +1,5 @@
-import { useContext, type ReactNode } from "react";
-import { useNavigation } from "expo-router";
+import { useCallback, useContext, useEffect, useRef, type ComponentRef, type ReactNode } from "react";
+import { useFocusEffect, useNavigation } from "expo-router";
 import { HeaderHeightContext } from "expo-router/react-navigation";
 import {
   ActivityIndicator,
@@ -33,8 +33,33 @@ export function Screen({ children, refreshing, onRefresh }: { children: ReactNod
   const inStack = useNavigation().getState()?.type === "stack";
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const top = Platform.OS === "ios" && inStack ? Math.round(headerHeight) : 0;
+
+  // iOS quirk: after leaving a screen that has pull-to-refresh and coming back, the page can be left
+  // resting slightly pulled down (a gap at the top). If it's below its top without the person
+  // pulling or a refresh running, put it back.
+  const ref = useRef<ComponentRef<typeof ScrollView>>(null);
+  const dragging = useRef(false);
+  const offset = useRef(0);
+  // Just after a pull (bouncing back, or the refresh spinner settling) the page is legitimately below its top.
+  const settleUntil = useRef(0);
+  const snapBack = () => {
+    if (!dragging.current && !refreshing && Date.now() > settleUntil.current && offset.current < -1) ref.current?.scrollTo({ y: 0, animated: false });
+  };
+  useEffect(() => { settleUntil.current = Date.now() + 1000; }, [refreshing]);
+  useFocusEffect(useCallback(() => {
+    const timer = setTimeout(snapBack, 60);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshing]));
+
   return (
     <ScrollView
+      ref={ref}
+      scrollEventThrottle={32}
+      onScroll={(e) => { offset.current = e.nativeEvent.contentOffset.y; if (Platform.OS === "ios") snapBack(); }}
+      onScrollBeginDrag={() => { dragging.current = true; }}
+      onScrollEndDrag={() => { dragging.current = false; settleUntil.current = Date.now() + 1000; }}
+      onMomentumScrollEnd={() => { dragging.current = false; snapBack(); }}
       style={{ backgroundColor: t.bg }}
       contentContainerStyle={{ padding: 16, paddingTop: 16 + top, gap: 12 }}
       scrollIndicatorInsets={top ? { top } : undefined}
