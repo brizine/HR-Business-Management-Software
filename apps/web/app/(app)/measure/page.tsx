@@ -106,6 +106,14 @@ export default function MeasurePage() {
     }
   }, []);
 
+  /** Drops the Esri dates from the list (back to the standard photos); keeps the photo shown unless it was an Esri one. */
+  const resetPhotos = () => {
+    waybackAbort.current?.abort();
+    wantImagery.current = null;
+    setWayback({ loading: false, versions: [], error: null, searched: false });
+    setImageryKey((k) => (k.startsWith("wb-") ? OK_LEAF_OFF.key : k));
+  };
+
   const goTo = (v: MapView) => {
     setView(v);
     center.current = v;
@@ -276,9 +284,12 @@ export default function MeasurePage() {
           <div className="card stack" style={{ gap: 8 }}>
             <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
               <h2 style={{ margin: 0 }}>Aerial Photo</h2>
-              <button className="btn sm" onClick={() => findDates(center.current)} disabled={wayback.loading}>
-                {wayback.loading ? "Looking up Esri photo dates…" : wayback.searched ? "Find Esri photo dates here again" : "Find more photo dates here (Esri)"}
-              </button>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                <button className="btn sm" onClick={() => findDates(center.current)} disabled={wayback.loading}>
+                  {wayback.loading ? "Looking up Esri photo dates…" : wayback.searched ? "Find Esri photo dates here again" : "Find more photo dates here (Esri)"}
+                </button>
+                {(wayback.searched || wayback.loading) && <button className="btn sm" onClick={resetPhotos}>Back to Default Photos</button>}
+              </div>
             </div>
             <div className="measure-layers">
               {layers.map((l) => (
@@ -354,7 +365,7 @@ export default function MeasurePage() {
 
       <div className="card stack">
         <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-          <h2 style={{ margin: 0 }}>Saved Measurements</h2>
+          <h2 style={{ margin: 0 }}>Saved Measurements{list.data?.length ? <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}> · {list.data.length}{list.data.length >= 200 ? "+" : ""}{listQuery ? " found" : ""}</span> : null}</h2>
           <form onSubmit={(e) => { e.preventDefault(); setListQuery((new FormData(e.currentTarget).get("q") as string).trim()); }} className="row" style={{ gap: 6, flex: "1 1 240px", maxWidth: 320 }}>
             <input name="q" placeholder="Search name or address" style={{ flex: 1, minWidth: 0 }} />
             <button className="btn sm">Search</button>
@@ -363,7 +374,7 @@ export default function MeasurePage() {
         <ErrorBox error={list.error} />
         {list.data && !list.data.length && <Empty>{listQuery ? "No measurements match." : "No saved measurements yet."}</Empty>}
         {!!list.data?.length && (
-          <div style={{ overflowX: "auto" }}><table>
+          <div className="measure-saved"><table>
             <thead><tr><th>Name</th><th>Address</th><th style={{ textAlign: "right" }}>Area</th><th>Saved by</th><th>Updated</th><th /></tr></thead>
             <tbody>{list.data.map((m) => (
               <tr key={m.id}>

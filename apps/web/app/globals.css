@@ -598,3 +598,7 @@ tr.openrow td { background: var(--bg); }
 .measure-handle { background: #fff; border: 2px solid #1f6feb; border-radius: 3px; box-sizing: border-box; cursor: move; }
 .measure-handle.mid { opacity: 0.6; border-radius: 50%; transform: scale(0.75); border-color: #fff; background: #1f6feb; }
 .measure-layers { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; }
+/* Saved measurements: a fixed-height box that scrolls, with the column names kept in view. */
+.measure-saved { max-height: 420px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.measure-saved thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; box-shadow: inset 0 -1px 0 var(--border); }
+.measure-saved tbody tr:last-child td { border-bottom: 0; }
