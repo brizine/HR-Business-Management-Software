@@ -113,7 +113,8 @@ Measure turf square footage from aerial photos, choosing photos taken in winter 
    switch any outline between Area, Front, Back and Hole. **Measure Line** measures lengths
    such as a perimeter barrier.
 4. Click a measurement on the map to adjust it: drag a corner to move it, drag a small dot between corners to
-   add one, right-click a corner to remove it. Turn **Show points** off (next to the drawing buttons, and while
+   add one, double-click a corner to remove it. **Right-click and drag** a corner of any measurement to move it, even
+   while a drawing button is selected; a plain **right-click** while drawing closes the outline (like Finish). Turn **Show points** off (next to the drawing buttons, and while
    drawing next to Finish) to hide the points, both the dots you place while drawing and the corner squares and
    circles, so you can see the outline clearly; while they're hidden, finish a shape with Finish, Enter or a
    double-click. Your measurements stay in place when you switch photos, so you can trace

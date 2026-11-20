@@ -65,7 +65,8 @@ interface Props {
 /**
  * The Measure page's map: aerial photo layer, saved shapes with their sizes, the shape being drawn,
  * and draggable corners on the selected shape (drag a corner to move it, drag a small midpoint dot to add one,
- * right-click a corner to remove it).
+ * double-click a corner to remove it). Right-click closes the outline being drawn; right-drag moves a corner of
+ * any measurement, even while drawing.
  */
 export function MeasureMap(p: Props) {
   const el = useRef<HTMLDivElement>(null);
@@ -83,6 +84,14 @@ export function MeasureMap(p: Props) {
   /** Where the mouse is on the map, in pixels (to re-snap when the map moves under it). */
   const cursorPx = useRef<Leaflet.Point | null>(null);
   const crosshair = useRef<HTMLDivElement | null>(null);
+  /** Each measurement's layer on the map, by id (to redraw it live while a corner is right-dragged). */
+  const shapeLayers = useRef(new Map<string, Leaflet.Polyline>());
+  /**
+   * A right-press on a corner is handled here (drag to move it; no drag = close the outline), so the browser's own
+   * right-click event for that press is ignored. Browsers send it on press (Mac, Linux) or on release (Windows).
+   */
+  const rightOnCorner = useRef(false);
+  const ignoreContextUntil = useRef(0);
   /**
    * Touchscreens: the crosshair stays put on the map's screen (starting in the middle); pan the map under it,
    * drag the crosshair, or tap to move it there, then press Drop Point. With a mouse it follows the mouse.
@@ -164,6 +173,52 @@ export function MeasureMap(p: Props) {
         placeAt(e.containerPoint);
       });
       m.on("dblclick", () => { if (props.current.drawing) props.current.onFinish(); });
+      const container = m.getContainer();
+      // Right-click while drawing closes the outline (like Finish); never shows the browser menu over the map.
+      container.addEventListener("contextmenu", (ev) => {
+        ev.preventDefault();
+        if (rightOnCorner.current || Date.now() < ignoreContextUntil.current) return;
+        const cur = props.current;
+        if (cur.drawing && cur.draft.length >= (cur.drawing === "line" ? 2 : 3)) cur.onFinish();
+      }, true);
+      // Right-drag a corner of any measurement to move it (even while drawing).
+      container.addEventListener("mousedown", (ev) => {
+        if (ev.button !== 2) return;
+        const hit = cornerAt(m.mouseEventToContainerPoint(ev));
+        if (!hit) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        rightOnCorner.current = true;
+        const shape = props.current.shapes.find((x) => x.id === hit.id);
+        const layer = shapeLayers.current.get(hit.id);
+        if (!shape || !layer) return;
+        const pts = shape.points.map((x) => [...x] as LatLng);
+        let moved = false;
+        const move = (e: MouseEvent) => {
+          let ll = m.mouseEventToLatLng(e);
+          // With Snap on, land exactly on another measurement's corner when close.
+          if (props.current.snap !== false) {
+            const near = cornerAt(m.mouseEventToContainerPoint(e), hit);
+            if (near) ll = mod.latLng(near.point[0], near.point[1]);
+          }
+          pts[hit.index] = [ll.lat, ll.lng];
+          layer.setLatLngs(pts);
+          moved = true;
+        };
+        const up = (e: MouseEvent) => {
+          if (e.button !== 2) return;
+          window.removeEventListener("mousemove", move);
+          window.removeEventListener("mouseup", up);
+          rightOnCorner.current = false;
+          ignoreContextUntil.current = Date.now() + 400;
+          if (moved) return props.current.onChangeShape(hit.id, pts);
+          // A right-click on a corner without dragging still closes the outline being drawn.
+          const cur = props.current;
+          if (cur.drawing && cur.draft.length >= (cur.drawing === "line" ? 2 : 3)) cur.onFinish();
+        };
+        window.addEventListener("mousemove", move);
+        window.addEventListener("mouseup", up);
+      }, true);
       m.on("moveend", () => { const c = m.getCenter(); props.current.onMove({ lat: c.lat, lng: c.lng, zoom: m.getZoom() }); });
       ready.current = true;
       props.current.onReady?.(m, mod);
@@ -203,6 +258,20 @@ export function MeasureMap(p: Props) {
     if (p.drawing && touchMode.current) cursorPx.current = m.getSize().divideBy(2);
     track.current();
   }, [p.drawing]);
+
+  /** The measurement corner within reach of `pt` (screen pixels), nearest first; `skip` leaves out the corner being moved. */
+  function cornerAt(pt: Leaflet.Point, skip?: { id: string; index: number }) {
+    const m = map.current!;
+    let best: { id: string; index: number; point: LatLng; d: number } | null = null;
+    for (const s of props.current.shapes) {
+      s.points.forEach((ll, index) => {
+        if (skip && skip.id === s.id && skip.index === index) return;
+        const d = m.latLngToContainerPoint(ll).distanceTo(pt);
+        if (d <= HIT / 2 && (!best || d < best.d)) best = { id: s.id, index, point: ll, d };
+      });
+    }
+    return best as { id: string; index: number; point: LatLng; d: number } | null;
+  }
 
   /** Places the next point for the crosshair at `pt` (snapped); snapping onto the first point closes the shape. */
   function placeAt(pt: Leaflet.Point) {
@@ -300,6 +369,7 @@ export function MeasureMap(p: Props) {
     if (!mod || !shapesLayer.current || !editLayer.current || !draftLayer.current) return;
     const cur = props.current;
     shapesLayer.current.clearLayers();
+    shapeLayers.current.clear();
     editLayer.current.clearLayers();
     draftLayer.current.clearLayers();
     track.current();
@@ -320,6 +390,7 @@ export function MeasureMap(p: Props) {
         props.current.onSelect(s.id);
       });
       layer.addTo(shapesLayer.current);
+      shapeLayers.current.set(s.id, layer as Leaflet.Polyline);
       if (selected && !cur.drawing && cur.showHandles !== false) addHandles(mod, s, layer as Leaflet.Polyline);
     }
 
@@ -348,11 +419,13 @@ export function MeasureMap(p: Props) {
     const commit = (next: LatLng[]) => props.current.onChangeShape(s.id, next);
 
     pts.forEach((pt, i) => {
-      const h = mod.marker(pt, { icon: icon("measure-handle", 9), draggable: true, keyboard: false, title: "Drag to move · right-click to remove" });
+      const h = mod.marker(pt, { icon: icon("measure-handle", 9), draggable: true, keyboard: false, title: "Drag (or right-drag) to move · double-click to remove" });
       h.on("drag", (e) => { const ll = (e.target as Leaflet.Marker).getLatLng(); pts[i] = [ll.lat, ll.lng]; layer.setLatLngs(pts); });
       h.on("dragend", () => commit(pts));
-      h.on("contextmenu", (e: Leaflet.LeafletMouseEvent) => {
-        mod.DomEvent.preventDefault(e.originalEvent);
+      // Clicks on a corner stay on the corner (they used to fall through and deselect the measurement).
+      h.on("click", (e: Leaflet.LeafletMouseEvent) => mod.DomEvent.stop(e));
+      h.on("dblclick", (e: Leaflet.LeafletMouseEvent) => {
+        mod.DomEvent.stop(e);
         if (pts.length > (closed ? 3 : 2)) commit(pts.filter((_, k) => k !== i));
       });
       h.addTo(editLayer.current!);
@@ -363,6 +436,7 @@ export function MeasureMap(p: Props) {
       const a = pts[i], b = pts[(i + 1) % n];
       const mid: LatLng = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
       const h = mod.marker(mid, { icon: icon("measure-handle mid", 7), draggable: true, keyboard: false, title: "Drag to add a corner" });
+      h.on("click dblclick", (e: Leaflet.LeafletEvent) => mod.DomEvent.stop(e as Leaflet.LeafletMouseEvent));
       h.on("dragend", (e) => {
         const ll = (e.target as Leaflet.Marker).getLatLng();
         const next = [...pts];

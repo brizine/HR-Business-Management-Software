@@ -73,9 +73,9 @@ const TOOLS: { label: string; kind: MeasureKind; zone: MeasureZone | null }[] = 
 ];
 
 const HINT: Record<MeasureKind, string> = {
-  turf: "Click each corner of the turf. Double-click, press Enter, or click the first point to finish.",
+  turf: "Click each corner of the turf. Right-click, double-click, press Enter, or click the first point to finish. Right-drag a corner of any measurement to move it.",
   cut: "Trace a bed, driveway, patio or the house over an area; the part inside the area is cut out of it.",
-  line: "Click along the path (e.g. a perimeter barrier). Double-click or press Enter to finish.",
+  line: "Click along the path (e.g. a perimeter barrier). Right-click, double-click or press Enter to finish.",
 };
 
 export default function MeasurePage() {
@@ -444,7 +444,7 @@ export default function MeasurePage() {
                 <span className="hint-touch">Move the crosshair onto the next corner (move the map, drag the crosshair, or tap the spot), then press Drop Point. Press Finish when done; tap the selected button again to stop.</span>
               </>
             ) : !selectedId ? "Choose a drawing button to measure, or click a measurement on the map to adjust it." : showHandles
-              ? "Drag corners to adjust · drag a small dot to add a corner · right-click a corner to remove it · Delete removes it"
+              ? "Drag (or right-drag) corners to adjust · drag a small dot to add a corner · double-click a corner to remove it · Delete removes it"
               : "Points are hidden; turn on Show points to adjust corners · Delete removes it"}
           </div>
           {message && <p className="muted" role="status" style={{ margin: 0 }}>{message}</p>}
