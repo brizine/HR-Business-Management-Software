@@ -396,8 +396,8 @@ export function MeasureMap(p: Props) {
 
     if (cur.drawing && cur.draft.length) {
       const color = shapeColor(cur.drawing, cur.drawZone);
-      const closed = cur.drawing !== "line" && cur.draft.length >= 3;
-      (closed ? mod.polygon(cur.draft, { color, weight: 1.5, dashArray: "4 4", fillOpacity: 0.15 }) : mod.polyline(cur.draft, { color, weight: 1.5, dashArray: "4 4" })).addTo(draftLayer.current);
+      // Just the lines between the points so far: nothing is shaded until the outline is closed.
+      mod.polyline(cur.draft, { color, weight: 1.5, dashArray: "4 4", fill: false, interactive: false }).addTo(draftLayer.current);
       if (cur.showHandles !== false) cur.draft.forEach((pt, i) => {
         const first = i === 0 && cur.drawing !== "line" && cur.draft.length >= 3;
         const dot = mod.circleMarker(pt, { radius: first ? 5.5 : 3.5, color: "#fff", weight: 1.5, fillColor: color, fillOpacity: 1 });
