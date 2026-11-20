@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { computeMix, formatAmount, formatEntered, isInactive, totalsByUnit } from "@crewdesk/shared";
 import { api, fmtDateTime } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
@@ -149,6 +149,67 @@ function SelectedWindow({ sheet, gallons, rows, acres, squareFeet, onClose }: { 
 }
 
 /** Everyone: enter tank gallons, Update total. Nothing here is saved to the server. */
+/**
+ * Dragging product rows up or down by their handle (mouse or touch), or moving them with the arrow keys on the
+ * handle. The new order shows straight away and is saved when the row is let go.
+ */
+function useDragOrder(ids: string[], save: (ids: string[]) => Promise<unknown>) {
+  const [order, setOrder] = useState<string[] | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const rows = useRef(new Map<string, HTMLElement>());
+  const commit = async (next: string[]) => {
+    if (next.join() === ids.join()) return setOrder(null);
+    setOrder(next);
+    try { await save(next); } catch (e) { alert((e as Error).message); } finally { setOrder(null); }
+  };
+  // Rows are kept per list (the table, and the phone cards), since only the one on screen has a position.
+  const handleProps = (id: string, name: string, list: string) => ({
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      if (e.button !== 0 && e.pointerType === "mouse") return;
+      e.preventDefault();
+      let current = [...(order ?? ids)];
+      setOrder(current);
+      setDragId(id);
+      const move = (ev: PointerEvent) => {
+        // The row goes after every other row whose middle is above the pointer.
+        const others = current.filter((x) => x !== id);
+        let at = 0;
+        for (const other of others) {
+          const r = rows.current.get(`${list}:${other}`)?.getBoundingClientRect();
+          if (r && ev.clientY > r.top + r.height / 2) at++;
+        }
+        const next = [...others];
+        next.splice(at, 0, id);
+        if (next.join() !== current.join()) { current = next; setOrder(next); }
+      };
+      // Listen on the window: the row moves in the page while dragging, which would drop a capture on the handle.
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", up);
+        setDragId(null);
+        void commit(current);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", up);
+    },
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+      e.preventDefault();
+      const list = [...(order ?? ids)];
+      const i = list.indexOf(id), j = i + (e.key === "ArrowUp" ? -1 : 1);
+      if (j < 0 || j >= list.length) return;
+      [list[i], list[j]] = [list[j], list[i]];
+      void commit(list);
+    },
+    "aria-label": `Move ${name} (drag, or use the up and down arrow keys)`,
+    title: "Drag to move this row up or down",
+  });
+  const rowRef = (id: string, list: string) => (el: HTMLElement | null) => { if (el) rows.current.set(`${list}:${id}`, el); else rows.current.delete(`${list}:${id}`); };
+  return { order: order ?? ids, dragId, handleProps, rowRef };
+}
+
 function Calculator({ sheet, canEdit, onChange }: { sheet: any; canEdit: boolean; onChange: () => void }) {
   const units = useUnits();
   const [input, setInput] = useState("");
@@ -180,6 +241,15 @@ function Calculator({ sheet, canEdit, onChange }: { sheet: any; canEdit: boolean
   const pickedRows = mix.rows.filter((r) => picked.has(r.product.id as string));
   const allPicked = ids.length > 0 && ids.every((id) => picked.has(id));
   const toggle = (id: string) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  // Editors drag rows to change their order (saved for everyone).
+  const drag = useDragOrder(ids, async (productIds) => {
+    await api(`/spray-mixes/${sheet.id}/order`, { method: "PUT", body: { productIds } });
+    await onChange();
+  });
+  const rows = drag.order.map((id) => mix.rows.find((r) => r.product.id === id)).filter((r): r is (typeof mix.rows)[number] => !!r);
+  const handle = (p: any, list: "table" | "cards") => (
+    <button type="button" className={`mix-drag noprint${drag.dragId === p.id ? " active" : ""}`} {...drag.handleProps(p.id, p.name, list)}>⠿</button>
+  );
   const pickBox = (p: any) => (
     <input type="checkbox" className="mix-pick" checked={picked.has(p.id)} onChange={() => toggle(p.id)} aria-label={`Select ${p.name}`} />
   );
@@ -210,12 +280,13 @@ function Calculator({ sheet, canEdit, onChange }: { sheet: any; canEdit: boolean
       <div className="card tablewrap mix-table-wrap">
         <table className="mix-table">
           <caption className="sr-only">Product needed for a {applied}-gallon tank of {sheet.name}</caption>
-          <thead><tr><th scope="col" className="mix-pick-col noprint">
+          <thead><tr>{canEdit && <th className="mix-drag-col noprint"><span className="sr-only">Move</span></th>}<th scope="col" className="mix-pick-col noprint">
             <input type="checkbox" className="mix-pick" checked={allPicked} disabled={!ids.length} onChange={() => setPicked(allPicked ? new Set() : new Set(ids))} aria-label="Select all products" />
           </th><th scope="col">Product</th><th scope="col">Rate/Acre</th><th scope="col">Rate/1000 ft²</th><th scope="col">Measurement</th><th scope="col">Water volume</th><th scope="col">Product needed</th>{canEdit && <th className="noprint"><span className="sr-only">Remove</span></th>}</tr></thead>
           <tbody>
-            {mix.rows.map(({ product: p, ratePer1000, needed }) => (
-              <tr key={p.id} className={picked.has(p.id!) ? "mix-picked" : undefined}>
+            {rows.map(({ product: p, ratePer1000, needed }) => (
+              <tr key={p.id} ref={drag.rowRef(p.id!, "table")} className={[picked.has(p.id!) ? "mix-picked" : "", drag.dragId === p.id ? "mix-dragging" : ""].join(" ").trim() || undefined}>
+                {canEdit && <td className="mix-drag-col noprint">{handle(p, "table")}</td>}
                 <td className="mix-pick-col noprint">{pickBox(p)}</td>
                 <th scope="row" style={{ fontWeight: 500 }}>
                   <Editable canEdit={canEdit} label={`${p.name} name`} value={p.name} onSave={(v) => saveProduct(p, { name: v })} />
@@ -228,17 +299,17 @@ function Calculator({ sheet, canEdit, onChange }: { sheet: any; canEdit: boolean
                 {canEdit && <td className="noprint"><button type="button" className="btn sm danger mix-remove" aria-label={`Remove ${p.name}`} title={`Remove ${p.name}`} onClick={() => remove(p)}>×</button></td>}
               </tr>
             ))}
-            {canEdit && <AddProductRow sheet={sheet} onChange={onChange} columns={8} />}
+            {canEdit && <AddProductRow sheet={sheet} onChange={onChange} columns={9} />}
           </tbody>
         </table>
         {!mix.rows.length && <Empty>No products on this sheet yet.</Empty>}
       </div>
       {/* Phones: the amount to add first and large, rates underneath, so nothing scrolls sideways. */}
       <ul className="mix-cards" aria-label={`Product needed for a ${applied}-gallon tank`}>
-        {mix.rows.map(({ product: p, ratePer1000, needed }) => (
-          <li key={p.id} className={`card${picked.has(p.id!) ? " mix-picked" : ""}`}>
+        {rows.map(({ product: p, ratePer1000, needed }) => (
+          <li key={p.id} ref={drag.rowRef(p.id!, "cards")} className={`card${picked.has(p.id!) ? " mix-picked" : ""}${drag.dragId === p.id ? " mix-dragging" : ""}`}>
             <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
-              <strong><span className="noprint" style={{ marginRight: 8 }}>{pickBox(p)}</span><Editable canEdit={canEdit} label={`${p.name} name`} value={p.name} onSave={(v) => saveProduct(p, { name: v })} /></strong>
+              <strong>{canEdit && handle(p, "cards")}<span className="noprint" style={{ marginRight: 8 }}>{pickBox(p)}</span><Editable canEdit={canEdit} label={`${p.name} name`} value={p.name} onSave={(v) => saveProduct(p, { name: v })} /></strong>
               <span><strong style={{ fontSize: 20 }}>{formatAmount(needed)}</strong> <span className="muted">
                 <Editable canEdit={canEdit} kind="select" options={units} width={140} label={`${p.name} measurement`} value={p.unit} onSave={(v) => saveProduct(p, { unit: v })} />
               </span></span>

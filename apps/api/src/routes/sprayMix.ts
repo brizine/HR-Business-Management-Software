@@ -202,6 +202,25 @@ const routes: FastifyPluginAsync = async (app) => {
     return row;
   });
 
+  /** Editors: puts a sheet's products in a new order (the list of every product id, top to bottom). */
+  app.put<{ Params: { id: string } }>("/:id/order", async (req) => {
+    await requireEditor(req);
+    const { productIds } = parse(z.object({ productIds: z.array(z.string().uuid()).max(500) }), req.body);
+    const sheet = await loadSheet(req, req.params.id);
+    const current = await db.select().from(mixProducts).where(eq(mixProducts.sheetId, sheet.id)).orderBy(asc(mixProducts.sortOrder), asc(mixProducts.name));
+    const known = new Set(current.map((p) => p.id));
+    if (productIds.length !== current.length || new Set(productIds).size !== productIds.length || productIds.some((id) => !known.has(id))) {
+      throw new HttpError(409, "The products changed while you were moving them. Reload the page and try again.");
+    }
+    if (productIds.every((id, i) => current[i]?.id === id)) return { ok: true };
+    await db.transaction(async (tx) => {
+      for (const [i, id] of productIds.entries()) await tx.update(mixProducts).set({ sortOrder: i }).where(eq(mixProducts.id, id));
+    });
+    const names = new Map(current.map((p) => [p.id, p.name]));
+    await log(req, sheet.id, `Reordered products: ${productIds.map((id) => names.get(id)).join(", ")}`.slice(0, 500));
+    return { ok: true };
+  });
+
   app.patch<{ Params: { productId: string } }>("/products/:productId", async (req) => {
     await requireEditor(req);
     const body = parse(mixProductSchema.partial().extend({ sortOrder: z.number().int().min(0).max(10_000).optional() }), req.body);

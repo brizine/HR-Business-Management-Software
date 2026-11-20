@@ -98,6 +98,19 @@ describe("spray mixes", () => {
     expect(changes[0].by).toBe("lead Sprayer");
   });
 
+  it("editors reorder a sheet's products; the order is logged", async () => {
+    const sheet = (await call("GET", "/spray-mixes", "crew")).body.sheets[0];
+    const ids: string[] = sheet.products.map((p: any) => p.id);
+    const reversed = [...ids].reverse();
+    expect((await call("PUT", `/spray-mixes/${sheet.id}/order`, "crew", { productIds: reversed })).status).toBe(403);
+    expect((await call("PUT", `/spray-mixes/${sheet.id}/order`, "owner", { productIds: reversed.slice(1) })).status).toBe(409);
+    expect((await call("PUT", `/spray-mixes/${sheet.id}/order`, "owner", { productIds: reversed })).status).toBe(200);
+    const after = (await call("GET", "/spray-mixes", "crew")).body.sheets.find((s: any) => s.id === sheet.id);
+    expect(after.products.map((p: any) => p.id)).toEqual(reversed);
+    const changes = (await call("GET", `/spray-mixes/${sheet.id}/changes`, "owner")).body;
+    expect(changes[0].summary).toMatch(/^Reordered products: /);
+  });
+
   it("keeps each company's sheets separate", async () => {
     expect((await call("GET", "/spray-mixes", "other")).body.sheets).toEqual([]);
     expect((await call("PATCH", `/spray-mixes/products/${ID.aquacap}`, "other", { ratePerAcre: 1 })).status).toBe(404);

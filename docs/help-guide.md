@@ -75,6 +75,8 @@ version. Read on the phone, edit on the website.
 Enter the tank size in gallons and tap **Update total** to see how much of each product to add.
 Admins choose which employees can edit products, rates and mixes; every change is logged under
 **Change history**.
+Editors can change the order of the products: drag a row up or down by its handle (⠿) at the left, on a
+computer or a phone, or focus the handle and use the up and down arrow keys. The new order is saved for everyone.
 
 ## Property Measure
 

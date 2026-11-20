@@ -676,3 +676,9 @@ tr.openrow td { background: var(--bg); }
 .btn.measure-lock { display: inline-flex; align-items: center; color: var(--muted); }
 .btn.measure-lock.open { color: #fff; background: #d29922; border-color: #d29922; }
 .measure-shape.reopened { border-style: dashed; }
+/* Spray Mix: drag a product row by its handle to change the order (editors) */
+.mix-drag-col { width: 28px; padding-left: 6px !important; padding-right: 0 !important; }
+.mix-drag { border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1; padding: 4px 6px; margin-right: 4px; border-radius: 6px; cursor: grab; touch-action: none; user-select: none; }
+.mix-drag:hover, .mix-drag:focus-visible { color: var(--text); background: var(--bg); }
+.mix-drag.active { cursor: grabbing; color: var(--primary); }
+.mix-table tr.mix-dragging, .mix-cards li.mix-dragging { background: var(--surface); box-shadow: 0 4px 14px rgba(0,0,0,0.18); position: relative; z-index: 1; outline: 2px solid var(--primary); }
