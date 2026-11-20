@@ -391,7 +391,14 @@ export function MeasureMap(p: Props) {
       });
       layer.addTo(shapesLayer.current);
       shapeLayers.current.set(s.id, layer as Leaflet.Polyline);
-      if (selected && !cur.drawing && cur.showHandles !== false) addHandles(mod, s, layer as Leaflet.Polyline);
+      if (cur.showHandles !== false) {
+        // The selected measurement (when not drawing) gets draggable handles; every other one shows its corners
+        // as small dots (these can be right-dragged, even while drawing).
+        if (selected && !cur.drawing) addHandles(mod, s, layer as Leaflet.Polyline);
+        else for (const pt of s.points) {
+          mod.circleMarker(pt, { radius: 3, color: "#fff", weight: 1.25, fillColor: color, fillOpacity: 1, interactive: false, className: "measure-corner" }).addTo(editLayer.current);
+        }
+      }
     }
 
     if (cur.drawing && cur.draft.length) {

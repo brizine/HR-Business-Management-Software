@@ -262,7 +262,9 @@ export default function MeasurePage() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
+      // Typing in a text box is left alone; the Show points / Snap switches (checkboxes) don't block the drawing keys.
+      const typing = t && (t.tagName === "TEXTAREA" || t.tagName === "SELECT" || (t.tagName === "INPUT" && !["checkbox", "radio"].includes((t as HTMLInputElement).type)));
+      if (typing) return;
       if (drawingRef.current) {
         if (e.key === "Enter") { e.preventDefault(); finish(); }
         else if (e.key === "Escape") cancelDrawing();
