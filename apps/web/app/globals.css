@@ -655,7 +655,8 @@ tr.openrow td { background: var(--bg); }
 .measure-crosshair { position: absolute; left: 0; top: 0; width: 124px; height: 124px; pointer-events: none; z-index: 800; display: none; }
 .measure-crosshair svg { display: block; filter: drop-shadow(0 0 1px rgba(0,0,0,0.6)); }
 .measure-crosshair.snapped .xh-box { stroke: #7ee787; stroke-width: 3; }
-.measure-crosshair .xh-labels { position: absolute; left: 34px; bottom: 91px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+/* Labels sit up and to the left of the box (on the 45° diagonal), clear of the top and left lines. */
+.measure-crosshair .xh-labels { position: absolute; right: 94px; bottom: 94px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .measure-crosshair .xh-labels span { background: rgba(0, 0, 0, 0.75); color: #fff; border: 1.5px solid #3fb950; font: 600 11px/1.25 system-ui, sans-serif; padding: 1px 5px; white-space: nowrap; }
 .measure-crosshair .xh-labels .xh-angle { color: #d0d7de; }
 .measure-crosshair .xh-labels .xh-snap { border-color: #7ee787; color: #7ee787; }
