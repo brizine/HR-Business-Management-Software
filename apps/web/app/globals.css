@@ -586,10 +586,11 @@ tr.openrow td { background: var(--bg); }
 .measure-map { height: 70vh; min-height: 420px; border-radius: 10px; border: 1px solid var(--border); background: #1b1f24; z-index: 0; }
 .measure-total { font-size: 30px; font-weight: 700; line-height: 1.1; }
 .measure-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
-.measure-shape { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; }
+.measure-shape { display: flex; align-items: center; gap: 5px; padding: 4px 5px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; }
 .measure-shape.selected { border-color: var(--primary); }
-.measure-shape input { flex: 1; min-width: 0; padding: 4px 6px; }
-.measure-size { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 14px; }
+.measure-shape input { flex: 1 1 auto; min-width: 56px; width: 0; padding: 4px 6px; }
+.measure-shape .btn.sm { padding: 3px 6px; min-width: 0; line-height: 1; }
+.measure-size { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 13px; }
 .measure-layer { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; font-weight: normal; }
 .measure-layer.selected { border-color: var(--primary); }
 .measure-layer input { width: auto; margin-top: 3px; }
@@ -609,7 +610,7 @@ tr.openrow td { background: var(--bg); }
 .measure-zone-totals { display: grid; gap: 4px; padding: 8px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .measure-zone-totals > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 15px; }
 .measure-zone-totals .measure-dot { margin-right: 4px; }
-.measure-shape select.measure-zone { width: auto; padding: 4px 2px; font-size: 13px; }
+.measure-shape select.measure-zone { width: auto; padding: 3px 1px; font-size: 12px; }
 
 /* Property Measure: printed report (only the report prints while it's on the page) */
 .measure-print-root { display: none; }
@@ -672,3 +673,6 @@ tr.openrow td { background: var(--bg); }
 /* The selected drawing button stays highlighted while measuring */
 .btn.measure-tool.active { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
 .btn.measure-tool.active .measure-dot { box-shadow: 0 0 0 2px #fff; }
+.btn.measure-lock { display: inline-flex; align-items: center; color: var(--muted); }
+.btn.measure-lock.open { color: #fff; background: #d29922; border-color: #d29922; }
+.measure-shape.reopened { border-style: dashed; }

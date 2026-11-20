@@ -22,6 +22,14 @@ const VIEW_KEY = "measure.view";
 const HANDLES_KEY = "measure.handles";
 const SNAP_KEY = "measure.snap";
 
+/** Padlock icons for the Measurements list: locked = finished, open = reopened for more tracing. */
+const LockIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden><rect x="3" y="7" width="10" height="7.5" rx="1.5" fill="currentColor" /><path d="M5 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" strokeWidth="1.8" /></svg>
+);
+const UnlockIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden><rect x="3" y="7" width="10" height="7.5" rx="1.5" fill="currentColor" /><path d="M5 7V5a3 3 0 0 1 5.8-1" fill="none" stroke="currentColor" strokeWidth="1.8" /></svg>
+);
+
 /** An on/off switch for the drawing toolbar. */
 function Switch({ on, onChange, label, title }: { on: boolean; onChange: (on: boolean) => void; label: string; title: string }) {
   return (
@@ -202,7 +210,43 @@ export default function MeasurePage() {
     setDrawing(kind); setDrawZone(zone); drawZoneRef.current = zone; setSelectedId(null); setMessage(null);
   };
   const drawZoneRef = useRef<MeasureZone | null>(null);
-  const cancelDrawing = () => { drawingRef.current = null; setDrawing(null); setDraft([]); setRedo([]); };
+  /** A finished measurement reopened with its unlock button: what it was, where it sat in the list, and the
+   *  drawing button selected before, to go back to when it's closed again or put back. */
+  type Reopened = { original: MeasureShape; index: number; prev: { kind: MeasureKind | null; zone: MeasureZone | null } };
+  const [reopened, setReopened] = useState<Reopened | null>(null);
+  const reopenedRef = useRef<Reopened | null>(null);
+  const setReopenedBoth = (r: Reopened | null) => { reopenedRef.current = r; setReopened(r); };
+  const selectTool = (kind: MeasureKind | null, zone: MeasureZone | null) => { drawingRef.current = kind; drawZoneRef.current = zone; setDrawing(kind); setDrawZone(zone); };
+  const putBack = (r: Reopened, shape: MeasureShape) =>
+    setShapes((list) => { const next = list.filter((x) => x.id !== shape.id); next.splice(Math.min(r.index, next.length), 0, shape); return next; });
+  const cancelDrawing = () => {
+    const r = reopenedRef.current;
+    setDraft([]); setRedo([]);
+    if (r) {
+      // Cancel on a reopened measurement puts it back exactly as it was.
+      putBack(r, r.original);
+      setReopenedBoth(null);
+      selectTool(r.prev.kind, r.prev.zone);
+      setMessage("Put back as it was.");
+      return;
+    }
+    selectTool(null, null);
+  };
+  /** Reopens a finished measurement (its lock button) to keep tracing from its last point. */
+  const reopenShape = (id: string) => {
+    if (reopenedRef.current || draftRef.current.length) return;
+    const idx = shapesRef.current.findIndex((x) => x.id === id);
+    if (idx < 0) return;
+    const shape = shapesRef.current[idx];
+    setReopenedBoth({ original: shape, index: idx, prev: { kind: drawingRef.current, zone: drawZoneRef.current } });
+    setShapes((list) => list.filter((x) => x.id !== id));
+    selectTool(shape.kind, shape.kind === "turf" ? shape.zone ?? null : null);
+    draftRef.current = shape.points;
+    setDraft(shape.points);
+    setRedo([]);
+    setSelectedId(null);
+    setMessage("Reopened: keep tracing from its last point, then close it again (right-click, Finish or Enter). Cancel puts it back as it was.");
+  };
   /** Points taken off with Undo Point, newest last, for Redo Point; placing a new point clears them. */
   const [redo, setRedo] = useState<LatLng[]>([]);
   const onAddPoint = useCallback((pt: LatLng) => {
@@ -240,6 +284,20 @@ export default function MeasurePage() {
     }
     let zone = kind === "turf" ? drawZoneRef.current : null;
     let finalKind: MeasureKind = kind;
+    const r = reopenedRef.current;
+    if (r) {
+      // Closing a reopened measurement: same id, name and place in the list; then back to the button selected before.
+      const shape: MeasureShape = { ...r.original, kind, points: pts, zone: kind === "turf" ? zone : null };
+      putBack(r, shape);
+      setReopenedBoth(null);
+      draftRef.current = [];
+      setDraft([]); setRedo([]);
+      selectTool(r.prev.kind, r.prev.zone);
+      setSelectedId(shape.id);
+      setDirty(true);
+      setMessage(null);
+      return;
+    }
     // Drawn mostly on top of an existing area: ask whether it's a hole (a bed, patio, driveway or the house).
     if (kind === "turf") {
       const areas = shapesRef.current.filter((x) => x.kind === "turf").map((x) => x.points);
@@ -284,9 +342,12 @@ export default function MeasurePage() {
   const updateShape = (id: string, patch: Partial<MeasureShape>) => { setShapes((s) => s.map((x) => (x.id === id ? { ...x, ...patch } : x))); setDirty(true); };
   /** Removes every measurement from the map (the name, address, notes and pin stay; nothing is saved until Save). */
   const clearShapes = () => {
-    const what = shapes.length ? `all ${shapes.length} measurement${shapes.length === 1 ? "" : "s"}${draft.length ? " and the outline you're drawing" : ""}` : "the outline you're drawing";
+    const count = shapes.length + (reopened ? 1 : 0);
+    const what = count ? `all ${count} measurement${count === 1 ? "" : "s"}${draft.length && !reopened ? " and the outline you're drawing" : ""}` : "the outline you're drawing";
     if ((!shapes.length && !draft.length) || !window.confirm(`Clear ${what} from the map?`)) return;
     // Works while a drawing button is selected: it stays selected, ready to trace again.
+    const r = reopenedRef.current;
+    if (r) { setReopenedBoth(null); selectTool(r.prev.kind, r.prev.zone); }
     setDraft([]);
     setRedo([]);
     setShapes([]);
@@ -298,6 +359,12 @@ export default function MeasurePage() {
   const onChangeShape = useCallback((id: string, points: LatLng[]) => { setShapes((s) => s.map((x) => (x.id === id ? { ...x, points } : x))); setDirty(true); }, []);
 
   const totals = useMemo(() => measureShapes(shapes), [shapes]);
+  /** The Measurements list: the finished ones, with the reopened one (if any) shown in its old place. */
+  const listRows = useMemo(() => {
+    const rows: { shape: MeasureShape; reopened: boolean }[] = shapes.map((shape) => ({ shape, reopened: false }));
+    if (reopened) rows.splice(Math.min(reopened.index, rows.length), 0, { shape: reopened.original, reopened: true });
+    return rows;
+  }, [shapes, reopened]);
   const sheet = mixes.data?.sheets.find((s) => s.id === sheetId) ?? mixes.data?.sheets[0];
 
   // Address search
@@ -518,9 +585,18 @@ export default function MeasurePage() {
               <h2 style={{ margin: 0 }}>Measurements</h2>
               <button className="btn sm" onClick={clearShapes} disabled={!shapes.length && !draft.length} title="Remove all measurements from the map">Clear</button>
             </div>
-            {!shapes.length && <span className="muted" style={{ fontSize: 14 }}>None yet. Use Add Area below the map and click around the turf.</span>}
-            {shapes.map((s) => (
+            {!shapes.length && !reopened && <span className="muted" style={{ fontSize: 14 }}>None yet. Use Add Area below the map and click around the turf.</span>}
+            {listRows.map((row) => row.reopened ? (
+              <div key={`reopened-${row.shape.id}`} className="measure-shape selected reopened">
+                <button className="btn sm measure-lock open" onClick={finish} title="Reopened (unlocked): click to close it again" aria-label="Close this measurement again"><UnlockIcon /></button>
+                <span className="measure-dot" style={{ background: shapeColor(drawing ?? row.shape.kind, drawZone) }} />
+                <span style={{ flex: 1, minWidth: 0, fontSize: 14 }}>{row.shape.label || (row.shape.kind === "turf" && row.shape.zone ? MEASURE_ZONE_LABELS[row.shape.zone] : MEASURE_KIND_LABELS[row.shape.kind])}</span>
+                <span className="muted" style={{ fontSize: 13 }}>reopened, tracing…</span>
+              </div>
+            ) : ((s) => (
               <div key={s.id} className={`measure-shape${s.id === selectedId ? " selected" : ""}`} onClick={() => !drawing && setSelectedId(s.id)}>
+                <button className="btn sm measure-lock" onClick={(e) => { e.stopPropagation(); reopenShape(s.id); }} disabled={!!reopened || draft.length > 0}
+                  title={reopened || draft.length ? "Finish or cancel the outline you're drawing first" : "Finished (locked): click to reopen it and keep tracing"} aria-label="Reopen this measurement"><LockIcon /></button>
                 <span className="measure-dot" style={{ background: shapeColor(s.kind, s.zone) }} title={s.kind === "turf" && s.zone ? MEASURE_ZONE_LABELS[s.zone] : MEASURE_KIND_LABELS[s.kind]} />
                 <input value={s.label ?? ""} onChange={(e) => updateShape(s.id, { label: e.target.value })} placeholder={s.kind === "turf" && s.zone ? MEASURE_ZONE_LABELS[s.zone] : MEASURE_KIND_LABELS[s.kind]} aria-label="Measurement name" maxLength={80} />
                 {s.kind !== "line" && (
@@ -542,7 +618,7 @@ export default function MeasurePage() {
                 </span>
                 <button className="btn sm" onClick={(e) => { e.stopPropagation(); removeShape(s.id); }} aria-label="Remove measurement" title="Remove">✕</button>
               </div>
-            ))}
+            ))(row.shape))}
           </div>
 
           <div className="card stack" style={{ gap: 8 }}>
