@@ -282,7 +282,11 @@ export default function MeasurePage() {
   const updateShape = (id: string, patch: Partial<MeasureShape>) => { setShapes((s) => s.map((x) => (x.id === id ? { ...x, ...patch } : x))); setDirty(true); };
   /** Removes every measurement from the map (the name, address, notes and pin stay; nothing is saved until Save). */
   const clearShapes = () => {
-    if (!shapes.length || !window.confirm(`Clear all ${shapes.length} measurement${shapes.length === 1 ? "" : "s"} from the map?`)) return;
+    const what = shapes.length ? `all ${shapes.length} measurement${shapes.length === 1 ? "" : "s"}${draft.length ? " and the outline you're drawing" : ""}` : "the outline you're drawing";
+    if ((!shapes.length && !draft.length) || !window.confirm(`Clear ${what} from the map?`)) return;
+    // Works while a drawing button is selected: it stays selected, ready to trace again.
+    setDraft([]);
+    setRedo([]);
     setShapes([]);
     setSelectedId(null);
     setDirty(true);
@@ -510,7 +514,7 @@ export default function MeasurePage() {
           <div className="card stack" style={{ gap: 6 }}>
             <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8 }}>
               <h2 style={{ margin: 0 }}>Measurements</h2>
-              <button className="btn sm" onClick={clearShapes} disabled={!shapes.length || !!drawing} title="Remove all measurements from the map">Clear</button>
+              <button className="btn sm" onClick={clearShapes} disabled={!shapes.length && !draft.length} title="Remove all measurements from the map">Clear</button>
             </div>
             {!shapes.length && <span className="muted" style={{ fontSize: 14 }}>None yet. Use Add Area below the map and click around the turf.</span>}
             {shapes.map((s) => (
