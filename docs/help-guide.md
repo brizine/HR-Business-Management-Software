@@ -101,7 +101,8 @@ Measure turf square footage from aerial photos, choosing photos taken in winter 
    point. A green tag says what it snapped to and the line turns solid. Turn **Snap** off for curved beds or
    odd shapes. On a phone or tablet, the crosshair starts in the middle of the map: move the map under it,
    drag the crosshair by its box, or tap a spot to move it there, then press **Drop Point** to place each
-   point (tapping never places one by itself). Press **Finish** when done. Double-click, press Enter, or click the first
+   point (tapping never places one by itself). Press **Finish** when done. While drawing, **Undo Point** takes off the last point (Ctrl+Z) and
+   **Redo Point** puts it back (Ctrl+Y). Double-click, press Enter, or click the first
    point to finish. **Add Front Area** (blue) and **Add Back Area** (purple) work the same way and count
    toward the front or back yard; you can change any area to Front, Back or plain Area in the
    **Measurements** list. Use **Add Cut-out** for beds, driveways, patios and the house: draw it over an area

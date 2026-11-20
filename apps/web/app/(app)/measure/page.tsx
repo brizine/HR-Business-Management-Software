@@ -191,10 +191,29 @@ export default function MeasurePage() {
   }, []);
 
   // Drawing
-  const startDrawing = (kind: MeasureKind, zone: MeasureZone | null = null) => { setDrawing(kind); setDrawZone(zone); drawZoneRef.current = zone; setDraft([]); setSelectedId(null); setMessage(null); };
+  const startDrawing = (kind: MeasureKind, zone: MeasureZone | null = null) => { setDrawing(kind); setDrawZone(zone); drawZoneRef.current = zone; setDraft([]); setRedo([]); setSelectedId(null); setMessage(null); };
   const drawZoneRef = useRef<MeasureZone | null>(null);
-  const cancelDrawing = () => { setDrawing(null); setDraft([]); };
-  const onAddPoint = useCallback((pt: LatLng) => setDraft((d) => (d.length && samePoint(d[d.length - 1], pt) ? d : [...d, pt])), []);
+  const cancelDrawing = () => { setDrawing(null); setDraft([]); setRedo([]); };
+  /** Points taken off with Undo Point, newest last, for Redo Point; placing a new point clears them. */
+  const [redo, setRedo] = useState<LatLng[]>([]);
+  const onAddPoint = useCallback((pt: LatLng) => {
+    setDraft((d) => (d.length && samePoint(d[d.length - 1], pt) ? d : [...d, pt]));
+    setRedo([]);
+  }, []);
+  const undoPoint = useCallback(() => {
+    const d = draftRef.current;
+    if (!d.length) return;
+    setRedo((r) => [...r, d[d.length - 1]]);
+    setDraft(d.slice(0, -1));
+  }, []);
+  const redoRef = useRef(redo);
+  redoRef.current = redo;
+  const redoPoint = useCallback(() => {
+    const r = redoRef.current;
+    if (!r.length) return;
+    setDraft((d) => [...d, r[r.length - 1]]);
+    setRedo(r.slice(0, -1));
+  }, []);
   const drawingRef = useRef(drawing);
   drawingRef.current = drawing;
   const draftRef = useRef(draft);
@@ -216,6 +235,7 @@ export default function MeasurePage() {
     setSelectedId(shape.id);
     setDrawing(null);
     setDraft([]);
+    setRedo([]);
     setDirty(true);
     setMessage(null);
   }, []);
@@ -227,7 +247,8 @@ export default function MeasurePage() {
       if (drawingRef.current) {
         if (e.key === "Enter") { e.preventDefault(); finish(); }
         else if (e.key === "Escape") cancelDrawing();
-        else if (e.key === "Backspace" || (e.key === "z" && (e.ctrlKey || e.metaKey))) { e.preventDefault(); setDraft((d) => d.slice(0, -1)); }
+        else if ((e.key === "y" && (e.ctrlKey || e.metaKey)) || (e.key.toLowerCase() === "z" && e.shiftKey && (e.ctrlKey || e.metaKey))) { e.preventDefault(); redoPoint(); }
+        else if (e.key === "Backspace" || (e.key === "z" && (e.ctrlKey || e.metaKey))) { e.preventDefault(); undoPoint(); }
       } else if ((e.key === "Delete" || e.key === "Backspace") && selectedRef.current) {
         e.preventDefault();
         removeShape(selectedRef.current);
@@ -382,7 +403,8 @@ export default function MeasurePage() {
                 <span className="muted" style={{ flex: "1 1 260px", fontSize: 14 }}>{drawing === "turf" && drawZone ? `${MEASURE_ZONE_LABELS[drawZone]}: ` : ""}<span className="hint-mouse">{showHandles ? HINT[drawing] : HINT[drawing].replace(", press Enter, or click the first point to finish", " or press Enter to finish")}</span>
                   <span className="hint-touch">Move the crosshair onto the next corner (move the map, drag the crosshair, or tap the spot), then press Drop Point. Press Finish when done.</span></span>
                 <button className="btn sm primary" onClick={finish}>Finish</button>
-                <button className="btn sm" onClick={() => setDraft((d) => d.slice(0, -1))} disabled={!draft.length}>Undo Point</button>
+                <button className="btn sm" onClick={undoPoint} disabled={!draft.length} title="Take off the last point (Ctrl+Z)">Undo Point</button>
+                <button className="btn sm" onClick={redoPoint} disabled={!redo.length} title="Put back the last point you undid (Ctrl+Y)">Redo Point</button>
                 <button className="btn sm" onClick={cancelDrawing}>Cancel</button>
                 {pointsToggle}
               </>
