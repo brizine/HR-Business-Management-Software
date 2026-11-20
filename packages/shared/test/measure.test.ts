@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { imagerySourceSchema, measureShapeSchema, measureShapes, measureTotals, pickOkMapsLayers, pathLengthM, polygonAreaSqM, SQ_FT_PER_SQ_M, type LatLng } from "../src/measure";
+import { imagerySourceSchema, measureShapeSchema, measureShapes, measureTotals, overlapFraction, pickOkMapsLayers, pathLengthM, polygonAreaSqM, SQ_FT_PER_SQ_M, type LatLng } from "../src/measure";
 
 /** A square `side` meters across, centered near Norman, OK. */
 function square(side: number, lat = 35.2226, lng = -97.4395): LatLng[] {
@@ -144,5 +144,20 @@ describe("front and back totals", () => {
     const r = measureShapes([{ id: "s", kind: "turf", points: big }]);
     expect(r.frontSqFt).toBe(0);
     expect(r.backSqFt).toBe(0);
+  });
+});
+
+describe("outlines drawn over existing areas", () => {
+  const big = square(100);
+  const at = (side: number, north: number, east: number) => {
+    const [lat, lng] = big[0];
+    return square(side, lat + north / 111_320, lng + east / (111_320 * Math.cos((lat * Math.PI) / 180)));
+  };
+  it("measures how much of the new outline is on top of existing areas", () => {
+    expect(overlapFraction(at(10, 20, 20), [big])).toBeCloseTo(1, 3); // a bed inside the lawn
+    expect(overlapFraction(at(20, 40, 90), [big])).toBeCloseTo(0.5, 1); // half over the edge
+    expect(overlapFraction(at(10, 300, 300), [big])).toBe(0); // somewhere else
+    expect(overlapFraction(square(300, 35.2226 - 100 / 111_320, -97.4395 - 100 / (111_320 * Math.cos((35.2226 * Math.PI) / 180))), [big])).toBeLessThan(0.15); // a yard drawn around it
+    expect(overlapFraction(at(10, 20, 20), [])).toBe(0);
   });
 });

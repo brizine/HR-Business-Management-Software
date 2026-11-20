@@ -104,10 +104,11 @@ Measure turf square footage from aerial photos, choosing photos taken in winter 
    point (tapping never places one by itself). Press **Finish** when done. While drawing, **Undo Point** takes off the last point (Ctrl+Z) and
    **Redo Point** puts it back (Ctrl+Y). Double-click, press Enter, or click the first
    point to finish. **Add Front Area** (blue) and **Add Back Area** (purple) work the same way and count
-   toward the front or back yard; you can change any area to Front, Back or plain Area in the
-   **Measurements** list. Use **Add Cut-out** for beds, driveways, patios and the house: draw it over an area
-   and the part inside the area is cut out of it (shown as a hole, and that area's size goes down). A
-   cut-out that hangs past the edge only removes the overlapping part. **Measure Line** measures lengths
+   toward the front or back yard. For beds, driveways, patios and the house, trace them as an area on top of
+   the lawn you already traced: when you finish, you're asked whether it's a hole. Answer **OK** and it
+   becomes a cut-out (red dashed): the part inside the lawn is cut out of it, and that area's size goes down;
+   a hole that hangs past the edge only removes the overlapping part. In the **Measurements** list you can
+   switch any outline between Area, Front, Back and Hole. **Measure Line** measures lengths
    such as a perimeter barrier.
 4. Click a measurement on the map to adjust it: drag a corner to move it, drag a small dot between corners to
    add one, right-click a corner to remove it. Turn **Show points** off (next to the drawing buttons, and while

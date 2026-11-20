@@ -2,7 +2,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  MEASURE_KIND_LABELS, MEASURE_ZONE_LABELS, formatAcres, formatFeet, formatSqFt, measureShapes, shapeSqFt, type MeasureZone,
+  MEASURE_KIND_LABELS, MEASURE_ZONE_LABELS, formatAcres, formatFeet, formatSqFt, measureShapes, overlapFraction, shapeSqFt, type MeasureZone,
   type LatLng, type MeasureKind, type MeasureShape,
 } from "@crewdesk/shared";
 import { api, fmtDate } from "@/lib/api";
@@ -69,7 +69,6 @@ const TOOLS: { label: string; kind: MeasureKind; zone: MeasureZone | null }[] = 
   { label: "Add Area", kind: "turf", zone: null },
   { label: "Add Front Area", kind: "turf", zone: "front" },
   { label: "Add Back Area", kind: "turf", zone: "back" },
-  { label: "Add Cut-out", kind: "cut", zone: null },
   { label: "Measure Line", kind: "line", zone: null },
 ];
 
@@ -217,6 +216,8 @@ export default function MeasurePage() {
   const drawingRef = useRef(drawing);
   drawingRef.current = drawing;
   const draftRef = useRef(draft);
+  const shapesRef = useRef(shapes);
+  shapesRef.current = shapes;
   draftRef.current = draft;
   const finish = useCallback(() => {
     const kind = drawingRef.current;
@@ -227,8 +228,17 @@ export default function MeasurePage() {
       setMessage(kind === "line" ? "A line needs at least 2 points." : "An area needs at least 3 corners.");
       return;
     }
-    const zone = kind === "turf" ? drawZoneRef.current : null;
-    const shape: MeasureShape = { id: newId(), kind, label: "", points: pts, ...(zone ? { zone } : {}) };
+    let zone = kind === "turf" ? drawZoneRef.current : null;
+    let finalKind: MeasureKind = kind;
+    // Drawn mostly on top of an existing area: ask whether it's a hole (a bed, patio, driveway or the house).
+    if (kind === "turf") {
+      const areas = shapesRef.current.filter((x) => x.kind === "turf").map((x) => x.points);
+      if (overlapFraction(pts, areas) >= 0.5 && window.confirm("This outline is drawn over an existing area.\n\nIs it a hole to cut out of that area (a bed, patio, driveway or the house)?\n\nOK = Yes, it's a hole     Cancel = No, keep it as an area")) {
+        finalKind = "cut";
+        zone = null;
+      }
+    }
+    const shape: MeasureShape = { id: newId(), kind: finalKind, label: "", points: pts, ...(zone ? { zone } : {}) };
     drawingRef.current = null;
     draftRef.current = [];
     setShapes((s) => [...s, shape]);
@@ -494,11 +504,18 @@ export default function MeasurePage() {
               <div key={s.id} className={`measure-shape${s.id === selectedId ? " selected" : ""}`} onClick={() => !drawing && setSelectedId(s.id)}>
                 <span className="measure-dot" style={{ background: shapeColor(s.kind, s.zone) }} title={s.kind === "turf" && s.zone ? MEASURE_ZONE_LABELS[s.zone] : MEASURE_KIND_LABELS[s.kind]} />
                 <input value={s.label ?? ""} onChange={(e) => updateShape(s.id, { label: e.target.value })} placeholder={s.kind === "turf" && s.zone ? MEASURE_ZONE_LABELS[s.zone] : MEASURE_KIND_LABELS[s.kind]} aria-label="Measurement name" maxLength={80} />
-                {s.kind === "turf" && (
-                  <select className="measure-zone" value={s.zone ?? ""} onClick={(e) => e.stopPropagation()} onChange={(e) => updateShape(s.id, { zone: (e.target.value || null) as MeasureZone | null })} aria-label="Front or back">
+                {s.kind !== "line" && (
+                  <select
+                    className="measure-zone" value={s.kind === "cut" ? "hole" : s.zone ?? ""} onClick={(e) => e.stopPropagation()} aria-label="Area, front, back or hole"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      updateShape(s.id, v === "hole" ? { kind: "cut", zone: null } : { kind: "turf", zone: (v || null) as MeasureZone | null });
+                    }}
+                  >
                     <option value="">Area</option>
                     <option value="front">Front</option>
                     <option value="back">Back</option>
+                    <option value="hole">Hole</option>
                   </select>
                 )}
                 <span className="measure-size" title={s.kind === "turf" && shapeSqFt(s) - (totals.byId[s.id] ?? 0) > 0.5 ? `${formatSqFt(shapeSqFt(s))} before cut-outs` : undefined}>

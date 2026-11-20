@@ -179,6 +179,25 @@ export function measureShapes(shapes: readonly (Pick<MeasureShape, "id" | "kind"
   }
 }
 
+/**
+ * How much of a new outline lies on top of the given areas, from 0 (none) to 1 (all of it). Used to ask whether
+ * an outline drawn over an existing area is a hole (a cut-out) rather than more lawn.
+ */
+export function overlapFraction(points: readonly LatLng[], areas: readonly (readonly LatLng[])[]) {
+  const others = areas.filter((a) => a.length >= 3);
+  if (points.length < 3 || !others.length) return 0;
+  const proj = projector(points[0]);
+  const flat = (pts: readonly LatLng[]): clipModule.Polygon => [pts.map(proj.to)];
+  try {
+    const mine = flatArea([flat(points)]);
+    if (mine <= 0) return 0;
+    const under = clip.union(flat(others[0]), ...others.slice(1).map(flat));
+    return Math.min(1, flatArea(clip.intersection(flat(points), under)) / mine);
+  } catch {
+    return 0;
+  }
+}
+
 /** Totals only (see measureShapes). */
 export function measureTotals(shapes: readonly (Pick<MeasureShape, "kind" | "points"> & { zone?: MeasureZone | null })[]) {
   const { turfSqFt, cutSqFt, netSqFt, frontSqFt, backSqFt, acres, lineFt } = measureShapes(shapes.map((s, i) => ({ ...s, id: `s${i}` })));
