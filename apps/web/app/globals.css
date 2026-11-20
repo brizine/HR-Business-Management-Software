@@ -668,3 +668,6 @@ tr.openrow td { background: var(--bg); }
 /* Drawing hint: mouse wording, or touch wording on touchscreens */
 .hint-touch { display: none; }
 @media (pointer: coarse) { .hint-mouse { display: none; } .hint-touch { display: inline; } }
+/* The selected drawing button stays highlighted while measuring */
+.btn.measure-tool.active { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+.btn.measure-tool.active .measure-dot { box-shadow: 0 0 0 2px #fff; }

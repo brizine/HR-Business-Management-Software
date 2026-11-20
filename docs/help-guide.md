@@ -94,7 +94,9 @@ Measure turf square footage from aerial photos, choosing photos taken in winter 
    was taken; the ones marked **Leaf-off** were taken December to March.
    **Look at this spot in** opens the same place in Google Maps, Google Earth (which has past photos
    under its clock button) or Apple Maps in a new tab, to compare. Their photos can't be traced here.
-3. Click **Add Area** and click each corner of the turf. While drawing, a crosshair shows where the next
+3. Click **Add Area** (or Add Front Area, Add Back Area, Measure Line). The button stays selected, so you can trace
+   one outline after another; choose another button to switch, or click the selected one again (or press Esc) to
+   stop. Stop drawing before dragging corners to adjust them. Click each corner of the turf. While drawing, a crosshair shows where the next
    point will go, with the line's compass bearing and length. With **Snap** on (next to Show points), the next
    point locks to square corners (90°), straight runs, 45° and, for the first edge, north–south or east–west;
    it snaps onto existing corners, finds the fourth corner of a rectangle, and closes the shape on the first

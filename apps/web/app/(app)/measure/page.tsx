@@ -190,9 +190,19 @@ export default function MeasurePage() {
   }, []);
 
   // Drawing
-  const startDrawing = (kind: MeasureKind, zone: MeasureZone | null = null) => { setDrawing(kind); setDrawZone(zone); drawZoneRef.current = zone; setDraft([]); setRedo([]); setSelectedId(null); setMessage(null); };
+  /**
+   * Selects a drawing button. It stays selected for outline after outline until another is chosen; an outline
+   * already started carries over to the new type. Choosing the selected one again stops drawing.
+   */
+  const startDrawing = (kind: MeasureKind, zone: MeasureZone | null = null) => {
+    if (drawingRef.current === kind && drawZoneRef.current === zone) return cancelDrawing();
+    const fromLine = drawingRef.current === "line", toLine = kind === "line";
+    if (!drawingRef.current || fromLine !== toLine) { setDraft([]); setRedo([]); }
+    drawingRef.current = kind;
+    setDrawing(kind); setDrawZone(zone); drawZoneRef.current = zone; setSelectedId(null); setMessage(null);
+  };
   const drawZoneRef = useRef<MeasureZone | null>(null);
-  const cancelDrawing = () => { setDrawing(null); setDraft([]); setRedo([]); };
+  const cancelDrawing = () => { drawingRef.current = null; setDrawing(null); setDraft([]); setRedo([]); };
   /** Points taken off with Undo Point, newest last, for Redo Point; placing a new point clears them. */
   const [redo, setRedo] = useState<LatLng[]>([]);
   const onAddPoint = useCallback((pt: LatLng) => {
@@ -239,11 +249,10 @@ export default function MeasurePage() {
       }
     }
     const shape: MeasureShape = { id: newId(), kind: finalKind, label: "", points: pts, ...(zone ? { zone } : {}) };
-    drawingRef.current = null;
+    // The drawing button stays selected, ready for the next outline.
     draftRef.current = [];
     setShapes((s) => [...s, shape]);
     setSelectedId(shape.id);
-    setDrawing(null);
     setDraft([]);
     setRedo([]);
     setDirty(true);
@@ -408,31 +417,35 @@ export default function MeasurePage() {
             onChangeShape={onChangeShape} onMove={onMove} result={totals} onReady={onReady} showHandles={showHandles} pin={pin} onMovePin={onMovePin} snap={snap}
           />
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-            {drawing ? (
+            {TOOLS.map((t) => {
+              const active = drawing === t.kind && (drawZone ?? null) === t.zone;
+              return (
+                <button key={t.label} className={`btn sm measure-tool${active ? " active" : ""}`} aria-pressed={active} onClick={() => startDrawing(t.kind, t.zone)}
+                  title={active ? "Selected: click again to stop drawing" : `Draw with ${t.label}; it stays selected until you choose another`}>
+                  <span className="measure-dot" style={{ background: shapeColor(t.kind, t.zone) }} /> {t.label}
+                </button>
+              );
+            })}
+            {drawing && (
               <>
-                <span className="muted" style={{ flex: "1 1 260px", fontSize: 14 }}>{drawing === "turf" && drawZone ? `${MEASURE_ZONE_LABELS[drawZone]}: ` : ""}<span className="hint-mouse">{showHandles ? HINT[drawing] : HINT[drawing].replace(", press Enter, or click the first point to finish", " or press Enter to finish")}</span>
-                  <span className="hint-touch">Move the crosshair onto the next corner (move the map, drag the crosshair, or tap the spot), then press Drop Point. Press Finish when done.</span></span>
-                <button className="btn sm primary" onClick={finish}>Finish</button>
+                <button className="btn sm primary" onClick={finish} disabled={draft.length < (drawing === "line" ? 2 : 3)}>Finish</button>
                 <button className="btn sm" onClick={undoPoint} disabled={!draft.length} title="Take off the last point (Ctrl+Z)">Undo Point</button>
                 <button className="btn sm" onClick={redoPoint} disabled={!redo.length} title="Put back the last point you undid (Ctrl+Y)">Redo Point</button>
-                <button className="btn sm" onClick={cancelDrawing}>Cancel</button>
-                {pointsToggle}
-              </>
-            ) : (
-              <>
-                {TOOLS.map((t) => (
-                  <button key={t.label} className="btn sm" onClick={() => startDrawing(t.kind, t.zone)}>
-                    <span className="measure-dot" style={{ background: shapeColor(t.kind, t.zone) }} /> {t.label}
-                  </button>
-                ))}
-                {pointsToggle}
-                <span className="muted" style={{ fontSize: 13 }}>
-                  {!selectedId ? "Click a measurement on the map to adjust it." : showHandles
-                    ? "Drag corners to adjust · drag a small dot to add a corner · right-click a corner to remove it · Delete removes it"
-                    : "Points are hidden; turn on Show points to adjust corners · Delete removes it"}
-                </span>
+                <button className="btn sm" onClick={cancelDrawing} title="Stop drawing (Esc); an unfinished outline is discarded">Cancel</button>
               </>
             )}
+            {pointsToggle}
+          </div>
+          <div className="muted" style={{ fontSize: 13 }}>
+            {drawing ? (
+              <>
+                {drawing === "turf" && drawZone ? `${MEASURE_ZONE_LABELS[drawZone]}: ` : ""}
+                <span className="hint-mouse">{showHandles ? HINT[drawing] : HINT[drawing].replace(", press Enter, or click the first point to finish", " or press Enter to finish")} The button stays selected for the next one; click it again (or Esc) to stop.</span>
+                <span className="hint-touch">Move the crosshair onto the next corner (move the map, drag the crosshair, or tap the spot), then press Drop Point. Press Finish when done; tap the selected button again to stop.</span>
+              </>
+            ) : !selectedId ? "Choose a drawing button to measure, or click a measurement on the map to adjust it." : showHandles
+              ? "Drag corners to adjust · drag a small dot to add a corner · right-click a corner to remove it · Delete removes it"
+              : "Points are hidden; turn on Show points to adjust corners · Delete removes it"}
           </div>
           {message && <p className="muted" role="status" style={{ margin: 0 }}>{message}</p>}
           <div className="card stack" style={{ gap: 8 }}>
