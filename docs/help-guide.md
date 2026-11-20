@@ -81,11 +81,13 @@ Admins choose which employees can edit products, rates and mixes; every change i
 Measure turf square footage from aerial photos, choosing photos taken in winter when the leaves are off.
 
 1. Start typing the property's address under **Find a property**: after a few letters, matching addresses
-   near the map drop down; pick one with the mouse, or the arrow keys and Enter. You can also type the full
+   drop down, nearest your shop first (type a house number, or just a street name to see matching streets and
+   how many addresses each has); pick one with the mouse, or the arrow keys and Enter. You can also type the full
    address (or paste a Google Maps link, or latitude, longitude) and click **Find**. Addresses come first
    from the State of Oklahoma's 911 address list (the most complete, including new streets), then from
    OpenStreetMap. The 911 list for your counties (Cleveland, Oklahoma and McClain to start) is kept in
-   Crewdesk and refreshed every 30 days; admins can add or remove counties under **Photo and address
+   Crewdesk and refreshed every 30 days; admins can add or remove counties, and set the **Shop location**
+   suggestions are measured from (it starts as the business address in Company settings), under **Photo and address
    sources (admins)**. Addresses in other Oklahoma counties are still found with **Find**, just more slowly.
    A red pin marks the house. If it's not quite on the house, drag it there; it's saved with the measurement
    and shows when you print or export.

@@ -10,6 +10,7 @@ interface Status {
   all: string[];
   refreshing: boolean;
   canManage: boolean;
+  shop: { lat: number; lng: number; label: string; source: "admin" | "company" } | null;
 }
 
 /**
@@ -20,6 +21,7 @@ export function AddressCounties() {
   const status = useApi<Status>("/measurements/addresses");
   const action = useAction();
   const [adding, setAdding] = useState("");
+  const [shopText, setShopText] = useState("");
   const data = status.data;
 
   // While downloading, check every 10 seconds.
@@ -31,9 +33,30 @@ export function AddressCounties() {
 
   if (!data) return <ErrorBox error={status.error} />;
   const chosen = data.counties.map((c) => c.county);
-  const setCounties = (counties: string[]) => action.run(async () => status.setData(await api("/measurements/addresses/counties", { method: "PUT", body: { counties } })));
+  const setCounties = (counties: string[]) => action.run(async () => status.setData({ ...data, ...(await api("/measurements/addresses/counties", { method: "PUT", body: { counties } })) }));
+
+  const saveShop = (query: string) => action.run(async () => {
+    const r = await api("/measurements/shop", { method: "PUT", body: { query } });
+    status.setData({ ...data, shop: r.shop });
+    setShopText("");
+  });
 
   return (
+    <>
+    <div className="stack" style={{ gap: 6, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
+      <strong style={{ fontSize: 14 }}>Shop location</strong>
+      <span className="muted" style={{ fontSize: 13 }}>Address suggestions in &ldquo;Find a property&rdquo; list the addresses nearest here first.</span>
+      <span style={{ fontSize: 14 }}>
+        {data.shop
+          ? <>{data.shop.label} <span className="muted">({data.shop.source === "admin" ? "set here" : "from the business address in Company settings"})</span></>
+          : <span className="muted">Not set: suggestions start near the middle of the map. Enter the shop&apos;s address below.</span>}
+      </span>
+      <form className="row" style={{ gap: 6, flexWrap: "wrap" }} onSubmit={(e) => { e.preventDefault(); if (shopText.trim()) saveShop(shopText.trim()); }}>
+        <input value={shopText} onChange={(e) => setShopText(e.target.value)} placeholder="Shop address, e.g. 1601 Deskin Dr, Norman, OK 73069" style={{ flex: "1 1 220px" }} aria-label="Shop address" />
+        <button className="btn sm" disabled={action.busy || !shopText.trim()}>Set</button>
+        {data.shop?.source === "admin" && <button type="button" className="btn sm" disabled={action.busy} onClick={() => saveShop("")}>Use business address</button>}
+      </form>
+    </div>
     <div className="stack" style={{ gap: 6, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
       <strong style={{ fontSize: 14 }}>Address search: Oklahoma 911 address list</strong>
       <span className="muted" style={{ fontSize: 13 }}>
@@ -59,11 +82,12 @@ export function AddressCounties() {
           {data.all.filter((c) => !chosen.includes(c)).map((c) => <option key={c} value={c}>{countyLabel(c)}</option>)}
         </select>
         <button className="btn sm" disabled={!adding || action.busy} onClick={() => { setCounties([...chosen, adding]); setAdding(""); }}>Add</button>
-        <button className="btn sm" disabled={action.busy || data.refreshing} onClick={() => action.run(async () => status.setData(await api("/measurements/addresses/refresh", { method: "POST", body: {} })))}>
+        <button className="btn sm" disabled={action.busy || data.refreshing} onClick={() => action.run(async () => status.setData({ ...data, ...(await api("/measurements/addresses/refresh", { method: "POST", body: {} })) }))}>
           {data.refreshing ? "Downloading…" : "Update Now"}
         </button>
       </div>
       <ErrorBox error={action.error} />
     </div>
+    </>
   );
 }

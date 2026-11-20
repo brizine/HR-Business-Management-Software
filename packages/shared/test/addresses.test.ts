@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OK_COUNTIES, addressKey, countyLabel, titleCaseAddress, typedAddressKeys } from "../src/addresses";
+import { OK_COUNTIES, addressKey, countyLabel, titleCaseAddress, typedAddressKeys, typedStreetWords } from "../src/addresses";
 
 describe("address keys", () => {
   it("builds keys from 911 records", () => {
@@ -26,5 +26,16 @@ describe("address keys", () => {
     expect(countyLabel("MCCLAIN")).toBe("McClain County");
     expect(countyLabel("LE FLORE")).toBe("Le Flore County");
     expect(OK_COUNTIES).toHaveLength(77);
+  });
+});
+
+describe("street names typed without a number", () => {
+  it("turns them into words to look for", () => {
+    expect(typedStreetWords("Deskin")).toEqual(["DESKIN"]);
+    expect(typedStreetWords("deskin drive")).toEqual(["DESKIN", "DR"]);
+    expect(typedStreetWords("W Gray St")).toEqual(["GRAY", "ST"]);
+    expect(typedStreetWords("Deskin Dr, Norman OK")).toEqual(["DESKIN", "DR"]);
+    expect(typedStreetWords("1601 Deskin")).toBeNull();
+    expect(typedStreetWords("ab")).toBeNull();
   });
 });

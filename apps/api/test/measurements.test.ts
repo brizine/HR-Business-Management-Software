@@ -72,6 +72,17 @@ describe("measurements", () => {
   });
 });
 
+describe("shop location", () => {
+  it("admins set it (address suggestions start nearest it); others can't", async () => {
+    expect((await call("PUT", "/measurements/shop", "crew", { query: "35.26028745, -97.46507469" })).status).toBe(403);
+    const set = await call("PUT", "/measurements/shop", "owner", { query: "35.26028745, -97.46507469" });
+    expect(set.body.shop).toMatchObject({ lat: 35.26028745, lng: -97.46507469, source: "admin" });
+    expect((await call("GET", "/measurements/addresses", "crew")).body.shop).toMatchObject({ source: "admin" });
+    // Cleared: back to the business address (none here), so no shop.
+    expect((await call("PUT", "/measurements/shop", "owner", { query: "" })).body.shop).toBeNull();
+  });
+});
+
 describe("aerial photo sources", () => {
   const found = (leafOffYears: number[]) => ({
     at: Date.now(), error: null,

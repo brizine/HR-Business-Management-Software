@@ -1,5 +1,5 @@
 import { asc, eq, inArray, like, sql } from "drizzle-orm";
-import { DEFAULT_ADDRESS_COUNTIES, OK_COUNTIES, addressKey, titleCaseAddress, typedAddressKeys, type MeasureImagerySettings } from "@crewdesk/shared";
+import { DEFAULT_ADDRESS_COUNTIES, OK_COUNTIES, addressKey, titleCaseAddress, typedAddressKeys, typedStreetWords, type MeasureImagerySettings } from "@crewdesk/shared";
 import { db } from "../db";
 import { addressCounties, addressPoints, companies } from "../db/schema";
 
@@ -154,7 +154,8 @@ export async function searchAddresses(typed: string, near?: { lat: number; lng: 
     const rows = await db
       .select({ fullAddress: addressPoints.fullAddress, city: addressPoints.city, zip: addressPoints.zip, lat: addressPoints.lat, lng: addressPoints.lng, county: addressPoints.county, key: addressPoints.key })
       .from(addressPoints)
-      .where(exactNumber ? eq(addressPoints.key, key) : like(addressPoints.key, `${key}%`))
+      // Just a house number ("1601"): every address with that number; otherwise keys starting with what was typed.
+      .where(exactNumber ? like(addressPoints.key, `${key} %`) : like(addressPoints.key, `${key}%`))
       .orderBy(near ? sql`(${addressPoints.lat} - ${near.lat}) ^ 2 + (${addressPoints.lng} - ${near.lng}) ^ 2` : asc(addressPoints.key))
       .limit(limit * 4);
     if (!rows.length) continue;
@@ -172,6 +173,34 @@ export async function searchAddresses(typed: string, near?: { lat: number; lng: 
       .slice(0, limit);
   }
   return [];
+}
+
+export interface StreetMatch { label: string; lat: number; lng: number; addresses: number }
+
+/**
+ * Streets in the stored 911 addresses matching a street name typed without a house number ("Desk", "Deskin Dr"),
+ * one per street and city, nearest first; each with its address nearest `near` and how many addresses it has.
+ */
+export async function searchStreets(typed: string, near: { lat: number; lng: number }, limit = 6): Promise<StreetMatch[]> {
+  const w = typedStreetWords(typed);
+  if (!w) return [];
+  // Keys are "NUMBER STREET TYPE"; the typed words must start a word of the street part.
+  const pattern = `% ${w.join(" ").replace(/[%_\\]/g, "")}%`;
+  const dist = sql`(${addressPoints.lat} - ${near.lat}) ^ 2 + (${addressPoints.lng} - ${near.lng}) ^ 2`;
+  const street = sql`regexp_replace(${addressPoints.key}, '^[0-9]+[A-Z]? ', '')`;
+  const rows = await db.execute(sql`
+    select street, city, zip, lat, lng, n from (
+      select ${street} as street, ${addressPoints.city} as city, ${addressPoints.zip} as zip, ${addressPoints.lat} as lat, ${addressPoints.lng} as lng,
+        row_number() over (partition by ${street}, ${addressPoints.city} order by ${dist}) as rn,
+        count(*) over (partition by ${street}, ${addressPoints.city}) as n,
+        ${dist} as d
+      from ${addressPoints}
+      where ${addressPoints.key} like ${pattern}
+    ) t where rn = 1 order by d limit ${limit}`);
+  return (rows.rows as { street: string; city: string | null; zip: string | null; lat: number; lng: number; n: string | number }[]).map((r) => ({
+    label: `${titleCaseAddress(r.street)}${r.city ? `, ${titleCaseAddress(r.city)}` : ""}, OK${r.zip ? ` ${r.zip}` : ""}`,
+    lat: Number(r.lat), lng: Number(r.lng), addresses: Number(r.n),
+  }));
 }
 
 /** Asks OKMaps directly (any county; slow, so only for Find, not while typing). */

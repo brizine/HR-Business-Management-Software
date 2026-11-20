@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db, pool } from "../src/db";
 import { addressPoints } from "../src/db/schema";
-import { searchAddresses, toAddressRow } from "../src/lib/addresses";
+import { searchAddresses, searchStreets, toAddressRow } from "../src/lib/addresses";
 import { geocode } from "../src/lib/geocode";
 
 const COUNTY = "ZZTEST";
@@ -38,6 +38,19 @@ describe("Oklahoma 911 addresses", () => {
   it("Find uses the 911 list before the national geocoders", async () => {
     const r = await geocode("1601 Zqdeskin Drive, Norman OK");
     expect(r).toMatchObject({ source: "ok911", lat: 35.26028745, lng: -97.46507469 });
+  });
+});
+
+describe("street names and house numbers", () => {
+  it("lists streets for a name typed without a number, nearest first, with their address counts", async () => {
+    const shop = { lat: 35.26, lng: -97.465 };
+    const streets = await searchStreets("Zqdesk", shop);
+    expect(streets.map((x) => [x.label, x.addresses])).toEqual([["Zqdeskin Dr, Norman, OK 73069", 2], ["Zqdeskin St, Lindsay, OK 73052", 1]]);
+    expect(await searchStreets("Zqdeskin Dr", shop)).toHaveLength(1);
+  });
+  it("lists every address with a typed house number, nearest first", async () => {
+    const near = (await searchAddresses("1601", { lat: 34.94, lng: -97.63 }, 50)).filter((m) => m.label.includes("Zqdeskin"));
+    expect(near[0].label).toContain("Lindsay");
   });
 });
 

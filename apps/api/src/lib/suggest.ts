@@ -11,6 +11,8 @@ export interface AddressSuggestion {
   kind: "address" | "street" | "place";
   /** Look the label up for the exact spot when picked (a typed house number on a street result). */
   lookUp: boolean;
+  /** A short note shown with it (e.g. "35 addresses" for a street). */
+  detail?: string;
 }
 
 const STATES: Record<string, string> = {

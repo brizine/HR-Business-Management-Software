@@ -9,6 +9,8 @@ export interface AddressSuggestion {
   kind: "address" | "street" | "place";
   /** Look the label up for the exact spot when picked (OpenStreetMap had the street but not the house number). */
   lookUp: boolean;
+  /** A short note shown with it (e.g. "35 addresses" for a street). */
+  detail?: string;
 }
 
 /**
@@ -115,11 +117,12 @@ export function AddressSearch({ value, onChange, near, onPick, onSubmit, busy, p
                 onMouseEnter={() => setActive(i)}
               >
                 <span className="address-suggest-icon" aria-hidden>{s.kind === "place" ? "◎" : s.kind === "street" ? "—" : "⌂"}</span>
-                <span>{s.label}</span>
+                <span style={{ flex: 1 }}>{s.label}</span>
+                {s.detail && <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{s.detail}</span>}
               </div>
             ))}
             {!items.length && <div className="muted address-suggest-empty">No suggestions. Press Find to search for exactly what you typed.</div>}
-            <div className="address-suggest-credit">Suggestions © OpenStreetMap contributors (Photon)</div>
+            <div className="address-suggest-credit">Nearest your shop first · Oklahoma 911 addresses (OKMaps) · © OpenStreetMap contributors (Photon)</div>
           </div>
         )}
       </label>

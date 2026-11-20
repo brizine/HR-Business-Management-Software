@@ -248,6 +248,8 @@ export interface MeasureImagerySettings {
   seen?: Record<string, string>;
   /** Oklahoma counties whose 911 address points are kept for address search (default Cleveland, Oklahoma, McClain). */
   addressCounties?: string[];
+  /** The shop: address suggestions list the nearest addresses first. From the business address unless an admin set it. */
+  shop?: { lat: number; lng: number; label: string; source: "admin" | "company" } | null;
 }
 
 /**

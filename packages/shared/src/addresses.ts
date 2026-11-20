@@ -71,6 +71,19 @@ export function typedAddressKeys(typed: string): { number: number; keys: string[
   return { number, keys, extra: [...rest.slice(1), ...extra], words: all, otherState: all.some((w) => OTHER_STATES.has(w)) };
 }
 
+/**
+ * A street name typed without a house number ("Deskin", "w gray st", "Deskin Dr Norman"), as the words to look
+ * for in address keys (USPS abbreviations, no direction in front, no state or ZIP). Null if it starts with a number.
+ */
+export function typedStreetWords(typed: string): string[] | null {
+  const w = words(typed.split(",")[0]);
+  if (!w.length || /^\d/.test(w[0])) return null;
+  let rest = w;
+  if (rest.length > 1 && DIRECTIONS[rest[0]]) rest = rest.slice(1);
+  rest = rest.map(abbr).filter((x) => !["OK", "OKLAHOMA"].includes(x) && !/^\d{5}$/.test(x));
+  return rest.length && rest.join("").length >= 3 ? rest : null;
+}
+
 /** "1601 DESKIN DR" → "1601 Deskin Dr"; keeps directions upper case and "160th" lower. */
 export function titleCaseAddress(s: string) {
   return s
