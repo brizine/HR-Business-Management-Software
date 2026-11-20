@@ -397,7 +397,8 @@ export default function MeasurePage() {
   const runExport = (format: ExportFormat) => exporter.run(async () => {
     const m = mapRef.current;
     if (!m) throw new Error("The map is still loading.");
-    if (drawing) throw new Error("Finish or cancel the measurement you're drawing first.");
+    // Only an outline still being traced (or a reopened one) gets in the way; a selected drawing button doesn't.
+    if (draft.length || reopened) throw new Error("Finish or cancel the outline you're drawing first.");
     const lib = await import("@/lib/measure-export");
     const info: ExportInfo = { name, address, notes, imagery, shapes, result: totals, pin };
     if (format === "print") await lib.printReport(m.map, m.L, info);
@@ -434,7 +435,8 @@ export default function MeasurePage() {
 
   const save = (asNew: boolean) => action.run(async () => {
     if (!name.trim()) throw new Error("Give the measurement a name (customer or property) before saving.");
-    if (drawing) throw new Error("Finish or cancel the measurement you're drawing first.");
+    // Only an outline still being traced (or a reopened one) gets in the way; a selected drawing button doesn't.
+    if (draft.length || reopened) throw new Error("Finish or cancel the outline you're drawing first.");
     const v = center.current;
     const body = { name, address: address || null, notes: notes || null, lat: v.lat, lng: v.lng, zoom: Math.round(v.zoom), imagery: imageryName(imagery), shapes, pinLat: pin?.lat ?? null, pinLng: pin?.lng ?? null };
     const m = saved && saved.canEdit && !asNew
