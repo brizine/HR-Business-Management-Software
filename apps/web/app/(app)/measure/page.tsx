@@ -434,10 +434,10 @@ export default function MeasurePage() {
             })}
             {drawing && (
               <>
+                <button className="btn sm" onClick={cancelDrawing} title="Stop drawing (Esc); an unfinished outline is discarded">Cancel</button>
                 <button className="btn sm primary" onClick={finish} disabled={draft.length < (drawing === "line" ? 2 : 3)}>Finish</button>
                 <button className="btn sm" onClick={undoPoint} disabled={!draft.length} title="Take off the last point (Ctrl+Z)">Undo Point</button>
                 <button className="btn sm" onClick={redoPoint} disabled={!redo.length} title="Put back the last point you undid (Ctrl+Y)">Redo Point</button>
-                <button className="btn sm" onClick={cancelDrawing} title="Stop drawing (Esc); an unfinished outline is discarded">Cancel</button>
               </>
             )}
             {pointsToggle}
