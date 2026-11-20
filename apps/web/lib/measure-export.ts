@@ -216,7 +216,8 @@ const photoLine = (info: ExportInfo) => `Photo: ${info.imagery.label}${info.imag
 function withCaption(map: HTMLCanvasElement, info: ExportInfo) {
   const pad = 14 * SCALE, gap = 4 * SCALE;
   const parts: { text: string; bold?: boolean }[] = [
-    { text: [info.name || "Property measurement", info.address].filter(Boolean).join(" · "), bold: true },
+    // The address first (then the name, if one was given).
+    { text: [info.address, info.name].filter(Boolean).join(" · ") || "Property measurement", bold: true },
     { text: totalsRows(info.result).map(([k, v]) => `${k}: ${v}`).join("   ·   ") },
     { text: `${photoLine(info)}   Measured ${today()}.` },
   ];
@@ -278,7 +279,7 @@ const toBlob = (canvas: HTMLCanvasElement, type: string, quality?: number) =>
 
 export async function exportImage(map: Leaflet.Map, L: typeof Leaflet, info: ExportInfo, format: "png" | "jpeg") {
   const canvas = withCaption(await renderMap(map, L, info), info);
-  download(await toBlob(canvas, `image/${format}`, 0.92), `${fileBase(info.name)}.${format === "jpeg" ? "jpg" : "png"}`);
+  download(await toBlob(canvas, `image/${format}`, 0.92), `${fileBase(info.name || info.address)}.${format === "jpeg" ? "jpg" : "png"}`);
 }
 
 /** PDF fonts only cover basic Latin characters. */
@@ -289,10 +290,10 @@ export async function exportPdf(map: Leaflet.Map, L: typeof Leaflet, info: Expor
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), m = 40;
   let y = m;
-  doc.setFont("helvetica", "bold").setFontSize(18).text(pdfText(info.name || "Property Measurement"), m, y + 8);
+  doc.setFont("helvetica", "bold").setFontSize(18).text(pdfText(info.name || info.address || "Property Measurement"), m, y + 8);
   y += 26;
   doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(90);
-  doc.text(pdfText([info.address, `Measured ${today()}`].filter(Boolean).join("  ·  ")), m, y);
+  doc.text(pdfText([info.name ? info.address : "", `Measured ${today()}`].filter(Boolean).join("  ·  ")), m, y);
   y += 14;
   // Photo: as wide as the page, up to about half its height.
   const maxW = W - m * 2, maxH = H * 0.5;
@@ -330,7 +331,7 @@ export async function exportPdf(map: Leaflet.Map, L: typeof Leaflet, info: Expor
   }
   doc.setFontSize(8).setTextColor(120);
   doc.text(doc.splitTextToSize(pdfText(photoLine(info)), W - m * 2), m, H - m + 10);
-  doc.save(`${fileBase(info.name)}.pdf`);
+  doc.save(`${fileBase(info.name || info.address)}.pdf`);
 }
 
 /* ---------- Outlines (KML / GeoJSON) ---------- */
@@ -366,7 +367,7 @@ export function exportKml(info: ExportInfo) {
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${xml(info.name || "Property measurement")}</name><description>${xml([info.address, summary, info.notes].filter(Boolean).join("\n\n"))}</description>
 ${placemarks.join("\n")}
 </Document></kml>`;
-  download(new Blob([body], { type: "application/vnd.google-earth.kml+xml" }), `${fileBase(info.name)}.kml`);
+  download(new Blob([body], { type: "application/vnd.google-earth.kml+xml" }), `${fileBase(info.name || info.address)}.kml`);
 }
 
 export function exportGeoJson(info: ExportInfo) {
@@ -391,7 +392,7 @@ export function exportGeoJson(info: ExportInfo) {
     properties: { name: info.name || null, address: info.address || null, totalSqFt: Math.round(r.netSqFt), frontSqFt: Math.round(r.frontSqFt), backSqFt: Math.round(r.backSqFt), photo: info.imagery.label },
     features,
   };
-  download(new Blob([JSON.stringify(body, null, 2)], { type: "application/geo+json" }), `${fileBase(info.name)}.geojson`);
+  download(new Blob([JSON.stringify(body, null, 2)], { type: "application/geo+json" }), `${fileBase(info.name || info.address)}.geojson`);
 }
 
 /* ---------- Printing ---------- */
@@ -404,8 +405,8 @@ export async function printReport(map: Leaflet.Map, L: typeof Leaflet, info: Exp
   const root = document.createElement("div");
   root.className = "measure-print-root";
   root.innerHTML = `
-    <h1>${html(info.name || "Property Measurement")}</h1>
-    <p class="sub">${html([info.address, `Measured ${today()}`].filter(Boolean).join(" · "))}</p>
+    <h1>${html(info.name || info.address || "Property Measurement")}</h1>
+    <p class="sub">${html([info.name ? info.address : "", `Measured ${today()}`].filter(Boolean).join(" · "))}</p>
     <img src="${canvas.toDataURL("image/jpeg", 0.92)}" alt="Aerial photo with measurements" />
     <div class="cols">
       <table><tbody>${totalsRows(info.result).map(([k, v]) => `<tr class="${k === "Total Area" ? "big" : ""}"><th>${html(k)}</th><td>${html(v)}</td></tr>`).join("")}</tbody></table>
