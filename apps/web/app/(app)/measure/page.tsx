@@ -64,6 +64,9 @@ const OUTSIDE_MAPS: { label: string; hint: string; url: (v: MapView) => string }
 ];
 
 type ExportFormat = "print" | "png" | "jpeg" | "pdf" | "kml" | "geojson";
+/** The export code, loaded once and early, so the Save As box can open right after the click. */
+let exportLibPromise: Promise<typeof import("@/lib/measure-export")> | null = null;
+const exportLib = () => (exportLibPromise ??= import("@/lib/measure-export"));
 const EXPORTS: { format: ExportFormat; label: string; hint: string }[] = [
   { format: "pdf", label: "PDF report", hint: "Photo with outlines, totals and the list" },
   { format: "png", label: "Photo (PNG)", hint: "Best quality image with outlines and totals" },
@@ -113,6 +116,7 @@ export default function MeasurePage() {
   const mapRef = useRef<{ map: Leaflet.Map; L: typeof Leaflet } | null>(null);
   const onReady = useCallback((map: Leaflet.Map, L: typeof Leaflet) => { mapRef.current = { map, L }; }, []);
   const exporter = useAction();
+  useEffect(() => { void exportLib(); }, []);
   /** Show the points: dots while drawing, and corner squares and midpoint circles for adjusting (remembered on this device). */
   const [showHandles, setShowHandles] = useState(true);
   useEffect(() => { try { if (localStorage.getItem(HANDLES_KEY) === "off") setShowHandles(false); } catch { /* storage unavailable */ } }, []);
@@ -399,14 +403,18 @@ export default function MeasurePage() {
     if (!m) throw new Error("The map is still loading.");
     // Only an outline still being traced (or a reopened one) gets in the way; a selected drawing button doesn't.
     if (draft.length || reopened) throw new Error("Finish or cancel the outline you're drawing first.");
-    const lib = await import("@/lib/measure-export");
+    if ((format === "kml" || format === "geojson") && !shapes.length && !pin) throw new Error("Draw a measurement first; KML and GeoJSON save only the outlines and the pin.");
+    const lib = await exportLib();
     const info: ExportInfo = { name, address, notes, imagery, shapes, result: totals, pin };
-    if (format === "print") await lib.printReport(m.map, m.L, info);
-    else if (format === "png" || format === "jpeg") await lib.exportImage(m.map, m.L, info, format);
-    else if (format === "pdf") await lib.exportPdf(m.map, m.L, info);
-    else if (!shapes.length && !pin) throw new Error("Draw a measurement first; KML and GeoJSON save only the outlines and the pin.");
-    else if (format === "kml") lib.exportKml(info);
-    else lib.exportGeoJson(info);
+    if (format === "print") return lib.printReport(m.map, m.L, info);
+    // Ask where to save first (straight after the click, so the browser shows the Save As box); then make the file.
+    const target = await lib.chooseSaveTarget(lib.exportFileName(info, format), format);
+    if (!target) return; // they cancelled
+    if (format === "png" || format === "jpeg") await lib.exportImage(m.map, m.L, info, format, target);
+    else if (format === "pdf") await lib.exportPdf(m.map, m.L, info, target);
+    else if (format === "kml") await lib.exportKml(info, target);
+    else await lib.exportGeoJson(info, target);
+    setMessage(`Exported ${lib.exportFileName(info, format)}.`);
   });
 
   const confirmDiscard = () => !dirty || !shapes.length || window.confirm("Discard the unsaved changes to this measurement?");

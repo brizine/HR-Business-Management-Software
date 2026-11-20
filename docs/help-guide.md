@@ -129,7 +129,9 @@ Measure turf square footage from aerial photos, choosing photos taken in winter 
    totals, the list of measurements, notes and the photo's source. **Export** saves the same thing as a
    **PDF report**, or the photo with outlines and totals as a **PNG** (best quality) or **JPEG** (smaller,
    for email and texts), or just the outlines as **KML** (opens in Google Earth) or **GeoJSON** (for GIS
-   software). The photo is saved as it's shown on the map, so zoom and pan to frame the property first.
+   software). After you pick the type, a **Save As** box asks where to save it and what to call it (Chrome and
+   Edge; Safari and Firefox save it like any download, wherever the browser is set to put downloads). The photo is
+   saved as it's shown on the map, so zoom and pan to frame the property first.
 7. Give it a name and **Save**. Everyone can open saved measurements under **Saved Measurements**; the
    person who saved one, or a Spray Mix manager, can change or delete it.
 

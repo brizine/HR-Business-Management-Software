@@ -263,6 +263,52 @@ export function fileBase(name: string) {
   return `${base || "measurement"}-${new Date().toISOString().slice(0, 10)}`;
 }
 
+/* ---------- Where to save ---------- */
+
+export type SaveFormat = "png" | "jpeg" | "pdf" | "kml" | "geojson";
+const FORMATS: Record<SaveFormat, { ext: string; mime: string; desc: string }> = {
+  png: { ext: "png", mime: "image/png", desc: "PNG image" },
+  jpeg: { ext: "jpg", mime: "image/jpeg", desc: "JPEG image" },
+  pdf: { ext: "pdf", mime: "application/pdf", desc: "PDF document" },
+  kml: { ext: "kml", mime: "application/vnd.google-earth.kml+xml", desc: "Google Earth (KML)" },
+  geojson: { ext: "geojson", mime: "application/geo+json", desc: "GeoJSON" },
+};
+
+/** Where a finished export file goes. */
+export interface SaveTarget { write(blob: Blob): Promise<void> }
+
+export const exportFileName = (info: Pick<ExportInfo, "name" | "address">, format: SaveFormat) => `${fileBase(info.name || info.address)}.${FORMATS[format].ext}`;
+
+type SavePicker = (o: { suggestedName: string; types: { description: string; accept: Record<string, string[]> }[] }) => Promise<{
+  createWritable(): Promise<{ write(b: Blob): Promise<void>; close(): Promise<void> }>;
+}>;
+
+/**
+ * Opens the browser's Save As box (Chrome and Edge) so the person picks the folder and file name; null if they
+ * cancel. Browsers without it (Safari, Firefox) save like any download. Call it straight after the click, before
+ * any slow work, or the browser won't open the box.
+ */
+export async function chooseSaveTarget(filename: string, format: SaveFormat): Promise<SaveTarget | null> {
+  const picker = (window as unknown as { showSaveFilePicker?: SavePicker }).showSaveFilePicker;
+  if (typeof picker === "function") {
+    const f = FORMATS[format];
+    try {
+      const handle = await picker({ suggestedName: filename, types: [{ description: f.desc, accept: { [f.mime]: [`.${f.ext}`] } }] });
+      return {
+        write: async (blob) => {
+          const w = await handle.createWritable();
+          await w.write(blob);
+          await w.close();
+        },
+      };
+    } catch (e) {
+      if ((e as DOMException).name === "AbortError") return null; // they cancelled the box
+      // Anything else (not allowed here): save as a normal download instead.
+    }
+  }
+  return { write: async (blob) => download(blob, filename) };
+}
+
 function download(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -277,15 +323,15 @@ function download(blob: Blob, filename: string) {
 const toBlob = (canvas: HTMLCanvasElement, type: string, quality?: number) =>
   new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Couldn't make the image"))), type, quality));
 
-export async function exportImage(map: Leaflet.Map, L: typeof Leaflet, info: ExportInfo, format: "png" | "jpeg") {
+export async function exportImage(map: Leaflet.Map, L: typeof Leaflet, info: ExportInfo, format: "png" | "jpeg", target: SaveTarget) {
   const canvas = withCaption(await renderMap(map, L, info), info);
-  download(await toBlob(canvas, `image/${format}`, 0.92), `${fileBase(info.name || info.address)}.${format === "jpeg" ? "jpg" : "png"}`);
+  await target.write(await toBlob(canvas, `image/${format}`, 0.92));
 }
 
 /** PDF fonts only cover basic Latin characters. */
 const pdfText = (s: string) => s.replace(/−/g, "-").replace(/[–—]/g, "-").replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/…/g, "...");
 
-export async function exportPdf(map: Leaflet.Map, L: typeof Leaflet, info: ExportInfo) {
+export async function exportPdf(map: Leaflet.Map, L: typeof Leaflet, info: ExportInfo, target: SaveTarget) {
   const [{ jsPDF }, canvas] = await Promise.all([import("jspdf"), renderMap(map, L, info)]);
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), m = 40;
@@ -331,7 +377,7 @@ export async function exportPdf(map: Leaflet.Map, L: typeof Leaflet, info: Expor
   }
   doc.setFontSize(8).setTextColor(120);
   doc.text(doc.splitTextToSize(pdfText(photoLine(info)), W - m * 2), m, H - m + 10);
-  doc.save(`${fileBase(info.name || info.address)}.pdf`);
+  await target.write(doc.output("blob"));
 }
 
 /* ---------- Outlines (KML / GeoJSON) ---------- */
@@ -341,7 +387,7 @@ const closed = (pts: LatLng[]) => (pts.length && (pts[0][0] !== pts[pts.length -
 /** KML colors are aabbggrr. */
 const kmlColor = (hex: string, alpha: string) => `${alpha}${hex.slice(5, 7)}${hex.slice(3, 5)}${hex.slice(1, 3)}`;
 
-export function exportKml(info: ExportInfo) {
+export async function exportKml(info: ExportInfo, target: SaveTarget) {
   const coords = (pts: LatLng[]) => closed(pts).map(([lat, lng]) => `${lng},${lat},0`).join(" ");
   const placemarks = info.shapes.map((s) => {
     const color = shapeColor(s.kind, s.zone);
@@ -367,10 +413,10 @@ export function exportKml(info: ExportInfo) {
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${xml(info.name || "Property measurement")}</name><description>${xml([info.address, summary, info.notes].filter(Boolean).join("\n\n"))}</description>
 ${placemarks.join("\n")}
 </Document></kml>`;
-  download(new Blob([body], { type: "application/vnd.google-earth.kml+xml" }), `${fileBase(info.name || info.address)}.kml`);
+  await target.write(new Blob([body], { type: "application/vnd.google-earth.kml+xml" }));
 }
 
-export function exportGeoJson(info: ExportInfo) {
+export async function exportGeoJson(info: ExportInfo, target: SaveTarget) {
   const ring = (pts: LatLng[]) => closed(pts).map(([lat, lng]) => [lng, lat]);
   const features: object[] = info.shapes.map((s) => {
     let geometry: object;
@@ -392,7 +438,7 @@ export function exportGeoJson(info: ExportInfo) {
     properties: { name: info.name || null, address: info.address || null, totalSqFt: Math.round(r.netSqFt), frontSqFt: Math.round(r.frontSqFt), backSqFt: Math.round(r.backSqFt), photo: info.imagery.label },
     features,
   };
-  download(new Blob([JSON.stringify(body, null, 2)], { type: "application/geo+json" }), `${fileBase(info.name || info.address)}.geojson`);
+  await target.write(new Blob([JSON.stringify(body, null, 2)], { type: "application/geo+json" }));
 }
 
 /* ---------- Printing ---------- */
