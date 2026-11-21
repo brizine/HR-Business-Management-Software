@@ -63,7 +63,7 @@ export async function runScheduledChecks(now = new Date()) {
     sent++;
   }
 
-  // Work orders scheduled by mileage or engine hours: tell the assignee and fleet managers when
+  // Repair orders scheduled by mileage or engine hours: tell the assignee and fleet managers when
   // they're getting close and again when they're reached (once each, re-armed if rescheduled).
   const woRows = await db
     .select({ wo: workOrders, asset: assets })
@@ -79,7 +79,7 @@ export async function runScheduledChecks(now = new Date()) {
     const managers = await staffWithRole(wo.companyId, "manager", "fleet");
     notify(wo.companyId, [...managers, wo.assignedToId], {
       category: "fleet",
-      title: `${asset.name}: work order #${wo.number} ${due.status === "overdue" ? "is due now" : "is coming due"}`,
+      title: `${asset.name}: repair order #${wo.number} ${due.status === "overdue" ? "is due now" : "is coming due"}`,
       body: `${wo.title}. ${due.notes.join("; ")}.`,
       link: { screen: "work-order", id: wo.id, assetId: asset.id },
     });

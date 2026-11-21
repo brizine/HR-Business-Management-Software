@@ -316,7 +316,7 @@ export const maintenanceScheduleSchema = z
     lastServiceDate: isoDate.nullable().optional(),
     lastServiceOdometer: z.number().nonnegative().nullable().optional(),
     lastServiceHours: z.number().nonnegative().nullable().optional(),
-    /** Who looks after this service (gets its reminders; work orders from it are assigned to them). */
+    /** Who looks after this service (gets its reminders; repair orders from it are assigned to them). */
     assignedToId: z.string().uuid().nullable().optional(),
     /** Send the "due soon" reminder this far ahead (null = the company default). */
     ...reminderLeadFields,

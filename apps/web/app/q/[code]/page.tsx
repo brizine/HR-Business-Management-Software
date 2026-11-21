@@ -69,7 +69,7 @@ export default function Scan({ params }: { params: Promise<{ code: string }> }) 
         </div>
         <Badge value={asset.status} />
       </div>
-      {asset.status === "out_of_service" && <div className="error" style={{ marginTop: 10 }}>Out of service. Don&apos;t operate until the open work order is completed.</div>}
+      {asset.status === "out_of_service" && <div className="error" style={{ marginTop: 10 }}>Out of service. Don&apos;t operate until the open repair order is completed.</div>}
       {done && <div className="card" style={{ marginTop: 12 }}>✓ {done}</div>}
 
       <div className="scan-actions">
@@ -88,7 +88,7 @@ export default function Scan({ params }: { params: Promise<{ code: string }> }) 
               assetId: asset.id, odometer: num("odometer"), engineHours: num("engineHours"),
               items: DEFAULT_INSPECTION_ITEMS.map((item, i) => ({ item, ok: f.get(`ok-${i}`) !== "fail", note: (f.get(`note-${i}`) as string) || undefined })),
             } });
-            finish(res.workOrder ? `Defects reported. Work order #${res.workOrder.number} opened for the shop.` : "Inspection passed. Have a safe trip.");
+            finish(res.workOrder ? `Defects reported. Repair order #${res.workOrder.number} opened for the shop.` : "Inspection passed. Have a safe trip.");
           });
         }}>
           <div className="formgrid">
@@ -137,7 +137,7 @@ export default function Scan({ params }: { params: Promise<{ code: string }> }) 
             const wo = await api("/work-orders", { body: {
               assetId: asset.id, title: f.get("title"), description: (f.get("description") as string) || undefined, priority: f.get("priority"),
             } });
-            finish(`Reported as work order #${wo.number}. The shop has been notified.`);
+            finish(`Reported as repair order #${wo.number}. The shop has been notified.`);
           });
         }}>
           <label>What&apos;s wrong?<input name="title" required placeholder="e.g. Check engine light on" /></label>
@@ -157,7 +157,7 @@ export default function Scan({ params }: { params: Promise<{ code: string }> }) 
 
       {(open.length > 0 || due.length > 0) && (
         <div className="card">
-          {open.length > 0 && <h2>Open Work Orders</h2>}
+          {open.length > 0 && <h2>Open Repair Orders</h2>}
           {open.map((w: any) => (
             <div key={w.id} className="row" style={{ justifyContent: "space-between", padding: "4px 0" }}>
               <span>#{w.number} {w.title}</span><Badge value={w.status} />

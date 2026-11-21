@@ -126,10 +126,10 @@ function WorkOrders() {
 
   return (
     <>
-      <PageHead title="Work Orders" sub={<span role="status">{list.data ? (rows.length === all.length ? `Repairs and scheduled service · ${all.length} shown` : `Showing ${rows.length} of ${all.length}`) : "Repairs and scheduled service"}</span>}>
-        <button className="btn primary" onClick={() => setCreating(!creating)}>{can("manager", "fleet") ? "New work order" : "Report an issue"}</button>
+      <PageHead title="Repair Orders" sub={<span role="status">{list.data ? (rows.length === all.length ? `Repairs and scheduled service · ${all.length} shown` : `Showing ${rows.length} of ${all.length}`) : "Repairs and scheduled service"}</span>}>
+        <button className="btn primary" onClick={() => setCreating(!creating)}>{can("manager", "fleet") ? "New repair order" : "Report an issue"}</button>
       </PageHead>
-      <form className="card filters" role="search" aria-label="Filter work orders" onSubmit={(e) => e.preventDefault()}>
+      <form className="card filters" role="search" aria-label="Filter repair orders" onSubmit={(e) => e.preventDefault()}>
         <label>Search
           <input type="search" placeholder="Number, title, asset, person…" value={filters.q} onChange={(e) => setFilter({ q: e.target.value })} />
         </label>
@@ -192,7 +192,7 @@ function WorkOrders() {
             <label>Description<textarea name="description" /></label>
             <p className="muted" style={{ margin: 0 }}>
               {can("manager", "fleet") ? "Schedule it by date, mileage, engine hours or any mix: it's due at whichever comes first, and the person assigned and fleet managers are reminded as it gets close. " : ""}
-              Critical issues take the asset out of service until the work order is completed.
+              Critical issues take the asset out of service until the repair order is completed.
             </p>
             <ErrorBox error={create.error} />
             <div><button className="btn primary" disabled={create.busy}>Create</button></div>
@@ -202,7 +202,7 @@ function WorkOrders() {
       <div className="card tablewrap">
         {rows.length ? (
           <table>
-            <thead><tr><th>#</th><th>Work order</th><th>Asset</th><th>Priority</th><th>Assigned</th><th>Due</th><th>Status</th><th>Cost</th></tr></thead>
+            <thead><tr><th>#</th><th>Repair order</th><th>Asset</th><th>Priority</th><th>Assigned</th><th>Due</th><th>Status</th><th>Cost</th></tr></thead>
             <tbody>{rows.map(({ workOrder: w, assetName, assignee, assetMeter, due }) => {
               const editable = can("manager", "fleet") || w.assignedToId === me?.user.id;
               return [
@@ -224,7 +224,7 @@ function WorkOrders() {
               ];
             })}</tbody>
           </table>
-        ) : <Empty>{all.length ? "No work orders match your filters." : "No work orders."}</Empty>}
+        ) : <Empty>{all.length ? "No repair orders match your filters." : "No repair orders."}</Empty>}
       </div>
     </>
   );

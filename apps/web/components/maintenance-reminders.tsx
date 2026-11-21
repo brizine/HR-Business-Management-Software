@@ -17,7 +17,7 @@ export function describeLead(l: Partial<Lead>) {
   return [l.remindMilesBefore != null && `${l.remindMilesBefore.toLocaleString()} mi`, l.remindHoursBefore != null && `${l.remindHoursBefore} hrs`, l.remindDaysBefore != null && `${l.remindDaysBefore} days`].filter(Boolean).join(" / ");
 }
 
-/** Assets page: company-wide reminder timing for maintenance schedules (and scheduled work orders). */
+/** Assets page: company-wide reminder timing for maintenance schedules (and scheduled repair orders). */
 export function MaintenanceReminderDefaults({ onClose }: { onClose: () => void }) {
   const { can } = useAuth();
   const admin = can("admin", "fleet");
@@ -44,7 +44,7 @@ export function MaintenanceReminderDefaults({ onClose }: { onClose: () => void }
       </div>
       <p className="muted" style={{ margin: 0 }}>
         How far ahead the &ldquo;due soon&rdquo; reminder goes out, for every asset. Leave a box blank to use 10% of each schedule&apos;s interval
-        (e.g. 500 miles ahead for a 5,000-mile oil change). A schedule can set its own timing on its asset&apos;s page. Work orders scheduled by
+        (e.g. 500 miles ahead for a 5,000-mile oil change). A schedule can set its own timing on its asset&apos;s page. Repair orders scheduled by
         mileage, hours or date use these too (blank: 500 miles, 25 hours, 7 days).
       </p>
       <fieldset disabled={!admin || busy} style={{ border: 0, padding: 0, margin: 0 }}>

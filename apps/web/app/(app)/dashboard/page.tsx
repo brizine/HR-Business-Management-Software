@@ -26,7 +26,7 @@ export default function Dashboard() {
           <div className="stats">
             <Stat label="Assets in service" value={data.fleet.assets} />
             <Stat label="In shop / out of service" value={data.fleet.outOfService} tone={data.fleet.outOfService ? "warn" : undefined} />
-            <Stat label="Open work orders" value={data.fleet.openWorkOrders} />
+            <Stat label="Open repair orders" value={data.fleet.openWorkOrders} />
             <Stat label="Maintenance overdue" value={data.fleet.maintenanceOverdue} tone={data.fleet.maintenanceOverdue ? "bad" : "ok"} />
             <Stat label="Maintenance due soon" value={data.fleet.maintenanceDueSoon} tone={data.fleet.maintenanceDueSoon ? "warn" : undefined} />
           </div>

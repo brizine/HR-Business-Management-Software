@@ -70,7 +70,7 @@ export function AccountingCard() {
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div>
           <h2 style={{ margin: 0 }}>Accounting (Bigcapital)</h2>
-          <p className="muted" style={{ margin: "4px 0 0" }}>Send approved payroll and work order costs to your books, so nobody types them in twice.</p>
+          <p className="muted" style={{ margin: "4px 0 0" }}>Send approved payroll and repair order costs to your books, so nobody types them in twice.</p>
         </div>
         {st?.connected && st.baseUrl && <a className="btn" href={st.baseUrl} target="_blank" rel="noopener noreferrer">Open Bigcapital ↗</a>}
       </div>
@@ -111,13 +111,13 @@ export function AccountingCard() {
               {pickAccount("Payroll liability", "payrollLiabilityAccountId", LIABILITY_ACCOUNT_TYPES, "Credited, e.g. Payroll Liabilities / Wages Payable. Clear it when you pay.")}
             </div>
             <label className="check"><input type="checkbox" checked={s.autoPostPayroll} onChange={(e) => set({ autoPostPayroll: e.target.checked })} /> Send each pay period automatically when it&apos;s approved</label>
-            <h3 style={{ margin: "8px 0 0" }}>Work Orders</h3>
+            <h3 style={{ margin: "8px 0 0" }}>Repair Orders</h3>
             <div className="formgrid">
               {pickAccount("Parts expense", "partsAccountId", EXPENSE_ACCOUNT_TYPES, "e.g. Vehicle Repairs & Maintenance.")}
               {pickAccount("Labor expense", "laborAccountId", EXPENSE_ACCOUNT_TYPES, "Optional: shop labor on its own account.", true)}
               {pickAccount("Paid from", "workOrderPaymentAccountId", PAYMENT_ACCOUNT_TYPES, "Bank, cash or credit card account.")}
             </div>
-            <label className="check"><input type="checkbox" checked={s.autoPostWorkOrders} onChange={(e) => set({ autoPostWorkOrders: e.target.checked })} /> Send each work order&apos;s costs automatically when it&apos;s completed</label>
+            <label className="check"><input type="checkbox" checked={s.autoPostWorkOrders} onChange={(e) => set({ autoPostWorkOrders: e.target.checked })} /> Send each repair order&apos;s costs automatically when it&apos;s completed</label>
             <p className="muted" style={{ margin: 0, fontSize: 13 }}>
               Payroll is posted as estimated gross wages for hourly staff (before taxes and deductions). Record taxes and the actual payment in Bigcapital, or from your payroll provider.
             </p>
@@ -132,7 +132,7 @@ export function AccountingCard() {
         </form>
       ) : (
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <span><span className="badge ok">connected</span> <span className="muted">{s.baseUrl}{s.autoPostPayroll || s.autoPostWorkOrders ? ` · sends ${[s.autoPostPayroll ? "payroll" : null, s.autoPostWorkOrders ? "work orders" : null].filter(Boolean).join(" and ")} automatically` : " · sending by hand"}</span></span>
+          <span><span className="badge ok">connected</span> <span className="muted">{s.baseUrl}{s.autoPostPayroll || s.autoPostWorkOrders ? ` · sends ${[s.autoPostPayroll ? "payroll" : null, s.autoPostWorkOrders ? "repair orders" : null].filter(Boolean).join(" and ")} automatically` : " · sending by hand"}</span></span>
           {owner && <button className="btn sm" onClick={() => setEditing(true)}>Change settings</button>}
         </div>
       )}
@@ -150,7 +150,7 @@ export function AccountingCard() {
               </tr>
             ))}</tbody></table>
           ) : <Empty>No approved pay periods yet.</Empty>}
-          <h3 style={{ margin: "8px 0 0" }}>Completed Work Orders with Costs</h3>
+          <h3 style={{ margin: "8px 0 0" }}>Completed Repair Orders with Costs</h3>
           {st.workOrders.length ? (
             <table><tbody>{st.workOrders.map((w) => (
               <tr key={w.id}>
@@ -159,7 +159,7 @@ export function AccountingCard() {
                 <td style={{ textAlign: "right" }}><SyncCell posting={w.posting} changed={w.changedSincePosting} busy={send.busy} onSend={() => sendIt(`/accounting/work-orders/${w.id}`)} /></td>
               </tr>
             ))}</tbody></table>
-          ) : <Empty>No completed work orders with costs yet.</Empty>}
+          ) : <Empty>No completed repair orders with costs yet.</Empty>}
         </>
       )}
     </div>

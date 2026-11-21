@@ -13,7 +13,7 @@ question, get step-by-step answers) and **User Manual** (this guide, with conten
 The left menu has two sides. The **Operations | Team** switch near the top flips between them:
 
 - **Operations:** **Reports** (managers), **Tools** (**Property Measure**, **Spray Mix Calculator**) and
-  **Fleet & Equipment** (**Assets**, **Work Orders**, **Inspections**). Customers, scheduling and
+  **Fleet & Equipment** (**Assets**, **Repair Orders**, **Inspections**). Customers, scheduling and
   billing will be added here.
 - **Team:** **Dashboard** and **Reports** (managers), **People** (**Team**, **Shifts**, **Time Clock**,
   **Attendance**, **Time Off**, **Reviews & Discipline**, **Training**, **Documents**, **Onboarding**,
@@ -21,7 +21,7 @@ The left menu has two sides. The **Operations | Team** switch near the top flips
 - **Always shown:** **Notifications**, **Company Wiki**, **Help** and **Settings**.
 - Opening a page (or a link someone sent) switches the menu to that page's side by itself, and the
   menu remembers the side you used last on that computer.
-- **Reports** on each side lists the reports you can see there, such as Fuel & Costs, Work Orders and
+- **Reports** on each side lists the reports you can see there, such as Fuel & Costs, Repair Orders and
   Inspections (Operations), or Attendance, Timesheets, Time Off, Training Progress and Payroll (Team).
 
 ## Roles and access
@@ -78,7 +78,7 @@ alerts. Phone pop-ups need the Crewdesk app installed and signed in.
 
 ## Dashboard
 
-Headcount, who's on the clock, pending time off, overdue maintenance, open work orders and expiring
+Headcount, who's on the clock, pending time off, overdue maintenance, open repair orders and expiring
 registrations at a glance (managers and up). It's on the **Team** side of the menu.
 
 ## Company Wiki
@@ -363,32 +363,32 @@ Job postings, a public careers page, an applicant board, and one-click hire.
 
 Connects to Bigcapital (the company's accounting system). Approved pay periods can post as journal
 entries (wages, bonuses and commissions to the wages account; reimbursements to the reimbursements
-account if one is chosen) and completed work orders as expenses, automatically or by hand. Set up the connection and
+account if one is chosen) and completed repair orders as expenses, automatically or by hand. Set up the connection and
 accounts in **Settings → Integrations** (payroll admins).
 
 ## Assets (Vehicles & Equipment)
 
 - The fleet list with maintenance status; click an asset for details: meters (odometer, engine
-  hours), documents, QR label, work orders, inspections and **Preventive Maintenance Schedules**.
+  hours), documents, QR label, repair orders, inspections and **Preventive Maintenance Schedules**.
 - **Add schedule** opens the form (it turns into **Cancel** while open); **Save schedule** saves it:
   service name, every X miles / engine hours / days (whichever comes first), last
-  service, **Assign to** (they get its reminders and work orders made from it), optional
+  service, **Assign to** (they get its reminders and repair orders made from it), optional
   **Remind … before** timing and **Notes** (oil type, part numbers, which shop…). Notes show under
-  the service name; **Add note** / **Edit note** changes them later. **Create work order** turns a
-  due service into a work order (its notes go in the work order's description).
+  the service name; **Add note** / **Edit note** changes them later. **Create repair order** turns a
+  due service into a repair order (its notes go in the repair order's description).
 - **Reminder settings** (top of the Assets page): company default for how far ahead "due soon"
   reminders go out (miles, engine hours, days; blank = 10% of the interval) and an optional repeat
   every N days while overdue. Each schedule can override this with **Change** in its Reminder
   column.
-- **Maintenance History** (on each asset's page): every completed work order and service, newest
-  first, with the date, work order number, what was done and notes, mileage / engine hours at the
+- **Maintenance History** (on each asset's page): every completed repair order and service, newest
+  first, with the date, repair order number, what was done and notes, mileage / engine hours at the
   time, who did it and the vendor, and parts, labor and total cost. **Filters**: search (service,
-  part, vendor, notes, work order number, who did it), type (scheduled service, repair, from an
+  part, vendor, notes, repair order number, who did it), type (scheduled service, repair, from an
   inspection) and a date range; the totals update to match. **Export CSV** downloads what's shown
   (for a spreadsheet, resale or warranty records); **Print** opens a printable copy. **Add past
   service** (fleet managers) records older work, e.g. from paper records or receipts: what was done,
   date, odometer, hours, vendor, costs, notes, and optionally which schedule it was for (a newer one
-  resets that schedule). Click a work order number to open it, for example to correct its costs.
+  resets that schedule). Click a repair order number to open it, for example to correct its costs.
 - **Fuel** (on each asset's page): **Log fuel** after each fill-up: date, fuel (Gasoline, Diesel,
   **CNG**, Propane, DEF, Other), amount (gallons, or GGE for CNG, as the CNG pump shows), price per
   gallon or total (enter any two and the third fills in), odometer and/or engine hours, station,
@@ -422,24 +422,24 @@ accounts in **Settings → Integrations** (payroll admins).
 - **Print QR labels:** scanning a label with any phone camera opens a page to inspect, log a
   reading or report an issue.
 
-## Work Orders
+## Repair Orders
 
-- **New work order** (managers) or **Report an issue** (everyone): asset, title, priority,
+- **New repair order** (managers) or **Report an issue** (everyone): asset, title, priority,
   description, assign to, and when it's due: a **date**, **mileage** and/or **engine hours**
   (whichever comes first).
 - The **Due** column shows Upcoming / Coming due / Due now with how far off it is. The assignee and
   fleet managers are reminded as it comes due and when it's due.
-- Click a work order to update status, assignee, due point, labor, parts cost, vendor and notes.
+- Click a repair order to update status, assignee, due point, labor, parts cost, vendor and notes.
   Completing one linked to a schedule resets that schedule. Critical issues take the asset out of
   service until completed.
 
 ## Inspections
 
-Pre-trip / pre-use checklists, mostly done in the phone app. Any failed item opens a work order
+Pre-trip / pre-use checklists, mostly done in the phone app. Any failed item opens a repair order
 automatically.
 
 ## Phone app
 
 Location is required to use the app (it's recorded at clock in/out and every 5 minutes while
 clocked in with the app open). Clock in and out, schedule and open shifts, time off, assigned vehicles, meter readings, fuel (with receipt photos),
-inspections, issue reports, work orders, training, onboarding tasks and signing documents.
+inspections, issue reports, repair orders, training, onboarding tasks and signing documents.

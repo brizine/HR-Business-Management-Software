@@ -26,7 +26,7 @@ export const PERMISSION_AREAS = [
   { key: "hiring", label: "Hiring", levels: { manager: "Post jobs, move applicants, hire" } },
   { key: "onboarding", label: "Onboarding", levels: { manager: "See new hires' checklists and do manager steps", admin: "Edit checklist templates and do admin steps" } },
   { key: "payroll", label: "Payroll & tax forms", levels: { admin: "Preview and export payroll, see tax forms, reopen pay periods", owner: "Payroll settings and pay schedule" } },
-  { key: "fleet", label: "Fleet & equipment", levels: { manager: "Add and edit assets, assign work orders, set maintenance schedules" } },
+  { key: "fleet", label: "Fleet & equipment", levels: { manager: "Add and edit assets, assign repair orders, set maintenance schedules" } },
   { key: "wiki", label: "Company wiki", levels: { manager: "See manager-level pages", admin: "See and edit admin-level pages, change who can see or edit pages" } },
   { key: "spray", label: "Spray Mix Calculator", levels: { admin: "Edit every mix and choose who else can edit" } },
   { key: "dashboard", label: "Dashboard", levels: { manager: "See the dashboard" } },

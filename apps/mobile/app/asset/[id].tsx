@@ -105,7 +105,7 @@ export default function Asset() {
         )) : <Txt muted>No schedules.</Txt>}
       </Card>
 
-      <Card title="Open work orders">
+      <Card title="Open repair orders">
         {a.workOrders.filter((w: any) => !["completed", "cancelled"].includes(w.status)).map((w: any) => (
           <View key={w.id}>
             <Divider />

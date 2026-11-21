@@ -86,7 +86,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
             const body = { ...formValues(e.currentTarget), assetId: id };
             sched.run(async () => { await api("/assets/schedules", { body }); setAddingSchedule(false); asset.reload(); });
           }}>
-            <p className="muted" style={{ margin: 0 }}>Whichever interval comes first triggers the service. Leave last-service fields blank to count from today. The person assigned gets its reminders, and work orders made from it go to them.</p>
+            <p className="muted" style={{ margin: 0 }}>Whichever interval comes first triggers the service. Leave last-service fields blank to count from today. The person assigned gets its reminders, and repair orders made from it go to them.</p>
             <div className="formgrid">
               <label>Service<input name="name" required placeholder="Oil & filter change" /></label>
               <label>Every X miles<input name="intervalMiles" type="number" min="1" /></label>
@@ -138,7 +138,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
                   {can("manager", "fleet") && <div><button className="btn sm" onClick={() => setRemindFor(remindFor === s.id ? null : s.id)}>Change</button></div>}
                 </td>
                 <td className="row">
-                  {can("manager", "fleet") && <button className="btn sm" onClick={() => createWorkOrder(s)}>Create work order</button>}
+                  {can("manager", "fleet") && <button className="btn sm" onClick={() => createWorkOrder(s)}>Create repair order</button>}
                   {can("manager", "fleet") && <button className="btn sm danger" onClick={() => confirm("Delete schedule?") && api(`/assets/schedules/${s.id}`, { method: "DELETE" }).then(asset.reload)}>×</button>}
                 </td>
               </tr>,
@@ -161,7 +161,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
       <TotalCostOfOwnership asset={a} />
       <div className="grid cols-2">
         <div className="card">
-          <h2>Work Orders</h2>
+          <h2>Repair Orders</h2>
           {a.workOrders.length ? (
             <table><tbody>{a.workOrders.map((w: any) => (
               <tr key={w.id}>
@@ -170,7 +170,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
                 <td>{w.status === "completed" ? money(w.partsCostCents + w.laborCostCents) : <Badge value={w.priority} menu="workOrderPriority" />}</td>
               </tr>
             ))}</tbody></table>
-          ) : <Empty>No work orders.</Empty>}
+          ) : <Empty>No repair orders.</Empty>}
         </div>
         <div className="card">
           <h2>Inspections</h2>

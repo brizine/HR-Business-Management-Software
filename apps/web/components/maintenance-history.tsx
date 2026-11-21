@@ -41,7 +41,7 @@ export function MaintenanceHistory({ asset, onChange }: { asset: AssetInfo; onCh
 
   const exportCsv = () => {
     const cell = (v: unknown) => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-    const head = ["Date", "Work order", "Type", "Service", "Odometer (mi)", "Engine hours", "Done by", "Vendor", "Labor hours", "Parts", "Labor", "Total", "Description", "Notes"];
+    const head = ["Date", "Repair order", "Type", "Service", "Odometer (mi)", "Engine hours", "Done by", "Vendor", "Labor hours", "Parts", "Labor", "Total", "Description", "Notes"];
     const body = rows.map((e) => [ymd(e.completedAt), e.number, KIND_LABEL[e.kind], e.title, e.odometer ?? "", e.hours ?? "", e.doneBy ?? "", e.vendor ?? "", e.laborHours ?? "",
       (e.partsCostCents / 100).toFixed(2), (e.laborCostCents / 100).toFixed(2), ((e.partsCostCents + e.laborCostCents) / 100).toFixed(2), e.description ?? "", e.notes ?? ""]);
     const csv = [head, ...body].map((r) => r.map(cell).join(",")).join("\r\n");
@@ -100,7 +100,7 @@ export function MaintenanceHistory({ asset, onChange }: { asset: AssetInfo; onCh
       )}
       {rows.length ? (
         <div className="tablewrap"><table>
-          <thead><tr><th>Date</th><th>Work order</th><th>Service</th><th>Mileage / hours</th><th>Done by / vendor</th><th style={{ textAlign: "right" }}>Parts</th><th style={{ textAlign: "right" }}>Labor</th><th style={{ textAlign: "right" }}>Total</th></tr></thead>
+          <thead><tr><th>Date</th><th>Repair order</th><th>Service</th><th>Mileage / hours</th><th>Done by / vendor</th><th style={{ textAlign: "right" }}>Parts</th><th style={{ textAlign: "right" }}>Labor</th><th style={{ textAlign: "right" }}>Total</th></tr></thead>
           <tbody>{rows.map((e) => (
             <tr key={e.id}>
               <td style={{ whiteSpace: "nowrap" }}>{fmtDate(e.completedAt)}</td>
@@ -119,7 +119,7 @@ export function MaintenanceHistory({ asset, onChange }: { asset: AssetInfo; onCh
           ))}</tbody>
         </table></div>
       ) : list.data ? (
-        <Empty>{filtering ? "Nothing matches your search." : "No completed maintenance yet. Completed work orders appear here; use Add past service for older records."}</Empty>
+        <Empty>{filtering ? "Nothing matches your search." : "No completed maintenance yet. Completed repair orders appear here; use Add past service for older records."}</Empty>
       ) : null}
     </div>
   );

@@ -42,7 +42,7 @@ export default function Privacy() {
         <li><strong>Photos and documents you upload:</strong> for example onboarding documents (such as a driver&apos;s
           license), signed forms, fuel receipts and photos of equipment. The camera is used only when you choose to take a
           photo or scan an equipment QR label.</li>
-        <li><strong>Vehicle and equipment information:</strong> meter readings, fuel purchases, inspections and work orders
+        <li><strong>Vehicle and equipment information:</strong> meter readings, fuel purchases, inspections and repair orders
           you log.</li>
         <li><strong>Device and usage information:</strong> a push-notification token for your device, the device type, sign-in
           times, and the IP address and browser used to sign in (kept for security and to protect your account).</li>

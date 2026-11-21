@@ -162,8 +162,8 @@ describe("accounting (Bigcapital)", () => {
     const expense = received.filter((r) => r.path === "/api/expenses").at(-1)!;
     expect(expense.body).toMatchObject({ paymentAccountId: 2, referenceNo: `WO-${wo.body.number}`, publish: true });
     expect(expense.body.categories).toEqual([
-      { index: 1, expenseAccountId: 5, amount: 123.45, description: expect.stringContaining("Parts: Work order") },
-      { index: 2, expenseAccountId: 5, amount: 80, description: expect.stringContaining("Labor: Work order") },
+      { index: 1, expenseAccountId: 5, amount: 123.45, description: expect.stringContaining("Parts: Repair order") },
+      { index: 2, expenseAccountId: 5, amount: 80, description: expect.stringContaining("Labor: Repair order") },
     ]);
     expect(expense.body.description).toContain("Truck 7");
     expect(expense.body.description).toContain("Main St Garage");

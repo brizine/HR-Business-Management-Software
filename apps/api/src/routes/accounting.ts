@@ -54,7 +54,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.get("/accounts", async (req) => asHttp(async () => (await (await clientFor(req.user.companyId)).bc.accounts()).filter((a) => a.active)));
 
   /**
-   * What's been sent and what's waiting: recent approved pay periods and completed work orders with
+   * What's been sent and what's waiting: recent approved pay periods and completed repair orders with
    * costs, each with its posting (if any).
    */
   app.get("/status", async (req) => {

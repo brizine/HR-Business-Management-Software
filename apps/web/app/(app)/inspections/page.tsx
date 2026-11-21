@@ -34,7 +34,7 @@ export default function Inspections() {
 
   return (
     <>
-      <PageHead title="Inspections" sub={filtering && list.data ? <span role="status">Showing {rows.length} of {all.length} inspections</span> : "Pre-trip and pre-use checks. Failed items open a work order automatically."}>
+      <PageHead title="Inspections" sub={filtering && list.data ? <span role="status">Showing {rows.length} of {all.length} inspections</span> : "Pre-trip and pre-use checks. Failed items open a repair order automatically."}>
         <button className="btn primary" onClick={() => setDoing(!doing)}>New inspection</button>
       </PageHead>
       <form className="card filters" role="search" aria-label="Filter inspections" onSubmit={(e) => e.preventDefault()}>

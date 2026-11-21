@@ -4,7 +4,7 @@ import { z } from "zod";
  * Accounting (Bigcapital) connection. Bigcapital runs on its own server; Crewdesk sends it:
  *   - a journal entry for each approved pay period (estimated gross wages; debit wage expense,
  *     credit a payroll liability), and
- *   - an expense for each completed work order with costs (parts and labor, paid from a bank /
+ *   - an expense for each completed repair order with costs (parts and labor, paid from a bank /
  *     credit card account).
  * Account ids are Bigcapital's own. The API key is stored encrypted and never sent back.
  */
@@ -22,11 +22,11 @@ export const accountingSettingsSchema = z.object({
   reimbursementAccountId: z.number().int().positive().nullable().optional(),
   /** Credited for payroll: e.g. "Payroll Liabilities" / "Wages Payable". Liability account. */
   payrollLiabilityAccountId: z.number().int().positive().nullable(),
-  /** Work order parts. Expense account. */
+  /** Repair order parts. Expense account. */
   partsAccountId: z.number().int().positive().nullable(),
-  /** Work order labor (shop or in-house). Expense account (parts account if not set). */
+  /** Repair order labor (shop or in-house). Expense account (parts account if not set). */
   laborAccountId: z.number().int().positive().nullable(),
-  /** What work order costs are paid from: bank, cash or credit card. */
+  /** What repair order costs are paid from: bank, cash or credit card. */
   workOrderPaymentAccountId: z.number().int().positive().nullable(),
   autoPostPayroll: z.boolean(),
   autoPostWorkOrders: z.boolean(),

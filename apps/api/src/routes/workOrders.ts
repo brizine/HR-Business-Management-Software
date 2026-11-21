@@ -15,7 +15,7 @@ const AREA = "fleet" as const;
 function notifyAssigned(wo: typeof workOrders.$inferSelect, assetName: string, actorId: string) {
   notify(wo.companyId, except([wo.assignedToId], actorId), {
     category: "fleet",
-    title: `Work order #${wo.number} assigned to you`,
+    title: `Repair order #${wo.number} assigned to you`,
     body: `${assetName}: ${wo.title}${wo.dueDate ? ` (due ${wo.dueDate})` : ""}`,
     link: { screen: "tasks" },
   });
@@ -33,7 +33,7 @@ const routes: FastifyPluginAsync = async (app) => {
     }
     if (req.query.assetId) filters.push(eq(workOrders.assetId, req.query.assetId));
     if (req.query.mine === "true") filters.push(eq(workOrders.assignedToId, req.user.sub));
-    // Managers can list one person's work orders (their Tasks box on the employee page).
+    // Managers can list one person's repair orders (their Tasks box on the employee page).
     else if (req.query.assignedToId && isManager(req, AREA)) filters.push(eq(workOrders.assignedToId, req.query.assignedToId));
     const lead = resolveLead({}, await fleetSettingsFor(req.user.companyId));
     const rows = await db
@@ -90,7 +90,7 @@ const routes: FastifyPluginAsync = async (app) => {
       notify(req.user.companyId, except(await staffWithRole(req.user.companyId, "manager", AREA), req.user.sub), {
         category: "fleet",
         title: `${created.priority === "critical" ? "CRITICAL: " : ""}${asset.name}: ${created.title}`,
-        body: created.priority === "critical" ? "Asset taken out of service." : `New ${created.priority}-priority work order #${created.number}.`,
+        body: created.priority === "critical" ? "Asset taken out of service." : `New ${created.priority}-priority repair order #${created.number}.`,
         link,
       });
     }
@@ -98,7 +98,7 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /**
-   * Adds a service done in the past to an asset's history, as a completed work order dated then
+   * Adds a service done in the past to an asset's history, as a completed repair order dated then
    * (e.g. records from before Crewdesk). If it's linked to a schedule and newer than the schedule's
    * last service, the schedule counts from it. Not sent to accounting.
    */
@@ -149,7 +149,7 @@ const routes: FastifyPluginAsync = async (app) => {
 
   /**
    * Managers can change anything; the assigned technician can update progress.
-   * Completing a work order linked to a schedule resets that schedule's
+   * Completing a repair order linked to a schedule resets that schedule's
    * "last service" to the completion date and meters.
    */
   app.patch<{ Params: { id: string } }>("/:id", async (req) => {
@@ -158,7 +158,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .select()
       .from(workOrders)
       .where(and(eq(workOrders.id, req.params.id), eq(workOrders.companyId, req.user.companyId)));
-    if (!wo) notFound("Work order");
+    if (!wo) notFound("Repair order");
     if (!isManager(req, AREA)) {
       if (wo.assignedToId !== req.user.sub) throw new HttpError(403, "Only the assigned technician or a manager can update this");
       delete body.assignedToId;
@@ -220,7 +220,7 @@ const routes: FastifyPluginAsync = async (app) => {
     if (completing) {
       notify(req.user.companyId, except([wo.reportedById], req.user.sub), {
         category: "fleet",
-        title: `Work order #${wo.number} completed`,
+        title: `Repair order #${wo.number} completed`,
         body: `${asset.name}: ${wo.title}`,
         link: { screen: "work-order", id: wo.id, assetId: wo.assetId },
       });

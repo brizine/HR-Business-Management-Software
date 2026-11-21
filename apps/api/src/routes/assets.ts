@@ -111,7 +111,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return row;
   });
 
-  /** Maintenance history: every completed work order for the asset, newest first, with who did it. */
+  /** Maintenance history: every completed repair order for the asset, newest first, with who did it. */
   app.get<{ Params: { id: string } }>("/:id/history", async (req) => {
     const asset = await loadAsset(req.user.companyId, req.params.id);
     const doneBy = alias(employees, "done_by");

@@ -36,7 +36,7 @@ export default function Tasks() {
           ))}
         </Card>
       )}
-      <Card title="My work orders">
+      <Card title="My repair orders">
         {workOrders.data?.length ? workOrders.data.map(({ workOrder: w, assetName }) => (
           <View key={w.id} style={{ gap: 6 }}>
             <Divider />

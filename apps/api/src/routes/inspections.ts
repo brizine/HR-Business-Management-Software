@@ -30,7 +30,7 @@ const routes: FastifyPluginAsync = async (app) => {
 
   /**
    * Pre-trip / pre-use inspection (DVIR-style). Any failed item automatically
-   * opens a high-priority work order listing the defects.
+   * opens a high-priority repair order listing the defects.
    */
   app.post("/", async (req) => {
     const body = parse(inspectionSchema, req.body);
@@ -76,7 +76,7 @@ const routes: FastifyPluginAsync = async (app) => {
       notify(req.user.companyId, except(await staffWithRole(req.user.companyId, "manager", "fleet"), req.user.sub), {
         category: "fleet",
         title: `${asset.name} failed inspection`,
-        body: `${failed.map((f) => f.item).join(", ")}. Work order #${result.workOrder.number} opened.`,
+        body: `${failed.map((f) => f.item).join(", ")}. Repair order #${result.workOrder.number} opened.`,
         link: { screen: "work-order", id: result.workOrder.id, assetId: asset.id },
       });
     }

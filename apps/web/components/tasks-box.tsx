@@ -14,9 +14,9 @@ interface Task {
 }
 
 /**
- * Employee page: what's waiting on this person. On your own page ("My Tasks"): work orders, your
+ * Employee page: what's waiting on this person. On your own page ("My Tasks"): repair orders, your
  * onboarding checklist, documents to sign, pay periods to approve and (managers) onboarding steps
- * waiting on you. Managers on someone else's page see their work orders and onboarding checklist.
+ * waiting on you. Managers on someone else's page see their repair orders and onboarding checklist.
  */
 export function TasksBox({ employeeId, firstName, isSelf }: { employeeId: string; firstName: string; isSelf: boolean }) {
   const { can } = useAuth();
@@ -29,7 +29,7 @@ export function TasksBox({ employeeId, firstName, isSelf }: { employeeId: string
   const tasks: Task[] = [
     ...(workOrders.data ?? []).map(({ workOrder: w, assetName }) => ({
       key: `wo-${w.id}`, href: `/work-orders?highlight=${w.id}`, title: `${w.number ? `#${w.number} ` : ""}${w.title}`,
-      detail: `Work order · ${assetName}${w.dueDate ? ` · due ${fmtDate(w.dueDate)}` : ""}`, badge: w.status,
+      detail: `Repair order · ${assetName}${w.dueDate ? ` · due ${fmtDate(w.dueDate)}` : ""}`, badge: w.status,
     })),
     ...(onboarding.data ?? []).filter((t) => t.assignee === "employee").map((t) => ({
       key: `ob-${t.id}`, href: "/onboarding", title: t.title,

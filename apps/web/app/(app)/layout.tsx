@@ -26,7 +26,7 @@ const NAV: Record<Side, NavSection[]> = {
       section: "Fleet & Equipment",
       items: [
         { href: "/fleet", label: "Assets" },
-        { href: "/work-orders", label: "Work Orders" },
+        { href: "/work-orders", label: "Repair Orders" },
         { href: "/inspections", label: "Inspections" },
       ],
     },

@@ -120,14 +120,14 @@ describe("event notifications", () => {
     await flushNotifications(); // let notifications from earlier steps finish first
     sent = [];
     const wo = await call("POST", "/work-orders", owner.token, { assetId: asset.body.id, title: "Fix brakes", assignedToId: tech.id });
-    expect((await pushesTo(tokens.tech))[0].title).toBe(`Work order #${wo.body.number} assigned to you`);
+    expect((await pushesTo(tokens.tech))[0].title).toBe(`Repair order #${wo.body.number} assigned to you`);
 
     // The technician finishing their own job doesn't notify themselves; the reporter (owner) hears about it.
     await flushNotifications(); // let notifications from earlier steps finish first
     sent = [];
     await call("PATCH", `/work-orders/${wo.body.id}`, tech.token, { status: "completed" });
     expect(await pushesTo(tokens.tech)).toHaveLength(0);
-    expect((await pushesTo(tokens.owner))[0].title).toBe(`Work order #${wo.body.number} completed`);
+    expect((await pushesTo(tokens.owner))[0].title).toBe(`Repair order #${wo.body.number} completed`);
   });
 
   it("stores every notification in the inbox", async () => {
@@ -250,11 +250,11 @@ describe("scheduled checks", () => {
     await runScheduledChecks();
     await runScheduledChecks();
     const soon = (await pushesTo(tokens.tech)).filter((m) => m.title.startsWith("Spray Truck"));
-    expect(soon.map((m) => m.title)).toEqual(["Spray Truck: work order #" + wo.body.number + " is coming due"]);
+    expect(soon.map((m) => m.title)).toEqual(["Spray Truck: repair order #" + wo.body.number + " is coming due"]);
     expect(soon[0].body).toContain("300 miles to go");
     await call("POST", `/assets/${truck.body.id}/meter`, tech.token, { odometer: 45100 });
     await runScheduledChecks();
-    expect((await pushesTo(tokens.owner)).some((m) => m.title === `Spray Truck: work order #${wo.body.number} is due now`)).toBe(true);
+    expect((await pushesTo(tokens.owner)).some((m) => m.title === `Spray Truck: repair order #${wo.body.number} is due now`)).toBe(true);
   });
 
   it("reminds people who forgot to clock out, and their manager", async () => {

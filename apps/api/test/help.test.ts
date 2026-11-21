@@ -64,7 +64,7 @@ describe("help assistant", () => {
     const res = await call("GET", "/help/guide");
     expect(res.status).toBe(200);
     expect(res.body.markdown).toMatch(/^# Crewdesk user guide/);
-    expect(res.body.markdown).toContain("## Work Orders");
+    expect(res.body.markdown).toContain("## Repair Orders");
     expect((await call("GET", "/help/guide", undefined, false)).status).toBe(401);
     setHelpClient({ beta: { messages: { create: async (body) => (sent.push(body), reply) } } });
   });

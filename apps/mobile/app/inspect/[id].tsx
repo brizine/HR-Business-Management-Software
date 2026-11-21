@@ -32,7 +32,7 @@ export default function Inspect() {
       });
       Alert.alert(
         res.inspection.passed ? "Inspection passed" : "Defects reported",
-        res.workOrder ? `Work order #${res.workOrder.number} was opened for the shop.` : "Have a safe trip.",
+        res.workOrder ? `Repair order #${res.workOrder.number} was opened for the shop.` : "Have a safe trip.",
       );
       router.back();
     } catch (e) {

@@ -26,8 +26,8 @@ export const MENU_LISTS = [
   { key: "mixUnits", label: "Spray Mix measurements", noun: "measurement", kind: "list", defaults: [...MIX_UNITS], pages: ["/spray-mix"] },
   { key: "assetTypes", label: "Asset types", noun: "asset type", kind: "list", defaults: [...ASSET_TYPES], pages: ["/fleet", "/fleet/:id"] },
   { key: "assetStatus", label: "Asset status", kind: "labels", values: ["active", "in_shop", "out_of_service", "retired"], pages: ["/fleet", "/fleet/:id"] },
-  { key: "workOrderStatus", label: "Work order status", kind: "labels", values: WORK_ORDER_STATUSES, pages: ["/work-orders", "/fleet/:id"] },
-  { key: "workOrderPriority", label: "Work order priority", kind: "labels", values: ["low", "medium", "high", "critical"], pages: ["/work-orders", "/fleet/:id"] },
+  { key: "workOrderStatus", label: "Repair order status", kind: "labels", values: WORK_ORDER_STATUSES, pages: ["/work-orders", "/fleet/:id"] },
+  { key: "workOrderPriority", label: "Repair order priority", kind: "labels", values: ["low", "medium", "high", "critical"], pages: ["/work-orders", "/fleet/:id"] },
 ] as const;
 
 export type MenuKey = (typeof MENU_LISTS)[number]["key"];

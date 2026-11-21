@@ -62,23 +62,23 @@ export async function postPayPeriod(companyId: string, periodId: string, by: str
   }
 }
 
-/** Sends a completed work order's parts and labor to Bigcapital as an expense (once). */
+/** Sends a completed repair order's parts and labor to Bigcapital as an expense (once). */
 export async function postWorkOrder(companyId: string, workOrderId: string, by: string | null) {
   const done = await alreadyPosted(companyId, "work_order", workOrderId);
   if (done) return done;
   const [row] = await db.select({ wo: workOrders, assetName: assets.name }).from(workOrders).innerJoin(assets, eq(assets.id, workOrders.assetId))
     .where(and(eq(workOrders.id, workOrderId), eq(workOrders.companyId, companyId)));
-  if (!row) throw new BigcapitalError("Work order not found");
+  if (!row) throw new BigcapitalError("Repair order not found");
   const { wo } = row;
   const amount = wo.partsCostCents + wo.laborCostCents;
   try {
-    if (wo.status !== "completed") throw new BigcapitalError("Complete the work order first");
-    if (!amount) throw new BigcapitalError("This work order has no parts or labor cost");
+    if (wo.status !== "completed") throw new BigcapitalError("Complete the repair order first");
+    if (!amount) throw new BigcapitalError("This repair order has no parts or labor cost");
     const { cfg, bc } = await clientFor(companyId);
     const s = cfg.settings;
-    if (!s.partsAccountId || !s.workOrderPaymentAccountId) throw new BigcapitalError("Choose the work order expense and payment accounts first (the Accounting page).");
+    if (!s.partsAccountId || !s.workOrderPaymentAccountId) throw new BigcapitalError("Choose the repair order expense and payment accounts first (the Accounting page).");
     const date = localParts(wo.completedAt ?? new Date(), cfg.timezone).date;
-    const label = `Work order #${wo.number}: ${row.assetName}, ${wo.title}`;
+    const label = `Repair order #${wo.number}: ${row.assetName}, ${wo.title}`;
     const externalId = await bc.createExpense({
       paymentDate: date,
       referenceNo: `WO-${wo.number}`,

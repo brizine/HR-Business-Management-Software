@@ -34,7 +34,7 @@ function addDays(date: string, days: number): string {
 
 /**
  * How far ahead the "due soon" reminder goes out. Each value left out (or null) falls back to
- * DUE_SOON_FRACTION of that interval for schedules, and WORK_ORDER_DUE_SOON for work orders.
+ * DUE_SOON_FRACTION of that interval for schedules, and WORK_ORDER_DUE_SOON for repair orders.
  */
 export interface ReminderLead { miles?: number | null; hours?: number | null; days?: number | null }
 
@@ -97,13 +97,13 @@ export function computeDue(schedule: ScheduleLike, meter: MeterLike, today = new
   return { status: worst, nextDueOdometer, nextDueHours, nextDueDate, reasons };
 }
 
-/** How close counts as "due soon" for a work order scheduled by mileage, engine hours or date. */
+/** How close counts as "due soon" for a repair order scheduled by mileage, engine hours or date. */
 export const WORK_ORDER_DUE_SOON = { miles: 500, hours: 25, days: 7 };
 
 export interface WorkOrderDueLike { dueDate?: string | null; dueOdometer?: number | null; dueHours?: number | null }
 
 /**
- * Where a scheduled work order stands against the asset's meters and today's date (whichever
+ * Where a scheduled repair order stands against the asset's meters and today's date (whichever
  * comes first): "upcoming", "due_soon" or "overdue", with the distance to go for each. Null if it
  * has no due point.
  */

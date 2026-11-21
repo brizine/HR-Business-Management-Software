@@ -443,7 +443,7 @@ export const maintenanceSchedules = pgTable("maintenance_schedules", {
   lastServiceDate: date("last_service_date"),
   lastServiceOdometer: doublePrecision("last_service_odometer"),
   lastServiceHours: doublePrecision("last_service_hours"),
-  /** Who looks after this service: gets its reminders, and work orders made from it are assigned to them. */
+  /** Who looks after this service: gets its reminders, and repair orders made from it are assigned to them. */
   assignedToId: uuid("assigned_to_id").references(() => employees.id, { onDelete: "set null" }),
   /** Send the "due soon" reminder this far ahead (null = the company default, else 10% of the interval). */
   remindMilesBefore: doublePrecision("remind_miles_before"),
@@ -701,7 +701,7 @@ export const availability = pgTable(
 );
 
 /** Saved shift presets, e.g. "Morning crew 7:00–15:30, Driver, Truck 12". */
-/** What was sent to Bigcapital (one per pay period / work order), so nothing is posted twice. */
+/** What was sent to Bigcapital (one per pay period / repair order), so nothing is posted twice. */
 export const accountingPostings = pgTable(
   "accounting_postings",
   {

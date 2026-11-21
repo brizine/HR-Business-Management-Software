@@ -11,7 +11,7 @@ interface Task {
   title: string;
   detail: string;
   badge?: string;
-  /** The menu whose wording the badge uses (e.g. work order status). */
+  /** The menu whose wording the badge uses (e.g. repair order status). */
   badgeMenu?: LabelMenu;
   /** What tapping it does; none for things handled further down this screen. */
   open?: () => void;
@@ -22,7 +22,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 /**
  * Tasks tab: what's waiting on you (same as "My Tasks" on the website's employee page): work
  * orders, your onboarding checklist, documents to sign, pay periods to approve and (managers)
- * onboarding steps waiting on you. Work orders and onboarding are handled further down the Tasks
+ * onboarding steps waiting on you. Repair orders and onboarding are handled further down the Tasks
  * tab; documents open the Documents page to be read and signed.
  */
 export function MyTasksCard({ documents }: { documents: any[] | null }) {
@@ -36,7 +36,7 @@ export function MyTasksCard({ documents }: { documents: any[] | null }) {
   const tasks: Task[] = [
     ...(workOrders.data ?? []).map(({ workOrder: w, assetName }) => ({
       key: `wo-${w.id}`, title: `${w.number ? `#${w.number} ` : ""}${w.title}`,
-      detail: `Work order · ${assetName}${w.dueDate ? ` · due ${fmtDate(w.dueDate)}` : ""}`, badge: w.status, badgeMenu: "workOrderStatus" as const,
+      detail: `Repair order · ${assetName}${w.dueDate ? ` · due ${fmtDate(w.dueDate)}` : ""}`, badge: w.status, badgeMenu: "workOrderStatus" as const,
     })),
     ...(onboarding.data ?? []).filter((x) => x.assignee === "employee").map((x) => ({
       key: `ob-${x.id}`, title: x.title, detail: `Onboarding${x.dueDate ? ` · due ${fmtDate(x.dueDate)}` : ""}`,

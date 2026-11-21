@@ -31,7 +31,7 @@ export const NOTIFICATION_CATEGORY_INFO: Record<NotificationCategory, { label: s
   pto: { label: "Time off", description: "Requests to approve and decisions on yours" },
   time: { label: "Time clock & attendance", description: "Forgotten clock-outs, people who haven't clocked in for their shift, and attendance point levels reached" },
   schedule: { label: "Schedule", description: "Published schedules, shift changes, open shifts, reminders" },
-  fleet: { label: "Fleet & equipment", description: "Work orders, failed inspections, maintenance due, expiring registrations" },
+  fleet: { label: "Fleet & equipment", description: "Repair orders, failed inspections, maintenance due, expiring registrations" },
   documents: { label: "Documents", description: "Documents waiting for your signature" },
   onboarding: { label: "Onboarding", description: "Your new-hire checklist" },
   hiring: { label: "Hiring", description: "New job applicants" },
