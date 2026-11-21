@@ -178,7 +178,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {s.section && <div className="navsection">{s.section}</div>}
             {s.items.map((i) => i.href === "/accounting" && booksUrl ? (
               <a key={i.href} href={booksUrl} target="_blank" rel="noopener noreferrer" title="Opens Bigcapital in a new tab">
-                {i.label} <span aria-hidden="true">↗</span>
+                {i.label}
               </a>
             ) : (
               <Link key={i.href} href={i.href} className={path === i.href || path.startsWith(`${i.href}/`) || (i.label === "Payroll" && (path.startsWith("/pay-periods") || path.startsWith("/tax-forms"))) ? "active" : ""}>
