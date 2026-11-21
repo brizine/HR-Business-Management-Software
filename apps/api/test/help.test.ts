@@ -54,7 +54,7 @@ describe("help assistant", () => {
     expect(body.messages).toHaveLength(3);
     expect(body.system[0].cache_control).toEqual({ type: "ephemeral" });
     expect(body.system[0].text).toContain("<crewdesk_user_guide>");
-    expect(body.system[0].text).toContain("## Schedule");
+    expect(body.system[0].text).toContain("## Shifts");
     expect(body.system[1].text).toContain("role owner");
     expect(body.system[1].text).not.toContain("Help Co\n"); // per-person details stay out of the cached block
   });

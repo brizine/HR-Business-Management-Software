@@ -14,7 +14,7 @@ function Attendance() {
   const manager = can("manager", "time");
   const params = useSearchParams();
   const staff = useApi<any[]>(manager ? "/employees" : null);
-  const [tab, setTab] = useState<Tab>("calendar");
+  const [tab, setTab] = useState<Tab>(manager && params.get("tab") === "report" ? "report" : "calendar");
   const [person, setPerson] = useState<string | null>(params.get("employee"));
   useEffect(() => { if (params.get("employee")) { setPerson(params.get("employee")); setTab("calendar"); } }, [params]);
   const [f, setF] = useState({ q: "", title: "", dept: "", show: "" });

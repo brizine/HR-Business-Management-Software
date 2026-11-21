@@ -7,35 +7,68 @@ import type { PermissionArea, Role } from "@crewdesk/shared";
 import { useAuth } from "@/lib/auth";
 import { PageLayoutRoot } from "@/components/page-layout";
 
-const NAV: { section: string; items: { href: string; label: string; min?: Role; area?: PermissionArea }[] }[] = [
-  { section: "", items: [{ href: "/dashboard", label: "Dashboard", min: "manager", area: "dashboard" }, { href: "/wiki", label: "Company Wiki" }, { href: "/spray-mix", label: "Spray Mix Calculator" }, { href: "/measure", label: "Property Measure" }] },
-  {
-    section: "People",
-    items: [
-      { href: "/people", label: "Team" },
-      { href: "/schedule", label: "Schedule" },
-      { href: "/time", label: "Time Clock" },
-      { href: "/attendance", label: "Attendance" },
-      { href: "/time-off", label: "Time Off" },
-      { href: "/reviews", label: "Reviews & Discipline" },
-      { href: "/training", label: "Training" },
-      { href: "/documents", label: "Documents" },
-      { href: "/tax-forms", label: "Pay & Tax Forms" },
-      { href: "/onboarding", label: "Onboarding" },
-      { href: "/hiring", label: "Hiring", min: "manager", area: "hiring" },
-      { href: "/payroll", label: "Payroll", min: "admin", area: "payroll" },
-      { href: "/accounting", label: "Accounting", min: "admin", area: "payroll" },
-    ],
-  },
-  {
-    section: "Fleet & Equipment",
-    items: [
-      { href: "/fleet", label: "Assets" },
-      { href: "/work-orders", label: "Work Orders" },
-      { href: "/inspections", label: "Inspections" },
-    ],
-  },
-];
+type NavItem = { href: string; label: string; min?: Role; area?: PermissionArea };
+type NavSection = { section: string; items: NavItem[] };
+/** The sidebar has two sides: Operations (field work, tools, fleet; customers later) and Team (people and pay). */
+type Side = "operations" | "team";
+const SIDES: { key: Side; label: string }[] = [{ key: "operations", label: "Operations" }, { key: "team", label: "Team" }];
+const NAV: Record<Side, NavSection[]> = {
+  operations: [
+    { section: "", items: [{ href: "/reports/operations", label: "Reports", min: "manager", area: "fleet" }] },
+    {
+      section: "Tools",
+      items: [
+        { href: "/measure", label: "Property Measure" },
+        { href: "/spray-mix", label: "Spray Mix Calculator" },
+      ],
+    },
+    {
+      section: "Fleet & Equipment",
+      items: [
+        { href: "/fleet", label: "Assets" },
+        { href: "/work-orders", label: "Work Orders" },
+        { href: "/inspections", label: "Inspections" },
+      ],
+    },
+  ],
+  team: [
+    { section: "", items: [{ href: "/dashboard", label: "Dashboard", min: "manager", area: "dashboard" }, { href: "/reports/team", label: "Reports", min: "manager" }] },
+    {
+      section: "People",
+      items: [
+        { href: "/people", label: "Team" },
+        { href: "/schedule", label: "Shifts" },
+        { href: "/time", label: "Time Clock" },
+        { href: "/attendance", label: "Attendance" },
+        { href: "/time-off", label: "Time Off" },
+        { href: "/reviews", label: "Reviews & Discipline" },
+        { href: "/training", label: "Training" },
+        { href: "/documents", label: "Documents" },
+        { href: "/onboarding", label: "Onboarding" },
+        { href: "/hiring", label: "Hiring", min: "manager", area: "hiring" },
+      ],
+    },
+    {
+      section: "Pay",
+      items: [
+        { href: "/payroll", label: "Payroll", min: "admin", area: "payroll" },
+        { href: "/tax-forms", label: "Pay & Tax Forms" },
+      ],
+    },
+  ],
+};
+/** Pages that belong to a side without a menu item of their own. */
+const EXTRA: Record<Side, string[]> = { operations: [], team: ["/pay-periods"] };
+const SIDE_KEY = "crewdesk.side";
+
+/** Which side a page belongs to (null for shared pages such as Notifications, Wiki, Help and Settings). */
+function sideOf(path: string): Side | null {
+  const hit = (href: string) => path === href || path.startsWith(`${href}/`) || path.startsWith(`${href}?`);
+  for (const side of ["operations", "team"] as Side[]) {
+    if (NAV[side].some((s) => s.items.some((i) => hit(i.href))) || EXTRA[side].some(hit)) return side;
+  }
+  return null;
+}
 
 /** Unread count for the sidebar; polls every minute and refreshes when the inbox changes. */
 function useUnreadCount(enabled: boolean) {
@@ -76,7 +109,40 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (ready && !me) router.replace("/login");
   }, [ready, me, router]);
+
+  // The side shown follows the page you're on; on shared pages it stays on the last one used.
+  const [stored, setStored] = useState<Side>("operations");
+  useEffect(() => {
+    try { const v = localStorage.getItem(SIDE_KEY); if (v === "operations" || v === "team") setStored(v); } catch { /* storage blocked */ }
+  }, []);
+  const pageSide = sideOf(path);
+  useEffect(() => {
+    if (!pageSide) return;
+    setStored(pageSide);
+    try { localStorage.setItem(SIDE_KEY, pageSide); } catch { /* storage blocked */ }
+  }, [pageSide]);
+  const side = pageSide ?? stored;
   if (!me) return null;
+
+  const visible = (sections: NavSection[]) => sections
+    .map((s) => ({
+      ...s,
+      items: s.items
+        .map((i) => (i.href === "/payroll" && !can("admin", "payroll") && payApprovals?.isApprover ? { ...i, href: "/pay-periods", min: undefined } : i))
+        .filter((i) => !i.min || can(i.min, i.area))
+        // Payroll admins reach Pay & Tax Forms from a button on the Payroll page.
+        .filter((i) => !(i.href === "/tax-forms" && can("admin", "payroll"))),
+    }))
+    .filter((s) => s.items.length);
+  const switchTo = (to: Side) => {
+    if (to === side) return;
+    setStored(to);
+    try { localStorage.setItem(SIDE_KEY, to); } catch { /* storage blocked */ }
+    // Open the side's first page, skipping Reports so you land somewhere you work.
+    const items = visible(NAV[to]).flatMap((s) => s.items);
+    const first = items.find((i) => !i.href.startsWith("/reports")) ?? items[0];
+    if (first) router.push(first.href);
+  };
 
   return (
     <div className="shell">
@@ -90,20 +156,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Link href="/notifications" className={path.startsWith("/notifications") ? "active" : ""}>
           Notifications {unread > 0 && <span className="badge bad" style={{ marginLeft: 4 }}>{unread > 99 ? "99+" : unread}</span>}
         </Link>
-        {NAV.map((s) => (
-          <div key={s.section} style={{ display: "contents" }}>
+        <Link href="/wiki" className={path.startsWith("/wiki") ? "active" : ""}>Company Wiki</Link>
+        <div className="side-switch" role="tablist" aria-label="Menu">
+          {SIDES.map((o) => (
+            <button key={o.key} type="button" role="tab" aria-selected={side === o.key} onClick={() => switchTo(o.key)}>{o.label}</button>
+          ))}
+        </div>
+        {visible(NAV[side]).map((s) => (
+          <div key={s.section || "top"} style={{ display: "contents" }}>
             {s.section && <div className="navsection">{s.section}</div>}
-            {s.items
-              .map((i) => (i.href === "/payroll" && !can("admin", "payroll") && payApprovals?.isApprover ? { ...i, href: "/pay-periods", min: undefined } : i))
-              .filter((i) => !i.min || can(i.min, i.area))
-              // Payroll admins reach Pay & Tax Forms from a button on the Payroll page.
-              .filter((i) => !(i.href === "/tax-forms" && can("admin", "payroll")))
-              .map((i) => (
-                <Link key={i.href} href={i.href} className={path.startsWith(i.href) || (i.label === "Payroll" && (path.startsWith("/pay-periods") || path.startsWith("/tax-forms"))) ? "active" : ""}>
-                  {i.label}
-                  {i.label === "Payroll" && !!payApprovals?.pending && <span className="badge warn" style={{ marginLeft: 4 }} title="Pay periods waiting for your approval">{payApprovals.pending}</span>}
-                </Link>
-              ))}
+            {s.items.map((i) => (
+              <Link key={i.href} href={i.href} className={path.startsWith(i.href) || (i.label === "Payroll" && (path.startsWith("/pay-periods") || path.startsWith("/tax-forms"))) ? "active" : ""}>
+                {i.label}
+                {i.label === "Payroll" && !!payApprovals?.pending && <span className="badge warn" style={{ marginLeft: 4 }} title="Pay periods waiting for your approval">{payApprovals.pending}</span>}
+              </Link>
+            ))}
           </div>
         ))}
         <div className="spacer" />

@@ -8,6 +8,22 @@ features change. Menu names are written as they appear in the left sidebar.
 The blue **? Help** button near the bottom of the left menu, above **Settings**, opens Help: **Ask the Assistant** (type a
 question, get step-by-step answers) and **User Manual** (this guide, with contents and search).
 
+## Finding your way: Operations and Team
+
+The left menu has two sides. The **Operations | Team** switch near the top flips between them:
+
+- **Operations:** **Reports** (managers), **Tools** (**Property Measure**, **Spray Mix Calculator**) and
+  **Fleet & Equipment** (**Assets**, **Work Orders**, **Inspections**). Customers, scheduling and
+  billing will be added here.
+- **Team:** **Dashboard** and **Reports** (managers), **People** (**Team**, **Shifts**, **Time Clock**,
+  **Attendance**, **Time Off**, **Reviews & Discipline**, **Training**, **Documents**, **Onboarding**,
+  **Hiring**) and **Pay** (**Payroll**, **Pay & Tax Forms**).
+- **Always shown:** **Notifications**, **Company Wiki**, **Help** and **Settings**.
+- Opening a page (or a link someone sent) switches the menu to that page's side by itself, and the
+  menu remembers the side you used last on that computer.
+- **Reports** on each side lists the reports you can see there, such as Fuel & Costs, Work Orders and
+  Inspections (Operations), or Attendance, Timesheets, Time Off, Training Progress and Payroll (Team).
+
 ## Roles and access
 
 - **Roles:** Owner, Admin, Manager, Employee. Owners can do everything. Admins manage people, pay
@@ -16,8 +32,8 @@ question, get step-by-step answers) and **User Manual** (this guide, with conten
 - **Settings → Permissions** (owners, and anyone given "manages permissions") sets, area by area,
   what each person can do: no access, view, manage, or admin. **Settings → Layout Editor → Role
   access** sets the defaults for each role.
-- Some sidebar items only appear for the roles that can use them (for example Payroll and
-  Accounting for admins, Hiring and Dashboard for managers).
+- Some sidebar items only appear for the roles that can use them (for example Payroll for
+  admins, Hiring, Dashboard and Reports for managers).
 
 ## Signing in and security
 
@@ -53,6 +69,7 @@ question, get step-by-step answers) and **User Manual** (this guide, with conten
   assistant use the edited copy. When Crewdesk's standard manual is updated, a notice offers the
   **Standard manual** tab so you can copy in what's new.
 - **Permissions:** per-person access by area, with search and filters.
+- **Integrations** (payroll admins): connections to other systems; today, **Accounting (Bigcapital)**.
 
 ## Notifications
 
@@ -62,7 +79,7 @@ alerts. Phone pop-ups need the Crewdesk app installed and signed in.
 ## Dashboard
 
 Headcount, who's on the clock, pending time off, overdue maintenance, open work orders and expiring
-registrations at a glance (managers and up).
+registrations at a glance (managers and up). It's on the **Team** side of the menu.
 
 ## Company Wiki
 
@@ -167,7 +184,10 @@ photo and how carefully the edges are traced.
   Editing the pay rate in the profile form also records a change, starting on the date in
   **If pay changes, it starts on**. Remove an entry only if it was a mistake.
 
-## Schedule
+## Shifts
+
+The **Shifts** page (Team side of the menu) is the work schedule.
+
 
 - The week grid: one row per person plus **Open shifts** (anyone can claim them). Change the week
   with the calendar drop-down at the top.
@@ -177,7 +197,7 @@ photo and how carefully the edges are traced.
   (managers) or pick up an open shift; click the **+** in a day to add a shift there; click a date
   to open that week in the week grid. **Change or delete shifts** works here too and starts with the
   month you're looking at. The choice is remembered on that computer.
-- **📅 Subscribe in calendar** (Schedule page, everyone): a private link that puts your published
+- **📅 Subscribe in calendar** (Shifts page, everyone): a private link that puts your published
   shifts, approved time off and paid holidays in your own calendar: **Add to Google Calendar**,
   **Open in Apple Calendar / Outlook**, or **Copy link** (Google Calendar: **Other calendars + → From
   URL**). **Reset my link** stops an old link working.
@@ -344,7 +364,7 @@ Job postings, a public careers page, an applicant board, and one-click hire.
 Connects to Bigcapital (the company's accounting system). Approved pay periods can post as journal
 entries (wages, bonuses and commissions to the wages account; reimbursements to the reimbursements
 account if one is chosen) and completed work orders as expenses, automatically or by hand. Set up the connection and
-accounts on this page (admins).
+accounts in **Settings → Integrations** (payroll admins).
 
 ## Assets (Vehicles & Equipment)
 

@@ -489,8 +489,8 @@ export default function Schedule() {
 
   return (
     <>
-      <PageHead title="Schedule" sub={view === "week" ? `Week of ${from.toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" })}` : "Month calendar"}>
-        <div className="row" style={{ gap: 4 }} role="tablist" aria-label="Schedule view">
+      <PageHead title="Shifts" sub={view === "week" ? `Week of ${from.toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" })}` : "Month calendar"}>
+        <div className="row" style={{ gap: 4 }} role="tablist" aria-label="Shifts view">
           <button role="tab" aria-selected={view === "week"} className={`btn ${view === "week" ? "primary" : ""}`} onClick={() => setView("week")}>Week</button>
           <button role="tab" aria-selected={view === "month"} className={`btn ${view === "month" ? "primary" : ""}`} onClick={() => setView("month")}>Month</button>
         </div>
