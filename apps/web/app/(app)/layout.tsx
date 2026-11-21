@@ -52,6 +52,8 @@ const NAV: Record<Side, NavSection[]> = {
       section: "Pay",
       items: [
         { href: "/payroll", label: "Payroll", min: "admin", area: "payroll" },
+        // Opens Bigcapital in a new tab once it's connected; until then, the Integrations settings.
+        { href: "/accounting", label: "Accounting", min: "admin", area: "payroll" },
         { href: "/tax-forms", label: "Pay & Tax Forms" },
       ],
     },
@@ -99,6 +101,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (me) api<{ isApprover: boolean; pending: number }>("/pay-periods/me").then(setPayApprovals, () => {});
   }, [me?.user.id, path]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Bigcapital's address, for the Accounting link (payroll admins only; empty until connected).
+  const canAccounting = !!me && can("admin", "payroll");
+  const [booksUrl, setBooksUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!canAccounting) return setBooksUrl(null);
+    api<{ enabled: boolean; hasKey: boolean; baseUrl: string }>("/accounting/settings")
+      .then((r) => setBooksUrl(r.enabled && r.hasKey && r.baseUrl ? r.baseUrl : null), () => setBooksUrl(null));
+  }, [canAccounting, me?.company.id, path]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The browser tab shows the company's name (re-applied on navigation in case Next resets it).
   const companyName = me?.company.name;
@@ -165,8 +176,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {visible(NAV[side]).map((s) => (
           <div key={s.section || "top"} style={{ display: "contents" }}>
             {s.section && <div className="navsection">{s.section}</div>}
-            {s.items.map((i) => (
-              <Link key={i.href} href={i.href} className={path.startsWith(i.href) || (i.label === "Payroll" && (path.startsWith("/pay-periods") || path.startsWith("/tax-forms"))) ? "active" : ""}>
+            {s.items.map((i) => i.href === "/accounting" && booksUrl ? (
+              <a key={i.href} href={booksUrl} target="_blank" rel="noopener noreferrer" title="Opens Bigcapital in a new tab">
+                {i.label} <span aria-hidden="true">↗</span>
+              </a>
+            ) : (
+              <Link key={i.href} href={i.href} className={path === i.href || path.startsWith(`${i.href}/`) || (i.label === "Payroll" && (path.startsWith("/pay-periods") || path.startsWith("/tax-forms"))) ? "active" : ""}>
                 {i.label}
                 {i.label === "Payroll" && !!payApprovals?.pending && <span className="badge warn" style={{ marginLeft: 4 }} title="Pay periods waiting for your approval">{payApprovals.pending}</span>}
               </Link>

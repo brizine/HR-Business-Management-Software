@@ -366,6 +366,9 @@ entries (wages, bonuses and commissions to the wages account; reimbursements to 
 account if one is chosen) and completed repair orders as expenses, automatically or by hand. Set up the connection and
 accounts in **Settings → Integrations** (payroll admins).
 
+To work in Bigcapital itself, click **Accounting ↗** under Payroll in the Team menu; it opens Bigcapital in a
+new tab (until Bigcapital is connected, the link opens Settings → Integrations instead).
+
 ## Assets (Vehicles & Equipment)
 
 - The fleet list with maintenance status; click an asset for details: meters (odometer, engine
