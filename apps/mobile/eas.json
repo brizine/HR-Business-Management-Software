@@ -9,7 +9,10 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://management.prospray.net/api"
       },
-      "pnpm": "10.28.0"
+      "pnpm": "10.28.0",
+      "android": {
+        "buildType": "apk"
+      }
     },
     "production": {
       "autoIncrement": true,
@@ -20,6 +23,11 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "track": "internal",
+        "releaseStatus": "draft"
+      }
+    }
   }
 }
