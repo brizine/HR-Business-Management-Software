@@ -11,7 +11,8 @@ import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
 import { customerInCompany, type Tx } from "../lib/crm";
-import { addDays, billingSettings, refreshInvoice, takeInvoiceNumber } from "../lib/invoices";
+import { addDays, billingSettings, PAY_LINK_DAYS, payLinkFor, portalUrl, refreshInvoice, takeInvoiceNumber } from "../lib/invoices";
+import { stripeConfig } from "../lib/stripe";
 import { batchPdf, billToLines, invoicePdf, type PdfCompany, type PdfInvoice } from "../lib/invoicePdf";
 import { emailTransport } from "../lib/channels";
 import { randomToken } from "../lib/crypto";
@@ -22,7 +23,7 @@ const AREA = "customers" as const;
 
 type ListQuery = { status?: string; q?: string; customerId?: string; limit?: string; offset?: string };
 
-async function companyForPdf(companyId: string): Promise<PdfCompany> {
+export async function companyForPdf(companyId: string): Promise<PdfCompany> {
   const [c] = await db.select().from(companies).where(eq(companies.id, companyId));
   let logo: Buffer | null = null;
   if (c.logoKey) { try { logo = await storage.get(c.logoKey); } catch { logo = null; } }
@@ -30,7 +31,7 @@ async function companyForPdf(companyId: string): Promise<PdfCompany> {
 }
 
 /** Everything the PDF needs for one invoice. */
-async function pdfInvoice(companyId: string, invoiceId: string, opts: { copy?: boolean } = {}): Promise<PdfInvoice & { zip: string }> {
+export async function pdfInvoice(companyId: string, invoiceId: string, opts: { copy?: boolean } = {}): Promise<PdfInvoice & { zip: string }> {
   const [row] = await db.select({ inv: invoices, cust: customers, prop: properties }).from(invoices)
     .innerJoin(customers, eq(customers.id, invoices.customerId)).leftJoin(properties, eq(properties.id, invoices.propertyId))
     .where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)));
@@ -46,11 +47,12 @@ async function pdfInvoice(companyId: string, invoiceId: string, opts: { copy?: b
     serviceAddress: prop ? formatAddress(prop) : null,
     lines: lines.map((l) => ({ description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, amountCents: l.amountCents })),
     footer: settings.footer, payableTo: settings.payableTo, copy: opts.copy,
+    payOnline: (await stripeConfig(companyId)) ? portalUrl(companyId).replace(/^https?:\/\//, "").replace(/\?.*$/, "") : null,
     zip: cust.billingStreet ? cust.billingZip ?? "" : prop?.zip ?? "",
   };
 }
 
-function sendPdf(reply: FastifyReply, bytes: Uint8Array, filename: string) {
+export function sendPdf(reply: FastifyReply, bytes: Uint8Array, filename: string) {
   reply.header("Content-Type", "application/pdf");
   reply.header("Content-Disposition", `inline; filename="${filename}"`);
   reply.header("Cache-Control", "no-store");
@@ -74,9 +76,9 @@ async function prepare(tx: Tx, companyId: string, body: InvoiceInput) {
   return { cust, totals };
 }
 
-const INVOICE_TEXT = (o: { company: string; number: number; customer: string; due: string; amount: string; dueDate: string; message?: string; phone?: string | null }) => ({
+const INVOICE_TEXT = (o: { company: string; number: number; customer: string; due: string; amount: string; dueDate: string; message?: string; phone?: string | null; payUrl?: string | null }) => ({
   subject: `Invoice ${o.number} from ${o.company}: ${o.amount} due ${o.dueDate}`,
-  text: `Hello ${o.customer},\n\n${o.message ? `${o.message}\n\n` : ""}Your invoice ${o.number} from ${o.company} is attached.\nAmount due: ${o.amount}\nDue: ${o.due}\n\nTo pay by check, mail it with the bottom part of the invoice. Questions? Just reply to this email${o.phone ? ` or call ${o.phone}` : ""}.\n\nThank you,\n${o.company}`,
+  text: `Hello ${o.customer},\n\n${o.message ? `${o.message}\n\n` : ""}Your invoice ${o.number} from ${o.company} is attached.\nAmount due: ${o.amount}\nDue: ${o.due}\n\n${o.payUrl ? `Pay online (card or bank account): ${o.payUrl}\n\nOr, to pay by check` : "To pay by check"}, mail it with the bottom part of the invoice. Questions? Just reply to this email${o.phone ? ` or call ${o.phone}` : ""}.\n\nThank you,\n${o.company}`,
 });
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]!);
@@ -214,7 +216,8 @@ const routes: FastifyPluginAsync = async (app) => {
     const { inv, cust, prop } = row;
     const sync = await syncStatus(companyId, inv.id, payments.map((p) => p.id));
     return {
-      ...inv, balanceCents: inv.totalCents - inv.paidCents, overdue: isOverdue(inv, today), lines, payments, sync,
+      ...inv, payToken: undefined, balanceCents: inv.totalCents - inv.paidCents, overdue: isOverdue(inv, today), lines, payments, sync,
+      payLink: payLinkFor(inv), onlinePayments: !!(await stripeConfig(companyId)),
       customer: { id: cust.id, number: cust.number, name: customerName(cust), email: cust.email, delivery: cust.delivery, poRequired: cust.poRequired, status: cust.status,
         billTo: billToLines(cust, prop), copies },
       property: prop ? { id: prop.id, street: prop.street, name: prop.name, address: formatAddress(prop), lawnSqFt: prop.lawnSqFt } : null,
@@ -284,7 +287,11 @@ const routes: FastifyPluginAsync = async (app) => {
       const [u] = await tx.update(invoices).set({ number, status: "sent", payToken: randomToken(24), updatedAt: new Date() }).where(eq(invoices.id, cur.id)).returning();
       return u;
     });
+    // Each send restarts the pay link's 30 days.
+    const [linked] = await db.update(invoices).set({ payToken: inv.payToken ?? randomToken(24), payTokenExpiresAt: new Date(Date.now() + PAY_LINK_DAYS * 86_400_000) })
+      .where(eq(invoices.id, inv.id)).returning();
     const fresh = await refreshInvoice(db, inv.id);
+    const payUrl = (await stripeConfig(companyId)) ? payLinkFor(linked)?.url ?? null : null;
 
     if (wantsEmail && transport && to) {
       const company = await companyForPdf(companyId);
@@ -295,12 +302,14 @@ const routes: FastifyPluginAsync = async (app) => {
         .map((c) => c.email!).filter((e) => e !== to);
       const amount = formatMoney(data.totalCents - data.paidCents);
       const due = `${data.dueDate.slice(5, 7)}/${data.dueDate.slice(8, 10)}/${data.dueDate.slice(0, 4)}`;
-      const t = INVOICE_TEXT({ company: company.name, number: inv.number!, customer: customerName(cust), due: `${due} (${termsLabel(data.termsDays)})`, amount, dueDate: due, message: body.message, phone: company.phone });
+      const t = INVOICE_TEXT({ company: company.name, number: inv.number!, customer: customerName(cust), due: `${due} (${termsLabel(data.termsDays)})`, amount, dueDate: due, message: body.message, phone: company.phone, payUrl });
       const html = `<p>Hello ${esc(customerName(cust))},</p>${body.message ? `<p>${esc(body.message).replace(/\n/g, "<br>")}</p>` : ""}
 <p>Your invoice <strong>${inv.number}</strong> from ${esc(company.name)} is attached.</p>
 <table style="border-collapse:collapse"><tr><td style="padding:2px 12px 2px 0;color:#667085">Amount due</td><td style="font-size:18px;font-weight:700">${amount}</td></tr>
 <tr><td style="padding:2px 12px 2px 0;color:#667085">Due</td><td>${esc(t.text.match(/Due: (.*)/)?.[1] ?? due)}</td></tr></table>
-<p>To pay by check, mail it with the bottom part of the invoice. Questions? Just reply to this email${company.phone ? ` or call ${esc(company.phone)}` : ""}.</p>
+${payUrl ? `<p><a href="${esc(payUrl)}" style="display:inline-block;background:#1f7a3a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600">Pay online</a></p>
+<p style="color:#667085;font-size:13px">Card or bank account. This button works for ${PAY_LINK_DAYS} days; after that, sign in at <a href="${esc(portalUrl(companyId))}">${esc(portalUrl(companyId).replace(/^https?:\/\//, "").replace(/\?.*$/, ""))}</a>.</p>` : ""}
+<p>${payUrl ? "Or, to pay by check" : "To pay by check"}, mail it with the bottom part of the invoice. Questions? Just reply to this email${company.phone ? ` or call ${esc(company.phone)}` : ""}.</p>
 <p>Thank you,<br>${esc(company.name)}</p>`;
       await transport.send({
         to, cc: copies, subject: t.subject, text: t.text, html, fromName: company.name, replyTo: company.email ?? undefined,

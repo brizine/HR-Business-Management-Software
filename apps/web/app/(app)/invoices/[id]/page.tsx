@@ -70,6 +70,11 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
                 {inv.needsMailing && <li>Waiting to be printed and mailed (<Link href="/invoices?status=mail">To mail</Link>)</li>}
                 {inv.mailedAt && <li>Mailed {fmtDate(inv.mailedAt)}</li>}
                 {inv.number && !inv.emailedAt && !inv.needsMailing && !inv.mailedAt && <li className="muted">Numbered, not delivered.</li>}
+                {inv.onlinePayments && inv.number && inv.status !== "void" && inv.status !== "paid" && (
+                  inv.payLink
+                    ? <li className="row" style={{ gap: 8 }}>Pay link works until {fmtDate(inv.payLink.expiresAt)} <CopyButton text={inv.payLink.url} label="Copy pay link" /></li>
+                    : <li className="muted">Pay link expired. Send again to give the customer a new one (or they can sign in to the portal).</li>
+                )}
               </ul>
               <BooksStatus inv={inv} onChange={invoice.reload} />
             </div>
@@ -93,8 +98,11 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
             {inv.payments.length ? (
               <ul className="plain-list">
                 {inv.payments.map((p: any) => (
-                  <li key={p.id} className="row" style={{ justifyContent: "space-between", opacity: p.status === "void" ? 0.55 : 1 }}>
-                    <span><strong>{formatMoney(p.amountCents)}</strong> {PAYMENT_METHOD_LABELS[p.method as PaymentMethod]}{p.reference ? ` #${p.reference}` : ""} <span className="muted">· {fmtDate(p.receivedOn)}{p.note ? ` · ${p.note}` : ""}{p.status === "void" ? " · void" : ""}</span>
+                  <li key={p.id} className="row" style={{ justifyContent: "space-between", opacity: p.status === "void" || p.status === "failed" ? 0.55 : 1 }}>
+                    <span><strong>{formatMoney(p.amountCents)}</strong> {PAYMENT_METHOD_LABELS[p.method as PaymentMethod]}{p.methodDetail ? ` (${p.methodDetail})` : ""}{p.reference ? ` #${p.reference}` : ""}
+                      {p.status === "pending" && <> <span className="badge warn" title="Bank payments take about 4 business days to clear">clearing</span></>}
+                      {p.status === "failed" && <> <span className="badge bad" title="The bank returned it; the invoice still owes this">failed</span></>}
+                      {" "}<span className="muted">· {fmtDate(p.receivedOn)}{p.note ? ` · ${p.note}` : ""}{p.feeCents ? ` · Stripe fee ${formatMoney(p.feeCents)}` : ""}{p.status === "void" ? " · void" : ""}</span>
                       {inv.sync?.connected && p.status === "completed" && <PaymentBooks s={inv.sync.payments?.[p.id]} />}</span>
                     {p.status === "completed" && (p.method === "cash" || p.method === "check" || p.method === "other") && (
                       <button className="btn" disabled={action.busy} onClick={() => confirm("Void this payment? The invoice goes back to owing it.") && action.run(async () => { await api(`/invoices/${id}/payments/${p.id}/void`, { method: "POST" }); invoice.reload(); })}>Void payment</button>
@@ -166,4 +174,14 @@ function PaymentBooks({ s }: { s: { status: string; error: string | null } | nul
   if (s.status === "posted") return <span className="ok-text"> · in Bigcapital</span>;
   if (s.status === "skipped") return <span className="muted"> · not sent ({s.error})</span>;
   return <span className="bad-text" title={s.error ?? ""}> · not in Bigcapital yet</span>;
+}
+
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button type="button" className="btn" onClick={async () => {
+      try { await navigator.clipboard.writeText(text); } catch { window.prompt("Copy this link:", text); }
+      setCopied(true); setTimeout(() => setCopied(false), 2000);
+    }}>{copied ? "Copied" : label}</button>
+  );
 }

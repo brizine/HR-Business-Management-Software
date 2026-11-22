@@ -171,7 +171,9 @@ Operations → **Billing** has **Invoices** and the **Price list** (managers in 
 - **PDF:** the **PDF** button on an invoice opens it to print or save.
 - **Payments:** **Record payment** for a check (with its number), cash or other payment; the amount starts at what's
   still owed. Part payments mark the invoice **Partly paid**; the rest marks it **Paid**. A payment entered by
-  mistake can be voided, which puts the amount back as owed. Card and bank payments come through the customer portal.
+  mistake can be voided, which puts the amount back as owed. Card and bank payments come in online (below); they show
+  the card or bank (for example "Visa ·· 4242"), Stripe's fee, and **clearing** while a bank payment is on its way.
+  An invoice paid in full before it was mailed comes off the **To mail** list.
 - **Editing and voiding:** a draft, or a sent invoice with no payments, can be edited (send it again afterwards).
   **Void** keeps a sent invoice on record with a reason and stops it counting as owed; void its payments first.
 - **Statuses:** Draft, Unpaid, Overdue (past the due date), Partly paid, Paid, Void. The tabs (Open, Overdue, Drafts,
@@ -191,6 +193,35 @@ Operations → **Billing** has **Invoices** and the **Price list** (managers in 
   Autopilot's last number), your usual **terms** (due on receipt, net 7/10/15/30), **make checks payable to**, and the
   **footer** printed on every invoice.
 
+### Online payments and the customer portal
+
+Customers pay invoices by **card or US bank account** through Stripe. Card and bank details are typed into Stripe's own
+form and go straight to Stripe; Crewdesk never sees or keeps them.
+
+- **Setting up (owner):** Settings → Integrations → **Online payments (Stripe)**. In Stripe, open **Developers → API
+  keys**, copy the **Publishable key** (pk_…) and the **Secret key** (sk_…, click Reveal), paste both and click
+  **Connect**. Crewdesk checks them with Stripe, keeps the secret key encrypted, and sets up the link Stripe uses to
+  report payments. The test company only takes **test keys** (pk_test_ / sk_test_), so no real money moves there; use
+  your **live keys** in the real company. **Disconnect** turns online payments off.
+- **Pay link:** once Stripe is connected, every emailed invoice has a **Pay online** button, and paper invoices say
+  "Or pay online" with the portal address on the stub. The link opens that one invoice with no sign-in and works for
+  **30 days** after the invoice was last sent (sending it again restarts the 30 days). On the invoice page,
+  **Copy pay link** gives you the link to text or read to a customer.
+- **Customer portal** (management.prospray.net/portal): customers type the email address on their account (or the
+  email of a contact marked "copy on invoices"), get a 6-digit code or a sign-in link by email, and see their balance,
+  invoices to pay, paid invoices and PDFs, and past payments. They can pay any open invoice and fix their phone number
+  and billing address (changes go to Bigcapital too). There's no password. An address that isn't on an account gets
+  no email, so the portal never reveals who your customers are.
+- **What happens when they pay:** a card payment marks the invoice **Paid** right away and emails the customer a
+  receipt. A bank payment shows as **clearing** for about 4 business days, then **Paid** (with a receipt); if the bank
+  returns it, it shows **failed** and the invoice still owes the amount. Stripe reports each payment to Crewdesk, and
+  Crewdesk also checks clearing bank payments with Stripe every hour in case a report goes missing. Online payments go
+  to Bigcapital like any other payment (to 1030 Card Processor Clearing). Refunds are made in Stripe for now.
+- **View as customer:** the button on a customer's page opens the portal exactly as they see it, in a new tab, for an
+  hour. It's read-only: paying and changing details are turned off.
+- **Fees:** Stripe charges about 2.9% + 30¢ per card payment and 0.8% (up to $5) per bank payment; the fee shows on
+  each payment. Customers pay the invoice amount; there's no surcharge.
+
 ### Test company
 
 A separate company, named after yours with "(Test)", for trying things out without touching real customers or books.
@@ -200,6 +231,10 @@ A separate company, named after yours with "(Test)", for trying things out witho
   bar at the top of every page says you're in the test company, with **Back to the real company**.
 - **What's in it:** the sample customers are loaded the first time anyone opens it. Nothing else is copied: it has
   no employees, payroll or settings of its own beyond what you add. Its sign-ins never get email.
+- **Test payments:** connect Stripe in the test company with your Stripe **test keys** (Stripe → turn on Test mode →
+  Developers → API keys). Then send a sample invoice and pay it from **Copy pay link**, or put your own email on a
+  sample customer and sign in to the portal as them. Use card **4242 4242 4242 4242** (any future date, any CVC and
+  ZIP), or **Test Institution** for a bank account. A yellow note on the pay page reminds everyone it's test mode.
 - **Test books:** connect it to a test organization in Bigcapital (Settings → Integrations, with that
   organization's own API key), then click **Set up test books** to give it the same chart of accounts and
   preferences as your real books. This button only exists in the test company and is refused anywhere else.

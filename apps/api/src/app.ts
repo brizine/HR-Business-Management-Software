@@ -48,6 +48,8 @@ import searchRoutes from "./routes/search";
 import { flushBillingSync } from "./lib/billingSync";
 import serviceTypeRoutes from "./routes/serviceTypes";
 import invoiceRoutes from "./routes/invoices";
+import { stripeSettingsRoutes, stripeWebhookRoutes } from "./routes/stripe";
+import { payLinkRoutes, portalRoutes } from "./routes/portal";
 
 export interface AppOptions {
   logger?: boolean;
@@ -140,4 +142,10 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(searchRoutes, { prefix: "/search" });
   await app.register(serviceTypeRoutes, { prefix: "/service-types" });
   await app.register(invoiceRoutes, { prefix: "/invoices" });
+  await app.register(stripeSettingsRoutes, { prefix: "/stripe" });
+  // Public, but checked against the company's Stripe signing secret.
+  await app.register(stripeWebhookRoutes, { prefix: "/stripe" });
+  // Public: the customer portal (its own sign-in) and invoice pay links.
+  await app.register(portalRoutes, { prefix: "/portal" });
+  await app.register(payLinkRoutes, { prefix: "/pay" });
 }

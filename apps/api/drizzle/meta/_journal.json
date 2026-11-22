@@ -428,6 +428,13 @@
       "when": 1795319939911,
       "tag": "0060_bigcapital_links",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1795321323745,
+      "tag": "0061_portal_stripe",
+      "breakpoints": true
     }
   ]
 }

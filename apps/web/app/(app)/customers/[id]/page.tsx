@@ -33,6 +33,14 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
       <PageHead title={c.name} before={<Link className="btn" href="/customers" aria-label="Back to customers">←</Link>}
         sub={<>#{c.number} · {CUSTOMER_KIND_LABELS[c.kind as CustomerKind]} · <Badge value={c.status} />{c.sample && <> · <span className="tag tag-gray">Sample</span></>}</>}>
         {c.status !== "cancelled" && <button className="btn" onClick={() => setEditing(!editing)}>Edit</button>}
+        <button className="btn" title="Opens the customer portal as this customer sees it (read-only)" disabled={action.busy} onClick={() => {
+          // Open the tab now (browsers block tabs opened after a wait), then point it at the portal.
+          const tab = window.open("about:blank", "_blank");
+          action.run(async () => {
+            try { await api("/portal/view-as", { body: { customerId: id } }); } catch (e) { tab?.close(); throw e; }
+            if (tab) tab.location.href = "/portal"; else window.location.href = "/portal";
+          });
+        }}>View as customer</button>
         {c.status !== "cancelled"
           ? <button className="btn danger" onClick={() => setCancelling(!cancelling)}>Cancel customer</button>
           : <button className="btn primary" disabled={action.busy} onClick={() => action.run(async () => { await api(`/customers/${id}/reactivate`, { method: "POST" }); customer.reload(); })}>Reactivate</button>}

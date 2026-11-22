@@ -159,7 +159,7 @@ async function newRecoveryCodes(employeeId: string) {
  * accounting connection (or its encrypted key), or the edited manual (the Help page loads that).
  */
 function publicCompany(company: typeof companies.$inferSelect) {
-  const { logoKey, accountingKey, accounting, helpGuide, helpGuideBase, reviewProgram, ...companyInfo } = company;
+  const { logoKey, accountingKey, accounting, helpGuide, helpGuideBase, reviewProgram, stripe, stripeSecret, stripeWebhookSecret, billing, ...companyInfo } = company;
   return { ...companyInfo, hasLogo: !!logoKey, isTest: !!company.testOfCompanyId };
 }
 

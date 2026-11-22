@@ -33,6 +33,11 @@ const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull(
 export const companies = pgTable("companies", {
   id: id(),
   name: text("name").notNull(),
+  /** Stripe connection (Settings → Integrations): publishable key, test or live, the webhook Crewdesk made. */
+  stripe: jsonb("stripe").$type<{ publishableKey: string; mode: "test" | "live"; webhookEndpointId?: string | null; accountName?: string | null; connectedAt?: string }>(),
+  /** Stripe secret key and webhook signing secret, encrypted. */
+  stripeSecret: text("stripe_secret"),
+  stripeWebhookSecret: text("stripe_webhook_secret"),
   /** Invoice numbering, terms and the printed footer (Settings → Billing); defaults apply when unset. */
   billing: jsonb("billing").$type<Partial<BillingSettings>>(),
   /** Set on a test company: the real company it's a sandbox for (sample customers, test mode payments). */
@@ -1376,6 +1381,8 @@ export const invoices = pgTable(
     mailedAt: timestamp("mailed_at", { withTimezone: true }),
     /** For the online pay link (Phase 1 portal). */
     payToken: text("pay_token"),
+    /** The pay link stops working after this (30 days from the last send); signing in to the portal still works. */
+    payTokenExpiresAt: timestamp("pay_token_expires_at", { withTimezone: true }),
     voidedAt: timestamp("voided_at", { withTimezone: true }),
     voidReason: text("void_reason"),
     bigcapitalInvoiceId: text("bigcapital_invoice_id"),
@@ -1421,16 +1428,23 @@ export const invoicePayments = pgTable(
     receivedOn: date("received_on").notNull(),
     reference: text("reference"),
     note: text("note"),
-    /** "completed" or "void". */
+    /** "completed", "pending" (a bank payment clearing), "failed" or "void". */
     status: text("status").notNull().default("completed"),
+    /** Stripe PaymentIntent id (pi_…) for card and bank payments. */
     stripePaymentId: text("stripe_payment_id"),
+    /** "Visa ·· 4242" or "Arvest checking ·· 6789". */
+    methodDetail: text("method_detail"),
     feeCents: integer("fee_cents"),
     bigcapitalPaymentId: text("bigcapital_payment_id"),
     recordedById: uuid("recorded_by_id").references(() => employees.id, { onDelete: "set null" }),
     voidedAt: timestamp("voided_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
-  (t) => [index("invoice_payments_invoice_idx").on(t.invoiceId), index("invoice_payments_company_idx").on(t.companyId, t.receivedOn)],
+  (t) => [
+    index("invoice_payments_invoice_idx").on(t.invoiceId),
+    index("invoice_payments_company_idx").on(t.companyId, t.receivedOn),
+    uniqueIndex("invoice_payments_stripe_idx").on(t.stripePaymentId),
+  ],
 );
 
 /** Which Bigcapital record a Crewdesk thing became, where the thing has no column of its own (e.g. price-list items). */
@@ -1446,4 +1460,21 @@ export const bigcapitalLinks = pgTable(
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("bigcapital_links_key_idx").on(t.companyId, t.kind, t.localKey)],
+);
+
+/** One-time sign-in codes (and links) for the customer portal. Only hashes are kept. */
+export const portalCodes = pgTable(
+  "portal_codes",
+  {
+    id: id(),
+    companyId: companyId(),
+    email: text("email").notNull(),
+    codeHash: text("code_hash").notNull(),
+    linkHash: text("link_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("portal_codes_email_idx").on(t.companyId, t.email), uniqueIndex("portal_codes_link_idx").on(t.linkHash)],
 );

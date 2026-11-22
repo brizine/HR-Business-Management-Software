@@ -24,6 +24,8 @@ export interface PdfInvoice {
   customerName: string; billTo: string[]; serviceAddress: string | null; customerNumber: number;
   lines: { description: string; quantity: number; unitPriceCents: number; amountCents: number }[];
   footer: string; payableTo: string; copy?: boolean;
+  /** "Pay online at …" on the stub, when the company takes online payments. */
+  payOnline?: string | null;
 }
 
 const usDate = (iso: string) => { const [y, m, d] = iso.split("-"); return `${Number(m)}/${Number(d)}/${y}`; };
@@ -160,6 +162,11 @@ export async function addInvoicePages(doc: PDFDocument, c: PdfCompany, inv: PdfI
   sp.text("Mail to", L, sy, { size: 8.5, color: MUTED }); sy += 11;
   sp.text(c.name, L, sy, { size: 10 }); sy += 12;
   for (const l of companyLines(c)) { sp.text(l, L, sy, { size: 10 }); sy += 12; }
+  if (inv.payOnline) {
+    sy += 8;
+    sp.text("Or pay online (card or bank account)", L, sy, { size: 8.5, color: MUTED }); sy += 11;
+    sp.text(inv.payOnline, L, sy, { size: 10, bold: true });
+  }
   const sx = W / 2 + 20;
   let ry = st + 26;
   const row = (k: string, v: string, strong = false) => { sp.text(k, sx, ry, { size: 9, color: MUTED }); sp.text(v, R, ry, { size: strong ? 12 : 10, bold: strong, right: true }); ry += strong ? 18 : 14; };

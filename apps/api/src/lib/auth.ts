@@ -21,9 +21,13 @@ export interface AuthUser {
   role: Role;
   /** employees.token_version when issued; bumping it signs the person out everywhere. */
   ver?: number;
-  purpose?: TokenPurpose | "view";
+  purpose?: TokenPurpose | "view" | "portal";
   /** For "view" tokens: the one document it opens. */
   doc?: string;
+  /** For "portal" tokens (customers, where sub is their email): set when staff use "View as customer". */
+  staff?: string;
+  /** For "portal" tokens from "View as customer": the one customer shown. */
+  cust?: string;
   /** Loaded per request (not in the token): access levels by area that differ from the role. */
   areas?: AreaLevels;
   /** Loaded per request: may this person manage permissions? (Owners always.) */
