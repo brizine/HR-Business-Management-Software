@@ -19,9 +19,10 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   employee, time off request, repair order or asset, depending on your access); **Notifications** (the
   number is unread items); **Help**; and your initials, for My Info, Security, notification settings,
   all settings and Sign out.
-- **Breadcrumbs:** above the title of a detail page, the path to it, such as **Customers › Pat Payer › 5 Elm
-  St** on a property (through its bill-to customer) or **Invoices › Invoice 1043**. Click any part to go
-  there.
+- **Breadcrumb trail:** at the top of every page, the last pages you visited, oldest first, ending with the page
+  you're on (in bold), such as **Customers › Jane Example › Invoice 1043 › Price list › Invoices**. Click one to
+  go back to it. It shows your last four pages before this one; opening a page that's already in the trail moves
+  it to the end. The trail is yours alone, kept in this browser (the test company has its own).
 - **Left menu:** one icon per group. Point at (or click) a group to see its pages; groups with one page open
   straight away. **Company Wiki** and **Settings** are at the bottom. The **»** button at the very bottom
   widens the menu to list every page under its group (**«** narrows it again); Crewdesk remembers your choice

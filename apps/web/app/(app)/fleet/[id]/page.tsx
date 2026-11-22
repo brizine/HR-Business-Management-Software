@@ -37,7 +37,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
 
   return (
     <>
-      <PageHead title={a.name} crumbs={[{ label: "Fleet", href: "/fleet" }, { label: a.name }]} sub={[a.year, a.make, a.model, a.licensePlate, a.vin].filter(Boolean).join(" · ")}>
+      <PageHead title={a.name} sub={[a.year, a.make, a.model, a.licensePlate, a.vin].filter(Boolean).join(" · ")}>
         <Badge value={a.status} menu="assetStatus" />
         {can("manager", "fleet") && <button className="btn" onClick={() => setEditing(!editing)}>{editing ? "Close" : "Edit"}</button>}
       </PageHead>

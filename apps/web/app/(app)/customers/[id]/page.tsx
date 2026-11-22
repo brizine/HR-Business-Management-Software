@@ -33,7 +33,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
 
   return (
     <>
-      <PageHead title={c.name} crumbs={[{ label: "Customers", href: "/customers" }, { label: c.name }]}
+      <PageHead title={c.name} before={<Link className="btn" href="/customers" aria-label="Back to customers">←</Link>}
         sub={<>#{c.number} · {CUSTOMER_KIND_LABELS[c.kind as CustomerKind]} · <Badge value={c.status} />{c.sample && <> · <span className="tag tag-gray">Sample</span></>}</>}>
         {c.status !== "cancelled" && <button className="btn" onClick={() => setEditing(!editing)}>Edit</button>}
         <button className="btn" title="Opens the customer portal as this customer sees it (read-only)" disabled={action.busy} onClick={() => {

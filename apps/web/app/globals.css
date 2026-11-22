@@ -943,16 +943,22 @@ a.pt-row:hover { background: var(--bg); }
 .credit-form { background: var(--bg); }
 .pt-credit { color: var(--ok); font-weight: 600; margin-top: 4px; }
 
-/* Breadcrumbs above a page title. */
-.crumbs { font-size: 13px; color: var(--muted); margin-bottom: 2px; }
-.crumbs ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; }
-.crumbs li { display: inline-flex; align-items: center; min-width: 0; }
-.crumbs li + li::before { content: "›"; margin: 0 6px; color: var(--muted); }
-.crumbs a { color: var(--primary); text-decoration: none; }
-.crumbs a:hover { text-decoration: underline; }
-.crumbs span[aria-current] { color: var(--muted); max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 480px) {
   .test-badge { padding: 2px 5px; font-size: 11px; letter-spacing: 0.5px; }
   .topbar.is-test .topbar-brand { min-width: 0; flex-shrink: 1; }
   .test-pop { position: fixed; left: 12px; right: 12px; width: auto; }
+}
+
+/* Breadcrumb trail: the last few pages visited, at the top of every page. */
+.trail { font-size: 13px; color: var(--muted); margin: -6px 0 12px; overflow-x: auto; scrollbar-width: none; }
+.trail::-webkit-scrollbar { display: none; }
+.trail ol { list-style: none; margin: 0; padding: 0; display: flex; align-items: center; white-space: nowrap; }
+.trail li { display: inline-flex; align-items: center; }
+.trail li + li::before { content: "›"; margin: 0 7px; color: var(--muted); }
+.trail a, .trail span { max-width: 22ch; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: bottom; }
+.trail a { color: var(--primary); text-decoration: none; }
+.trail a:hover { text-decoration: underline; }
+.trail span[aria-current] { color: var(--text); font-weight: 600; }
+@media (max-width: 480px) {
+  .trail a, .trail span { max-width: 14ch; }
 }

@@ -1,34 +1,17 @@
 "use client";
-import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { nameCurrent } from "@/lib/trail";
 import type { LabelMenu } from "@crewdesk/shared";
 import { useMenuData } from "@/lib/menus";
 
-export type Crumb = { label: string; href?: string };
-
-/** Where this page sits: "Customers › Pat Payer › 5 Elm St"; each part but the last is a link. */
-export function Crumbs({ items }: { items: Crumb[] }) {
-  if (!items.length) return null;
-  return (
-    <nav aria-label="Breadcrumb" className="crumbs">
-      <ol>
-        {items.map((c, i) => (
-          <li key={i}>
-            {c.href && i < items.length - 1 ? <Link href={c.href}>{c.label}</Link> : <span aria-current={i === items.length - 1 ? "page" : undefined}>{c.label}</span>}
-          </li>
-        ))}
-      </ol>
-    </nav>
-  );
-}
-
-export function PageHead({ title, sub, children, before, crumbs }: { title: string; sub?: ReactNode; children?: ReactNode; before?: ReactNode; crumbs?: Crumb[] }) {
+export function PageHead({ title, sub, children, before }: { title: string; sub?: ReactNode; children?: ReactNode; before?: ReactNode }) {
+  // Names this page in the breadcrumb trail.
+  useEffect(() => { nameCurrent(window.location.pathname, title); }, [title]);
   return (
     <div className="pagehead">
       <div className="pagehead-title">
         {before}
         <div>
-          {crumbs && <Crumbs items={crumbs} />}
           <h1>{title}</h1>
           {sub && <div className="muted">{sub}</div>}
         </div>

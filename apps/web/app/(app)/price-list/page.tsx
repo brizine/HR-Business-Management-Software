@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
 import { INCOME_ACCOUNTS, PRICING_KINDS, PRICING_LABELS, describePricing, type PricingKind } from "@crewdesk/shared";
 import { api } from "@/lib/api";
@@ -23,7 +24,7 @@ export default function PriceList() {
   const account = (code: string) => INCOME_ACCOUNTS.find((a) => a.code === code);
   return (
     <>
-      <PageHead title="Price list"
+      <PageHead title="Price list" before={<Link className="btn" href="/invoices" aria-label="Back to invoices">←</Link>}
         sub="The services you sell and how each is priced. Invoices fill in the price from the property's lawn size.">
         {admin && <button className="btn primary" onClick={() => setEditing("new")}>Add service</button>}
       </PageHead>

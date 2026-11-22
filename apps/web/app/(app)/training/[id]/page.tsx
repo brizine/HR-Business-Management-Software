@@ -22,7 +22,8 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
 
   return (
     <>
-      <PageHead title={c.title} crumbs={[{ label: "Training", href: "/training" }, { label: c.title }]} sub={[c.category, `${c.lessons.length} lesson${c.lessons.length === 1 ? "" : "s"}`, c.validityMonths ? `retake every ${c.validityMonths} months` : null].filter(Boolean).join(" · ")}>
+      <PageHead title={c.title} sub={[c.category, `${c.lessons.length} lesson${c.lessons.length === 1 ? "" : "s"}`, c.validityMonths ? `retake every ${c.validityMonths} months` : null].filter(Boolean).join(" · ")}>
+        <Link className="btn" href="/training">All training</Link>
         {c.canEdit && <Link className="btn" href={`/training/${c.id}/edit`}>Edit course</Link>}
       </PageHead>
       <div className="grid cols-2">

@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, fmtDateTime } from "@/lib/api";
@@ -16,7 +17,7 @@ export default function WikiHistory({ params }: { params: Promise<{ id: string }
 
   return (
     <WikiShell currentId={id}>
-      <PageHead title={`History: ${page.data?.title ?? ""}`} crumbs={[{ label: "Wiki", href: "/wiki" }, ...(page.data ? [{ label: page.data.title, href: `/wiki/${id}` }] : []), { label: "History" }]} />
+      <PageHead title={`History: ${page.data?.title ?? ""}`}><Link className="btn" href={`/wiki/${id}`}>Back to page</Link></PageHead>
       <ErrorBox error={revs.error} />
       <ol className="card stack" style={{ listStyle: "none", margin: 0 }}>
         {revs.data?.map((r, i) => (

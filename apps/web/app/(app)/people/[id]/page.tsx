@@ -62,7 +62,7 @@ export default function Person({ params }: { params: Promise<{ id: string }> }) 
 
   return (
     <>
-      <PageHead title={`${e.firstName} ${e.lastName}`} crumbs={[{ label: "People", href: "/people" }, { label: `${e.firstName} ${e.lastName}` }]} sub={[e.title, e.department].filter(Boolean).join(" · ")}
+      <PageHead title={`${e.firstName} ${e.lastName}`} sub={[e.title, e.department].filter(Boolean).join(" · ")}
         before={<PhotoEditor e={e} canEdit={can("admin", "people") || e.id === me?.user.id} onChange={emp.setData} />}>
         <Badge value={e.status} menu="employeeStatus" />
         {can("admin", "people") && e.id !== me?.user.id && e.hasLogin && (

@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { Trail } from "@/components/trail";
 import { NAV, pathMatches, sideOf, type NavGroup, type NavItem, type Side } from "@/lib/nav";
 import { PageLayoutRoot } from "@/components/page-layout";
 import { Rail, TopBar } from "@/components/app-shell";
@@ -120,7 +121,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <TopBar side={side} onSwitch={switchTo} unread={unread} onMenu={() => setDrawer(true)} visibleItems={(s) => groupsFor(s).flatMap((g) => g.items)} />
       <div className="shell">
         <Rail side={side} groups={groupsFor(side)} expanded={expanded} onToggle={toggleRail} drawer={drawer} onCloseDrawer={() => setDrawer(false)} onSwitch={switchTo} renderItem={renderItem} />
-        <main className="main"><PageLayoutRoot>{children}</PageLayoutRoot></main>
+        <main className="main"><Trail /><PageLayoutRoot>{children}</PageLayoutRoot></main>
       </div>
     </div>
   );

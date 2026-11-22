@@ -40,7 +40,7 @@ export default function LessonPage({ params }: { params: Promise<{ id: string; l
 
   return (
     <>
-      <PageHead title={l.title} crumbs={[{ label: "Training", href: "/training" }, { label: c.title, href: `/training/${id}` }, { label: l.title }]}>
+      <PageHead title={l.title} sub={<Link href={`/training/${id}`}>{c.title}</Link>}>
         {prev && <Link className="btn" href={`/training/${id}/lesson/${prev.id}`}>← Previous</Link>}
         {next && <Link className="btn" href={`/training/${id}/lesson/${next.id}`}>Next →</Link>}
       </PageHead>
