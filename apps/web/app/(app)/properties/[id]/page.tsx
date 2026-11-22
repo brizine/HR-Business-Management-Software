@@ -6,6 +6,7 @@ import { PROPERTY_ROLE_LABELS, formatAddress, formatPhone, type PropertyRole } f
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
+import { LinkedTodos } from "@/components/todos";
 import { Badge, ErrorBox, PageHead } from "@/components/ui";
 import { CancelForm, CustomerPicker, PropertyFields, TagChips, propertyBody, propertyFormValue, useTags } from "@/components/customers";
 import { CreditForm } from "@/components/credits";
@@ -109,6 +110,9 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
           </div>
         </div>
       )}
+      <div style={{ marginTop: 16 }}>
+        <LinkedTodos propertyId={id} customer={(billTo ?? current[0]) ? { id: (billTo ?? current[0]).customerId, name: (billTo ?? current[0]).name } : null} />
+      </div>
       {p.cancellations.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
           <h2 style={{ fontSize: 16, marginTop: 0 }}>Cancellations</h2>

@@ -4,6 +4,7 @@ import { useApi } from "@/lib/hooks";
 import { useAuth } from "@/lib/auth";
 import { OnboardingTaskItem } from "@/components/onboarding-task";
 import { MyTasksCard } from "@/components/my-tasks";
+import { MyTodosCard } from "@/components/my-todos";
 import { useState } from "react";
 import { Badge, Button, Card, Divider, Row, Screen, Txt } from "@/components/ui";
 
@@ -23,6 +24,7 @@ export default function Tasks() {
   return (
     <Screen refreshing={onboarding.loading || workOrders.loading} onRefresh={reload}>
       <MyTasksCard key={refreshKey} documents={docs.data} />
+      <MyTodosCard refreshKey={refreshKey} />
       {!!onboarding.data?.length && (
         <Card title="My onboarding checklist">
           {onboarding.data.map((t) => <OnboardingTaskItem key={t.id} task={t} mode="self" onChange={reload} />)}

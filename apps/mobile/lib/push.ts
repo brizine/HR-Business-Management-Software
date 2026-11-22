@@ -63,6 +63,7 @@ export function routeFor(link: NotificationLink | null | undefined): string | nu
     case "time": return "/";
     case "schedule": return "/schedule";
     case "tasks":
+    case "todos":
     case "onboarding": return "/tasks";
     case "documents": return "/profile";
     case "asset": return `/asset/${link.id}`;

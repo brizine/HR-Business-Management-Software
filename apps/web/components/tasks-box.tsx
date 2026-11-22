@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { formatTodoTime, todoState } from "@crewdesk/shared";
 import { fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
@@ -14,7 +15,7 @@ interface Task {
 }
 
 /**
- * Employee page: what's waiting on this person. On your own page ("My Tasks"): repair orders, your
+ * Employee page: what's waiting on this person. On your own page ("My Tasks"): to-dos for the next week, repair orders, your
  * onboarding checklist, documents to sign, pay periods to approve and (managers) onboarding steps
  * waiting on you. Managers on someone else's page see their repair orders and onboarding checklist.
  */
@@ -25,8 +26,19 @@ export function TasksBox({ employeeId, firstName, isSelf }: { employeeId: string
   const waitingOnMe = useApi<any[]>(isSelf && can("manager", "onboarding") ? "/onboarding/assigned" : null);
   const documents = useApi<any[]>(isSelf ? "/documents" : null);
   const payPeriods = useApi<{ canApprove: boolean; periods: any[] }>(isSelf ? "/pay-periods" : null);
+  // To-dos through the next week (a manager sees someone else's only with To-dos manager access).
+  const weekOut = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+  const todos = useApi<{ today: string; items: any[] }>(isSelf ? `/todos?mine=true&to=${weekOut}` : can("manager", "todos") ? `/todos?assigneeId=${employeeId}&to=${weekOut}` : null);
 
   const tasks: Task[] = [
+    ...(todos.data?.items ?? []).map((t) => {
+      const state = todoState(t, todos.data!.today);
+      return {
+        key: `todo-${t.id}`, href: `/todos?open=${t.id}`, title: t.title,
+        detail: ["To-do", new Date(`${t.date}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }), formatTodoTime(t.startTime, t.endTime), t.property?.address ?? t.location].filter(Boolean).join(" · "),
+        badge: state === "overdue" ? "overdue" : state === "today" ? "today" : undefined,
+      };
+    }),
     ...(workOrders.data ?? []).map(({ workOrder: w, assetName }) => ({
       key: `wo-${w.id}`, href: `/work-orders?highlight=${w.id}`, title: `${w.number ? `#${w.number} ` : ""}${w.title}`,
       detail: `Repair order · ${assetName}${w.dueDate ? ` · due ${fmtDate(w.dueDate)}` : ""}`, badge: w.status,

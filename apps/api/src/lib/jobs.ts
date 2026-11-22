@@ -2,11 +2,11 @@ import { refreshAddresses } from "./addresses";
 import { retryBillingSyncs } from "./billingSync";
 import { checkPendingStripePayments, checkRecentRefunds, updateWebhookEvents } from "./stripe";
 import { and, eq, gt, sql, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or } from "drizzle-orm";
-import { LOCATION_KEEP_DAYS, DEFAULT_RENEWAL_REMIND_DAYS, DEFAULT_RENEWAL_REPEAT_DAYS, INACTIVE_STATUSES, carryoverForfeit, renewalStatus, computeDue, resolveLead, workOrderDue, type FleetSettings, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
+import { LOCATION_KEEP_DAYS, DEFAULT_RENEWAL_REMIND_DAYS, DEFAULT_RENEWAL_REPEAT_DAYS, INACTIVE_STATUSES, carryoverForfeit, renewalStatus, computeDue, resolveLead, workOrderDue, type FleetSettings, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency, formatTodoTime } from "@crewdesk/shared";
 import { db } from "../db";
 import { fleetSettingsFor } from "./fleet";
 import { syncCurrentPay } from "./payRates";
-import { assets, attendanceOverrides, locationPings, companies, courseEnrollments, courses, employees, maintenanceSchedules, notificationLog, payRates, workOrders, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, ptoRequests, shifts, timeEntries } from "../db/schema";
+import { assets, attendanceOverrides, locationPings, companies, courseEnrollments, courses, employees, maintenanceSchedules, notificationLog, payRates, workOrders, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, ptoRequests, shifts, timeEntries, todos, todoAssignees, properties } from "../db/schema";
 import { attendanceRulesFor, computeAttendance } from "./attendance";
 import { assignCourse, autoAssignees, companyToday, describeEnrollments, latestEnrollments } from "./training";
 import { taskOwners } from "../routes/onboarding";
@@ -99,6 +99,9 @@ export async function runScheduledChecks(now = new Date()) {
 
   // Registration and insurance: reminders to renew as each date nears, and while expired.
   sent += await renewalReminders(now, settingsFor);
+
+  // To-dos: a reminder to each person the morning one starts.
+  sent += await todoReminders(now);
 
   // Forgotten clock-outs: remind the employee and let their manager know.
   const stale = await db
@@ -454,6 +457,38 @@ async function reviewChecks(now: Date) {
           ? `${name}'s ${d.ruleName.toLowerCase()} was due ${mdy(d.dueDate)} (${-d.daysLeft} day${d.daysLeft === -1 ? "" : "s"} ago).`
           : `${name}'s ${d.ruleName.toLowerCase()} is due ${mdy(d.dueDate)}${d.daysLeft === 0 ? " (today)" : ` (in ${d.daysLeft} day${d.daysLeft === 1 ? "" : "s"})`}.`,
         link: { screen: "review-due", employeeId: d.employeeId, reviewType: d.reviewType },
+      });
+      sent++;
+    }
+  }
+  return sent;
+}
+
+/** The morning a to-do starts (after REMINDER_HOUR local time), remind the people it's for, once. */
+export async function todoReminders(now: Date) {
+  let sent = 0;
+  // Only companies with an open to-do around today (every time zone's "today" is within a day of UTC's).
+  const utc = now.toISOString().slice(0, 10);
+  const near = [-1, 0, 1].map((n) => new Date(Date.parse(`${utc}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10));
+  const withTodos = await db.selectDistinct({ id: companies.id, tz: companies.timezone }).from(companies)
+    .innerJoin(todos, eq(todos.companyId, companies.id)).where(and(isNull(todos.doneAt), inArray(todos.date, near)));
+  for (const c of withTodos) {
+    const local = localParts(now, c.tz);
+    if (local.minutes < REMINDER_HOUR * 60) continue;
+    const due = await db.select({ t: todos, street: properties.street, city: properties.city }).from(todos)
+      .leftJoin(properties, eq(properties.id, todos.propertyId))
+      .where(and(eq(todos.companyId, c.id), eq(todos.date, local.date), isNull(todos.doneAt)));
+    if (!due.length) continue;
+    const people = await db.select().from(todoAssignees).where(inArray(todoAssignees.todoId, due.map((d) => d.t.id)));
+    for (const { t, street, city } of due) {
+      const to = people.filter((p) => p.todoId === t.id).map((p) => p.employeeId);
+      if (!to.length || !(await firstTime(c.id, `todo:${t.id}:${t.date}`))) continue;
+      const place = street ? [street, city].filter(Boolean).join(", ") : t.location;
+      notify(c.id, to, {
+        category: "todos",
+        title: `To-do today: ${t.title}`,
+        body: [formatTodoTime(t.startTime, t.endTime) || (t.endDate ? `Through ${t.endDate.slice(5).replace("-", "/")}` : "Today"), place].filter(Boolean).join(" · "),
+        link: { screen: "todos", id: t.id },
       });
       sent++;
     }

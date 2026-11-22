@@ -13,6 +13,7 @@ export const PERMISSION_AREAS = [
   },
   { key: "time", label: "Time clock", levels: { manager: "See and approve everyone's timesheets, fix punches", admin: "Set clock-in location rules and job sites" } },
   { key: "schedule", label: "Schedule", levels: { manager: "Create, publish and change shifts and templates; see availability" } },
+  { key: "todos", label: "To-dos", levels: { manager: "See everyone's to-dos and give to-dos to anyone" } },
   { key: "timeoff", label: "Time off", levels: { manager: "Approve or deny requests, request for others, see balances", admin: "Edit policies and adjust balances" } },
   { key: "documents", label: "Documents", levels: { manager: "See and upload everyone's documents" } },
   {

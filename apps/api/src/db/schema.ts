@@ -1637,3 +1637,53 @@ export const portalCodes = pgTable(
   },
   (t) => [index("portal_codes_email_idx").on(t.companyId, t.email), uniqueIndex("portal_codes_link_idx").on(t.linkHash)],
 );
+
+/**
+ * To-dos (like Homeworks'): one-off or repeating jobs for the office or the crew. Each is for a day
+ * (or several), optionally at a time, optionally tied to a customer and property or a free-text
+ * location, with budgeted hours, for one or more people (todo_assignees). A repeat makes one row
+ * per date up front, sharing a seriesId.
+ */
+export const todos = pgTable(
+  "todos",
+  {
+    id: id(),
+    companyId: companyId(),
+    title: text("title").notNull(),
+    notes: text("notes"),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    propertyId: uuid("property_id").references(() => properties.id, { onDelete: "set null" }),
+    location: text("location"),
+    color: text("color").notNull().default("#2563eb"),
+    date: date("date").notNull(),
+    /** The last day of a multi-day to-do (inclusive). */
+    endDate: date("end_date"),
+    /** "HH:MM" in the company's time zone. */
+    startTime: text("start_time"),
+    endTime: text("end_time"),
+    budgetedHours: doublePrecision("budgeted_hours"),
+    seriesId: uuid("series_id"),
+    /** How the series repeats ("none" for a single to-do). */
+    repeat: text("repeat").notNull().default("none"),
+    doneAt: timestamp("done_at", { withTimezone: true }),
+    doneById: uuid("done_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("todos_company_date_idx").on(t.companyId, t.date),
+    index("todos_series_idx").on(t.seriesId),
+    index("todos_customer_idx").on(t.customerId),
+    index("todos_property_idx").on(t.propertyId),
+  ],
+);
+
+export const todoAssignees = pgTable(
+  "todo_assignees",
+  {
+    todoId: uuid("todo_id").notNull().references(() => todos.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.todoId, t.employeeId] }), index("todo_assignees_employee_idx").on(t.employeeId)],
+);

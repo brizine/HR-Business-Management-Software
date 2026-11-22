@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { entryHours } from "@crewdesk/shared";
+import { entryHours, formatTodoTime } from "@crewdesk/shared";
 import { API_URL, api, fmtDateTime } from "@/lib/api";
 import { hrefFor } from "@/lib/links";
 import { useAuth } from "@/lib/auth";
@@ -11,6 +11,7 @@ import { Icon } from "@/components/icons";
 import { useClockPunch } from "@/components/clock-card";
 import { TestBadge, backToRealCompany } from "@/components/test-company";
 import { THEME_CHOICES, setTheme, useTheme } from "@/lib/theme";
+import { DoneBox, dayLabel, type Todo } from "@/components/todos";
 
 /** Closes a pop-up when you click outside it or press Escape. */
 function useDismiss(open: boolean, close: () => void, ref: React.RefObject<HTMLElement | null>) {
@@ -68,6 +69,7 @@ export function TopBar(props: {
       <button type="button" className="topbar-icon topbar-search-btn" aria-label="Search" onClick={() => setSearching(true)}><Icon name="search" /></button>
       <div className="topbar-spacer" />
       <ClockButton />
+      <TodosButton />
       <NotificationsBell unread={props.unread} />
       <NewMenu />
       <ProfileMenu />
@@ -102,6 +104,65 @@ function ClockButton() {
         <div className="topbar-popover" role="status">
           {error ? <span className="error">{error}</span> : result}
           <div><Link href="/time" onClick={close}>Open the Time Clock</Link></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The to-do icon: how many of yours are due today or overdue; click for the list, to tick them off or add one. */
+function TodosButton() {
+  const router = useRouter();
+  const path = usePathname();
+  const [due, setDue] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [list, setList] = useState<{ today: string; items: Todo[] } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, close, ref);
+  useEffect(() => { setOpen(false); }, [path]);
+  const load = useCallback(() => {
+    api<{ due: number }>("/todos/count").then((r) => setDue(r.due), () => {});
+  }, []);
+  const loadList = useCallback(() => {
+    api<{ today: string; items: Todo[] }>("/todos?mine=true&to=today&limit=20").then(setList, () => setList({ today: "", items: [] }));
+  }, []);
+  useEffect(() => {
+    load();
+    const timer = setInterval(load, 60_000);
+    const changed = () => { load(); if (open) loadList(); };
+    window.addEventListener("crewdesk:todos", changed);
+    window.addEventListener("focus", load);
+    return () => { clearInterval(timer); window.removeEventListener("crewdesk:todos", changed); window.removeEventListener("focus", load); };
+  }, [load, loadList, open]);
+  useEffect(() => { if (open) loadList(); }, [open, loadList]);
+  return (
+    <div className="topbar-pop" ref={ref}>
+      <button type="button" className="topbar-icon" aria-haspopup="dialog" aria-expanded={open} title="To-dos"
+        aria-label={`To-dos${due ? `, ${due} due` : ""}`} onClick={() => setOpen(!open)}>
+        <Icon name="todo" />{due > 0 && <span className="topbar-count">{due > 99 ? "99+" : due}</span>}
+      </button>
+      {open && (
+        <div className="topbar-popover align-right bell-pop" role="dialog" aria-label="Your to-dos">
+          <div className="bell-head"><strong>Your to-dos for today</strong>
+            <button type="button" className="linkbtn" onClick={() => { setOpen(false); router.push("/todos?new=1"); setTimeout(() => window.dispatchEvent(new Event("crewdesk:new")), 60); }}>+ New to-do</button>
+          </div>
+          {list === null ? <p className="muted bell-empty">Loading…</p>
+            : !list.items.length ? <p className="muted bell-empty">Nothing due today</p>
+            : (
+              <ul className="bell-list todo-pop-list">
+                {list.items.map((t) => (
+                  <li key={t.id} style={{ borderLeftColor: t.color }}>
+                    <DoneBox t={t} onChange={(u) => setList((l) => (l ? { ...l, items: l.items.map((x) => (x.id === u.id ? u : x)) } : l))} />
+                    <button type="button" onClick={() => { setOpen(false); router.push(`/todos?open=${t.id}`); }}>
+                      <strong className={t.doneAt ? "todo-struck" : undefined}>{t.title}</strong>
+                      <span className="muted">{[(t.endDate ?? t.date) < list.today ? `Overdue · ${dayLabel(t.date)}` : formatTodoTime(t.startTime, t.endTime), t.property?.address ?? t.location].filter(Boolean).join(" · ") || "Today"}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          <Link href="/todos" className="btn bell-all" onClick={close}>View all</Link>
         </div>
       )}
     </div>
@@ -230,7 +291,7 @@ function ProfileMenu() {
 type Hit = { kind: string; id: string; title: string; sub: string | null; href: string };
 const KIND_LABELS: Record<string, string> = {
   page: "Pages", customer: "Customers", property: "Properties", invoice: "Invoices", payment: "Payments", service: "Price list",
-  employee: "People", asset: "Fleet", workOrder: "Repair orders", quick: "Quick links", account: "Account",
+  employee: "People", asset: "Fleet", workOrder: "Repair orders", todo: "To-dos", quick: "Quick links", account: "Account",
 };
 
 /**

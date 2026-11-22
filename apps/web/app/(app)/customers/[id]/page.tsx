@@ -2,10 +2,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
-import { CUSTOMER_KIND_LABELS, DELIVERY_LABELS, PROPERTY_ROLE_LABELS, formatAddress, formatPhone, type CustomerKind, type DeliveryMethod, type PropertyRole } from "@crewdesk/shared";
+import { CUSTOMER_KIND_LABELS, DELIVERY_LABELS, customerName, PROPERTY_ROLE_LABELS, formatAddress, formatPhone, type CustomerKind, type DeliveryMethod, type PropertyRole } from "@crewdesk/shared";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
+import { LinkedTodos } from "@/components/todos";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { CustomerBilling } from "@/components/invoices";
 import { CustomerCredits } from "@/components/credits";
@@ -112,6 +113,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
         properties={current.filter((p: any) => p.status !== "cancelled").map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", "), lawnSqFt: p.lawnSqFt }))} />
       <CustomerCredits customerId={id} onChange={() => setCreditVersion((v) => v + 1)}
         properties={current.filter((p: any) => p.status !== "cancelled").map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", ") }))} />
+      <LinkedTodos customerId={id} customer={{ id, name: customerName(c) }} />
 
       {c.cancellations.length > 0 && (
         <div className="card">

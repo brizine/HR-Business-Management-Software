@@ -16,7 +16,9 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   left menu); your company's name (click it for the home page); the **Operations | Team** switch; **Search** in
   the middle (click it or press **Ctrl+K**, **⌘K** on a Mac); **Clocked out** / **Clocked in** (click to clock
   in or out after a quick "are you sure?"; it shows how long you've been on and follows your company's location
-  rules like the Time Clock page); the **Notifications** bell; **+ New**; and your initials.
+  rules like the Time Clock page); **To-dos**; the **Notifications** bell; **+ New**; and your initials.
+- **To-dos button:** the red number is how many of your to-dos are due today or overdue. Click it to see them,
+  tick them off, add one (**+ New to-do**) or open the To-dos page (**View all**).
 - **Search:** click it before typing for quick links (Customers, Team, Shifts and Account settings). Then type and
   the matches drop down under the box, grouped:
   - **Customers** (name, email, phone or customer number) and **Properties** (street, property name or ZIP);
@@ -26,6 +28,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   - **Price list** services by name.
   - **People** by name, **Fleet** assets by name, make, model, plate or VIN, and **Repair orders** by number
     (**RO 12**) or title. Opening a repair order shows it on the Repair Orders page, even if it's completed.
+  - **To-dos** you can see, by title or location (a repeating one shows once).
   - **Pages** you can open, by name.
 
   Customers, properties, invoices, payments and the price list only show for people with Customers & billing
@@ -33,7 +36,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
 - **Notifications bell:** the red number is unread items. Click it to see your new notifications; click one to
   open what it's about (it's marked read). **Mark all as read** clears them; **View all** opens the full list.
 - **+ New:** everything you can add, in columns like Homeworks: **Team & Resources** (Employee, Time off request,
-  Item & service, Equipment), **Finance** (Invoice), **Events** (Repair order) and **Customer** (Customer,
+  Item & service, Equipment), **Finance** (Invoice), **Events** (To-do, Repair order) and **Customer** (Customer,
   Property). Each opens its page with the add form showing; you only see what your access allows.
 - **Your initials:** My profile, Company Wiki, Notification settings, Security, All settings, Help, **Back to the
   real company** (in the test company) and **Sign out**.
@@ -50,9 +53,9 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   straight away. **Company Wiki**, **Settings**, **Help** and light or dark mode are at the bottom. The top bar's menu button widens
   the menu to list every page under its group, with your company logo on top (click it again to narrow it);
   Crewdesk remembers your choice on that computer.
-- **Operations:** **Customers** (Customers, Properties), **Field** (Property Measure, Spray Mix Calculator),
-  **Fleet** (Assets, Repair Orders, Inspections) and **Reports** (managers). Scheduling, billing and messages
-  will be added here.
+- **Operations:** **Customers** (Customers, Properties), **To-dos**, **Billing** (Invoices, Price list), **Field**
+  (Property Measure, Spray Mix Calculator), **Fleet** (Assets, Repair Orders, Inspections) and **Reports**
+  (managers). Scheduling and customer messages will be added here.
 - **Team:** **Dashboard** (managers), **People** (Team, Shifts, Time Clock, Attendance, Time Off, Reviews &
   Discipline, Training, Documents, Onboarding, Hiring), **Pay** (Payroll, Accounting, Pay & Tax Forms) and
   **Reports** (managers).
@@ -330,6 +333,40 @@ A separate company, named after yours with "(Test)", for trying things out witho
   preferences as your real books. This button only exists in the test company and is refused anywhere else.
 - **Starting over:** the owner can **Delete test company** (Settings → Company Info); everything in it goes, and
   the real company isn't affected. Creating it again starts fresh.
+
+## To-dos
+
+To-dos are jobs for the office or the crew, like Homeworks' to-dos: "call the HOA about the gate code", "fix
+the sprinkler head at Jane's", "fuel up the trucks every Monday". Open them from **To-dos** in the Operations menu,
+the to-do button in the top bar, **+ New → To-do**, or the **To-dos** box on a customer's or property's page.
+
+- **Adding one** (**Add to-do**), laid out like Homeworks:
+  - **To-do title or description** (required).
+  - **Customer:** pick a customer and one of their properties (people with Customers & billing access), and/or
+    type a **Location** (the shop, a supplier, any address). Pick a **Color** to tell kinds of to-dos apart.
+  - **Scheduling:** **Repeats** (single to-do, every day, every weekday, every week, every 2 weeks or every
+    month), the **Date** (or first date and **Repeat until**, up to a year ahead), **More than one day** (a last
+    day), **Set a time** (start and optional end), and **Budgeted hours**.
+  - **For:** tick the people it's for (managers). Nobody ticked means it's for nobody in particular; managers see
+    it on the To-dos page. Without To-dos manager access you make to-dos for yourself.
+  - **Notes** (optional).
+- **Who sees what:** you see the to-dos that are for you and the ones you made. Managers (the **To-dos** area on
+  the Permissions page) see everyone's and can give to-dos to anyone. People a to-do is for get a notification
+  when it's given to them, and a reminder the morning it starts (turn these off under Notification settings →
+  To-dos).
+- **The To-dos page** lists them under **Overdue**, **Today**, **Tomorrow** and each later day, with how many
+  and the budgeted hours for each day. Filters: **Show** (To do or Done), **For** (managers: everyone, me,
+  nobody assigned, or one person), **Through** (the next 2 weeks, month, 3 months or everything) and **Search**.
+- **Ticking off:** tick the box by a to-do (here, in the top bar's list, or on the phone). Untick it to undo.
+  Done ones move to **Show: Done**, with who did it and when.
+- **Opening one** shows the notes, the property's gate code, who it's for, who made it and when it was done.
+  Whoever made it, or a manager, can **Edit** or **Delete** it. For a repeating to-do you choose **just this one**
+  or **this one and the later ones** that aren't done (moving the date moves the later ones by the same number of
+  days).
+- **Repeating to-dos** are made up front, one per date (↻ marks them). A customer's or property's page and search
+  show each series once, with how many more are coming.
+- **Your page:** the **My Tasks** box lists your to-dos for the next week, along with repair orders and
+  onboarding steps.
 
 ## Spray Mix Calculator
 
@@ -690,4 +727,6 @@ automatically.
 
 Location is required to use the app (it's recorded at clock in/out and every 5 minutes while
 clocked in with the app open). Clock in and out, schedule and open shifts, time off, assigned vehicles, meter readings, fuel (with receipt photos),
-inspections, issue reports, repair orders, training, onboarding tasks and signing documents.
+inspections, issue reports, repair orders, to-dos, training, onboarding tasks and signing documents.
+- **To-dos** (Tasks tab): yours for the next week with **Done**, the customer, the address (tap it for
+  directions), gate code and notes. **Quick add** makes one for yourself for today or tomorrow.

@@ -2,11 +2,12 @@ import type { FastifyPluginAsync } from "fastify";
 import { and, asc, desc, eq, ilike, inArray, not, or, sql } from "drizzle-orm";
 import { PAYMENT_METHOD_LABELS, customerName, formatAddress, hasRole, isInactive, type PaymentMethod } from "@crewdesk/shared";
 import { db } from "../db";
-import { assets, customers, employees, invoicePayments, invoices, properties, serviceTypes, workOrders } from "../db/schema";
+import { assets, customers, employees, invoicePayments, invoices, properties, serviceTypes, todos, workOrders } from "../db/schema";
 import { authenticate, roleIn } from "../lib/auth";
+import { todoVisibility } from "./todos";
 
 export interface SearchHit {
-  kind: "customer" | "property" | "invoice" | "payment" | "service" | "employee" | "asset" | "workOrder";
+  kind: "customer" | "property" | "invoice" | "payment" | "service" | "employee" | "asset" | "workOrder" | "todo";
   id: string; title: string; sub: string | null; href: string;
 }
 
@@ -15,8 +16,8 @@ const money = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { min
 /**
  * The top bar's search (Ctrl+K). For people with Customers & billing access: customers, properties,
  * invoices (by number or PO), payments (by check or reference number) and price list services. For
- * everyone: employees, fleet assets and repair orders (by number or title). Each group is capped so
- * the list stays short.
+ * everyone: employees, fleet assets, repair orders (by number or title) and the to-dos they can see.
+ * Each group is capped so the list stays short.
  */
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
@@ -107,6 +108,18 @@ const routes: FastifyPluginAsync = async (app) => {
       .where(and(eq(workOrders.companyId, companyId), or(...woMatch)))
       .orderBy(sql`${workOrders.status} in ('completed', 'cancelled')`, desc(workOrders.createdAt)).limit(5);
     for (const w of wos) out.push({ kind: "workOrder", id: w.id, title: `#${w.number} ${w.title}`, sub: [w.assetName, w.status.replace(/_/g, " ")].join(" · "), href: `/work-orders?highlight=${w.id}` });
+
+    // A repeating to-do shows once (its next one that isn't done).
+    const tds = await db.select({ id: todos.id, title: todos.title, date: todos.date, doneAt: todos.doneAt, location: todos.location, seriesId: todos.seriesId })
+      .from(todos).where(and(eq(todos.companyId, companyId), todoVisibility(req), or(ilike(todos.title, like), ilike(todos.location, like))))
+      .orderBy(sql`${todos.doneAt} is not null`, asc(todos.date)).limit(40);
+    const seenSeries = new Set<string>();
+    const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+    for (const t of tds) {
+      if (t.seriesId && (seenSeries.has(t.seriesId) || !seenSeries.add(t.seriesId))) continue;
+      out.push({ kind: "todo", id: t.id, title: t.title, sub: [day(t.date), t.seriesId ? "repeats" : null, t.location, t.doneAt ? "done" : null].filter(Boolean).join(" · "), href: `/todos?open=${t.id}` });
+      if (out.filter((h) => h.kind === "todo").length >= 5) break;
+    }
 
     return { results: out };
   });
