@@ -17,7 +17,7 @@ export function SettingsTabs() {
       {tab("/settings/company-info", "Company Info")}
       {can("owner", "company") && tab("/settings/company", "Layout Editor")}
       {(me?.user.role === "owner" || me?.access?.managesPermissions) && tab("/settings/permissions", "Permissions")}
-      {can("admin", "customers") && tab("/settings/customers", "Customers")}
+      {can("admin", "customers") && tab("/settings/customers", "Customers & billing")}
       {can("admin", "payroll") && tab("/settings/integrations", "Integrations")}
     </div>
   );

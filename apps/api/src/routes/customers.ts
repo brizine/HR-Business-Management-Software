@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { and, arrayContains, arrayOverlaps, asc, desc, eq, ilike, inArray, isNull, not, or, sql, type SQL } from "drizzle-orm";
 import { cancelSchema, customerName, customerSchema, customerUpdateSchema, lawnTotal } from "@crewdesk/shared";
 import { db } from "../db";
-import { cancellationReasons, cancellations, customerContacts, customers, properties, propertyAssignments } from "../db/schema";
+import { cancellationReasons, cancellations, customerContacts, customers, invoices, properties, propertyAssignments } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
@@ -176,7 +176,12 @@ const routes: FastifyPluginAsync = async (app) => {
     const c = await customerInCompany(db, companyId, req.params.id);
     const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(propertyAssignments).where(eq(propertyAssignments.customerId, c.id));
     if (n > 0 && c.status !== "lead" && !c.sample) throw new HttpError(409, "This customer has property history; cancel them instead");
-    await db.delete(customers).where(eq(customers.id, c.id));
+    const [{ inv }] = await db.select({ inv: sql<number>`count(*)::int` }).from(invoices).where(eq(invoices.customerId, c.id));
+    if (inv > 0 && !c.sample) throw new HttpError(409, "This customer has invoices; cancel them instead");
+    await db.transaction(async (tx) => {
+      await tx.delete(invoices).where(eq(invoices.customerId, c.id));
+      await tx.delete(customers).where(eq(customers.id, c.id));
+    });
     return { ok: true };
   });
 };

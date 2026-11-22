@@ -1,0 +1,141 @@
+"use client";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { use, useEffect, useState } from "react";
+import { PAYMENT_METHOD_LABELS, formatMoney, type PaymentMethod } from "@crewdesk/shared";
+import { API_URL, api, fmtDate, fmtDateTime } from "@/lib/api";
+import { useAction, useApi } from "@/lib/hooks";
+import { ErrorBox, PageHead } from "@/components/ui";
+import { InvoiceFields, InvoiceStatus, PaymentForm, SendPanel, invoiceBody, invoiceFormValue } from "@/components/invoices";
+
+export default function InvoiceDetail({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const router = useRouter();
+  const invoice = useApi<any>(`/invoices/${id}`);
+  const [panel, setPanel] = useState<"send" | "pay" | "edit" | "void" | null>(null);
+  const action = useAction();
+  // "Save and send" on the new-invoice page lands here with the send panel open.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("send") === "1") { setPanel("send"); url.searchParams.delete("send"); window.history.replaceState(window.history.state, "", url.pathname); }
+  }, []);
+  const inv = invoice.data;
+  if (invoice.error) return <><PageHead title="Invoice" /><ErrorBox error={invoice.error} /></>;
+  if (!inv) return <PageHead title="Invoice" sub="Loading…" />;
+  const done = () => { setPanel(null); invoice.reload(); };
+  const editable = inv.status !== "void" && inv.paidCents === 0;
+  const title = inv.number ? `Invoice ${inv.number}` : "Draft invoice";
+
+  return (
+    <>
+      <PageHead title={title} before={<Link className="btn" href="/invoices" aria-label="Back to invoices">←</Link>}
+        sub={<><Link href={`/customers/${inv.customer.id}`}>{inv.customer.name}</Link> · <InvoiceStatus status={inv.status} overdue={inv.overdue} />{inv.needsMailing && <> · <span className="badge">to mail</span></>}</>}>
+        {inv.status !== "void" && <button className="btn primary" onClick={() => setPanel(panel === "send" ? null : "send")}>{inv.number ? "Send again" : "Send"}</button>}
+        {(inv.status === "sent" || inv.status === "partial") && <button className="btn" onClick={() => setPanel(panel === "pay" ? null : "pay")}>Record payment</button>}
+        <a className="btn" href={`${API_URL}/invoices/${id}/pdf`} target="_blank" rel="noopener noreferrer">PDF</a>
+        {editable && <button className="btn" onClick={() => setPanel(panel === "edit" ? null : "edit")}>Edit</button>}
+        {inv.status === "draft" && <button className="btn danger" disabled={action.busy} onClick={() => confirm("Delete this draft?") && action.run(async () => { await api(`/invoices/${id}`, { method: "DELETE" }); router.push("/invoices"); })}>Delete</button>}
+        {(inv.status === "sent" || inv.status === "partial") && inv.paidCents === 0 && <button className="btn danger" onClick={() => setPanel(panel === "void" ? null : "void")}>Void</button>}
+      </PageHead>
+      <ErrorBox error={action.error} />
+      {panel === "send" && <SendPanel invoice={inv} onDone={done} onClose={() => setPanel(null)} />}
+      {panel === "pay" && <PaymentForm invoice={inv} onDone={done} onClose={() => setPanel(null)} />}
+      {panel === "void" && <VoidForm id={id} onDone={done} onClose={() => setPanel(null)} />}
+      {panel === "edit" ? <EditInvoice invoice={inv} onDone={done} /> : (
+        <>
+          <div className="card">
+            <div className="money-box">
+              <div><div className="v">{formatMoney(inv.totalCents)}</div><div className="l">Total</div></div>
+              <div><div className="v">{formatMoney(inv.paidCents)}</div><div className="l">Paid</div></div>
+              <div><div className="v" style={{ color: inv.overdue ? "var(--bad)" : undefined }}>{inv.status === "void" ? "—" : formatMoney(inv.balanceCents)}</div><div className="l">Balance{inv.overdue ? " (overdue)" : ""}</div></div>
+              <div><div className="v" style={{ fontSize: 16 }}>{fmtDate(inv.dueDate)}</div><div className="l">Due</div></div>
+            </div>
+          </div>
+          <div className="grid cols-2">
+            <div className="card">
+              <h2 style={{ fontSize: 16, marginTop: 0 }}>Details</h2>
+              <dl className="facts">
+                <dt>Bill to</dt><dd><strong>{inv.customer.name}</strong> <span className="muted">#{inv.customer.number}</span>{inv.customer.billTo.map((l: string) => <div key={l}>{l}</div>)}</dd>
+                <dt>Service address</dt><dd>{inv.property ? <Link href={`/properties/${inv.property.id}`}>{inv.property.address}</Link> : "—"}</dd>
+                <dt>Invoice date</dt><dd>{fmtDate(inv.issueDate)}</dd>
+                {inv.poNumber && <><dt>PO number</dt><dd>{inv.poNumber}</dd></>}
+                {inv.voidReason && <><dt>Voided</dt><dd>{fmtDateTime(inv.voidedAt)}: {inv.voidReason}</dd></>}
+              </dl>
+            </div>
+            <div className="card">
+              <h2 style={{ fontSize: 16, marginTop: 0 }}>Delivery</h2>
+              <ul className="plain-list">
+                {!inv.number && <li className="muted">Not sent yet. Sending numbers it.</li>}
+                {inv.emailedAt && <li>Emailed {fmtDateTime(inv.emailedAt)} to {inv.emailedTo}</li>}
+                {inv.needsMailing && <li>Waiting to be printed and mailed (<Link href="/invoices?status=mail">To mail</Link>)</li>}
+                {inv.mailedAt && <li>Mailed {fmtDate(inv.mailedAt)}</li>}
+                {inv.number && !inv.emailedAt && !inv.needsMailing && !inv.mailedAt && <li className="muted">Numbered, not delivered.</li>}
+              </ul>
+            </div>
+          </div>
+          <div className="card tablewrap">
+            <table>
+              <thead><tr><th>Description</th><th style={{ textAlign: "right" }}>Qty</th><th style={{ textAlign: "right" }}>Price</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
+              <tbody>
+                {inv.lines.map((l: any) => (
+                  <tr key={l.id}><td>{l.description}<div className="muted" style={{ fontSize: 12 }}>Income {l.incomeAccountCode}</div></td><td style={{ textAlign: "right" }}>{l.quantity}</td><td style={{ textAlign: "right" }}>{formatMoney(l.unitPriceCents)}</td><td style={{ textAlign: "right" }}>{formatMoney(l.amountCents)}</td></tr>
+                ))}
+                <tr><td colSpan={3} style={{ textAlign: "right" }}>Subtotal</td><td style={{ textAlign: "right" }}>{formatMoney(inv.subtotalCents)}</td></tr>
+                {inv.discountCents > 0 && <tr><td colSpan={3} style={{ textAlign: "right" }}>Discount</td><td style={{ textAlign: "right" }}>-{formatMoney(inv.discountCents)}</td></tr>}
+                <tr><td colSpan={3} style={{ textAlign: "right" }}><strong>Total</strong></td><td style={{ textAlign: "right" }}><strong>{formatMoney(inv.totalCents)}</strong></td></tr>
+              </tbody>
+            </table>
+            {inv.notes && <p style={{ whiteSpace: "pre-wrap" }}>{inv.notes}</p>}
+          </div>
+          <div className="card">
+            <h2 style={{ fontSize: 16, marginTop: 0 }}>Payments</h2>
+            {inv.payments.length ? (
+              <ul className="plain-list">
+                {inv.payments.map((p: any) => (
+                  <li key={p.id} className="row" style={{ justifyContent: "space-between", opacity: p.status === "void" ? 0.55 : 1 }}>
+                    <span><strong>{formatMoney(p.amountCents)}</strong> {PAYMENT_METHOD_LABELS[p.method as PaymentMethod]}{p.reference ? ` #${p.reference}` : ""} <span className="muted">· {fmtDate(p.receivedOn)}{p.note ? ` · ${p.note}` : ""}{p.status === "void" ? " · void" : ""}</span></span>
+                    {p.status === "completed" && (p.method === "cash" || p.method === "check" || p.method === "other") && (
+                      <button className="btn" disabled={action.busy} onClick={() => confirm("Void this payment? The invoice goes back to owing it.") && action.run(async () => { await api(`/invoices/${id}/payments/${p.id}/void`, { method: "POST" }); invoice.reload(); })}>Void payment</button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="muted" style={{ margin: 0 }}>No payments yet.</p>}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function EditInvoice({ invoice, onDone }: { invoice: any; onDone: () => void }) {
+  const [value, setValue] = useState(invoiceFormValue(invoice));
+  const { busy, error, run, setError } = useAction();
+  return (
+    <form className="card stack" onSubmit={(e) => {
+      e.preventDefault();
+      const { body, error: problem } = invoiceBody(value);
+      if (!body) return setError(problem ?? "Check the invoice");
+      run(async () => { await api(`/invoices/${invoice.id}`, { method: "PUT", body }); onDone(); });
+    }}>
+      {invoice.number && <p className="muted" style={{ margin: 0 }}>This invoice was already sent. After saving, use Send again so the customer gets the corrected copy.</p>}
+      <InvoiceFields value={value} onChange={setValue} lockCustomer={!!invoice.number} />
+      <ErrorBox error={error} />
+      <div className="row"><button className="btn primary" disabled={busy}>Save</button><button type="button" className="btn" onClick={onDone}>Cancel</button></div>
+    </form>
+  );
+}
+
+function VoidForm({ id, onDone, onClose }: { id: string; onDone: () => void; onClose: () => void }) {
+  const [reason, setReason] = useState("");
+  const { busy, error, run } = useAction();
+  return (
+    <form className="card stack" onSubmit={(e) => { e.preventDefault(); run(async () => { await api(`/invoices/${id}/void`, { body: { reason } }); onDone(); }); }}>
+      <h2 style={{ fontSize: 16, margin: 0 }}>Void this invoice</h2>
+      <p className="muted" style={{ margin: 0 }}>It stays on record, marked void, and no longer counts as owed.</p>
+      <label>Reason<input required value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Duplicate, wrong customer…" /></label>
+      <ErrorBox error={error} />
+      <div className="row"><button className="btn danger" disabled={busy}>Void invoice</button><button type="button" className="btn" onClick={onClose}>Keep it</button></div>
+    </form>
+  );
+}

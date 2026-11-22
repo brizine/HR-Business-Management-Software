@@ -14,8 +14,8 @@ export default function CustomerSettings() {
   return (
     <>
       <SettingsTabs />
-      <PageHead title="Customers" sub="Tags and cancellation reasons used on customers and properties." />
-      {can("admin", "customers") ? <><TagsCard /><ReasonsCard /></> : <p className="muted">Only admins in Customers &amp; billing can change these.</p>}
+      <PageHead title="Customers & billing" sub="Invoice numbering and terms, tags and cancellation reasons." />
+      {can("admin", "customers") ? <><BillingCard /><TagsCard /><ReasonsCard /></> : <p className="muted">Only admins in Customers &amp; billing can change these.</p>}
     </>
   );
 }
@@ -156,6 +156,37 @@ function ReasonForm({ reason, onDone }: { reason: any | null; onDone: () => void
       </div>
       <ErrorBox error={error} />
       <div className="row"><button className="btn primary" disabled={busy}>Save</button><button type="button" className="btn" onClick={onDone}>Cancel</button></div>
+    </form>
+  );
+}
+
+/** Invoice numbering, terms, the "payable to" name and the printed footer. */
+function BillingCard() {
+  const saved = useApi<{ nextInvoiceNumber: number; termsDays: number; footer: string; payableTo: string }>("/invoices/settings");
+  const { busy, error, run } = useAction();
+  const [done, setDone] = useState(false);
+  if (!saved.data) return null;
+  const s = saved.data;
+  return (
+    <form className="card stack" onChange={() => setDone(false)} onSubmit={(e) => {
+      e.preventDefault();
+      const f = new FormData(e.currentTarget);
+      const body = { nextInvoiceNumber: Number(f.get("next")), termsDays: Number(f.get("terms")), footer: String(f.get("footer") ?? ""), payableTo: String(f.get("payable") ?? "") };
+      run(async () => { saved.setData(await api("/invoices/settings", { method: "PUT", body })); setDone(true); });
+    }}>
+      <h2 style={{ fontSize: 16, margin: 0 }}>Invoices</h2>
+      <div className="formgrid">
+        <label>Next invoice number<input name="next" type="number" min={1} defaultValue={s.nextInvoiceNumber} /><span className="muted" style={{ fontSize: 12 }}>At switch-over, set this to follow Service Autopilot's last number.</span></label>
+        <label>Usual terms
+          <select name="terms" defaultValue={String(s.termsDays)}>
+            {[0, 7, 10, 15, 30].map((d) => <option key={d} value={d}>{d === 0 ? "Due on receipt" : `Net ${d} (due in ${d} days)`}</option>)}
+          </select>
+        </label>
+        <label>Make checks payable to<input name="payable" defaultValue={s.payableTo} placeholder="Your company name" /></label>
+      </div>
+      <label>Footer on every invoice<textarea name="footer" rows={2} defaultValue={s.footer} placeholder="Thank you! All program applications are guaranteed…" /></label>
+      <ErrorBox error={error} />
+      <div className="row"><button className="btn primary" disabled={busy}>Save</button>{done && <span className="muted">Saved.</span>}</div>
     </form>
   );
 }

@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
+import type { BillingSettings, Bracket, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -33,6 +33,8 @@ const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull(
 export const companies = pgTable("companies", {
   id: id(),
   name: text("name").notNull(),
+  /** Invoice numbering, terms and the printed footer (Settings → Billing); defaults apply when unset. */
+  billing: jsonb("billing").$type<Partial<BillingSettings>>(),
   /** Set on a test company: the real company it's a sandbox for (sample customers, test mode payments). */
   testOfCompanyId: uuid("test_of_company_id").references((): AnyPgColumn => companies.id, { onDelete: "cascade" }),
   timezone: text("timezone").notNull().default("America/Chicago"),
@@ -1320,4 +1322,113 @@ export const tagEvents = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("tag_events_company_idx").on(t.companyId, t.createdAt)],
+);
+
+/* ───────────── Billing: price list, invoices, payments (customer system, Phase 1) ───────────── */
+
+/** The services price list: flat, per 1,000 sq ft (with a minimum) or by lawn-size bracket. */
+export const serviceTypes = pgTable(
+  "service_types",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    description: text("description"),
+    /** "flat", "per_thousand" or "bracket". */
+    pricing: text("pricing").notNull().default("flat"),
+    priceCents: integer("price_cents").notNull().default(0),
+    minimumCents: integer("minimum_cents").notNull().default(0),
+    brackets: jsonb("brackets").$type<Bracket[]>().notNull().default([]),
+    /** The income account's code in the books (4000, 4100, 4200…), so it works in real and test books alike. */
+    incomeAccountCode: text("income_account_code").notNull().default("4000"),
+    active: boolean("active").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("service_types_company_idx").on(t.companyId, t.sortOrder)],
+);
+
+export const invoices = pgTable(
+  "invoices",
+  {
+    id: id(),
+    companyId: companyId(),
+    /** Given when the invoice is first sent (drafts have none). */
+    number: integer("number"),
+    customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "restrict" }),
+    propertyId: uuid("property_id").references(() => properties.id, { onDelete: "set null" }),
+    /** "draft", "sent", "partial", "paid" or "void". */
+    status: text("status").notNull().default("draft"),
+    issueDate: date("issue_date").notNull(),
+    dueDate: date("due_date").notNull(),
+    poNumber: text("po_number"),
+    notes: text("notes"),
+    discountKind: text("discount_kind").notNull().default("none"),
+    discountValue: doublePrecision("discount_value").notNull().default(0),
+    subtotalCents: integer("subtotal_cents").notNull().default(0),
+    discountCents: integer("discount_cents").notNull().default(0),
+    totalCents: integer("total_cents").notNull().default(0),
+    paidCents: integer("paid_cents").notNull().default(0),
+    /** Waiting to be printed and mailed. */
+    needsMailing: boolean("needs_mailing").notNull().default(false),
+    emailedAt: timestamp("emailed_at", { withTimezone: true }),
+    emailedTo: text("emailed_to"),
+    mailedAt: timestamp("mailed_at", { withTimezone: true }),
+    /** For the online pay link (Phase 1 portal). */
+    payToken: text("pay_token"),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidReason: text("void_reason"),
+    bigcapitalInvoiceId: text("bigcapital_invoice_id"),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("invoices_company_number_idx").on(t.companyId, t.number),
+    index("invoices_company_status_idx").on(t.companyId, t.status),
+    index("invoices_customer_idx").on(t.customerId),
+    uniqueIndex("invoices_pay_token_idx").on(t.payToken),
+  ],
+);
+
+export const invoiceLines = pgTable(
+  "invoice_lines",
+  {
+    id: id(),
+    invoiceId: uuid("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+    serviceTypeId: uuid("service_type_id").references(() => serviceTypes.id, { onDelete: "set null" }),
+    description: text("description").notNull(),
+    quantity: doublePrecision("quantity").notNull().default(1),
+    unitPriceCents: integer("unit_price_cents").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    incomeAccountCode: text("income_account_code").notNull().default("4000"),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("invoice_lines_invoice_idx").on(t.invoiceId)],
+);
+
+/** Payments against an invoice: cash and checks recorded by hand now; card and bank through the portal. */
+export const invoicePayments = pgTable(
+  "invoice_payments",
+  {
+    id: id(),
+    companyId: companyId(),
+    invoiceId: uuid("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "restrict" }),
+    amountCents: integer("amount_cents").notNull(),
+    /** "cash", "check", "card", "ach" or "other". */
+    method: text("method").notNull(),
+    receivedOn: date("received_on").notNull(),
+    reference: text("reference"),
+    note: text("note"),
+    /** "completed" or "void". */
+    status: text("status").notNull().default("completed"),
+    stripePaymentId: text("stripe_payment_id"),
+    feeCents: integer("fee_cents"),
+    bigcapitalPaymentId: text("bigcapital_payment_id"),
+    recordedById: uuid("recorded_by_id").references(() => employees.id, { onDelete: "set null" }),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("invoice_payments_invoice_idx").on(t.invoiceId), index("invoice_payments_company_idx").on(t.companyId, t.receivedOn)],
 );

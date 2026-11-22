@@ -3,7 +3,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { bulkTagSchema, cancelReasonSchema, tagSchema } from "@crewdesk/shared";
 import { db } from "../db";
-import { cancellationReasons, crmTags, customers, properties, tagEvents } from "../db/schema";
+import { cancellationReasons, crmTags, customers, invoices, properties, tagEvents } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
@@ -139,6 +139,9 @@ const routes: FastifyPluginAsync = async (app) => {
   app.delete("/sample-customers", admin, async (req) => {
     const { companyId } = req.user;
     const removed = await db.transaction(async (tx) => {
+      // Their invoices (and payments) go first; invoices keep customers from being deleted otherwise.
+      await tx.delete(invoices).where(and(eq(invoices.companyId, companyId), inArray(invoices.customerId,
+        tx.select({ id: customers.id }).from(customers).where(and(eq(customers.companyId, companyId), eq(customers.sample, true))))));
       const props = await tx.delete(properties).where(and(eq(properties.companyId, companyId), eq(properties.sample, true))).returning({ id: properties.id });
       const custs = await tx.delete(customers).where(and(eq(customers.companyId, companyId), eq(customers.sample, true))).returning({ id: customers.id });
       return { customers: custs.length, properties: props.length };

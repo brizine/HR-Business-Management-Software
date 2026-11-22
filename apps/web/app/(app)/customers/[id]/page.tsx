@@ -7,6 +7,7 @@ import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
+import { CustomerBilling } from "@/components/invoices";
 import { CancelForm, CustomerFields, PropertyFields, TagChips, customerBody, customerFormValue, propertyBody, propertyFormValue, useTags } from "@/components/customers";
 
 export default function CustomerDetail({ params }: { params: Promise<{ id: string }> }) {
@@ -94,6 +95,8 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
           </>
         )}
       </div>
+
+      <CustomerBilling customerId={id} />
 
       {c.cancellations.length > 0 && (
         <div className="card">

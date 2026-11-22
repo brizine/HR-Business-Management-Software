@@ -146,6 +146,42 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
 - **Deleting:** admins can delete leads, sample customers and customers or properties with no history; anyone
   else is cancelled instead, so the history is kept.
 
+### Billing: price list and invoices
+
+Operations → **Billing** has **Invoices** and the **Price list** (managers in Customers & billing; admins change prices).
+
+- **Price list:** each service is priced one of three ways: a **flat price**, **per 1,000 sq ft** (with an optional
+  minimum charge), or **by lawn size** (brackets such as "up to 8,000 sq ft $75, larger $95"). Each service posts to
+  an income account (4000 Lawn Treatment Programs, 4100 Pest Control, 4200 One-Time Lawn Services, 4950 Other
+  Income). Use ↑ ↓ to set the order; **Retired** services stay on past invoices but aren't offered for new ones.
+- **New invoice** (Billing → Invoices, the top bar's **+ New**, or **New invoice** on a customer's page): choose the
+  customer and service address, then add lines. Picking a service fills in its price from the property's lawn size;
+  you can change any description, quantity or price, or add a custom line. Add a discount (amount or percent) and
+  notes printed on the invoice. A PO number is required for customers marked as needing one. Leave the due date
+  blank to use your usual terms.
+- **Drafts and numbers:** an invoice is a draft until it's sent; it gets its number the first time it's sent, so
+  drafts never use up numbers. Drafts can be deleted.
+- **Send:** choose **Email** (the PDF goes to the customer's email, or another address you type, and to any contacts
+  marked "copy on invoices"; replies go to the company email in Company Info) and/or **Paper** (adds it to the **To
+  mail** list). Text delivery comes in Phase 2. **Send again** re-sends a corrected or lost invoice.
+- **Paper invoices:** Billing → Invoices → **To mail** lists what's waiting, in ZIP order. **Print selected (PDF)**
+  makes one PDF with a cover sheet; each invoice is laid out for a #10 double-window envelope (your return address in
+  the top window, the customer's billing address in the bottom one) with a tear-off stub to send back with a check.
+  After mailing, click **Mark mailed**. Reprints of mailed invoices say "Copy."
+- **PDF:** the **PDF** button on an invoice opens it to print or save.
+- **Payments:** **Record payment** for a check (with its number), cash or other payment; the amount starts at what's
+  still owed. Part payments mark the invoice **Partly paid**; the rest marks it **Paid**. A payment entered by
+  mistake can be voided, which puts the amount back as owed. Card and bank payments come through the customer portal.
+- **Editing and voiding:** a draft, or a sent invoice with no payments, can be edited (send it again afterwards).
+  **Void** keeps a sent invoice on record with a reason and stops it counting as owed; void its payments first.
+- **Statuses:** Draft, Unpaid, Overdue (past the due date), Partly paid, Paid, Void. The tabs (Open, Overdue, Drafts,
+  To mail, Paid, Void, All) and search (invoice number, customer, address, PO) find them; the total due shows at the top.
+- **Customer page:** the **Billing** box shows past due, outstanding, paid this year and drafts, with the customer's
+  invoices listed below.
+- **Settings → Customers & billing** (admins): the **next invoice number** (at switch-over, set it to follow Service
+  Autopilot's last number), your usual **terms** (due on receipt, net 7/10/15/30), **make checks payable to**, and the
+  **footer** printed on every invoice.
+
 ### Test company
 
 A separate company, named after yours with "(Test)", for trying things out without touching real customers or books.

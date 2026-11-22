@@ -13,6 +13,13 @@ export interface EmailMessage {
   text: string;
   html: string;
   headers?: Record<string, string>;
+  /** Files to attach (e.g. an invoice PDF). */
+  attachments?: { filename: string; content: Buffer; contentType: string }[];
+  /** Where replies go (e.g. the company's own email, for invoices). */
+  replyTo?: string;
+  /** Shown as the sender's name, e.g. the company name (the address stays EMAIL_FROM's). */
+  fromName?: string;
+  cc?: string[];
 }
 
 export interface EmailTransport {
@@ -28,7 +35,11 @@ class SmtpEmail implements EmailTransport {
   async send(msg: EmailMessage) {
     // Test-company sign-ins use ".invalid" addresses, which can never receive mail; don't try.
     if (isUndeliverable(msg.to)) return;
-    await this.transporter.sendMail({ from: process.env.EMAIL_FROM ?? "Crewdesk <no-reply@example.com>", ...msg });
+    const { fromName, cc, ...rest } = msg;
+    const configured = process.env.EMAIL_FROM ?? "Crewdesk <no-reply@example.com>";
+    const address = configured.match(/<([^>]+)>/)?.[1] ?? configured;
+    const from = fromName ? { name: fromName, address } : configured;
+    await this.transporter.sendMail({ ...rest, from, ...(cc?.length ? { cc: cc.filter((a) => !isUndeliverable(a)) } : {}) });
   }
 }
 
