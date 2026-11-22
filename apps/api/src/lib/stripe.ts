@@ -1,8 +1,9 @@
 import Stripe from "stripe";
-import { and, eq, isNotNull, lt } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { customerName, formatMoney } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, customers, invoicePayments, invoices } from "../db/schema";
+import { companies, customers, invoicePayments, invoices, paymentRefunds } from "../db/schema";
+import { localDate } from "./tz";
 import { decrypt, encrypt } from "./crypto";
 import { HttpError } from "./errors";
 import { companyToday } from "./payRates";
@@ -18,7 +19,12 @@ import { queueBillingSync, syncPayment } from "./billingSync";
  */
 
 const PURPOSE = "stripe-secret";
-export const WEBHOOK_EVENTS = ["payment_intent.succeeded", "payment_intent.processing", "payment_intent.payment_failed", "payment_intent.canceled"] as const;
+export const WEBHOOK_EVENTS = [
+  "payment_intent.succeeded", "payment_intent.processing", "payment_intent.payment_failed", "payment_intent.canceled",
+  "charge.refunded", "refund.created", "refund.updated", "refund.failed",
+] as const;
+/** Bumped when WEBHOOK_EVENTS changes; older webhooks are updated by updateWebhookEvents(). */
+export const WEBHOOK_EVENTS_VERSION = 2;
 
 /** Tests point the SDK at a pretend Stripe (STRIPE_API_HOST/PORT/PROTOCOL). */
 function client(secret: string) {
@@ -79,7 +85,7 @@ export async function connectStripe(companyId: string, publishableKey: string, s
     webhookSecret = made.secret ?? null;
   }
   await db.update(companies).set({
-    stripe: { publishableKey, mode: pm, webhookEndpointId, accountName, connectedAt: new Date().toISOString() },
+    stripe: { publishableKey, mode: pm, webhookEndpointId, accountName, connectedAt: new Date().toISOString(), webhookEvents: WEBHOOK_EVENTS_VERSION },
     stripeSecret: encrypt(secretKey, PURPOSE),
     stripeWebhookSecret: webhookSecret ? encrypt(webhookSecret, PURPOSE) : null,
   }).where(eq(companies.id, companyId));
@@ -220,6 +226,132 @@ export async function checkPendingStripePayments(now = new Date()) {
     .limit(500);
   for (const r of rows) {
     try { await recordPaymentIntent(r.companyId, r.pi!); } catch (e) { console.error(`Stripe check for ${r.pi} failed:`, (e as Error).message); }
+  }
+  return rows.length;
+}
+
+/* ── Refunds ── */
+
+/** Refund statuses that count as money going back to the customer (a failed or canceled refund doesn't). */
+const REFUNDING = ["pending", "requires_action", "succeeded"];
+export const REFUND_REASONS = ["requested_by_customer", "duplicate", "fraudulent"] as const;
+
+/**
+ * Makes Crewdesk's refunds for a card or bank payment match Stripe's (refunds made in Crewdesk or in
+ * Stripe's dashboard), then updates the invoice balance and the books, and emails the customer
+ * about each new refund. Safe to call more than once.
+ */
+export async function syncRefunds(companyId: string, paymentIntentId: string) {
+  const [p] = await db.select().from(invoicePayments).where(and(eq(invoicePayments.companyId, companyId), eq(invoicePayments.stripePaymentId, paymentIntentId)));
+  if (!p) return { ignored: true as const };
+  const { stripe } = await stripeFor(companyId);
+  const [co] = await db.select({ tz: companies.timezone }).from(companies).where(eq(companies.id, companyId));
+  for await (const r of stripe.refunds.list({ payment_intent: paymentIntentId, limit: 100 })) {
+    const status = r.status ?? "pending";
+    await db.insert(paymentRefunds).values({
+      companyId, paymentId: p.id, invoiceId: p.invoiceId, stripeRefundId: r.id, amountCents: r.amount, status, reason: r.reason ?? null,
+      note: r.metadata?.crewdeskNote ?? null, refundedOn: localDate(new Date(r.created * 1000), co?.tz ?? "America/Chicago"),
+    }).onConflictDoUpdate({ target: paymentRefunds.stripeRefundId, set: { amountCents: r.amount, status, reason: r.reason ?? null } });
+  }
+  const rows = await db.select().from(paymentRefunds).where(eq(paymentRefunds.paymentId, p.id));
+  const refunded = Math.min(p.amountCents, rows.filter((r) => REFUNDING.includes(r.status)).reduce((s, r) => s + r.amountCents, 0));
+  if (refunded !== p.refundedCents) {
+    await db.update(invoicePayments).set({ refundedCents: refunded }).where(eq(invoicePayments.id, p.id));
+    await refreshInvoice(db, p.invoiceId);
+    queueBillingSync(() => syncPayment(companyId, p.id));
+  }
+  for (const r of rows.filter((x) => !x.notifiedAt && (x.status === "succeeded" || x.status === "pending"))) {
+    // Claim it first, so two updates arriving together send one email.
+    const [claimed] = await db.update(paymentRefunds).set({ notifiedAt: new Date() }).where(and(eq(paymentRefunds.id, r.id), isNull(paymentRefunds.notifiedAt))).returning();
+    if (claimed) await sendRefundEmail(companyId, p, r.amountCents).catch((e) => console.error("Refund email failed:", (e as Error).message));
+  }
+  return { refundedCents: refunded };
+}
+
+/** Refunds part or all of a card or bank payment through Stripe (staff, from the invoice page). */
+export async function refundPayment(companyId: string, paymentId: string, o: { amountCents?: number; reason: (typeof REFUND_REASONS)[number]; note?: string | null; by: string }) {
+  const [p] = await db.select().from(invoicePayments).where(and(eq(invoicePayments.id, paymentId), eq(invoicePayments.companyId, companyId)));
+  if (!p) throw new HttpError(404, "Payment not found");
+  if (!p.stripePaymentId) throw new HttpError(400, "Only card and bank payments made online are refunded here. Void a cash or check payment instead");
+  if (p.status === "pending") throw new HttpError(400, "This bank payment hasn't cleared yet. Refund it once it clears (about 4 business days)");
+  if (p.status !== "completed") throw new HttpError(400, "Only completed payments can be refunded");
+  const left = p.amountCents - p.refundedCents;
+  if (left <= 0) throw new HttpError(400, "This payment is already fully refunded");
+  const amount = o.amountCents ?? left;
+  if (amount > left) throw new HttpError(400, `That's more than the ${formatMoney(left)} left to refund on this payment`);
+  if (amount < 1) throw new HttpError(400, "Enter an amount to refund");
+  const { stripe } = await stripeFor(companyId);
+  let refund: Stripe.Refund;
+  try {
+    refund = await stripe.refunds.create({
+      payment_intent: p.stripePaymentId, amount, reason: o.reason,
+      metadata: { crewdeskCompanyId: companyId, crewdeskPaymentId: p.id, ...(o.note ? { crewdeskNote: o.note.slice(0, 450) } : {}) },
+    }, { idempotencyKey: `refund-${p.id}-${p.refundedCents}-${amount}` });
+  } catch (e) {
+    throw new HttpError(400, `Stripe didn't make the refund: ${(e as Error).message}`);
+  }
+  const [co] = await db.select({ tz: companies.timezone }).from(companies).where(eq(companies.id, companyId));
+  await db.insert(paymentRefunds).values({
+    companyId, paymentId: p.id, invoiceId: p.invoiceId, stripeRefundId: refund.id, amountCents: refund.amount, status: refund.status ?? "pending",
+    reason: refund.reason ?? o.reason, note: o.note ?? null, createdById: o.by, refundedOn: localDate(new Date(refund.created * 1000), co?.tz ?? "America/Chicago"),
+  }).onConflictDoUpdate({ target: paymentRefunds.stripeRefundId, set: { createdById: o.by, note: o.note ?? null } });
+  await syncRefunds(companyId, p.stripePaymentId);
+  return { refundId: refund.id, status: refund.status, amountCents: refund.amount };
+}
+
+async function sendRefundEmail(companyId: string, p: typeof invoicePayments.$inferSelect, amountCents: number) {
+  const transport = emailTransport();
+  if (!transport) return;
+  const [row] = await db.select({ inv: invoices, cust: customers, co: companies }).from(invoices).innerJoin(customers, eq(customers.id, invoices.customerId))
+    .innerJoin(companies, eq(companies.id, invoices.companyId)).where(eq(invoices.id, p.invoiceId));
+  const to = row?.cust.email;
+  if (!row || !to) return;
+  const { inv, cust, co } = row;
+  const where = p.methodDetail ? ` to your ${p.methodDetail}` : p.method === "ach" ? " to your bank account" : " to your card";
+  const lines = [`Hello ${customerName(cust)},`, "", `We've refunded ${formatMoney(amountCents)}${where} for invoice ${inv.number}.`,
+    p.method === "ach" ? "Bank refunds usually arrive within 5 business days." : "Card refunds usually show up within 5 to 10 business days, depending on your bank.",
+    "", `Questions? Just reply to this email${co.phone ? ` or call ${co.phone}` : ""}.`, "", co.name];
+  await transport.send({
+    to, subject: `Refund of ${formatMoney(amountCents)} from ${co.name}`, text: lines.join("\n"), fromName: co.name, replyTo: co.email ?? undefined,
+    html: lines.map((l) => (l ? `<p>${l.replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[ch]!)}</p>` : "")).join(""),
+  });
+}
+
+/**
+ * Hourly: refunds made in Stripe in the last day, in case Stripe's update didn't arrive (one list
+ * call per connected company).
+ */
+export async function checkRecentRefunds(now = new Date()) {
+  const connected = await db.select({ id: companies.id }).from(companies).where(isNotNull(companies.stripeSecret));
+  let checked = 0;
+  for (const c of connected) {
+    try {
+      const { stripe } = await stripeFor(c.id);
+      const pis = new Set<string>();
+      for await (const r of stripe.refunds.list({ created: { gte: Math.floor(now.getTime() / 1000) - 26 * 3600 }, limit: 100 })) {
+        const pi = typeof r.payment_intent === "string" ? r.payment_intent : r.payment_intent?.id;
+        if (pi) pis.add(pi);
+      }
+      for (const pi of pis) { await syncRefunds(c.id, pi); checked++; }
+    } catch (e) {
+      console.error(`Stripe refund check failed for company ${c.id}:`, (e as Error).message);
+    }
+  }
+  return checked;
+}
+
+/** Webhooks made before refunds were handled: subscribe them to the refund events too. */
+export async function updateWebhookEvents() {
+  const rows = await db.select({ id: companies.id, stripe: companies.stripe }).from(companies)
+    .where(and(isNotNull(companies.stripeSecret), sql`${companies.stripe}->>'webhookEndpointId' is not null`, sql`coalesce((${companies.stripe}->>'webhookEvents')::int, 1) < ${WEBHOOK_EVENTS_VERSION}`));
+  for (const r of rows) {
+    try {
+      const { stripe } = await stripeFor(r.id);
+      await stripe.webhookEndpoints.update(r.stripe!.webhookEndpointId!, { enabled_events: [...WEBHOOK_EVENTS] });
+      await db.update(companies).set({ stripe: { ...r.stripe!, webhookEvents: WEBHOOK_EVENTS_VERSION } }).where(eq(companies.id, r.id));
+    } catch (e) {
+      console.error(`Couldn't update the Stripe webhook for company ${r.id}:`, (e as Error).message);
+    }
   }
   return rows.length;
 }

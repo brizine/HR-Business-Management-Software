@@ -34,7 +34,7 @@ export const companies = pgTable("companies", {
   id: id(),
   name: text("name").notNull(),
   /** Stripe connection (Settings → Integrations): publishable key, test or live, the webhook Crewdesk made. */
-  stripe: jsonb("stripe").$type<{ publishableKey: string; mode: "test" | "live"; webhookEndpointId?: string | null; accountName?: string | null; connectedAt?: string }>(),
+  stripe: jsonb("stripe").$type<{ publishableKey: string; mode: "test" | "live"; webhookEndpointId?: string | null; accountName?: string | null; connectedAt?: string; webhookEvents?: number }>(),
   /** Stripe secret key and webhook signing secret, encrypted. */
   stripeSecret: text("stripe_secret"),
   stripeWebhookSecret: text("stripe_webhook_secret"),
@@ -1435,6 +1435,8 @@ export const invoicePayments = pgTable(
     /** "Visa ·· 4242" or "Arvest checking ·· 6789". */
     methodDetail: text("method_detail"),
     feeCents: integer("fee_cents"),
+    /** Refunded so far (refunds pending or done); what counts toward the invoice is amount − refunded. */
+    refundedCents: integer("refunded_cents").notNull().default(0),
     bigcapitalPaymentId: text("bigcapital_payment_id"),
     recordedById: uuid("recorded_by_id").references(() => employees.id, { onDelete: "set null" }),
     voidedAt: timestamp("voided_at", { withTimezone: true }),
@@ -1463,6 +1465,32 @@ export const bigcapitalLinks = pgTable(
 );
 
 /** One-time sign-in codes (and links) for the customer portal. Only hashes are kept. */
+/** Refunds of card and bank payments, made in Crewdesk or in Stripe's dashboard (kept in step with Stripe). */
+export const paymentRefunds = pgTable(
+  "payment_refunds",
+  {
+    id: id(),
+    companyId: companyId(),
+    paymentId: uuid("payment_id").notNull().references(() => invoicePayments.id, { onDelete: "cascade" }),
+    invoiceId: uuid("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+    /** Stripe refund id (re_…). */
+    stripeRefundId: text("stripe_refund_id"),
+    amountCents: integer("amount_cents").notNull(),
+    /** Stripe's status: "pending", "requires_action", "succeeded", "failed" or "canceled". */
+    status: text("status").notNull(),
+    /** "requested_by_customer", "duplicate", "fraudulent" or another reason Stripe gives. */
+    reason: text("reason"),
+    note: text("note"),
+    refundedOn: date("refunded_on").notNull(),
+    /** Who refunded it in Crewdesk (empty when it was done in Stripe). */
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    /** When the customer was emailed about it. */
+    notifiedAt: timestamp("notified_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("payment_refunds_payment_idx").on(t.paymentId), uniqueIndex("payment_refunds_stripe_idx").on(t.stripeRefundId)],
+);
+
 export const portalCodes = pgTable(
   "portal_codes",
   {

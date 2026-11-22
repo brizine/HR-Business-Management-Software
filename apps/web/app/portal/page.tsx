@@ -129,7 +129,7 @@ function Home({ me, reload }: { me: Me; reload: () => void }) {
             {me.paymentHistory.map((p) => (
               <li key={p.id} className="pt-row static">
                 <span>{longDate(p.receivedOn)} · {methodText(p)}{p.invoiceNumber ? <span className="pt-muted"> · invoice {p.invoiceNumber}</span> : null}</span>
-                <span className="pt-right"><strong>{formatMoney(p.amountCents)}</strong>{p.status === "pending" && <span className="pt-muted block">clearing</span>}</span>
+                <span className="pt-right"><strong>{formatMoney(p.amountCents)}</strong>{p.status === "pending" && <span className="pt-muted block">clearing</span>}{(p.refundedCents ?? 0) > 0 && <span className="pt-muted block">{(p.refundedCents ?? 0) >= p.amountCents ? "refunded" : `${formatMoney(p.refundedCents!)} refunded`}</span>}</span>
               </li>
             ))}
           </ul>

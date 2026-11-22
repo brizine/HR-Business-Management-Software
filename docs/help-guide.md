@@ -172,7 +172,8 @@ Operations → **Billing** has **Invoices** and the **Price list** (managers in 
 - **Payments:** **Record payment** for a check (with its number), cash or other payment; the amount starts at what's
   still owed. Part payments mark the invoice **Partly paid**; the rest marks it **Paid**. A payment entered by
   mistake can be voided, which puts the amount back as owed. Card and bank payments come in online (below); they show
-  the card or bank (for example "Visa ·· 4242"), Stripe's fee, and **clearing** while a bank payment is on its way.
+  the card or bank (for example "Visa ·· 4242"), Stripe's fee, **clearing** while a bank payment is on its way, and
+  anything refunded.
   An invoice paid in full before it was mailed comes off the **To mail** list.
 - **Editing and voiding:** a draft, or a sent invoice with no payments, can be edited (send it again afterwards).
   **Void** keeps a sent invoice on record with a reason and stops it counting as owed; void its payments first.
@@ -216,7 +217,17 @@ form and go straight to Stripe; Crewdesk never sees or keeps them.
   receipt. A bank payment shows as **clearing** for about 4 business days, then **Paid** (with a receipt); if the bank
   returns it, it shows **failed** and the invoice still owes the amount. Stripe reports each payment to Crewdesk, and
   Crewdesk also checks clearing bank payments with Stripe every hour in case a report goes missing. Online payments go
-  to Bigcapital like any other payment (to 1030 Card Processor Clearing). Refunds are made in Stripe for now.
+  to Bigcapital like any other payment (to 1030 Card Processor Clearing).
+- **Refunds:** on the invoice page, **Refund** (admins in Customers & billing) next to a card or bank payment sends
+  all or part of it back through Stripe; choose the amount and reason and add a note for your records. Refunds made
+  in Stripe's own dashboard come into Crewdesk too, usually within seconds (and an hourly check catches any that
+  didn't). Either way, the payment shows what was refunded, when, why and whether it was done in Crewdesk or in
+  Stripe; the customer gets an email; and the invoice owes the refunded amount again (**Partly paid** or **Unpaid**).
+  After a full refund you can **Void** the invoice if it won't be collected. In Bigcapital, the payment is replaced
+  by one for what's left, or taken out if it was fully refunded. Bank refunds show **on its way** until they finish
+  (up to 5 business days); a refund that fails puts the payment back as paid. A bank payment still clearing can't
+  be refunded until it clears. Stripe keeps its original fee on a refund. Cash and check payments are voided, not
+  refunded.
 - **View as customer:** the button on a customer's page opens the portal exactly as they see it, in a new tab, for an
   hour. It's read-only: paying and changing details are turned off.
 - **Fees:** Stripe charges about 2.9% + 30¢ per card payment and 0.8% (up to $5) per bank payment; the fee shows on

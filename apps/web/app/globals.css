@@ -931,3 +931,6 @@ a.pt-row:hover { background: var(--bg); }
   .pt-three label:first-child { grid-column: 1 / -1; }
   .pt-amount { font-size: 30px; }
 }
+.refund-list { margin: 0 0 0 4px; font-size: 13px; }
+.refund-list li { padding: 2px 0; }
+.refund-form { margin: 4px 0 8px; background: var(--bg); }

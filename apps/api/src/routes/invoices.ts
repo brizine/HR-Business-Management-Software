@@ -6,13 +6,13 @@ import {
   sendInvoiceSchema, termsLabel, voidSchema, type InvoiceInput,
 } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, customerContacts, customers, invoiceLines, invoicePayments, invoices, properties, serviceTypes } from "../db/schema";
+import { companies, customerContacts, customers, invoiceLines, invoicePayments, invoices, paymentRefunds, properties, serviceTypes } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
 import { customerInCompany, type Tx } from "../lib/crm";
 import { addDays, billingSettings, PAY_LINK_DAYS, payLinkFor, portalUrl, refreshInvoice, takeInvoiceNumber } from "../lib/invoices";
-import { stripeConfig } from "../lib/stripe";
+import { REFUND_REASONS, refundPayment, stripeConfig } from "../lib/stripe";
 import { batchPdf, billToLines, invoicePdf, type PdfCompany, type PdfInvoice } from "../lib/invoicePdf";
 import { emailTransport } from "../lib/channels";
 import { randomToken } from "../lib/crypto";
@@ -141,7 +141,7 @@ const routes: FastifyPluginAsync = async (app) => {
       pastDue: sql<number>`coalesce(sum(case when ${invoices.status} in ('sent','partial') and ${invoices.dueDate} < ${today} then ${balance} else 0 end), 0)::int`,
       drafts: sql<number>`count(*) filter (where ${invoices.status} = 'draft')::int`,
     }).from(invoices).where(and(eq(invoices.companyId, companyId), eq(invoices.customerId, req.params.customerId)));
-    const [p] = await db.select({ paid: sql<number>`coalesce(sum(${invoicePayments.amountCents}), 0)::int` }).from(invoicePayments)
+    const [p] = await db.select({ paid: sql<number>`coalesce(sum(${invoicePayments.amountCents} - ${invoicePayments.refundedCents}), 0)::int` }).from(invoicePayments)
       .where(and(eq(invoicePayments.companyId, companyId), eq(invoicePayments.customerId, req.params.customerId), eq(invoicePayments.status, "completed"), sql`${invoicePayments.receivedOn} >= ${`${today.slice(0, 4)}-01-01`}`));
     return { outstandingCents: s.outstanding, pastDueCents: s.pastDue, draftCount: s.drafts, paidThisYearCents: p.paid };
   });
@@ -209,7 +209,9 @@ const routes: FastifyPluginAsync = async (app) => {
       .where(and(eq(invoices.id, req.params.id), eq(invoices.companyId, companyId)));
     if (!row) throw new HttpError(404, "Invoice not found");
     const lines = await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, row.inv.id)).orderBy(asc(invoiceLines.sortOrder));
-    const payments = await db.select().from(invoicePayments).where(eq(invoicePayments.invoiceId, row.inv.id)).orderBy(desc(invoicePayments.receivedOn), desc(invoicePayments.createdAt));
+    const paymentRows = await db.select().from(invoicePayments).where(eq(invoicePayments.invoiceId, row.inv.id)).orderBy(desc(invoicePayments.receivedOn), desc(invoicePayments.createdAt));
+    const refunds = await db.select().from(paymentRefunds).where(eq(paymentRefunds.invoiceId, row.inv.id)).orderBy(asc(paymentRefunds.createdAt));
+    const payments = paymentRows.map((p) => ({ ...p, refunds: refunds.filter((r) => r.paymentId === p.id) }));
     const copies = await db.select({ name: customerContacts.name, email: customerContacts.email }).from(customerContacts)
       .where(and(eq(customerContacts.customerId, row.cust.id), eq(customerContacts.getsInvoices, true), isNotNull(customerContacts.email)));
     const today = await companyToday(companyId);
@@ -351,6 +353,21 @@ ${payUrl ? `<p><a href="${esc(payUrl)}" style="display:inline-block;background:#
       await tx.update(invoicePayments).set({ status: "void", voidedAt: new Date() }).where(eq(invoicePayments.id, p.id));
       return { invoice: await refreshInvoice(tx, req.params.id), paymentId: p.id };
     }).then((r) => { queueBillingSync(() => syncPayment(companyId, r.paymentId, req.user.sub)); return r.invoice; });
+  });
+
+  /** Refunds a card or bank payment (all or part) through Stripe. Admins only: it sends money back. */
+  app.post<{ Params: { id: string; paymentId: string } }>("/:id/payments/:paymentId/refund", { preHandler: requireRole("admin", AREA) }, async (req) => {
+    const body = parse(z.object({
+      amountCents: z.number().int().positive().optional(),
+      reason: z.enum(REFUND_REASONS).default("requested_by_customer"),
+      note: z.string().trim().max(450).optional().nullable(),
+    }), req.body);
+    const [p] = await db.select({ id: invoicePayments.id }).from(invoicePayments)
+      .where(and(eq(invoicePayments.id, req.params.paymentId), eq(invoicePayments.invoiceId, req.params.id), eq(invoicePayments.companyId, req.user.companyId)));
+    if (!p) throw new HttpError(404, "Payment not found");
+    const result = await refundPayment(req.user.companyId, p.id, { ...body, note: body.note || null, by: req.user.sub });
+    const [inv] = await db.select().from(invoices).where(eq(invoices.id, req.params.id));
+    return { ...result, invoice: { status: inv.status, paidCents: inv.paidCents, balanceCents: inv.totalCents - inv.paidCents } };
   });
 
   /** Voids a sent invoice (reason kept). Payments must be voided or refunded first. */

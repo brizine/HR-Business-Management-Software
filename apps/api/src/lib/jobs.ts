@@ -1,6 +1,6 @@
 import { refreshAddresses } from "./addresses";
 import { retryBillingSyncs } from "./billingSync";
-import { checkPendingStripePayments } from "./stripe";
+import { checkPendingStripePayments, checkRecentRefunds, updateWebhookEvents } from "./stripe";
 import { and, eq, gt, sql, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or } from "drizzle-orm";
 import { LOCATION_KEEP_DAYS, DEFAULT_RENEWAL_REMIND_DAYS, DEFAULT_RENEWAL_REPEAT_DAYS, INACTIVE_STATUSES, carryoverForfeit, renewalStatus, computeDue, resolveLead, workOrderDue, type FleetSettings, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
 import { db } from "../db";
@@ -274,9 +274,18 @@ export async function runScheduledChecks(now = new Date()) {
   await db.delete(locationPings).where(lt(locationPings.recordedAt, new Date(now.getTime() - LOCATION_KEEP_DAYS * 86_400_000)));
   // Invoices and payments that didn't reach Bigcapital yet (it was down, or not connected then).
   try { await retryBillingSyncs(); } catch (e) { console.error("Bigcapital retry failed:", (e as Error).message); }
-  // Once an hour: bank payments still clearing, in case Stripe's update didn't arrive.
-  if (now.getUTCMinutes() < 5) { try { await checkPendingStripePayments(now); } catch (e) { console.error("Stripe pending check failed:", (e as Error).message); } }
   return { sent };
+}
+
+/**
+ * Hourly, on its own timer so a slow or unreachable Stripe never holds up the other checks: bank
+ * payments still clearing and refunds made in Stripe (in case Stripe's update didn't arrive), and
+ * webhooks set up before refunds were handled get the refund events added.
+ */
+export async function runStripeChecks(now = new Date()) {
+  try { await updateWebhookEvents(); } catch (e) { console.error("Stripe webhook update failed:", (e as Error).message); }
+  try { await checkPendingStripePayments(now); } catch (e) { console.error("Stripe pending check failed:", (e as Error).message); }
+  try { await checkRecentRefunds(now); } catch (e) { console.error("Stripe refund check failed:", (e as Error).message); }
 }
 
 /**
@@ -401,6 +410,14 @@ export function startScheduler(intervalMs = 5 * 60_000) {
   const addresses = () => refreshAddresses().catch((err) => console.error("address refresh failed", err));
   setTimeout(addresses, 60_000).unref();
   setInterval(addresses, 3_600_000).unref();
+  let stripeRunning = false;
+  const stripe = () => {
+    if (stripeRunning) return;
+    stripeRunning = true;
+    runStripeChecks().catch((err) => console.error("Stripe checks failed", err)).finally(() => { stripeRunning = false; });
+  };
+  setTimeout(stripe, 90_000).unref();
+  setInterval(stripe, 3_600_000).unref();
   return setInterval(tick, intervalMs);
 }
 

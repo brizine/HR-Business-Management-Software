@@ -3,7 +3,7 @@ import { z } from "zod";
 import { authenticate, requireRole } from "../lib/auth";
 import { parse } from "../lib/errors";
 import { WEB_URL } from "../lib/channels";
-import { connectStripe, disconnectStripe, recordPaymentIntent, stripeConfig, verifyWebhook } from "../lib/stripe";
+import { connectStripe, disconnectStripe, recordPaymentIntent, stripeConfig, syncRefunds, verifyWebhook } from "../lib/stripe";
 
 const AREA = "customers" as const;
 /** Where Stripe can reach this API (for the webhook); set PUBLIC_API_URL if it isn't WEB_URL + /api. */
@@ -43,6 +43,11 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
     if (event.type.startsWith("payment_intent.")) {
       const pi = event.data.object as { id: string };
       await recordPaymentIntent(req.params.companyId, pi.id);
+    } else if (event.type === "charge.refunded" || event.type.startsWith("refund.") || event.type === "charge.refund.updated") {
+      // A refund made in Crewdesk or in Stripe's dashboard: read the payment's refunds back from Stripe.
+      const obj = event.data.object as { payment_intent?: string | { id: string } | null };
+      const pi = typeof obj.payment_intent === "string" ? obj.payment_intent : obj.payment_intent?.id;
+      if (pi) await syncRefunds(req.params.companyId, pi);
     }
     return { received: true };
   });

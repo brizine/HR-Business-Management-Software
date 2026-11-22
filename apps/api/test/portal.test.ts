@@ -6,8 +6,8 @@ import Stripe from "stripe";
 import { eq, sql } from "drizzle-orm";
 import { buildApp } from "../src/app";
 import { db, pool } from "../src/db";
-import { companies, invoicePayments, invoices } from "../src/db/schema";
-import { checkPendingStripePayments } from "../src/lib/stripe";
+import { companies, invoicePayments, invoices, paymentRefunds } from "../src/db/schema";
+import { checkPendingStripePayments, checkRecentRefunds, updateWebhookEvents } from "../src/lib/stripe";
 import { setEmailTransport, type EmailMessage } from "../src/lib/channels";
 import { flushBillingSync } from "../src/lib/billingSync";
 import { flushNotifications, setPushTransport } from "../src/lib/notify";
@@ -52,9 +52,34 @@ function fakeStripe() {
         const charge = pi.status === "succeeded" ? { id: "ch_1", object: "charge", balance_transaction: { id: "txn_1", object: "balance_transaction", fee: pi.pmType === "card" ? Math.round(pi.amount * 0.029) + 30 : 500 } } : null;
         return send(200, { ...pi, object: "payment_intent", amount_received: pi.status === "succeeded" ? pi.amount : 0, payment_method: pm, latest_charge: charge });
       }
+      if (req.method === "POST" && p.startsWith("/v1/webhook_endpoints/")) return send(200, { id: p.split("/")[3], object: "webhook_endpoint", enabled_events: form.getAll("enabled_events[]") });
+      if (req.method === "POST" && p === "/v1/refunds") {
+        const pi = intents.get(form.get("payment_intent") ?? "");
+        if (!pi) return send(404, { error: { type: "invalid_request_error", message: "No such payment_intent" } });
+        const metadata: Record<string, string> = {};
+        for (const [k, v] of form) { const m = k.match(/^metadata\[(.+)\]$/); if (m) metadata[m[1]] = v; }
+        const done = [...refunds.values()].filter((r) => r.payment_intent === pi.id && r.status !== "failed").reduce((s, r) => s + r.amount, 0);
+        const amount = Number(form.get("amount") ?? pi.amount - done);
+        if (amount > pi.amount - done) return send(400, { error: { type: "invalid_request_error", message: "Refund amount is greater than unrefunded amount on charge" } });
+        return send(200, addRefund(pi.id, amount, { reason: form.get("reason"), metadata }));
+      }
+      if (req.method === "GET" && p === "/v1/refunds") {
+        const forPi = form.get("payment_intent"), since = Number(form.get("created[gte]") ?? 0);
+        const data = [...refunds.values()].filter((r) => (!forPi || r.payment_intent === forPi) && r.created >= since);
+        return send(200, { object: "list", url: "/v1/refunds", has_more: false, data });
+      }
       send(404, { error: { type: "invalid_request_error", message: `Unrecognized request URL (${req.method}: ${p})` } });
     });
   });
+}
+
+type Refund = { id: string; object: "refund"; amount: number; payment_intent: string; status: string; reason: string | null; metadata: Record<string, string>; created: number };
+const refunds = new Map<string, Refund>();
+/** A refund as Stripe would hold it (card refunds succeed at once; bank refunds start pending). */
+function addRefund(piId: string, amount: number, o: { reason?: string | null; metadata?: Record<string, string> } = {}) {
+  const r: Refund = { id: `re_${suffix}x${++n}`, object: "refund", amount, payment_intent: piId, status: intents.get(piId)?.pmType === "us_bank_account" ? "pending" : "succeeded", reason: o.reason ?? null, metadata: o.metadata ?? {}, created: Math.floor(Date.now() / 1000) };
+  refunds.set(r.id, r);
+  return r;
 }
 
 let app: FastifyInstance;
@@ -96,8 +121,8 @@ async function sentInvoice(customerId: string, cents: number, via: string[] = ["
 }
 const tokenOf = async (invoiceId: string) => (await db.select({ t: invoices.payToken }).from(invoices).where(eq(invoices.id, invoiceId)))[0].t!;
 
-async function webhook(type: string, piId: string, secret = WEBHOOK_SECRET) {
-  const payload = JSON.stringify({ id: `evt_${++n}`, object: "event", type, data: { object: { id: piId, object: "payment_intent" } } });
+async function webhook(type: string, piId: string, secret = WEBHOOK_SECRET, object?: unknown) {
+  const payload = JSON.stringify({ id: `evt_${++n}`, object: "event", type, data: { object: object ?? { id: piId, object: "payment_intent" } } });
   const header = new Stripe("sk_test_x").webhooks.generateTestHeaderString({ payload, secret });
   const res = await app.inject({ method: "POST", url: `/stripe/webhook/${companyId}`, payload, headers: { "content-type": "application/json", "stripe-signature": header } });
   return res.statusCode;
@@ -255,7 +280,8 @@ describe("Pay links and payments", () => {
     pi.pmType = "us_bank_account"; pi.status = "processing";
     await call("POST", `/pay/${token}/confirm`, null, { paymentIntentId: pi.id });
     pi.status = "succeeded";
-    expect(await checkPendingStripePayments()).toBe(0); // too new to bother Stripe yet
+    await checkPendingStripePayments(); // too new to bother Stripe yet
+    expect((await call("GET", `/invoices/${id}`, "office")).body.status).toBe("sent");
     await db.update(invoicePayments).set({ createdAt: new Date(Date.now() - 3600_000) }).where(eq(invoicePayments.stripePaymentId, pi.id));
     expect(await checkPendingStripePayments()).toBeGreaterThanOrEqual(1);
     expect((await call("GET", `/invoices/${id}`, "office")).body.status).toBe("paid");
@@ -371,6 +397,111 @@ describe("Customer portal", () => {
     const c = await call("GET", `/portal/company?c=${companyId}`, null);
     expect(c.body).toMatchObject({ company: { name: "Portal Co" }, payments: { enabled: true, testMode: true } });
     expect((await call("GET", "/portal/company?c=00000000-0000-0000-0000-000000000000", null)).status).toBe(404);
+  });
+});
+
+describe("Refunds", () => {
+  /** An invoice paid online in full (card, or a bank payment that has cleared). */
+  async function paidOnline(cents: number, pmType: "card" | "us_bank_account" = "card") {
+    const id = await sentInvoice(ID.pat, cents, ["paper"]);
+    const token = await tokenOf(id);
+    const pi = intents.get((await call("POST", `/pay/${token}/pay`, null)).body.paymentIntentId)!;
+    pi.pmType = pmType; pi.status = "succeeded";
+    await call("POST", `/pay/${token}/confirm`, null, { paymentIntentId: pi.id });
+    const inv = (await call("GET", `/invoices/${id}`, "owner")).body;
+    expect(inv.status).toBe("paid");
+    return { id, pi, paymentId: inv.payments[0].id as string };
+  }
+  const refundUrl = (id: string, paymentId: string) => `/invoices/${id}/payments/${paymentId}/refund`;
+
+  it("refunds part, then the rest, from Crewdesk: the invoice owes it again and the customer is told", async () => {
+    const { id, pi, paymentId } = await paidOnline(8500);
+    expect((await call("POST", refundUrl(id, paymentId), "office", { amountCents: 3000 })).status).toBe(403);
+    sent.length = 0;
+    const r = await call("POST", refundUrl(id, paymentId), "owner", { amountCents: 3000, reason: "requested_by_customer", note: "Missed the back yard" });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ status: "succeeded", amountCents: 3000, invoice: { status: "partial", balanceCents: 3000 } });
+    const made = [...calls].reverse().find((c) => c.method === "POST" && c.path === "/v1/refunds")!;
+    expect(made.form.get("payment_intent")).toBe(pi.id);
+    expect(made.form.get("amount")).toBe("3000");
+    expect(made.form.get("metadata[crewdeskPaymentId]")).toBe(paymentId);
+    expect(sent.filter((m) => m.to === email("pat"))).toHaveLength(1);
+    expect(sent[0].subject).toBe("Refund of $30.00 from Portal Co");
+    expect(sent[0].text).toContain("to your Visa ·· 4242 for invoice");
+    let inv = (await call("GET", `/invoices/${id}`, "office")).body;
+    expect(inv.payments[0]).toMatchObject({ refundedCents: 3000, status: "completed" });
+    expect(inv.payments[0].refunds).toHaveLength(1);
+    expect(inv.payments[0].refunds[0]).toMatchObject({ amountCents: 3000, status: "succeeded", note: "Missed the back yard", reason: "requested_by_customer" });
+    expect(inv.payments[0].refunds[0].createdById).toBeTruthy();
+    // The webhook for the same refund changes nothing and sends no second email.
+    expect(await webhook("refund.created", pi.id, WEBHOOK_SECRET, { id: inv.payments[0].refunds[0].stripeRefundId, object: "refund", payment_intent: pi.id })).toBe(200);
+    expect(await webhook("charge.refunded", pi.id, WEBHOOK_SECRET, { id: "ch_1", object: "charge", payment_intent: pi.id })).toBe(200);
+    expect(sent.filter((m) => m.to === email("pat"))).toHaveLength(1);
+    expect((await call("POST", refundUrl(id, paymentId), "owner", { amountCents: 6000 })).body.error).toMatch(/more than the \$55\.00 left/);
+    // The rest (no amount = all that's left); then the invoice can be voided.
+    const rest = await call("POST", refundUrl(id, paymentId), "owner", {});
+    expect(rest.body).toMatchObject({ amountCents: 5500, invoice: { status: "sent", paidCents: 0, balanceCents: 8500 } });
+    expect((await call("POST", refundUrl(id, paymentId), "owner", {})).body.error).toMatch(/already fully refunded/);
+    expect((await call("POST", `/invoices/${id}/void`, "owner", { reason: "Service cancelled" })).status).toBe(200);
+    // The portal shows the refunds.
+    const cookie = await signInPortal(email("pat"));
+    const one = await portal("GET", `/portal/invoices/${id}`, cookie);
+    expect(one.body.invoice.refunds.map((x: any) => x.amountCents)).toEqual([3000, 5500]);
+    expect(one.body.invoice.payments[0].refundedCents).toBe(8500);
+    inv = (await call("GET", `/invoices/${id}`, "office")).body;
+    expect(inv.status).toBe("void");
+  });
+
+  it("a refund made in Stripe's dashboard comes in by webhook; a failed one puts the payment back", async () => {
+    const { id, pi } = await paidOnline(6000);
+    const re = addRefund(pi.id, 2500, { reason: "duplicate" });
+    sent.length = 0;
+    expect(await webhook("refund.created", pi.id, WEBHOOK_SECRET, re)).toBe(200);
+    let inv = (await call("GET", `/invoices/${id}`, "office")).body;
+    expect(inv).toMatchObject({ status: "partial", paidCents: 3500 });
+    expect(inv.payments[0].refunds[0]).toMatchObject({ amountCents: 2500, reason: "duplicate", createdById: null });
+    expect(sent).toHaveLength(1);
+    re.status = "failed";
+    expect(await webhook("refund.failed", pi.id, WEBHOOK_SECRET, re)).toBe(200);
+    inv = (await call("GET", `/invoices/${id}`, "office")).body;
+    expect(inv).toMatchObject({ status: "paid", paidCents: 6000 });
+    expect(inv.payments[0]).toMatchObject({ refundedCents: 0 });
+    expect(inv.payments[0].refunds[0].status).toBe("failed");
+  });
+
+  it("the hourly check finds refunds whose webhook never came", async () => {
+    const { id, pi } = await paidOnline(4000, "us_bank_account");
+    addRefund(pi.id, 4000);
+    expect(await checkRecentRefunds()).toBeGreaterThanOrEqual(1);
+    const inv = (await call("GET", `/invoices/${id}`, "office")).body;
+    expect(inv).toMatchObject({ status: "sent", paidCents: 0 });
+    expect(inv.payments[0].refunds[0].status).toBe("pending");
+    const [row] = await db.select().from(paymentRefunds).where(eq(paymentRefunds.paymentId, inv.payments[0].id));
+    expect(row.notifiedAt).toBeTruthy();
+  });
+
+  it("refuses refunds of cash, checks and bank payments still clearing", async () => {
+    const id = await sentInvoice(ID.pat, 2000, ["paper"]);
+    const cash = (await call("POST", `/invoices/${id}/payments`, "owner", { amountCents: 2000, method: "cash" })).body.payment;
+    expect((await call("POST", refundUrl(id, cash.id), "owner", {})).body.error).toMatch(/Void a cash or check payment/);
+    const id2 = await sentInvoice(ID.pat, 2000, ["paper"]);
+    const token = await tokenOf(id2);
+    const pi = intents.get((await call("POST", `/pay/${token}/pay`, null)).body.paymentIntentId)!;
+    pi.pmType = "us_bank_account"; pi.status = "processing";
+    await call("POST", `/pay/${token}/confirm`, null, { paymentIntentId: pi.id });
+    const pay = (await call("GET", `/invoices/${id2}`, "owner")).body.payments[0];
+    expect((await call("POST", refundUrl(id2, pay.id), "owner", {})).body.error).toMatch(/hasn't cleared yet/);
+  });
+
+  it("webhooks made before refunds were handled get the refund events added", async () => {
+    const [c] = await db.select({ stripe: companies.stripe }).from(companies).where(eq(companies.id, companyId));
+    await db.update(companies).set({ stripe: { ...c.stripe!, webhookEvents: 1 } }).where(eq(companies.id, companyId));
+    expect(await updateWebhookEvents()).toBeGreaterThanOrEqual(1);
+    const upd = [...calls].reverse().find((x) => x.method === "POST" && x.path === `/v1/webhook_endpoints/${c.stripe!.webhookEndpointId}`)!;
+    expect(upd.form.getAll("enabled_events[]").length || [...upd.form.keys()].filter((k) => k.startsWith("enabled_events")).length).toBeGreaterThanOrEqual(8);
+    expect([...upd.form.values()]).toContain("refund.created");
+    const [after] = await db.select({ stripe: companies.stripe }).from(companies).where(eq(companies.id, companyId));
+    expect(after.stripe!.webhookEvents).toBe(2);
   });
 });
 

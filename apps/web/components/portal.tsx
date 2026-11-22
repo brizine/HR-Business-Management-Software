@@ -9,13 +9,14 @@ import { API_URL, api } from "@/lib/api";
 
 export type PortalCompany = { id: string; name: string; phone: string | null; email: string | null; website: string | null; hasLogo: boolean; isTest: boolean };
 export type PortalPayments = { enabled: false } | { enabled: true; publishableKey: string; testMode: boolean };
-export type PortalPayment = { id: string; amountCents: number; method: string; methodDetail: string | null; receivedOn: string; status: string; invoiceId?: string; invoiceNumber?: number | null };
+export type PortalPayment = { id: string; amountCents: number; refundedCents?: number; method: string; methodDetail: string | null; receivedOn: string; status: string; invoiceId?: string; invoiceNumber?: number | null };
 export type PortalInvoice = {
   id: string; number: number; status: string; issueDate: string; dueDate: string; poNumber: string | null; notes: string | null;
   subtotalCents: number; discountCents: number; totalCents: number; paidCents: number; balanceCents: number; pendingCents: number; overdue: boolean;
   customer: { id: string; number: number; name: string }; serviceAddress: string | null;
   lines: { description: string; quantity: number; unitPriceCents: number; amountCents: number }[];
   payments: PortalPayment[];
+  refunds?: { id: string; paymentId: string; amountCents: number; refundedOn: string; status: string }[];
 };
 
 export const longDate = (d: string) => new Date(`${d.slice(0, 10)}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -91,7 +92,11 @@ export function InvoiceView({ inv, pdfHref, pay }: { inv: PortalInvoice; pdfHref
             {inv.payments.filter((p) => p.status === "completed").map((p) => (
               <tr key={p.id}><td>Paid {longDate(p.receivedOn)} · {methodText(p)}</td><td className="num">−{formatMoney(p.amountCents)}</td></tr>
             ))}
-            {inv.paidCents > 0 && inv.status !== "void" && <tr className="total"><td>Balance</td><td className="num">{formatMoney(inv.balanceCents)}</td></tr>}
+            {(inv.refunds ?? []).map((r) => {
+              const p = inv.payments.find((x) => x.id === r.paymentId);
+              return <tr key={r.id}><td>Refunded {longDate(r.refundedOn)}{p ? ` to ${methodText(p)}` : ""}{r.status === "pending" ? " (on its way)" : ""}</td><td className="num">+{formatMoney(r.amountCents)}</td></tr>;
+            })}
+            {(inv.paidCents > 0 || (inv.refunds?.length ?? 0) > 0) && inv.status !== "void" && <tr className="total"><td>Balance</td><td className="num">{formatMoney(inv.balanceCents)}</td></tr>}
           </tfoot>
         </table>
         {inv.notes && <p className="pt-muted" style={{ whiteSpace: "pre-wrap" }}>{inv.notes}</p>}

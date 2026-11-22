@@ -211,41 +211,61 @@ export function syncPayment(companyId: string, paymentId: string, by: string | n
 async function syncPaymentNow(companyId: string, paymentId: string, by: string | null): Promise<"posted" | "failed" | "skipped" | "not_connected"> {
   const [p] = await db.select().from(invoicePayments).where(and(eq(invoicePayments.id, paymentId), eq(invoicePayments.companyId, companyId)));
   if (!p) return "skipped";
+  // A bank payment still clearing isn't money in yet; it goes to the books when it clears.
+  if (p.status === "pending" && !p.bigcapitalPaymentId) return "skipped";
   const conn = await connection(companyId);
   if (!conn) return "not_connected";
+  // What belongs in the books: a completed payment, less anything refunded.
+  const net = p.status === "completed" ? p.amountCents - p.refundedCents : 0;
   try {
-    if (p.status === "void") {
+    if (net <= 0) {
+      // Void, failed (the bank returned it) or fully refunded: take it out of the books.
       if (p.bigcapitalPaymentId) {
         await conn.bc.deletePayment(p.bigcapitalPaymentId);
         await db.update(invoicePayments).set({ bigcapitalPaymentId: null }).where(eq(invoicePayments.id, p.id));
+      } else if (p.status === "failed") {
+        return "skipped";
       }
       await record(companyId, "payment", p.id, { status: "posted", amountCents: 0, error: null, by });
       return "posted";
     }
-    if (p.bigcapitalPaymentId) return "posted";
+    if (p.bigcapitalPaymentId) {
+      const [posted] = await db.select({ amountCents: accountingPostings.amountCents, status: accountingPostings.status }).from(accountingPostings)
+        .where(and(eq(accountingPostings.companyId, companyId), eq(accountingPostings.kind, "payment"), eq(accountingPostings.sourceId, p.id)));
+      // Already right (a failed replacement is tried again).
+      if (!posted || (posted.status === "posted" && posted.amountCents === net)) return "posted";
+      // Part of it was refunded (or a refund failed): replace the Bigcapital payment with one for what's left.
+      await conn.bc.deletePayment(p.bigcapitalPaymentId);
+      await db.update(invoicePayments).set({ bigcapitalPaymentId: null }).where(eq(invoicePayments.id, p.id));
+    }
     let [inv] = await db.select().from(invoices).where(eq(invoices.id, p.invoiceId));
     if (!inv.bigcapitalInvoiceId) {
       const r = await syncInvoiceNow(companyId, inv.id, by);
-      if (r === "skipped") { await record(companyId, "payment", p.id, { status: "skipped", amountCents: p.amountCents, error: "Its invoice isn't sent to Bigcapital (sample customer)", by }); return "skipped"; }
+      if (r === "skipped") { await record(companyId, "payment", p.id, { status: "skipped", amountCents: net, error: "Its invoice isn't sent to Bigcapital (sample customer)", by }); return "skipped"; }
       [inv] = await db.select().from(invoices).where(eq(invoices.id, p.invoiceId));
       if (!inv.bigcapitalInvoiceId) throw new BigcapitalError("Its invoice couldn't be sent to Bigcapital yet");
     }
     const customerBcId = await ensureCustomer(conn, companyId, p.customerId);
+    const refundNote = p.refundedCents > 0 ? `${dollarsText(p.amountCents)} paid, ${dollarsText(p.refundedCents)} refunded` : null;
     const externalId = await conn.bc.createPayment({
       customerId: customerBcId, paymentDate: p.receivedOn, depositAccountId: await conn.account(DEPOSIT_CODES[p.method] ?? "1020"),
       ...(p.reference ? { referenceNo: p.method === "check" ? `Check ${p.reference}` : p.reference } : {}),
-      statement: [`Invoice ${inv.number}`, p.note].filter(Boolean).join(" · "),
-      entries: [{ invoiceId: Number(inv.bigcapitalInvoiceId), paymentAmount: dollars(p.amountCents) }],
+      statement: [`Invoice ${inv.number}`, p.note, refundNote].filter(Boolean).join(" · "),
+      entries: [{ invoiceId: Number(inv.bigcapitalInvoiceId), paymentAmount: dollars(net) }],
     });
     if (!externalId) throw new BigcapitalError("Bigcapital didn't return the new payment's id");
     await db.update(invoicePayments).set({ bigcapitalPaymentId: externalId }).where(eq(invoicePayments.id, p.id));
-    await record(companyId, "payment", p.id, { status: "posted", externalId, amountCents: p.amountCents, by });
+    await record(companyId, "payment", p.id, { status: "posted", externalId, amountCents: net, by });
     return "posted";
   } catch (e) {
-    await record(companyId, "payment", p.id, { status: "failed", externalId: p.bigcapitalPaymentId, amountCents: p.amountCents, error: (e as Error).message, by });
+    // Read it again: a step above may already have taken the old payment out of Bigcapital.
+    const [now] = await db.select({ bc: invoicePayments.bigcapitalPaymentId }).from(invoicePayments).where(eq(invoicePayments.id, p.id));
+    await record(companyId, "payment", p.id, { status: "failed", externalId: now?.bc ?? null, amountCents: net, error: (e as Error).message, by });
     return "failed";
   }
 }
+
+const dollarsText = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 /** An invoice and its payments, now (the "Send to Bigcapital" button). */
 export async function syncInvoiceAndPayments(companyId: string, invoiceId: string, by: string | null) {

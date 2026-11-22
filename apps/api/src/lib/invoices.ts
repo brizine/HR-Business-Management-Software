@@ -27,7 +27,8 @@ export async function takeInvoiceNumber(tx: Tx, companyId: string): Promise<numb
 export async function refreshInvoice(tx: Tx, invoiceId: string) {
   const [inv] = await tx.select().from(invoices).where(eq(invoices.id, invoiceId));
   if (!inv) return null;
-  const [{ paid }] = await tx.select({ paid: sql<number>`coalesce(sum(${invoicePayments.amountCents}), 0)::int` }).from(invoicePayments)
+  // Completed payments, less anything refunded.
+  const [{ paid }] = await tx.select({ paid: sql<number>`coalesce(sum(${invoicePayments.amountCents} - ${invoicePayments.refundedCents}), 0)::int` }).from(invoicePayments)
     .where(and(eq(invoicePayments.invoiceId, invoiceId), eq(invoicePayments.status, "completed")));
   let status = inv.status;
   if (status !== "draft" && status !== "void") status = paid >= inv.totalCents ? "paid" : paid > 0 ? "partial" : "sent";

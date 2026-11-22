@@ -6,8 +6,8 @@ import { eq } from "drizzle-orm";
 import { DEFAULT_ACCOUNTING_SETTINGS } from "@crewdesk/shared";
 import { buildApp } from "../src/app";
 import { db, pool } from "../src/db";
-import { accountingPostings } from "../src/db/schema";
-import { flushBillingSync, retryBillingSyncs } from "../src/lib/billingSync";
+import { accountingPostings, invoicePayments, invoices } from "../src/db/schema";
+import { flushBillingSync, retryBillingSyncs, syncPayment } from "../src/lib/billingSync";
 import { flushNotifications, setPushTransport } from "../src/lib/notify";
 
 /* ── A pretend Bigcapital ── */
@@ -182,6 +182,42 @@ describe("Bigcapital billing sync", () => {
     await flushBillingSync();
     expect(last("DELETE", "/sale-invoices")!.path).toBe(`/sale-invoices/${bcId}`);
     expect((await call("GET", `/invoices/${ID.retried}`, "owner")).body.bigcapitalInvoiceId).toBeNull();
+  });
+
+  it("card payments go to Card Processor Clearing; a refund replaces the payment with what's left; clearing and failed bank payments stay out", async () => {
+    const id = await sentInvoice(ID.rita, [{ description: "Round 2", quantity: 1, unitPriceCents: 9000, incomeAccountCode: "4000" }]);
+    const [inv] = await db.select().from(invoices).where(eq(invoices.id, id));
+    const base = { companyId: inv.companyId, invoiceId: id, customerId: inv.customerId, receivedOn: "2026-03-12", note: "Paid online" };
+    const [card] = await db.insert(invoicePayments).values({ ...base, amountCents: 9000, method: "card", methodDetail: "Visa ·· 4242", stripePaymentId: `pi_bc_${suffix}_1` }).returning();
+    await syncPayment(inv.companyId, card.id);
+    const first = last("POST", "/payments-received")!;
+    expect(first.body).toMatchObject({ depositAccountId: 1034, entries: [{ paymentAmount: 90 }] });
+    // Part refunded: the old payment goes and one for $60 takes its place.
+    const before = calls.length;
+    await db.update(invoicePayments).set({ refundedCents: 3000 }).where(eq(invoicePayments.id, card.id));
+    await syncPayment(inv.companyId, card.id);
+    const after = calls.slice(before).filter((c) => c.method !== "GET");
+    expect(after.map((c) => c.method)).toEqual(["DELETE", "POST"]);
+    expect(after[1].body).toMatchObject({ depositAccountId: 1034, entries: [{ paymentAmount: 60 }] });
+    expect(after[1].body.statement).toContain("$90.00 paid, $30.00 refunded");
+    // Nothing changed: nothing sent.
+    const again = calls.length;
+    await syncPayment(inv.companyId, card.id);
+    expect(calls.slice(again).filter((c) => c.method !== "GET")).toEqual([]);
+    // Fully refunded: out of the books.
+    await db.update(invoicePayments).set({ refundedCents: 9000 }).where(eq(invoicePayments.id, card.id));
+    await syncPayment(inv.companyId, card.id);
+    expect(calls.slice(again).filter((c) => c.method !== "GET").map((c) => c.method)).toEqual(["DELETE"]);
+    const [row] = await db.select().from(invoicePayments).where(eq(invoicePayments.id, card.id));
+    expect(row.bigcapitalPaymentId).toBeNull();
+    // A bank payment still clearing, or one the bank returned, never goes to the books.
+    const quiet = calls.length;
+    const [pending] = await db.insert(invoicePayments).values({ ...base, amountCents: 9000, method: "ach", status: "pending", stripePaymentId: `pi_bc_${suffix}_2` }).returning();
+    const [failed] = await db.insert(invoicePayments).values({ ...base, amountCents: 9000, method: "ach", status: "failed", stripePaymentId: `pi_bc_${suffix}_3` }).returning();
+    expect(await syncPayment(inv.companyId, pending.id)).toBe("skipped");
+    expect(await syncPayment(inv.companyId, failed.id)).toBe("skipped");
+    await call("POST", `/invoices/${id}/sync`, "owner");
+    expect(calls.slice(quiet).filter((c) => c.path.startsWith("/payments-received"))).toEqual([]);
   });
 
   it("sample customers never reach the real books (outside the test company)", async () => {

@@ -4,7 +4,7 @@ import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { customerName, formatAddress, isInactive, isOverdue } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, customerContacts, customers, employees, invoiceLines, invoicePayments, invoices, portalCodes, properties, propertyAssignments } from "../db/schema";
+import { companies, customerContacts, customers, employees, invoiceLines, invoicePayments, invoices, paymentRefunds, portalCodes, properties, propertyAssignments } from "../db/schema";
 import { authenticate, requireRole, WEB_CLIENT_HEADER, type AuthUser } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { WEB_URL, sendSystemEmail } from "../lib/channels";
@@ -119,6 +119,8 @@ async function invoiceDetail(companyId: string, inv: typeof invoices.$inferSelec
   const pays = await db.select().from(invoicePayments).where(and(eq(invoicePayments.invoiceId, inv.id), inArray(invoicePayments.status, ["completed", "pending"])))
     .orderBy(asc(invoicePayments.createdAt));
   const pendingCents = pays.filter((p) => p.status === "pending").reduce((s, p) => s + p.amountCents, 0);
+  const refunds = await db.select().from(paymentRefunds).where(and(eq(paymentRefunds.invoiceId, inv.id), inArray(paymentRefunds.status, ["pending", "requires_action", "succeeded"])))
+    .orderBy(asc(paymentRefunds.createdAt));
   const today = await companyToday(companyId);
   return {
     id: inv.id, number: inv.number, status: inv.status, issueDate: inv.issueDate, dueDate: inv.dueDate, poNumber: inv.poNumber, notes: inv.notes,
@@ -127,7 +129,8 @@ async function invoiceDetail(companyId: string, inv: typeof invoices.$inferSelec
     customer: { id: cust.id, number: cust.number, name: customerName(cust) },
     serviceAddress: prop ? formatAddress(prop) : null,
     lines: lines.map((l) => ({ description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, amountCents: l.amountCents })),
-    payments: pays.map((p) => ({ id: p.id, amountCents: p.amountCents, method: p.method, methodDetail: p.methodDetail, receivedOn: p.receivedOn, status: p.status })),
+    payments: pays.map((p) => ({ id: p.id, amountCents: p.amountCents, refundedCents: p.refundedCents, method: p.method, methodDetail: p.methodDetail, receivedOn: p.receivedOn, status: p.status })),
+    refunds: refunds.map((r) => ({ id: r.id, paymentId: r.paymentId, amountCents: r.amountCents, refundedOn: r.refundedOn, status: r.status })),
   };
 }
 
@@ -254,7 +257,7 @@ const portalRoutes: FastifyPluginAsync = async (app) => {
         };
       }),
       invoices: list,
-      paymentHistory: pays.map(({ p, number }) => ({ id: p.id, invoiceId: p.invoiceId, invoiceNumber: number, amountCents: p.amountCents, method: p.method, methodDetail: p.methodDetail, receivedOn: p.receivedOn, status: p.status })),
+      paymentHistory: pays.map(({ p, number }) => ({ id: p.id, invoiceId: p.invoiceId, invoiceNumber: number, amountCents: p.amountCents, refundedCents: p.refundedCents, method: p.method, methodDetail: p.methodDetail, receivedOn: p.receivedOn, status: p.status })),
     };
   });
 
