@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -52,15 +53,41 @@ export function TestCompanyCard() {
 }
 
 /** Shown on every page inside the test company. */
-export function TestCompanyBanner() {
+/** Leaves the test company for the real one. */
+export async function backToRealCompany() {
+  await api("/auth/test-company/back", { method: "POST" });
+  go("/customers");
+}
+
+/**
+ * In the test company: a yellow TEST badge next to the company name in the top bar. Click it for what
+ * that means and the way back to the real company.
+ */
+export function TestBadge() {
   const { me } = useAuth();
   const { busy, error, run } = useAction();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open]);
   if (!me?.company.isTest) return null;
   return (
-    <div className="test-banner" role="status">
-      <span><strong>Test company.</strong> Sample data and test-mode payments only; nothing here is real.</span>
-      <button className="btn" disabled={busy} onClick={() => run(async () => { await api("/auth/test-company/back", { method: "POST" }); go("/customers"); })}>Back to the real company</button>
-      {error && <span className="error">{error}</span>}
+    <div className="topbar-pop" ref={ref}>
+      <button type="button" className="test-badge" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)} title="You're in the test company">TEST</button>
+      {open && (
+        <div className="topbar-popover test-pop" role="dialog" aria-label="Test company">
+          <strong>Test company</strong>
+          <p className="muted" style={{ margin: "4px 0 10px" }}>Sample customers and test-mode payments only; nothing here is real or reaches your real books.</p>
+          <button className="btn primary" disabled={busy} onClick={() => run(backToRealCompany)}>Back to the real company</button>
+          {error && <p className="error" style={{ margin: "8px 0 0" }}>{error}</p>}
+        </div>
+      )}
     </div>
   );
 }

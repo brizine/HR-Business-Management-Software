@@ -10,7 +10,7 @@ export default function EditWikiPage({ params }: { params: Promise<{ id: string 
   const { data, error } = useApi(`/wiki/pages/${id}`);
   return (
     <WikiShell currentId={id}>
-      <PageHead title={data ? `Edit: ${data.title}` : "Edit page"} />
+      <PageHead title={data ? `Edit: ${data.title}` : "Edit page"} crumbs={[{ label: "Wiki", href: "/wiki" }, ...(data ? [{ label: data.title, href: `/wiki/${id}` }] : []), { label: "Edit" }]} />
       {!data ? <ErrorBox error={error} /> : data.canEdit ? <WikiEditor page={data} /> : <ErrorBox error="You can read this page but not edit it." />}
     </WikiShell>
   );

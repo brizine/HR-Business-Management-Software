@@ -717,9 +717,11 @@ dl.facts dt { color: var(--muted); }
 dl.facts dd { margin: 0; overflow-wrap: anywhere; }
 .plain-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .warn-text { color: var(--warn); }
-.test-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin: -8px 0 16px; padding: 10px 14px;
-  border-radius: var(--radius); background: #fde68a; color: #422006; border: 1px solid #f59e0b; }
-.test-banner .btn { background: #fff7d6; color: #422006; border-color: #d97706; }
+/* Test company: a TEST badge by the company name and a yellow line under the top bar. */
+.test-badge { background: #fde047; color: #422006; border: 1px solid #f59e0b; border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 12px; font-weight: 800; letter-spacing: 1px; cursor: pointer; white-space: nowrap; }
+.test-badge:hover, .test-badge[aria-expanded="true"] { background: #facc15; }
+.topbar.is-test { box-shadow: inset 0 -3px 0 #f59e0b; }
+.test-pop { width: 280px; padding: 12px 14px; }
 
 /* ───── App frame: top bar + icon menu (laid out like Homeworks) ───── */
 .app { min-height: 100vh; display: flex; flex-direction: column; }
@@ -940,3 +942,17 @@ a.pt-row:hover { background: var(--bg); }
 .credit-list li:last-child { border-bottom: 0; }
 .credit-form { background: var(--bg); }
 .pt-credit { color: var(--ok); font-weight: 600; margin-top: 4px; }
+
+/* Breadcrumbs above a page title. */
+.crumbs { font-size: 13px; color: var(--muted); margin-bottom: 2px; }
+.crumbs ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; }
+.crumbs li { display: inline-flex; align-items: center; min-width: 0; }
+.crumbs li + li::before { content: "›"; margin: 0 6px; color: var(--muted); }
+.crumbs a { color: var(--primary); text-decoration: none; }
+.crumbs a:hover { text-decoration: underline; }
+.crumbs span[aria-current] { color: var(--muted); max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 480px) {
+  .test-badge { padding: 2px 5px; font-size: 11px; letter-spacing: 0.5px; }
+  .topbar.is-test .topbar-brand { min-width: 0; flex-shrink: 1; }
+  .test-pop { position: fixed; left: 12px; right: 12px; width: auto; }
+}

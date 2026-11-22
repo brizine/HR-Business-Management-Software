@@ -33,7 +33,7 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
 
   return (
     <>
-      <PageHead title={title} before={<Link className="btn" href="/invoices" aria-label="Back to invoices">←</Link>}
+      <PageHead title={title} crumbs={[{ label: "Invoices", href: "/invoices" }, { label: title }]}
         sub={<><Link href={`/customers/${inv.customer.id}`}>{inv.customer.name}</Link> · <InvoiceStatus status={inv.status} overdue={inv.overdue} />{inv.needsMailing && <> · <span className="badge">to mail</span></>}</>}>
         {inv.status !== "void" && <button className="btn primary" onClick={() => setPanel(panel === "send" ? null : "send")}>{inv.number ? "Send again" : "Send"}</button>}
         {(inv.status === "sent" || inv.status === "partial") && <button className="btn" onClick={() => setPanel(panel === "pay" ? null : "pay")}>Record payment</button>}

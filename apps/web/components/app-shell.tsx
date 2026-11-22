@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { NAV, NEW_MENU, SIDES, pathMatches, type NavGroup, type NavItem, type Side } from "@/lib/nav";
 import { Icon } from "@/components/icons";
 import { useClockPunch } from "@/components/clock-card";
+import { TestBadge, backToRealCompany } from "@/components/test-company";
 
 /** Closes a pop-up when you click outside it or press Escape. */
 function useDismiss(open: boolean, close: () => void, ref: React.RefObject<HTMLElement | null>) {
@@ -38,13 +39,14 @@ export function TopBar(props: {
   }, []);
   if (!me) return null;
   return (
-    <header className="topbar">
+    <header className={`topbar${me.company.isTest ? " is-test" : ""}`}>
       <button type="button" className="topbar-icon topbar-menu" aria-label="Open the menu" onClick={props.onMenu}><Icon name="menu" /></button>
       <Link href="/" className="topbar-brand" aria-label={`${me.company.name} home`}>
         {me.company.hasLogo
           ? <img src={`${API_URL}/company/logo${me.company.logoUpdatedAt ? `?v=${encodeURIComponent(me.company.logoUpdatedAt)}` : ""}`} alt={`${me.company.name} logo`} />
           : <span>{me.company.name}</span>}
       </Link>
+      <TestBadge />
       <div className="side-switch" role="tablist" aria-label="Menu">
         {SIDES.map((o) => (
           <button key={o.key} type="button" role="tab" aria-selected={props.side === o.key} onClick={() => props.onSwitch(o.key)}>{o.label}</button>
@@ -153,6 +155,7 @@ function ProfileMenu() {
           <Link role="menuitem" href="/settings/security" onClick={close}>Security</Link>
           <Link role="menuitem" href="/settings/notifications" onClick={close}>Notification settings</Link>
           <Link role="menuitem" href="/settings/security" onClick={close}>All settings</Link>
+          {me.company.isTest && <button type="button" role="menuitem" onClick={() => { setOpen(false); backToRealCompany(); }}>Back to the real company</button>}
           <button type="button" role="menuitem" onClick={() => { setOpen(false); signOut().then(() => router.replace("/login")); }}>Sign out</button>
         </div>
       )}

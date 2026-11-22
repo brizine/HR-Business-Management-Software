@@ -4,7 +4,7 @@ import { use } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
-import { Empty, ErrorBox } from "@/components/ui";
+import { Empty, ErrorBox, Crumbs } from "@/components/ui";
 import { Markdown } from "@/components/markdown";
 import { AccessBadges, WikiShell, updatedLine } from "@/components/wiki";
 
@@ -17,11 +17,7 @@ export default function WikiPage({ params }: { params: Promise<{ id: string }> }
     <WikiShell currentId={id}>
       {!p ? <ErrorBox error={error} /> : (
         <article className="card" aria-labelledby="wiki-title">
-          {p.breadcrumbs.length > 0 && (
-            <nav aria-label="Breadcrumb" className="muted" style={{ fontSize: 13, marginBottom: 6 }}>
-              {p.breadcrumbs.map((c: any) => <span key={c.id}><Link href={`/wiki/${c.id}`}>{c.title}</Link> › </span>)}
-            </nav>
-          )}
+          <Crumbs items={[{ label: "Wiki", href: "/wiki" }, ...p.breadcrumbs.map((c: any) => ({ label: c.title, href: `/wiki/${c.id}` })), { label: p.title }]} />
           <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
             <h1 id="wiki-title" style={{ margin: 0 }}>{p.title}</h1>
             <div className="row">

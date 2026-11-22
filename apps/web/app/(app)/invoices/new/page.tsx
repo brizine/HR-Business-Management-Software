@@ -26,7 +26,7 @@ export default function NewInvoice() {
   };
   return (
     <>
-      <PageHead title="New invoice" before={<Link className="btn" href="/invoices" aria-label="Back to invoices">←</Link>} />
+      <PageHead title="New invoice" crumbs={[{ label: "Invoices", href: "/invoices" }, { label: "New invoice" }]} />
       <form className="card stack" onSubmit={(e) => { e.preventDefault(); save(true); }}>
         <InvoiceFields value={value} onChange={setValue} />
         <ErrorBox error={error} />

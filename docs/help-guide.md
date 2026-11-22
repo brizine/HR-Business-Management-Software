@@ -19,6 +19,9 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   employee, time off request, repair order or asset, depending on your access); **Notifications** (the
   number is unread items); **Help**; and your initials, for My Info, Security, notification settings,
   all settings and Sign out.
+- **Breadcrumbs:** above the title of a detail page, the path to it, such as **Customers › Pat Payer › 5 Elm
+  St** on a property (through its bill-to customer) or **Invoices › Invoice 1043**. Click any part to go
+  there.
 - **Left menu:** one icon per group. Point at (or click) a group to see its pages; groups with one page open
   straight away. **Company Wiki** and **Settings** are at the bottom. The **»** button at the very bottom
   widens the menu to list every page under its group (**«** narrows it again); Crewdesk remembers your choice
@@ -288,8 +291,9 @@ form and go straight to Stripe; Crewdesk never sees or keeps them.
 A separate company, named after yours with "(Test)", for trying things out without touching real customers or books.
 
 - **Getting in:** owners, admins, managers and anyone with Customers & billing access click **Open test company** on
-  the Customers page (or Settings → Company Info). No separate password: you switch in as yourself, and a yellow
-  bar at the top of every page says you're in the test company, with **Back to the real company**.
+  the Customers page (or Settings → Company Info). No separate password: you switch in as yourself. While
+  you're in it, a yellow **TEST** badge sits next to the company name in the top bar (with a yellow line under
+  the bar); click it, or open your initials menu, for **Back to the real company**.
 - **What's in it:** the sample customers are loaded the first time anyone opens it. Nothing else is copied: it has
   no employees, payroll or settings of its own beyond what you add. Its sign-ins never get email.
 - **Test payments:** connect Stripe in the test company with your Stripe **test keys** (Stripe → turn on Test mode →

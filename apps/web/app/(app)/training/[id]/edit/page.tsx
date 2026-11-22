@@ -28,7 +28,7 @@ export default function EditCourse({ params }: { params: Promise<{ id: string }>
 
   return (
     <>
-      <PageHead title={`Edit: ${c.title}`} sub={c.published ? "Published" : "Draft (only people who edit training can see it)"}>
+      <PageHead title={`Edit: ${c.title}`} crumbs={[{ label: "Training", href: "/training" }, { label: c.title, href: `/training/${id}` }, { label: "Edit" }]} sub={c.published ? "Published" : "Draft (only people who edit training can see it)"}>
         <Link className="btn" href={`/training/${id}`}>View course</Link>
         <button className="btn danger" disabled={busy} onClick={() => confirm(`Delete "${c.title}" and everyone's progress in it?`) && run(async () => { await api(`/training/courses/${id}`, { method: "DELETE" }); router.push("/training"); })}>Delete course</button>
       </PageHead>

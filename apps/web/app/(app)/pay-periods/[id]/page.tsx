@@ -23,7 +23,7 @@ export default function PayPeriodApproval() {
 
   return (
     <>
-      <PageHead title={`Pay Period ${fmtDate(d.periodStart)} – ${fmtDate(d.periodEnd)}`} sub={`Payday ${fmtDate(d.payday)}`}>
+      <PageHead title={`Pay Period ${fmtDate(d.periodStart)} – ${fmtDate(d.periodEnd)}`} crumbs={[{ label: "Pay periods", href: "/pay-periods" }, { label: `${fmtDate(d.periodStart)} – ${fmtDate(d.periodEnd)}` }]} sub={`Payday ${fmtDate(d.payday)}`}>
         <Badge value={d.status === "approved" ? "approved" : "pending"} />
         {can("admin", "payroll") && <Link className="btn" href="/payroll">Payroll</Link>}
       </PageHead>

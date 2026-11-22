@@ -34,7 +34,9 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
 
   return (
     <>
-      <PageHead title={p.street} before={<Link className="btn" href="/properties" aria-label="Back to properties">←</Link>}
+      <PageHead title={p.street} crumbs={billTo
+        ? [{ label: "Customers", href: "/customers" }, { label: billTo.name, href: `/customers/${billTo.customerId}` }, { label: p.street }]
+        : [{ label: "Properties", href: "/properties" }, { label: p.street }]}
         sub={<>{[p.name, [p.city, p.state, p.zip].filter(Boolean).join(" ")].filter(Boolean).join(" · ")} · <Badge value={p.status} />{p.sample && <> · <span className="tag tag-gray">Sample</span></>}</>}>
         <a className="btn" href={mapsLink} target="_blank" rel="noopener noreferrer">Map</a>
         {billTo && can("manager", "customers") && <button className="btn" onClick={() => setCrediting(!crediting)}>Add credit</button>}
