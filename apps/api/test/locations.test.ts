@@ -18,7 +18,13 @@ async function call(method: string, url: string, who: string, payload?: unknown)
   const res = await app.inject({ method: method as never, url, payload: payload as never, headers: { authorization: `Bearer ${T[who]}` } });
   return { status: res.statusCode, body: res.json() };
 }
-const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+// Just after midnight (Central), "20 minutes ago" is yesterday: then everything moves back a little
+// further so the shift and its points all fall on one day, and that's the day the trail is read for.
+const chicagoNow = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", hour: "numeric", minute: "numeric", hourCycle: "h23" }).formatToParts(new Date());
+const minutesIntoDay = Number(chicagoNow.find((x) => x.type === "hour")!.value) * 60 + Number(chicagoNow.find((x) => x.type === "minute")!.value);
+const shift = minutesIntoDay < 45 ? minutesIntoDay + 5 : 0;
+const ago = (min: number) => new Date(Date.now() - (min + (min > 0 ? shift : 0)) * 60_000).toISOString();
+const trailDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date(Date.now() - (shift + 15) * 60_000));
 const pt = (min: number, lat = 41.6, lng = -93.6) => ({ lat, lng, accuracy: 12, at: ago(min) });
 
 beforeAll(async () => {
@@ -59,7 +65,7 @@ describe("location while clocked in", () => {
   });
 
   it("shows the day's trail to managers and the person, not coworkers", async () => {
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date());
+    const today = trailDay;
     const trail = await call("GET", `/time/locations?employeeId=${ID.crew}&date=${today}`, "owner");
     expect(trail.status).toBe(200);
     expect(trail.body.entries).toHaveLength(1);
@@ -74,7 +80,7 @@ describe("location while clocked in", () => {
     expect((await call("GET", "/time/pay-period", "crew")).body).toEqual({ period: null });
     await call("PUT", "/pay-periods/schedule", "owner", { frequency: "semimonthly", paydayOffsetDays: 5, approverIds: [] });
     const p = (await call("GET", "/time/pay-period", "crew")).body.period;
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date());
+    const today = trailDay;
     expect(p.start <= today && today <= p.end).toBe(true);
     expect(p.start.endsWith("-01") || p.start.endsWith("-16")).toBe(true);
     expect(new Date(p.startsAt).getTime()).toBeLessThan(Date.now());
