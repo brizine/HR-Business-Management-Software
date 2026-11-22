@@ -230,12 +230,12 @@ Operations → **Billing** has **Invoices** and the **Price list** (managers in 
     it too.
   - **Void** a pay link nobody used, or a cash or check prepayment entered by mistake (only before it has paid an
     invoice).
-  - **Bigcapital:** the money received goes into **2400 Customer Prepayments** (from Undeposited Funds for cash and
-    checks, Card Processor Clearing for card and bank). Each invoice it pays gets a payment through **1045
-    Prepayments Applied**, a clearing account Crewdesk adds that always nets to zero, plus a journal taking the same
-    amount out of 2400, so the invoice shows paid and the income is recorded when the work is billed. The prepay
-    discount goes to 4900 as a credit note. A refund is a journal taking it back out of 2400. Ask your CPA how prepaid
-    amounts should count for taxes.
+  - **Bigcapital (income when received):** prepayments count as income the day they're received. The money goes
+    from Undeposited Funds (cash and checks) or Card Processor Clearing (card and bank) to each covered service's
+    income account (price-list services use their own account; for an entered amount, choose the account, 4000 Lawn
+    Treatment Programs by default). Each invoice it pays is closed in Bigcapital with a credit note on the same income
+    account, applied to the invoice, so the income isn't counted twice. The prepay discount goes to 4900 as a credit
+    note, and a refund is a journal taking the refunded amount back out of income.
 - **Settings → Customers & billing** (admins): the **next invoice number** (at switch-over, set it to follow Service
   Autopilot's last number), your usual **terms** (due on receipt, net 7/10/15/30), **make checks payable to**, and the
   **footer** printed on every invoice, and whether a customer's credit is **used automatically** on their invoices

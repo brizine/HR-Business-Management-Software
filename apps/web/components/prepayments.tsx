@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { PREPAYMENT_STATUS_LABELS, PREPAY_HOW, PREPAY_HOW_LABELS, formatMoney, prepayTotals, priceFor, type PrepayHow } from "@crewdesk/shared";
+import { INCOME_ACCOUNTS, PREPAYMENT_STATUS_LABELS, PREPAY_HOW, PREPAY_HOW_LABELS, formatMoney, prepayTotals, priceFor, type PrepayHow } from "@crewdesk/shared";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -36,6 +36,7 @@ export function PrepaymentForm({ customerId, properties, onDone, onClose }: { cu
   const [reference, setReference] = useState("");
   const [useNow, setUseNow] = useState(false);
   const [note, setNote] = useState("");
+  const [incomeCode, setIncomeCode] = useState("4000");
   const { busy, error, run } = useAction();
   const sqFt = properties.find((p) => p.id === prop)?.lawnSqFt ?? properties.find((p) => p.lawnSqFt)?.lawnSqFt ?? null;
   const covers = mode === "services" ? lines.reduce((s, l) => s + Math.round(l.quantity * l.unitPriceCents), 0) : cents(amount) || 0;
@@ -54,7 +55,7 @@ export function PrepaymentForm({ customerId, properties, onDone, onClose }: { cu
       run(async () => {
         const r = await api("/prepayments", { body: {
           customerId, propertyId: prop || null, description: description.trim(), lines: mode === "services" ? lines : [], coversCents: covers,
-          discountKind, discountValue: discountKind === "amount" ? cents(discount) || 0 : Number(discount) || 0, how, reference: reference.trim() || undefined, useNow, note: note.trim() || undefined,
+          discountKind, discountValue: discountKind === "amount" ? cents(discount) || 0 : Number(discount) || 0, incomeAccountCode: incomeCode, how, reference: reference.trim() || undefined, useNow, note: note.trim() || undefined,
         } });
         onDone(r);
       });
@@ -93,7 +94,13 @@ export function PrepaymentForm({ customerId, properties, onDone, onClose }: { cu
           </select>
         </div>
       ) : (
-        <label>Amount ($)<input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="500.00" /></label>
+        <div className="formgrid">
+          <label>Amount ($)<input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="500.00" /></label>
+          <label>Counts as income in
+            <select value={incomeCode} onChange={(e) => setIncomeCode(e.target.value)}>{INCOME_ACCOUNTS.map((a) => <option key={a.code} value={a.code}>{a.code} {a.name}</option>)}</select>
+            <span className="muted" style={{ fontSize: 12 }}>Prepayments are income when received. Services from the price list use their own account.</span>
+          </label>
+        </div>
       )}
       <div className="formgrid">
         <label>Prepay discount

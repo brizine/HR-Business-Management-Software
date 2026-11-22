@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
-import { customerName, type PostingKind } from "@crewdesk/shared";
+import { customerName, splitIncome, type PostingKind } from "@crewdesk/shared";
 import { db } from "../db";
 import { accountingPostings, bigcapitalLinks, companies, creditApplications, customerCredits, customers, invoiceLines, invoicePayments, invoices, prepayments, serviceTypes } from "../db/schema";
 import { accountingConfig } from "./accounting";
@@ -20,17 +20,7 @@ import { bigcapital, BigcapitalError, type BigcapitalInvoice } from "./bigcapita
 
 type Client = ReturnType<typeof bigcapital>;
 const dollars = (cents: number) => Math.round(cents) / 100;
-const DEPOSIT_CODES: Record<string, string> = { cash: "1020", check: "1020", other: "1020", card: "1030", ach: "1030", prepaid: "1045" };
-/** 2400 holds prepayments until they pay invoices. */
-const PREPAYMENTS = "2400";
-/**
- * Accounts Crewdesk adds when first needed. 1045 is where a prepaid payment lands in Bigcapital (it
- * only takes cash or asset accounts as a payment's deposit account); a journal then moves the same
- * amount out of 2400, so 1045 always nets to zero.
- */
-const MADE_BY_CREWDESK: Record<string, { name: string; accountType: string; description: string }> = {
-  "1045": { name: "Prepayments Applied (clearing)", accountType: "other-current-asset", description: "Crewdesk: prepaid payments pass through here from 2400 Customer Prepayments; always nets to zero" },
-};
+const DEPOSIT_CODES: Record<string, string> = { cash: "1020", check: "1020", other: "1020", card: "1030", ach: "1030" };
 
 /* ── Work queue: sync calls for the same company run one after another (no double-creating) ── */
 
@@ -72,12 +62,7 @@ async function connection(companyId: string) {
   let byCode: Map<string, number> | null = null;
   const account = async (code: string) => {
     if (!byCode) byCode = new Map((await bc.accounts()).filter((a) => a.code).map((a) => [a.code!, a.id]));
-    let id = byCode.get(code);
-    // Crewdesk's own working accounts are made the first time they're needed.
-    if (!id && MADE_BY_CREWDESK[code]) {
-      const made = await bc.createAccount({ code, ...MADE_BY_CREWDESK[code] });
-      if (made) { id = Number(made); byCode.set(code, id); }
-    }
+    const id = byCode.get(code);
     if (!id) throw new BigcapitalError(`Bigcapital has no account with code ${code}. Add it there (or run Set up test books in the test company).`);
     return id;
   };
@@ -231,6 +216,7 @@ async function syncPaymentNow(companyId: string, paymentId: string, by: string |
   if (p.status === "pending" && !p.bigcapitalPaymentId) return "skipped";
   const conn = await connection(companyId);
   if (!conn) return "not_connected";
+  if (p.method === "prepaid") return syncPrepaidUse(conn, companyId, p, by);
   // What belongs in the books: a completed payment, less anything refunded.
   const net = p.status === "completed" ? p.amountCents - p.refundedCents : 0;
   try {
@@ -251,9 +237,6 @@ async function syncPaymentNow(companyId: string, paymentId: string, by: string |
       if (!posted || (posted.status === "posted" && posted.amountCents === net)) return "posted";
       // Part of it was refunded (or a refund failed): replace the Bigcapital payment with one for what's left.
       await takeOutOfBooks(conn, p);
-    } else if (p.bigcapitalJournalId) {
-      // A prepaid payment whose Bigcapital payment didn't get made last time: start over.
-      await takeOutOfBooks(conn, p);
     }
     let [inv] = await db.select().from(invoices).where(eq(invoices.id, p.invoiceId));
     if (!inv.bigcapitalInvoiceId) {
@@ -272,18 +255,6 @@ async function syncPaymentNow(companyId: string, paymentId: string, by: string |
     });
     if (!externalId) throw new BigcapitalError("Bigcapital didn't return the new payment's id");
     await db.update(invoicePayments).set({ bigcapitalPaymentId: externalId }).where(eq(invoicePayments.id, p.id));
-    if (p.method === "prepaid") {
-      // Paid from a prepayment: move the same amount out of 2400 Customer Prepayments (1045 nets to zero).
-      const [pp] = p.prepaymentId ? await db.select({ number: prepayments.number }).from(prepayments).where(eq(prepayments.id, p.prepaymentId)) : [];
-      const journalId = await conn.bc.createJournal({
-        date: p.receivedOn, reference: `Prepayment PP-${pp?.number ?? "?"} → invoice ${inv.number}`, description: `Prepayment PP-${pp?.number ?? "?"} used on invoice ${inv.number}`,
-        lines: [
-          { accountId: await conn.account(PREPAYMENTS), debitCents: net, contactId: customerBcId, note: `Invoice ${inv.number}` },
-          { accountId: await conn.account("1045"), creditCents: net, note: `Invoice ${inv.number}` },
-        ],
-      });
-      await db.update(invoicePayments).set({ bigcapitalJournalId: journalId }).where(eq(invoicePayments.id, p.id));
-    }
     await record(companyId, "payment", p.id, { status: "posted", externalId, amountCents: net, by });
     return "posted";
   } catch (e) {
@@ -297,16 +268,19 @@ async function syncPaymentNow(companyId: string, paymentId: string, by: string |
 /* ── Prepayments ── */
 
 /**
- * Makes Bigcapital match a prepayment: a journal putting the money received into 2400 Customer
- * Prepayments, and one taking any refund back out. (Using it on invoices is booked with each prepaid
- * payment; its discount with each discount credit.) Nothing goes until it's paid; voiding removes both.
+ * Prepayments count as income when they're received. Bigcapital gets a journal for the money in
+ * (bank or card clearing → each covered service's income account) and one for any refund back out.
+ * Each invoice it pays is closed with a credit note on the same income account (see syncPrepaidUse).
+ * Nothing goes until it's paid; voiding removes both journals.
  */
 export function syncPrepayment(companyId: string, prepaymentId: string, by: string | null = null) {
   return serialize(companyId, () => syncPrepaymentNow(companyId, prepaymentId, by));
 }
 
+const incomeOf = (p: typeof prepayments.$inferSelect) => (p.income?.length ? p.income : [{ code: "4000", cents: p.amountCents }]);
+
 async function syncPrepaymentNow(companyId: string, prepaymentId: string, by: string | null): Promise<"posted" | "failed" | "skipped" | "not_connected"> {
-  const [p] = await db.select().from(prepayments).where(and(eq(prepayments.id, prepaymentId), eq(prepayments.companyId, companyId)));
+  let [p] = await db.select().from(prepayments).where(and(eq(prepayments.id, prepaymentId), eq(prepayments.companyId, companyId)));
   if (!p) return "skipped";
   if ((p.status === "requested" || p.status === "pending") && !p.bigcapitalReceiptId) return "skipped";
   const conn = await connection(companyId);
@@ -316,29 +290,38 @@ async function syncPrepaymentNow(companyId: string, prepaymentId: string, by: st
     await record(companyId, "prepayment", p.id, { status: "skipped", amountCents: p.amountCents, error: "Sample customers stay out of the real books", by });
     return "skipped";
   }
+  const removeJournals = async () => {
+    for (const [key, id] of [["bigcapitalRefundId", p.bigcapitalRefundId], ["bigcapitalReceiptId", p.bigcapitalReceiptId]] as const) {
+      if (!id) continue;
+      await conn.bc.deleteJournal(id);
+      await db.update(prepayments).set({ [key]: null, ...(key === "bigcapitalRefundId" ? { bigcapitalRefundCents: 0 } : {}) }).where(eq(prepayments.id, p.id));
+    }
+  };
   try {
     if (p.status === "void" || p.status === "requested" || p.status === "pending") {
-      for (const [key, id] of [["bigcapitalRefundId", p.bigcapitalRefundId], ["bigcapitalReceiptId", p.bigcapitalReceiptId]] as const) {
-        if (!id) continue;
-        await conn.bc.deleteJournal(id);
-        await db.update(prepayments).set({ [key]: null, ...(key === "bigcapitalRefundId" ? { bigcapitalRefundCents: 0 } : {}) }).where(eq(prepayments.id, p.id));
-      }
+      await removeJournals();
       await record(companyId, "prepayment", p.id, { status: "posted", amountCents: 0, error: null, by });
       return "posted";
+    }
+    // Booked the earlier way (into 2400 Customer Prepayments): redo it as income.
+    if (p.bigcapitalReceiptId && !p.bigcapitalAsIncome) {
+      await removeJournals();
+      [p] = await db.select().from(prepayments).where(eq(prepayments.id, p.id));
     }
     const customerBcId = await ensureCustomer(conn, companyId, p.customerId);
     const deposit = await conn.account(DEPOSIT_CODES[p.method ?? "other"] ?? "1020");
     const ref = `Prepayment PP-${p.number}`;
     if (!p.bigcapitalReceiptId) {
+      const income = incomeOf(p);
       const id = await conn.bc.createJournal({
-        date: p.receivedOn!, reference: ref, description: `${ref}: ${p.description}${p.discountCents ? ` (covers ${dollarsText(p.coversCents)}, ${dollarsText(p.discountCents)} prepay discount)` : ""}`,
+        date: p.receivedOn!, reference: ref, description: `${ref}: ${p.description}${p.discountCents ? ` (covers ${dollarsText(p.coversCents)}, ${dollarsText(p.discountCents)} prepay discount)` : ""}; income when received`,
         lines: [
           { accountId: deposit, debitCents: p.amountCents, note: p.methodDetail ?? p.method ?? undefined },
-          { accountId: await conn.account(PREPAYMENTS), creditCents: p.amountCents, contactId: customerBcId, note: p.description },
+          ...(await Promise.all(income.map(async (part, i) => ({ accountId: await conn.account(part.code), creditCents: part.cents, ...(i === 0 ? { contactId: customerBcId } : {}), note: `Prepaid: ${p.description}` })))),
         ],
       });
       if (!id) throw new BigcapitalError("Bigcapital didn't return the journal's id");
-      await db.update(prepayments).set({ bigcapitalReceiptId: id }).where(eq(prepayments.id, p.id));
+      await db.update(prepayments).set({ bigcapitalReceiptId: id, bigcapitalAsIncome: true }).where(eq(prepayments.id, p.id));
     }
     if (p.refundedCents !== p.bigcapitalRefundCents) {
       if (p.bigcapitalRefundId) {
@@ -346,10 +329,11 @@ async function syncPrepaymentNow(companyId: string, prepaymentId: string, by: st
         await db.update(prepayments).set({ bigcapitalRefundId: null, bigcapitalRefundCents: 0 }).where(eq(prepayments.id, p.id));
       }
       if (p.refundedCents > 0) {
+        const parts = splitIncome(p.refundedCents, incomeOf(p).map((x) => [x.code, x.cents] as [string, number]));
         const id = await conn.bc.createJournal({
           date: await companyToday(companyId), reference: `${ref} refund`, description: `${ref}: ${dollarsText(p.refundedCents)} refunded`,
           lines: [
-            { accountId: await conn.account(PREPAYMENTS), debitCents: p.refundedCents, contactId: customerBcId, note: "Refunded" },
+            ...(await Promise.all(parts.map(async (part, i) => ({ accountId: await conn.account(part.code), debitCents: part.cents, ...(i === 0 ? { contactId: customerBcId } : {}), note: "Prepayment refunded" })))),
             { accountId: deposit, creditCents: p.refundedCents, note: "Refunded" },
           ],
         });
@@ -364,7 +348,73 @@ async function syncPrepaymentNow(companyId: string, prepaymentId: string, by: st
   }
 }
 
-/** Takes a payment out of Bigcapital (and, for a prepaid one, its 2400 journal). */
+/**
+ * An invoice paid from a prepayment. The prepayment already counted as income when it came in, so the
+ * invoice is closed with a credit note on the same income account(s), applied to it. Credit notes only
+ * touch the accrual books, so on cash basis the income isn't counted a second time.
+ */
+async function syncPrepaidUse(conn: Conn, companyId: string, p: typeof invoicePayments.$inferSelect, by: string | null): Promise<"posted" | "failed" | "skipped" | "not_connected"> {
+  const net = p.status === "completed" ? p.amountCents - p.refundedCents : 0;
+  try {
+    // Booked the earlier way (a payment through 1045 and a journal out of 2400): take that out first.
+    if (p.bigcapitalPaymentId || p.bigcapitalJournalId) await takeOutOfBooks(conn, p);
+    if (p.bigcapitalCreditNoteId) {
+      const [posted] = await db.select({ amountCents: accountingPostings.amountCents, status: accountingPostings.status }).from(accountingPostings)
+        .where(and(eq(accountingPostings.companyId, companyId), eq(accountingPostings.kind, "payment"), eq(accountingPostings.sourceId, p.id)));
+      if (net > 0 && posted?.status === "posted" && posted.amountCents === net) return "posted";
+      await removePrepaidUse(conn, p);
+    }
+    if (net <= 0) {
+      await record(companyId, "payment", p.id, { status: "posted", amountCents: 0, error: null, by });
+      return "posted";
+    }
+    let [inv] = await db.select().from(invoices).where(eq(invoices.id, p.invoiceId));
+    if (!inv.bigcapitalInvoiceId) {
+      const r = await syncInvoiceNow(companyId, inv.id, by);
+      if (r === "skipped") { await record(companyId, "payment", p.id, { status: "skipped", amountCents: net, error: "Its invoice isn't sent to Bigcapital (sample customer)", by }); return "skipped"; }
+      [inv] = await db.select().from(invoices).where(eq(invoices.id, p.invoiceId));
+      if (!inv.bigcapitalInvoiceId) throw new BigcapitalError("Its invoice couldn't be sent to Bigcapital yet");
+    }
+    const [pp] = p.prepaymentId ? await db.select().from(prepayments).where(eq(prepayments.id, p.prepaymentId)) : [];
+    const n = pp?.number ?? 0;
+    const customerBcId = await ensureCustomer(conn, companyId, p.customerId);
+    const itemId = await ensureItem(conn, companyId, null, "4950");
+    const parts = splitIncome(net, (pp ? incomeOf(pp) : [{ code: "4000", cents: net }]).map((x) => [x.code, x.cents] as [string, number]));
+    const noteId = await conn.bc.createCreditNote({
+      customerId: customerBcId, creditNoteDate: p.receivedOn, creditNoteNumber: `PP${n}-${inv.number}-${p.id.slice(0, 4)}`, referenceNo: `Prepayment PP-${n}`,
+      note: `Invoice ${inv.number} paid from prepayment PP-${n} (counted as income when it was received)`,
+      entries: await Promise.all(parts.map(async (part, i) => ({ index: i + 1, itemId, rate: dollars(part.cents), quantity: 1, description: `Paid from prepayment PP-${n}`, sellAccountId: await conn.account(part.code) }))),
+    });
+    if (!noteId) throw new BigcapitalError("Bigcapital didn't return the credit note's id");
+    await db.update(invoicePayments).set({ bigcapitalCreditNoteId: noteId }).where(eq(invoicePayments.id, p.id));
+    const before = new Set((await conn.bc.creditNoteApplications(noteId)).map((x) => x.id));
+    await conn.bc.applyCreditNote(noteId, [{ invoiceId: Number(inv.bigcapitalInvoiceId), amount: dollars(net) }]);
+    const made = (await conn.bc.creditNoteApplications(noteId)).find((x) => !before.has(x.id) && x.invoiceId === Number(inv.bigcapitalInvoiceId));
+    await db.update(invoicePayments).set({ bigcapitalApplicationId: made?.id ?? "unknown" }).where(eq(invoicePayments.id, p.id));
+    await record(companyId, "payment", p.id, { status: "posted", externalId: noteId, amountCents: net, by });
+    return "posted";
+  } catch (e) {
+    const [now] = await db.select({ bc: invoicePayments.bigcapitalCreditNoteId }).from(invoicePayments).where(eq(invoicePayments.id, p.id));
+    await record(companyId, "payment", p.id, { status: "failed", externalId: now?.bc ?? null, amountCents: net, error: (e as Error).message, by });
+    return "failed";
+  }
+}
+
+/** Takes a prepaid payment's credit note off its invoice and out of Bigcapital. */
+async function removePrepaidUse(conn: Conn, p: typeof invoicePayments.$inferSelect) {
+  if (!p.bigcapitalCreditNoteId) return;
+  let appId = p.bigcapitalApplicationId;
+  if (!appId || appId === "unknown") {
+    const [inv] = await db.select({ bc: invoices.bigcapitalInvoiceId }).from(invoices).where(eq(invoices.id, p.invoiceId));
+    appId = (await conn.bc.creditNoteApplications(p.bigcapitalCreditNoteId)).find((x) => x.invoiceId === Number(inv?.bc))?.id ?? null;
+  }
+  if (appId) await conn.bc.deleteCreditApplication(appId);
+  await db.update(invoicePayments).set({ bigcapitalApplicationId: null }).where(eq(invoicePayments.id, p.id));
+  await conn.bc.deleteCreditNote(p.bigcapitalCreditNoteId);
+  await db.update(invoicePayments).set({ bigcapitalCreditNoteId: null }).where(eq(invoicePayments.id, p.id));
+}
+
+/** Takes a payment out of Bigcapital (and, for a prepaid one booked the earlier way, its 2400 journal). */
 async function takeOutOfBooks(conn: Conn, p: typeof invoicePayments.$inferSelect) {
   if (p.bigcapitalPaymentId) {
     await conn.bc.deletePayment(p.bigcapitalPaymentId);

@@ -1,9 +1,9 @@
 import type { FastifyPluginAsync } from "fastify";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { customerName, formatAddress, formatMoney, prepaymentSchema, prepayTotals } from "@crewdesk/shared";
+import { customerName, formatAddress, formatMoney, prepaymentSchema, prepayTotals, splitIncome } from "@crewdesk/shared";
 import { db } from "../db";
-import { accountingPostings, companies, customers, employees, invoicePayments, invoices, prepayments, properties, propertyAssignments } from "../db/schema";
+import { accountingPostings, companies, customers, employees, invoicePayments, invoices, prepayments, properties, propertyAssignments, serviceTypes } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { customerInCompany } from "../lib/crm";
@@ -78,13 +78,20 @@ const routes: FastifyPluginAsync = async (app) => {
       if (!link) throw new HttpError(400, "That property isn't one of this customer's");
     }
     const t = prepayTotals(body.coversCents, body.discountKind, body.discountValue);
+    // Where it counts as income when received: each price-list service's own account, otherwise the one chosen.
+    const serviceIds = [...new Set(body.lines.map((l) => l.serviceTypeId).filter((x): x is string => !!x))];
+    const accountOf = new Map((serviceIds.length ? await db.select({ id: serviceTypes.id, code: serviceTypes.incomeAccountCode }).from(serviceTypes)
+      .where(and(eq(serviceTypes.companyId, companyId), inArray(serviceTypes.id, serviceIds))) : []).map((x) => [x.id, x.code]));
+    const income = splitIncome(t.amountCents, body.lines.length
+      ? body.lines.map((l) => [(l.serviceTypeId && accountOf.get(l.serviceTypeId)) || body.incomeAccountCode, Math.round(l.quantity * l.unitPriceCents)] as [string, number])
+      : [[body.incomeAccountCode, t.coversCents]]);
     const online = body.how === "link";
     if (online && !(await stripeConfig(companyId))) throw new HttpError(400, "Online payments aren't set up (Settings → Integrations → Stripe). Record a check or cash prepayment instead");
     const to = body.emailTo ?? cust.email;
     const { p, made } = await db.transaction(async (tx) => {
       const [p] = await tx.insert(prepayments).values({
         companyId, number: await nextPrepaymentNumber(tx, companyId), customerId: body.customerId, propertyId: body.propertyId ?? null, description: body.description, lines: body.lines,
-        coversCents: t.coversCents, discountCents: t.discountCents, amountCents: t.amountCents, note: body.note ?? null, useNow: body.useNow, createdById: sub,
+        coversCents: t.coversCents, discountCents: t.discountCents, amountCents: t.amountCents, income, note: body.note ?? null, useNow: body.useNow, createdById: sub,
         ...(online
           ? { status: "requested", payToken: randomToken(24), payTokenExpiresAt: new Date(Date.now() + PREPAY_LINK_DAYS * 86_400_000) }
           : { status: "open", method: body.how, reference: body.reference ?? null, receivedOn: await companyToday(companyId) }),

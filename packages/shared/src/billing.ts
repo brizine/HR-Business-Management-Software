@@ -251,6 +251,11 @@ export const prepaymentSchema = z.object({
   lines: z.array(prepaymentLineSchema).max(30).default([]),
   /** Value of what it covers, before the discount (entered directly when there are no lines). */
   coversCents: z.number().int().positive("Enter the amount").max(50_000_000),
+  /**
+   * Where it counts as income when received (prepayments are income when received): for an entered
+   * amount, and for lines that aren't price-list services. Price-list services use their own account.
+   */
+  incomeAccountCode: z.enum(INCOME_ACCOUNTS.map((a) => a.code) as [string, ...string[]]).default("4000"),
   discountKind: z.enum(["none", "percent", "amount"]).default("none"),
   discountValue: z.number().min(0).max(10_000_000).default(0),
   how: z.enum(PREPAY_HOW),
@@ -284,4 +289,23 @@ export function prepaySplit(valueCents: number, cashLeftCents: number, discountL
   if (cashCents > cashLeftCents) { cashCents = cashLeftCents; discountCents = v - cashCents; }
   if (discountCents > discountLeftCents) { discountCents = discountLeftCents; cashCents = v - discountCents; }
   return { cashCents, discountCents };
+}
+
+/**
+ * Splits money received across income accounts in proportion to what each account's lines are worth
+ * (largest remainder, so the parts add up exactly). Lines are [account code, value in cents].
+ */
+export function splitIncome(totalCents: number, lines: [string, number][]): { code: string; cents: number }[] {
+  const byCode = new Map<string, number>();
+  for (const [code, v] of lines) byCode.set(code, (byCode.get(code) ?? 0) + Math.max(0, v));
+  const worth = [...byCode.values()].reduce((s, v) => s + v, 0);
+  if (!byCode.size || worth <= 0) return [{ code: lines[0]?.[0] ?? "4000", cents: totalCents }];
+  const parts = [...byCode].map(([code, v]) => ({ code, exact: (totalCents * v) / worth }));
+  const out = parts.map((p) => ({ code: p.code, cents: Math.floor(p.exact) }));
+  let left = totalCents - out.reduce((s, p) => s + p.cents, 0);
+  for (const i of parts.map((p, i) => ({ i, r: p.exact - Math.floor(p.exact) })).sort((a, b) => b.r - a.r).map((x) => x.i)) {
+    if (left <= 0) break;
+    out[i].cents += 1; left -= 1;
+  }
+  return out.filter((p) => p.cents > 0);
 }

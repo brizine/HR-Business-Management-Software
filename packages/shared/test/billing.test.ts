@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describePricing, formatMoney, invoiceSchema, invoiceTotals, isOverdue, priceFor, serviceTypeSchema, invoiceBalance, creditSchema, billingSettingsSchema, prepayTotals, prepaySplit, prepaymentSchema } from "../src/billing";
+import { describePricing, formatMoney, invoiceSchema, invoiceTotals, isOverdue, priceFor, serviceTypeSchema, invoiceBalance, creditSchema, billingSettingsSchema, prepayTotals, prepaySplit, prepaymentSchema, splitIncome } from "../src/billing";
 
 describe("price list", () => {
   it("prices flat, per 1,000 sq ft (with a minimum) and by lawn size", () => {
@@ -79,5 +79,14 @@ describe("prepayments", () => {
     expect(prepaymentSchema.safeParse({ ...base, discountKind: "percent", discountValue: 60 }).success).toBe(false);
     expect(prepaymentSchema.safeParse({ ...base, discountKind: "amount", discountValue: 50000 }).success).toBe(false);
     expect(prepaymentSchema.safeParse({ ...base, description: "" }).success).toBe(false);
+  });
+});
+
+describe("prepayment income", () => {
+  it("splits money received across income accounts by what each is worth, adding up exactly", () => {
+    expect(splitIncome(27000, [["4000", 12000], ["4100", 18000]])).toEqual([{ code: "4000", cents: 10800 }, { code: "4100", cents: 16200 }]);
+    expect(splitIncome(100, [["4000", 1], ["4100", 1], ["4200", 1]]).reduce((s, p) => s + p.cents, 0)).toBe(100);
+    expect(splitIncome(47500, [["4000", 30000], ["4000", 20000]])).toEqual([{ code: "4000", cents: 47500 }]);
+    expect(splitIncome(5000, [])).toEqual([{ code: "4000", cents: 5000 }]);
   });
 });

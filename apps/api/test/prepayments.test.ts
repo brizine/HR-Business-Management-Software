@@ -1,4 +1,4 @@
-/** Prepayments: taking them (with a discount), paying invoices from them, voiding a use, taking back the discount, refunding the rest, and the Bigcapital entries. */
+/** Prepayments: taking them (with a discount), paying invoices from them, voiding a use, taking back the discount, refunding the rest, and the Bigcapital entries (income when received). */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer, type Server } from "node:http";
 import type { FastifyInstance } from "fastify";
@@ -111,9 +111,10 @@ describe("Prepayments", () => {
     await flushBillingSync();
     const journal = calls.find((c) => c.method === "POST" && c.path === "/manual-journals")!;
     expect(journal.body.reference).toBe("Prepayment PP-1");
+    // Income when received: Undeposited Funds → 4000 Lawn Treatment Programs (nothing to 2400).
     expect(journal.body.entries).toEqual([
       expect.objectContaining({ accountId: 1002, debit: 475 }),
-      expect.objectContaining({ accountId: 1029, credit: 475, contactId: expect.any(Number) }),
+      expect.objectContaining({ accountId: 1026, credit: 475, contactId: expect.any(Number) }),
     ]);
     ID.pp1 = r.body.id;
   });
@@ -126,14 +127,14 @@ describe("Prepayments", () => {
     expect(a.payments[0]).toMatchObject({ method: "prepaid", amountCents: 9500, prepaymentNumber: 1 });
     expect(a.credits[0]).toMatchObject({ amountCents: 500, reason: "prepay_discount" });
     expect(await pp(ID.pp1)).toMatchObject({ appliedCents: 9500, appliedDiscountCents: 500, cashLeftCents: 38000, discountLeftCents: 2000 });
-    // In Bigcapital: the payment lands in 1045 (made now), and a journal moves it out of 2400; the discount is a credit note in 4900.
+    // In Bigcapital: it already counted as income when received, so the invoice is closed by a credit note on
+    // 4000 (no payment, so no second income on cash basis); the discount is a credit note in 4900.
     await flushBillingSync();
-    expect(calls.find((c) => c.method === "POST" && c.path === "/accounts")!.body).toMatchObject({ code: "1045", accountType: "other-current-asset" });
-    const id1045 = ACCOUNTS.find((x) => x.code === "1045")!.id;
-    expect(calls.find((c) => c.method === "POST" && c.path === "/payments-received")!.body).toMatchObject({ depositAccountId: id1045, entries: [{ paymentAmount: 95 }] });
-    const move = calls.filter((c) => c.method === "POST" && c.path === "/manual-journals").pop()!;
-    expect(move.body.entries).toEqual([expect.objectContaining({ accountId: 1029, debit: 95 }), expect.objectContaining({ accountId: id1045, credit: 95 })]);
-    expect(calls.find((c) => c.method === "POST" && c.path === "/credit-notes")!.body.entries[0]).toMatchObject({ rate: 5, sellAccountId: 1031 });
+    const notes = calls.filter((c) => c.method === "POST" && c.path === "/credit-notes").map((c) => c.body);
+    expect(notes.find((n) => n.entries[0].rate === 95)).toMatchObject({ referenceNo: "Prepayment PP-1", entries: [{ rate: 95, sellAccountId: 1026 }] });
+    expect(notes.find((n) => n.entries[0].rate === 5)!.entries[0]).toMatchObject({ sellAccountId: 1031 });
+    expect(calls.filter((c) => c.method === "POST" && /apply-invoices$/.test(c.path))).toHaveLength(2);
+    expect(calls.some((c) => c.path.startsWith("/payments-received") || (c.method === "POST" && c.path === "/accounts"))).toBe(false);
     // A bigger invoice takes the rest: $380 cash + $20 discount; $50 still owed.
     ID.i450 = await sentInvoice(45000);
     expect(await inv(ID.i450)).toMatchObject({ status: "partial", paidCents: 38000, creditedCents: 2000, balanceCents: 5000 });
@@ -147,8 +148,9 @@ describe("Prepayments", () => {
     expect(await inv(ID.i100)).toMatchObject({ status: "sent", paidCents: 0, creditedCents: 0, balanceCents: 10000 });
     expect(await pp(ID.pp1)).toMatchObject({ cashLeftCents: 9500, discountLeftCents: 500 });
     await flushBillingSync();
-    const deletes = calls.filter((c) => c.method === "DELETE").map((c) => c.path.split("/")[1]);
-    expect(deletes).toEqual(expect.arrayContaining(["payments-received", "manual-journals", "credit-notes"]));
+    const deletes = calls.filter((c) => c.method === "DELETE").map((c) => c.path.replace(/\d+/g, "#"));
+    expect(deletes).toEqual(expect.arrayContaining(["/credit-notes/applied-invoices/#", "/credit-notes/#"]));
+    expect(deletes.filter((d) => d === "/credit-notes/#")).toHaveLength(2); // the prepaid credit note and the discount's
   });
 
   it("the customer cancels: the discount is taken back (paid from the prepayment at full price), and the rest refunded", async () => {
@@ -169,7 +171,7 @@ describe("Prepayments", () => {
     expect(sent[0]?.subject).toMatch(/^Refund of \$25\.00/);
     await flushBillingSync();
     const back = calls.find((c) => c.method === "POST" && c.path === "/manual-journals")!;
-    expect(back.body.entries).toEqual([expect.objectContaining({ accountId: 1029, debit: 25 }), expect.objectContaining({ accountId: 1002, credit: 25 })]);
+    expect(back.body.entries).toEqual([expect.objectContaining({ accountId: 1026, debit: 25 }), expect.objectContaining({ accountId: 1002, credit: 25 })]);
     // Invoice 100 still owes: nothing is left to pay it.
     expect(await inv(ID.i100)).toMatchObject({ balanceCents: 10000 });
   });
@@ -184,6 +186,40 @@ describe("Prepayments", () => {
     expect(await inv(next)).toMatchObject({ paidCents: 0 });
     const c = await sentInvoice(2000, ID.propB);
     expect(await inv(c)).toMatchObject({ paidCents: 2000, status: "paid" });
+  });
+
+  it("counts as income in each covered service's own account; an entered amount where it's told", async () => {
+    const pest = (await call("POST", "/service-types", "owner", { name: "Quarterly pest control", pricing: "flat", priceCents: 9000, incomeAccountCode: "4100" })).body.id;
+    const lawn = (await call("POST", "/service-types", "owner", { name: "Lawn round", pricing: "flat", priceCents: 6000, incomeAccountCode: "4000" })).body.id;
+    calls.length = 0;
+    const r = await take({ coversCents: 30000, discountKind: "percent", discountValue: 10, how: "cash", description: "Lawn + pest year", lines: [
+      { serviceTypeId: lawn, description: "Lawn round", quantity: 2, unitPriceCents: 6000 }, { serviceTypeId: pest, description: "Quarterly pest control", quantity: 2, unitPriceCents: 9000 },
+    ] });
+    expect(r.body).toMatchObject({ amountCents: 27000, income: [{ code: "4000", cents: 10800 }, { code: "4100", cents: 16200 }] });
+    const m = await take({ coversCents: 5000, how: "cash", description: "Toward one-time work", incomeAccountCode: "4200" });
+    expect(m.body.income).toEqual([{ code: "4200", cents: 5000 }]);
+    ACCOUNTS.push({ id: 1048, code: "4200", name: "Acct 4200", account_type: "income", active: true }, { id: 1047, code: "4100", name: "Acct 4100", account_type: "income", active: true });
+    await call("POST", `/prepayments/${r.body.id}/sync`, "office");
+    const j = calls.filter((c) => c.method === "POST" && c.path === "/manual-journals").map((c) => c.body).find((b) => b.reference === `Prepayment PP-${r.body.number}`)!;
+    expect(j.entries).toEqual([
+      expect.objectContaining({ accountId: 1002, debit: 270 }),
+      expect.objectContaining({ accountId: 1026, credit: 108 }),
+      expect.objectContaining({ accountId: 1047, credit: 162 }),
+    ]);
+  });
+
+  it("anything booked the earlier way (into 2400) is redone as income", async () => {
+    const r = await take({ coversCents: 4000, how: "cash", description: "Old style" });
+    await flushBillingSync();
+    // Pretend it was booked before this change.
+    const { db } = await import("../src/db");
+    const { prepayments } = await import("../src/db/schema");
+    const { eq } = await import("drizzle-orm");
+    await db.update(prepayments).set({ bigcapitalAsIncome: false }).where(eq(prepayments.id, r.body.id));
+    calls.length = 0;
+    expect((await call("POST", `/prepayments/${r.body.id}/sync`, "office")).body.result).toBe("posted");
+    expect(calls.filter((c) => c.method !== "GET").map((c) => `${c.method} ${c.path.replace(/\d+/g, "#")}`)).toEqual(["DELETE /manual-journals/#", "POST /manual-journals"]);
+    expect(calls.find((c) => c.method === "POST")!.body.entries[1]).toMatchObject({ accountId: 1026, credit: 40 });
   });
 
   it("voids a mistake, but not one that paid invoices; a pay link needs Stripe", async () => {

@@ -339,7 +339,7 @@ const portalRoutes: FastifyPluginAsync = async (app) => {
     const p = await db.transaction(async (tx) => {
       const [row] = await tx.insert(prepayments).values({
         companyId: v.companyId, number: await nextPrepaymentNumber(tx, v.companyId), customerId: body.customerId, description: "Prepayment toward future services",
-        coversCents: body.amountCents, amountCents: body.amountCents, status: "requested", note: "Made in the customer portal",
+        coversCents: body.amountCents, amountCents: body.amountCents, income: [{ code: "4000", cents: body.amountCents }], status: "requested", note: "Made in the customer portal",
       }).returning();
       return row;
     });

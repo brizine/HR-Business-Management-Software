@@ -1439,8 +1439,11 @@ export const invoicePayments = pgTable(
     feeCents: integer("fee_cents"),
     /** For "prepaid": the prepayment it came from. */
     prepaymentId: uuid("prepayment_id").references(() => prepayments.id, { onDelete: "restrict" }),
-    /** For "prepaid": the Bigcapital journal moving it out of 2400 Customer Prepayments. */
+    /** For "prepaid" (booked the earlier way): the Bigcapital journal moving it out of 2400; removed when redone. */
     bigcapitalJournalId: text("bigcapital_journal_id"),
+    /** For "prepaid": the Bigcapital credit note (on the prepayment's income account) that closes the invoice, and its application. */
+    bigcapitalCreditNoteId: text("bigcapital_credit_note_id"),
+    bigcapitalApplicationId: text("bigcapital_application_id"),
     /** Refunded so far (refunds pending or done); what counts toward the invoice is amount − refunded. */
     refundedCents: integer("refunded_cents").notNull().default(0),
     bigcapitalPaymentId: text("bigcapital_payment_id"),
@@ -1490,6 +1493,8 @@ export const prepayments = pgTable(
     lines: jsonb("lines").$type<{ serviceTypeId?: string | null; description: string; quantity: number; unitPriceCents: number }[]>().notNull().default([]),
     /** Value of what it covers; amount (what the customer pays) + discount. */
     coversCents: integer("covers_cents").notNull(),
+    /** Where the money counts as income when received: [{ code: "4000", cents }], adding up to amountCents. */
+    income: jsonb("income").$type<{ code: string; cents: number }[]>().notNull().default([]),
     discountCents: integer("discount_cents").notNull().default(0),
     amountCents: integer("amount_cents").notNull(),
     /** "requested" (link sent), "pending" (bank payment clearing), "open" (paid), "closed" (rest refunded) or "void". */
@@ -1515,6 +1520,8 @@ export const prepayments = pgTable(
     bigcapitalReceiptId: text("bigcapital_receipt_id"),
     bigcapitalRefundId: text("bigcapital_refund_id"),
     bigcapitalRefundCents: integer("bigcapital_refund_cents").notNull().default(0),
+    /** Its Bigcapital journals book it as income when received (older ones went to 2400 and are redone). */
+    bigcapitalAsIncome: boolean("bigcapital_as_income").notNull().default(false),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
     closedAt: timestamp("closed_at", { withTimezone: true }),
     voidedAt: timestamp("voided_at", { withTimezone: true }),
