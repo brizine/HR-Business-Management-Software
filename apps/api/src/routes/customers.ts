@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { and, arrayContains, arrayOverlaps, asc, desc, eq, ilike, inArray, isNull, not, or, sql, type SQL } from "drizzle-orm";
 import { cancelSchema, customerName, customerSchema, customerUpdateSchema, lawnTotal } from "@crewdesk/shared";
 import { db } from "../db";
-import { cancellationReasons, cancellations, customerContacts, customers, invoices, properties, propertyAssignments } from "../db/schema";
+import { cancellationReasons, cancellations, customerContacts, customerCredits, customers, invoices, properties, propertyAssignments } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
@@ -183,6 +183,7 @@ const routes: FastifyPluginAsync = async (app) => {
     if (inv > 0 && !c.sample) throw new HttpError(409, "This customer has invoices; cancel them instead");
     await db.transaction(async (tx) => {
       await tx.delete(invoices).where(eq(invoices.customerId, c.id));
+      await tx.delete(customerCredits).where(eq(customerCredits.customerId, c.id));
       await tx.delete(customers).where(eq(customers.id, c.id));
     });
     return { ok: true };

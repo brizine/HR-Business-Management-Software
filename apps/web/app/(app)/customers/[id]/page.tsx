@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { CustomerBilling } from "@/components/invoices";
+import { CustomerCredits } from "@/components/credits";
 import { CancelForm, CustomerFields, PropertyFields, TagChips, customerBody, customerFormValue, propertyBody, propertyFormValue, useTags } from "@/components/customers";
 
 export default function CustomerDetail({ params }: { params: Promise<{ id: string }> }) {
@@ -20,6 +21,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
   const [cancelling, setCancelling] = useState(false);
   const [addingProperty, setAddingProperty] = useState(false);
   const [showPast, setShowPast] = useState(false);
+  const [creditVersion, setCreditVersion] = useState(0);
   const action = useAction();
   const c = customer.data;
   if (customer.error) return <><PageHead title="Customer" /><ErrorBox error={customer.error} /></>;
@@ -104,7 +106,9 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
         )}
       </div>
 
-      <CustomerBilling customerId={id} />
+      <CustomerBilling customerId={id} key={`billing-${creditVersion}`} />
+      <CustomerCredits customerId={id} onChange={() => setCreditVersion((v) => v + 1)}
+        properties={current.filter((p: any) => p.status !== "cancelled").map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", ") }))} />
 
       {c.cancellations.length > 0 && (
         <div className="card">

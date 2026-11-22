@@ -190,9 +190,28 @@ Operations → **Billing** has **Invoices** and the **Price list** (managers in 
   example while Bigcapital was restarting) is retried every few minutes, or click **Send to Bigcapital now**. Settings →
   Integrations lists anything still waiting. Sample customers are only sent from the test company, never to the real
   books.
+- **Credits:** give a customer credit for a missed or incomplete service, a goodwill gesture, a billing correction, a
+  referral reward or a prepay discount. **Add credit** on the customer's page (the **Credits** box), on a property's
+  page (credit only for that property's invoices), or on an invoice. Enter the amount, the reason, and a
+  **description the customer sees** ("Missed the back yard on 5/12"); a note for the office is optional. Then choose
+  where it goes: **on open invoices now** (oldest first), **kept on the account for the next invoice**, or on one
+  invoice. A credit lowers what's owed: the invoice shows it ("Credit CR-3 −$20.00" on the PDF, "Credit: …" in the
+  portal), and a fully credited invoice counts as paid. Credit kept on the account goes on the customer's next
+  invoice automatically when it's sent (turn that off in Settings → Customers & billing). A property's credit is only
+  used on that property's invoices.
+  - **On an invoice:** the **Credits** box lists the credit on it; **Take off** puts it back on the account; **Use
+    credit** puts account credit on this invoice (choose the credit and amount).
+  - **Void** a credit (Credits box on the customer's page) if it was a mistake: it comes off any invoices it was on
+    and they owe it again. Voiding an invoice puts its credit back on the account. An invoice with credit on it can't
+    be edited until the credit is taken off.
+  - **Bigcapital:** each credit becomes a credit note (CR-number) in **4900 Discounts and Refunds**, applied to the
+    same invoices; taking credit off unapplies it, and voiding removes the credit note. Credit kept on the account
+    shows in Bigcapital as the customer's unused credit.
+  - **Customers** see their credit in the portal: on each invoice, and "credit on your account" on the home page.
 - **Settings → Customers & billing** (admins): the **next invoice number** (at switch-over, set it to follow Service
   Autopilot's last number), your usual **terms** (due on receipt, net 7/10/15/30), **make checks payable to**, and the
-  **footer** printed on every invoice.
+  **footer** printed on every invoice, and whether a customer's credit is **used automatically** on their invoices
+  when they're sent (on by default).
 
 ### Online payments and the customer portal
 
@@ -222,8 +241,11 @@ form and go straight to Stripe; Crewdesk never sees or keeps them.
   all or part of it back through Stripe; choose the amount and reason and add a note for your records. Refunds made
   in Stripe's own dashboard come into Crewdesk too, usually within seconds (and an hourly check catches any that
   didn't). Either way, the payment shows what was refunded, when, why and whether it was done in Crewdesk or in
-  Stripe; the customer gets an email; and the invoice owes the refunded amount again (**Partly paid** or **Unpaid**).
-  After a full refund you can **Void** the invoice if it won't be collected. In Bigcapital, the payment is replaced
+  Stripe, and the customer gets an email. Tick **Write it off** when refunding from Crewdesk (a goodwill refund) and a
+  credit for the refunded amount goes on the invoice, so it stays paid. Otherwise the invoice owes the refunded amount
+  again (**Partly paid** or **Unpaid**), for example when a customer paid with the wrong card; after a full refund you
+  can **Void** the invoice if it won't be collected. A refund made in Stripe's dashboard always comes in as owed
+  again; to write it off, **Add credit** on the invoice. In Bigcapital, the payment is replaced
   by one for what's left, or taken out if it was fully refunded. Bank refunds show **on its way** until they finish
   (up to 5 business days); a refund that fails puts the payment back as paid. A bank payment still clearing can't
   be refunded until it clears. Stripe keeps its original fee on a refund. Cash and check payments are voided, not

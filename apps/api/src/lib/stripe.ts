@@ -117,7 +117,7 @@ export async function startInvoicePayment(companyId: string, invoiceId: string) 
   if (inv.status === "draft") throw new HttpError(400, "This invoice isn't ready yet");
   const pending = await db.select().from(invoicePayments).where(and(eq(invoicePayments.invoiceId, inv.id), eq(invoicePayments.status, "pending")));
   const pendingCents = pending.reduce((s, p) => s + p.amountCents, 0);
-  const due = inv.totalCents - inv.paidCents - pendingCents;
+  const due = inv.totalCents - inv.paidCents - inv.creditedCents - pendingCents;
   if (due <= 0) throw new HttpError(400, pendingCents ? "A bank payment for this invoice is already on its way" : "This invoice is already paid. Thank you!");
   if (due < 50) throw new HttpError(400, "The amount left is too small to pay online; please call the office");
   const pi = await stripe.paymentIntents.create({
@@ -178,7 +178,7 @@ export async function applyPaymentIntent(companyId: string, pi: Stripe.PaymentIn
   const updated = await refreshInvoice(db, inv.id);
   if (status === "completed") {
     queueBillingSync(() => syncPayment(companyId, paymentId));
-    await sendReceipt(companyId, inv.id, amount, detail, updated ? updated.totalCents - updated.paidCents : 0).catch((e) => console.error("Receipt email failed:", (e as Error).message));
+    await sendReceipt(companyId, inv.id, amount, detail, updated ? updated.totalCents - updated.paidCents - updated.creditedCents : 0).catch((e) => console.error("Receipt email failed:", (e as Error).message));
   }
   return { status, paymentId };
 }

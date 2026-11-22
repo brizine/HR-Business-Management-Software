@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { customerName, type PostingKind } from "@crewdesk/shared";
 import { db } from "../db";
-import { accountingPostings, bigcapitalLinks, companies, customers, invoiceLines, invoicePayments, invoices, serviceTypes } from "../db/schema";
+import { accountingPostings, bigcapitalLinks, companies, creditApplications, customerCredits, customers, invoiceLines, invoicePayments, invoices, serviceTypes } from "../db/schema";
 import { accountingConfig } from "./accounting";
 import { bigcapital, BigcapitalError, type BigcapitalInvoice } from "./bigcapital";
 
@@ -267,6 +267,82 @@ async function syncPaymentNow(companyId: string, paymentId: string, by: string |
 
 const dollarsText = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
+/* ── Credits ── */
+
+/**
+ * Makes Bigcapital match a customer credit: a credit note in 4900 Discounts and Refunds, applied to
+ * the same invoices. Credit taken off an invoice is unapplied there; a void credit is removed.
+ */
+export function syncCredit(companyId: string, creditId: string, by: string | null = null) {
+  return serialize(companyId, () => syncCreditNow(companyId, creditId, by));
+}
+
+async function syncCreditNow(companyId: string, creditId: string, by: string | null): Promise<"posted" | "failed" | "skipped" | "not_connected"> {
+  const [c] = await db.select().from(customerCredits).where(and(eq(customerCredits.id, creditId), eq(customerCredits.companyId, companyId)));
+  if (!c) return "skipped";
+  const conn = await connection(companyId);
+  if (!conn) return "not_connected";
+  const [cust] = await db.select({ sample: customers.sample }).from(customers).where(eq(customers.id, c.customerId));
+  if (cust?.sample && !(await isTestCompany(companyId))) {
+    await record(companyId, "credit", c.id, { status: "skipped", amountCents: c.amountCents, error: "Sample customers stay out of the real books", by });
+    return "skipped";
+  }
+  const apps = await db.select().from(creditApplications).where(eq(creditApplications.creditId, c.id)).orderBy(asc(creditApplications.createdAt));
+  try {
+    // Credit taken off invoices: unapply it in Bigcapital.
+    for (const a of apps.filter((x) => x.removedAt && x.bigcapitalApplicationId)) {
+      let appId: string | null = a.bigcapitalApplicationId;
+      if (appId === "unknown" && c.bigcapitalCreditNoteId) appId = await findApplication(conn, c.bigcapitalCreditNoteId, a);
+      if (appId && appId !== "unknown") await conn.bc.deleteCreditApplication(appId);
+      await db.update(creditApplications).set({ bigcapitalApplicationId: null }).where(eq(creditApplications.id, a.id));
+    }
+    if (c.status === "void") {
+      if (c.bigcapitalCreditNoteId) {
+        await conn.bc.deleteCreditNote(c.bigcapitalCreditNoteId);
+        await db.update(customerCredits).set({ bigcapitalCreditNoteId: null }).where(eq(customerCredits.id, c.id));
+      }
+      await record(companyId, "credit", c.id, { status: "posted", amountCents: 0, error: null, by });
+      return "posted";
+    }
+    let noteId = c.bigcapitalCreditNoteId;
+    if (!noteId) {
+      const customerBcId = await ensureCustomer(conn, companyId, c.customerId);
+      const itemId = await ensureItem(conn, companyId, null, "4950");
+      noteId = await conn.bc.createCreditNote({
+        customerId: customerBcId, creditNoteDate: c.issuedOn, creditNoteNumber: `CR-${c.number}`, referenceNo: `Crewdesk credit CR-${c.number}`, note: c.description,
+        entries: [{ index: 1, itemId, rate: dollars(c.amountCents), quantity: 1, description: c.description, sellAccountId: await conn.account("4900") }],
+      });
+      if (!noteId) throw new BigcapitalError("Bigcapital didn't return the new credit note's id");
+      await db.update(customerCredits).set({ bigcapitalCreditNoteId: noteId }).where(eq(customerCredits.id, c.id));
+    }
+    // Credit used on invoices: apply it in Bigcapital (each invoice goes there first if it isn't yet).
+    for (const a of apps.filter((x) => !x.removedAt && !x.bigcapitalApplicationId)) {
+      let [inv] = await db.select().from(invoices).where(eq(invoices.id, a.invoiceId));
+      if (!inv.bigcapitalInvoiceId) {
+        await syncInvoiceNow(companyId, inv.id, by);
+        [inv] = await db.select().from(invoices).where(eq(invoices.id, a.invoiceId));
+        if (!inv.bigcapitalInvoiceId) throw new BigcapitalError(`Invoice ${inv.number} couldn't be sent to Bigcapital yet`);
+      }
+      const before = new Set((await conn.bc.creditNoteApplications(noteId)).map((x) => x.id));
+      await conn.bc.applyCreditNote(noteId, [{ invoiceId: Number(inv.bigcapitalInvoiceId), amount: dollars(a.amountCents) }]);
+      const made = (await conn.bc.creditNoteApplications(noteId)).find((x) => !before.has(x.id) && x.invoiceId === Number(inv.bigcapitalInvoiceId));
+      // If Bigcapital doesn't say which it was, it's found by invoice and amount when it needs removing.
+      await db.update(creditApplications).set({ bigcapitalApplicationId: made?.id ?? "unknown" }).where(eq(creditApplications.id, a.id));
+    }
+    await record(companyId, "credit", c.id, { status: "posted", externalId: noteId, amountCents: c.amountCents, error: null, by });
+    return "posted";
+  } catch (e) {
+    await record(companyId, "credit", c.id, { status: "failed", externalId: c.bigcapitalCreditNoteId, amountCents: c.amountCents, error: (e as Error).message, by });
+    return "failed";
+  }
+}
+
+async function findApplication(conn: Conn, noteId: string, a: typeof creditApplications.$inferSelect) {
+  const [inv] = await db.select({ bc: invoices.bigcapitalInvoiceId }).from(invoices).where(eq(invoices.id, a.invoiceId));
+  const hit = (await conn.bc.creditNoteApplications(noteId)).find((x) => x.invoiceId === Number(inv?.bc) && Math.round(x.amount * 100) === a.amountCents);
+  return hit?.id ?? null;
+}
+
 /** An invoice and its payments, now (the "Send to Bigcapital" button). */
 export async function syncInvoiceAndPayments(companyId: string, invoiceId: string, by: string | null) {
   const result = await syncInvoice(companyId, invoiceId, by);
@@ -282,15 +358,19 @@ export async function syncInvoiceAndPayments(companyId: string, invoiceId: strin
 export async function retryBillingSyncs(limit = 25) {
   const stale = new Date(Date.now() - 2 * 60_000);
   const failed = await db.select({ companyId: accountingPostings.companyId, kind: accountingPostings.kind, sourceId: accountingPostings.sourceId }).from(accountingPostings)
-    .where(and(inArray(accountingPostings.kind, ["invoice", "payment"]), eq(accountingPostings.status, "failed"), lt(accountingPostings.updatedAt, stale))).limit(limit);
+    .where(and(inArray(accountingPostings.kind, ["invoice", "payment", "credit"]), eq(accountingPostings.status, "failed"), lt(accountingPostings.updatedAt, stale))).limit(limit);
   const neverSent = await db.select({ companyId: invoices.companyId, id: invoices.id }).from(invoices)
     .where(and(isNotNull(invoices.number), isNull(invoices.bigcapitalInvoiceId), sql`${invoices.status} <> 'void'`, lt(invoices.updatedAt, stale),
       sql`not exists (select 1 from accounting_postings ap where ap.source_id = ${invoices.id} and ap.kind = 'invoice')`)).limit(limit);
   const unpaidPayments = await db.select({ companyId: invoicePayments.companyId, id: invoicePayments.id }).from(invoicePayments)
     .where(and(eq(invoicePayments.status, "completed"), isNull(invoicePayments.bigcapitalPaymentId), lt(invoicePayments.createdAt, stale),
       sql`not exists (select 1 from accounting_postings ap where ap.source_id = ${invoicePayments.id} and ap.kind = 'payment')`)).limit(limit);
+  const unsentCredits = await db.select({ companyId: customerCredits.companyId, id: customerCredits.id }).from(customerCredits)
+    .where(and(eq(customerCredits.status, "open"), isNull(customerCredits.bigcapitalCreditNoteId), lt(customerCredits.createdAt, stale),
+      sql`not exists (select 1 from accounting_postings ap where ap.source_id = ${customerCredits.id} and ap.kind = 'credit')`)).limit(limit);
   let tried = 0;
-  for (const f of failed) { tried++; await (f.kind === "invoice" ? syncInvoice(f.companyId, f.sourceId) : syncPayment(f.companyId, f.sourceId)); }
+  for (const f of failed) { tried++; await (f.kind === "invoice" ? syncInvoice(f.companyId, f.sourceId) : f.kind === "credit" ? syncCredit(f.companyId, f.sourceId) : syncPayment(f.companyId, f.sourceId)); }
+  for (const c of unsentCredits) { tried++; await syncCredit(c.companyId, c.id); }
   for (const i of neverSent) { tried++; await syncInvoice(i.companyId, i.id); }
   for (const p of unpaidPayments) { tried++; await syncPayment(p.companyId, p.id); }
   return { tried };

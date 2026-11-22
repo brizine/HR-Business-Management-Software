@@ -162,7 +162,7 @@ function ReasonForm({ reason, onDone }: { reason: any | null; onDone: () => void
 
 /** Invoice numbering, terms, the "payable to" name and the printed footer. */
 function BillingCard() {
-  const saved = useApi<{ nextInvoiceNumber: number; termsDays: number; footer: string; payableTo: string }>("/invoices/settings");
+  const saved = useApi<{ nextInvoiceNumber: number; termsDays: number; footer: string; payableTo: string; autoApplyCredits: boolean }>("/invoices/settings");
   const { busy, error, run } = useAction();
   const [done, setDone] = useState(false);
   if (!saved.data) return null;
@@ -171,7 +171,7 @@ function BillingCard() {
     <form className="card stack" onChange={() => setDone(false)} onSubmit={(e) => {
       e.preventDefault();
       const f = new FormData(e.currentTarget);
-      const body = { nextInvoiceNumber: Number(f.get("next")), termsDays: Number(f.get("terms")), footer: String(f.get("footer") ?? ""), payableTo: String(f.get("payable") ?? "") };
+      const body = { nextInvoiceNumber: Number(f.get("next")), termsDays: Number(f.get("terms")), footer: String(f.get("footer") ?? ""), payableTo: String(f.get("payable") ?? ""), autoApplyCredits: f.get("autoCredits") === "on" };
       run(async () => { saved.setData(await api("/invoices/settings", { method: "PUT", body })); setDone(true); });
     }}>
       <h2 style={{ fontSize: 16, margin: 0 }}>Invoices</h2>
@@ -185,6 +185,7 @@ function BillingCard() {
         <label>Make checks payable to<input name="payable" defaultValue={s.payableTo} placeholder="Your company name" /></label>
       </div>
       <label>Footer on every invoice<textarea name="footer" rows={2} defaultValue={s.footer} placeholder="Thank you! All program applications are guaranteed…" /></label>
+      <label className="check"><input type="checkbox" name="autoCredits" defaultChecked={s.autoApplyCredits !== false} /> Use a customer&apos;s credit on their invoices automatically when the invoices are sent</label>
       <ErrorBox error={error} />
       <div className="row"><button className="btn primary" disabled={busy}>Save</button>{done && <span className="muted">Saved.</span>}</div>
     </form>

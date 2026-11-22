@@ -452,6 +452,24 @@ describe("Refunds", () => {
     expect(inv.status).toBe("void");
   });
 
+  it("a refund can be written off: a credit for it goes on the invoice, so it isn't owed again", async () => {
+    const { id, paymentId } = await paidOnline(8500);
+    const r = await call("POST", refundUrl(id, paymentId), "owner", { amountCents: 2000, writeOff: true, note: "Goodwill: missed back yard" });
+    expect(r.status).toBe(200);
+    const inv = (await call("GET", `/invoices/${id}`, "office")).body;
+    expect(inv).toMatchObject({ status: "paid", paidCents: 6500, creditedCents: 2000, balanceCents: 0 });
+    expect(inv.credits[0]).toMatchObject({ amountCents: 2000, reason: "refund_writeoff" });
+    expect(inv.credits[0].description).toMatch(/^Refund of \$20\.00 on invoice \d+$/);
+    const credits = (await call("GET", `/credits?customerId=${ID.pat}`, "office")).body.credits;
+    expect(credits.find((c: any) => c.reason === "refund_writeoff")).toMatchObject({ amountCents: 2000, leftCents: 0, note: "Goodwill: missed back yard" });
+    // The customer sees the refund and the credit on the invoice.
+    const cookie = await signInPortal(email("pat"));
+    const one = (await portal("GET", `/portal/invoices/${id}`, cookie)).body.invoice;
+    expect(one).toMatchObject({ balanceCents: 0, creditedCents: 2000, status: "paid" });
+    expect(one.credits[0].amountCents).toBe(2000);
+    expect(one.refunds[0].amountCents).toBe(2000);
+  });
+
   it("a refund made in Stripe's dashboard comes in by webhook; a failed one puts the payment back", async () => {
     const { id, pi } = await paidOnline(6000);
     const re = addRefund(pi.id, 2500, { reason: "duplicate" });

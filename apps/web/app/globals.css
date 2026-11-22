@@ -934,3 +934,9 @@ a.pt-row:hover { background: var(--bg); }
 .refund-list { margin: 0 0 0 4px; font-size: 13px; }
 .refund-list li { padding: 2px 0; }
 .refund-form { margin: 4px 0 8px; background: var(--bg); }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--primary); font: inherit; cursor: pointer; text-decoration: underline; }
+.linkbtn:disabled { opacity: 0.6; cursor: default; }
+.credit-list li { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.credit-list li:last-child { border-bottom: 0; }
+.credit-form { background: var(--bg); }
+.pt-credit { color: var(--ok); font-weight: 600; margin-top: 4px; }

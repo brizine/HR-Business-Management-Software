@@ -1374,6 +1374,8 @@ export const invoices = pgTable(
     discountCents: integer("discount_cents").notNull().default(0),
     totalCents: integer("total_cents").notNull().default(0),
     paidCents: integer("paid_cents").notNull().default(0),
+    /** Customer credit used on it; what's owed is total − paid − credited. */
+    creditedCents: integer("credited_cents").notNull().default(0),
     /** Waiting to be printed and mailed. */
     needsMailing: boolean("needs_mailing").notNull().default(false),
     emailedAt: timestamp("emailed_at", { withTimezone: true }),
@@ -1465,6 +1467,64 @@ export const bigcapitalLinks = pgTable(
 );
 
 /** One-time sign-in codes (and links) for the customer portal. Only hashes are kept. */
+/**
+ * Credit given to a customer (a missed service, goodwill, a billing correction, a refund written
+ * off…). It lowers what they owe once it's used on invoices; what isn't used yet stays on their
+ * account. Optionally for one property's invoices only.
+ */
+export const customerCredits = pgTable(
+  "customer_credits",
+  {
+    id: id(),
+    companyId: companyId(),
+    /** CR-1, CR-2… per company. */
+    number: integer("number").notNull(),
+    customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "restrict" }),
+    propertyId: uuid("property_id").references(() => properties.id, { onDelete: "set null" }),
+    amountCents: integer("amount_cents").notNull(),
+    /** How much of it is used on invoices (kept up to date from credit_applications). */
+    appliedCents: integer("applied_cents").notNull().default(0),
+    reason: text("reason").notNull(),
+    /** Shown to the customer. */
+    description: text("description").notNull(),
+    /** For the office only. */
+    note: text("note"),
+    issuedOn: date("issued_on").notNull(),
+    /** "open" or "void". */
+    status: text("status").notNull().default("open"),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidReason: text("void_reason"),
+    /** The refund it writes off, when it came from "write it off" on a refund. */
+    refundId: uuid("refund_id").references(() => paymentRefunds.id, { onDelete: "set null" }),
+    bigcapitalCreditNoteId: text("bigcapital_credit_note_id"),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("customer_credits_customer_idx").on(t.customerId),
+    uniqueIndex("customer_credits_number_idx").on(t.companyId, t.number),
+  ],
+);
+
+/** Credit used on an invoice. Removing it (or voiding the invoice or the credit) puts it back on the account. */
+export const creditApplications = pgTable(
+  "credit_applications",
+  {
+    id: id(),
+    companyId: companyId(),
+    creditId: uuid("credit_id").notNull().references(() => customerCredits.id, { onDelete: "cascade" }),
+    invoiceId: uuid("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+    amountCents: integer("amount_cents").notNull(),
+    appliedOn: date("applied_on").notNull(),
+    /** Set when it's taken off the invoice; the row stays until Bigcapital has caught up. */
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+    bigcapitalApplicationId: text("bigcapital_application_id"),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("credit_applications_credit_idx").on(t.creditId), index("credit_applications_invoice_idx").on(t.invoiceId)],
+);
+
 /** Refunds of card and bank payments, made in Crewdesk or in Stripe's dashboard (kept in step with Stripe). */
 export const paymentRefunds = pgTable(
   "payment_refunds",

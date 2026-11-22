@@ -53,7 +53,7 @@ export const LIABILITY_ACCOUNT_TYPES = ["other-current-liability", "accounts-pay
 /** Bigcapital only accepts these as what an expense is paid from. */
 export const PAYMENT_ACCOUNT_TYPES = ["cash", "bank", "credit-card", "other-current-asset", "non-current-asset", "fixed-asset"];
 
-export type PostingKind = "payroll" | "work_order" | "invoice" | "payment" | "customer";
+export type PostingKind = "payroll" | "work_order" | "invoice" | "payment" | "customer" | "credit";
 
 export interface JournalLine { accountId: number; debitCents?: number; creditCents?: number; note?: string }
 

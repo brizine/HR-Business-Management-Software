@@ -1,12 +1,12 @@
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
-import { and, asc, desc, eq, ilike, inArray, isNotNull, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import {
   billingSettingsSchema, customerName, formatAddress, formatMoney, invoiceSchema, invoiceTotals, isOverdue, lineAmount, paymentSchema,
-  sendInvoiceSchema, termsLabel, voidSchema, type InvoiceInput,
+  invoiceBalance, sendInvoiceSchema, termsLabel, voidSchema, type InvoiceInput,
 } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, customerContacts, customers, invoiceLines, invoicePayments, invoices, paymentRefunds, properties, serviceTypes } from "../db/schema";
+import { companies, creditApplications, customerContacts, customerCredits, customers, invoiceLines, invoicePayments, invoices, paymentRefunds, properties, serviceTypes } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
@@ -17,7 +17,9 @@ import { batchPdf, billToLines, invoicePdf, type PdfCompany, type PdfInvoice } f
 import { emailTransport } from "../lib/channels";
 import { randomToken } from "../lib/crypto";
 import { storage } from "../lib/storage";
-import { queueBillingSync, syncInvoice, syncInvoiceAndPayments, syncPayment, syncStatus } from "../lib/billingSync";
+import { queueBillingSync, syncCredit, syncInvoice, syncInvoiceAndPayments, syncPayment, syncStatus } from "../lib/billingSync";
+import { applyCredit, autoApplyCredits, nextCreditNumber, removeInvoiceCredits } from "../lib/credits";
+import { creditsFor } from "./credits";
 
 const AREA = "customers" as const;
 
@@ -38,11 +40,15 @@ export async function pdfInvoice(companyId: string, invoiceId: string, opts: { c
   if (!row) throw new HttpError(404, "Invoice not found");
   const lines = await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, invoiceId)).orderBy(asc(invoiceLines.sortOrder));
   const settings = await billingSettings(companyId);
+  const credits = await db.select({ number: customerCredits.number, amountCents: creditApplications.amountCents }).from(creditApplications)
+    .innerJoin(customerCredits, eq(customerCredits.id, creditApplications.creditId))
+    .where(and(eq(creditApplications.invoiceId, invoiceId), isNull(creditApplications.removedAt))).orderBy(asc(creditApplications.createdAt));
   const { inv, cust, prop } = row;
   const termsDays = Math.max(0, Math.round((Date.parse(inv.dueDate) - Date.parse(inv.issueDate)) / 86_400_000));
   return {
     number: inv.number, status: inv.status, issueDate: inv.issueDate, dueDate: inv.dueDate, poNumber: inv.poNumber, notes: inv.notes,
     subtotalCents: inv.subtotalCents, discountCents: inv.discountCents, totalCents: inv.totalCents, paidCents: inv.paidCents, termsDays,
+    creditedCents: inv.creditedCents, credits: credits.map((c) => ({ number: c.number, amountCents: c.amountCents })),
     customerName: customerName(cust), customerNumber: cust.number, billTo: billToLines(cust, prop),
     serviceAddress: prop ? formatAddress(prop) : null,
     lines: lines.map((l) => ({ description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, amountCents: l.amountCents })),
@@ -92,7 +98,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
   app.addHook("preHandler", requireRole("manager", AREA));
 
-  const balance = sql<number>`(${invoices.totalCents} - ${invoices.paidCents})`;
+  const balance = sql<number>`(${invoices.totalCents} - ${invoices.paidCents} - ${invoices.creditedCents})`;
 
   app.get<{ Querystring: ListQuery }>("/", async (req) => {
     const { companyId } = req.user;
@@ -115,8 +121,8 @@ const routes: FastifyPluginAsync = async (app) => {
     const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
     const rows = await db.select({
-      id: invoices.id, number: invoices.number, status: invoices.status, issueDate: invoices.issueDate, dueDate: invoices.dueDate, totalCents: invoices.totalCents,
-      paidCents: invoices.paidCents, needsMailing: invoices.needsMailing, emailedAt: invoices.emailedAt, mailedAt: invoices.mailedAt, poNumber: invoices.poNumber,
+      id: invoices.id, number: invoices.number, status: invoices.status, issueDate: invoices.issueDate, dueDate: invoices.dueDate, totalCents: invoices.totalCents, propertyId: invoices.propertyId,
+      paidCents: invoices.paidCents, creditedCents: invoices.creditedCents, needsMailing: invoices.needsMailing, emailedAt: invoices.emailedAt, mailedAt: invoices.mailedAt, poNumber: invoices.poNumber,
       customerId: customers.id, kind: customers.kind, firstName: customers.firstName, lastName: customers.lastName, companyName: customers.companyName,
       street: properties.street, zip: sql<string | null>`coalesce(${customers.billingZip}, ${properties.zip})`,
     }).from(invoices).innerJoin(customers, eq(customers.id, invoices.customerId)).leftJoin(properties, eq(properties.id, invoices.propertyId))
@@ -127,7 +133,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .from(invoices).innerJoin(customers, eq(customers.id, invoices.customerId)).leftJoin(properties, eq(properties.id, invoices.propertyId)).where(and(...where));
     return {
       total: agg?.count ?? rows.length, dueCents: agg?.due ?? 0, today,
-      rows: rows.map(({ kind, firstName, lastName, companyName, ...r }) => ({ ...r, customerName: customerName({ kind, firstName, lastName, companyName }), balanceCents: r.totalCents - r.paidCents, overdue: isOverdue(r, today) })),
+      rows: rows.map(({ kind, firstName, lastName, companyName, ...r }) => ({ ...r, customerName: customerName({ kind, firstName, lastName, companyName }), balanceCents: invoiceBalance(r), overdue: isOverdue(r, today) })),
     };
   });
 
@@ -143,7 +149,8 @@ const routes: FastifyPluginAsync = async (app) => {
     }).from(invoices).where(and(eq(invoices.companyId, companyId), eq(invoices.customerId, req.params.customerId)));
     const [p] = await db.select({ paid: sql<number>`coalesce(sum(${invoicePayments.amountCents} - ${invoicePayments.refundedCents}), 0)::int` }).from(invoicePayments)
       .where(and(eq(invoicePayments.companyId, companyId), eq(invoicePayments.customerId, req.params.customerId), eq(invoicePayments.status, "completed"), sql`${invoicePayments.receivedOn} >= ${`${today.slice(0, 4)}-01-01`}`));
-    return { outstandingCents: s.outstanding, pastDueCents: s.pastDue, draftCount: s.drafts, paidThisYearCents: p.paid };
+    const credit = await creditsFor(companyId, req.params.customerId);
+    return { outstandingCents: s.outstanding, pastDueCents: s.pastDue, draftCount: s.drafts, paidThisYearCents: p.paid, creditCents: credit.availableCents };
   });
 
   app.get("/settings", async (req) => billingSettings(req.user.companyId));
@@ -217,8 +224,14 @@ const routes: FastifyPluginAsync = async (app) => {
     const today = await companyToday(companyId);
     const { inv, cust, prop } = row;
     const sync = await syncStatus(companyId, inv.id, payments.map((p) => p.id));
+    const appliedCredits = await db.select({ id: creditApplications.id, creditId: creditApplications.creditId, amountCents: creditApplications.amountCents, appliedOn: creditApplications.appliedOn, number: customerCredits.number, description: customerCredits.description, reason: customerCredits.reason })
+      .from(creditApplications).innerJoin(customerCredits, eq(customerCredits.id, creditApplications.creditId))
+      .where(and(eq(creditApplications.invoiceId, inv.id), isNull(creditApplications.removedAt))).orderBy(asc(creditApplications.createdAt));
+    const openCredits = (await creditsFor(companyId, cust.id)).credits.filter((c) => c.leftCents > 0);
     return {
-      ...inv, payToken: undefined, balanceCents: inv.totalCents - inv.paidCents, overdue: isOverdue(inv, today), lines, payments, sync,
+      ...inv, payToken: undefined, balanceCents: invoiceBalance(inv), overdue: isOverdue(inv, today), lines, payments, sync, credits: appliedCredits,
+      availableCreditCents: inv.status === "sent" || inv.status === "partial" ? openCredits.filter((c) => !c.propertyId || c.propertyId === inv.propertyId).reduce((sum, c) => sum + c.leftCents, 0) : 0,
+      openCredits: inv.status === "sent" || inv.status === "partial" ? openCredits.filter((c) => !c.propertyId || c.propertyId === inv.propertyId).map((c) => ({ id: c.id, number: c.number, description: c.description, leftCents: c.leftCents })) : [],
       payLink: payLinkFor(inv), onlinePayments: !!(await stripeConfig(companyId)),
       customer: { id: cust.id, number: cust.number, name: customerName(cust), email: cust.email, delivery: cust.delivery, poRequired: cust.poRequired, status: cust.status,
         billTo: billToLines(cust, prop), copies },
@@ -235,6 +248,7 @@ const routes: FastifyPluginAsync = async (app) => {
       if (!inv) throw new HttpError(404, "Invoice not found");
       if (inv.status === "void") throw new HttpError(400, "A void invoice can't be changed");
       if (inv.paidCents > 0) throw new HttpError(400, "This invoice has payments, so it can't be changed. Void the payments first, or add a new invoice for the difference");
+      if (inv.creditedCents > 0) throw new HttpError(400, "This invoice has credit on it. Take the credit off first (it goes back on the customer's account), then edit it");
       if (body.customerId !== inv.customerId && inv.number != null) throw new HttpError(400, "A sent invoice can't move to another customer; void it and make a new one");
       const { totals } = await prepare(tx, companyId, body);
       const [u] = await tx.update(invoices).set({
@@ -289,6 +303,12 @@ const routes: FastifyPluginAsync = async (app) => {
       const [u] = await tx.update(invoices).set({ number, status: "sent", payToken: randomToken(24), updatedAt: new Date() }).where(eq(invoices.id, cur.id)).returning();
       return u;
     });
+    // Credit on the customer's account goes on the invoice before it's built and sent (if that's turned on).
+    let creditsUsed: string[] = [];
+    if ((await billingSettings(companyId)).autoApplyCredits) {
+      const made = await db.transaction((tx) => autoApplyCredits(tx, companyId, inv.customerId, { invoiceIds: [inv.id], by: req.user.sub }));
+      creditsUsed = [...new Set(made.map((a) => a.creditId))];
+    }
     // Each send restarts the pay link's 30 days.
     const [linked] = await db.update(invoices).set({ payToken: inv.payToken ?? randomToken(24), payTokenExpiresAt: new Date(Date.now() + PAY_LINK_DAYS * 86_400_000) })
       .where(eq(invoices.id, inv.id)).returning();
@@ -302,7 +322,7 @@ const routes: FastifyPluginAsync = async (app) => {
       const copies = (await db.select({ email: customerContacts.email }).from(customerContacts)
         .where(and(eq(customerContacts.customerId, cust.id), eq(customerContacts.getsInvoices, true), isNotNull(customerContacts.email))))
         .map((c) => c.email!).filter((e) => e !== to);
-      const amount = formatMoney(data.totalCents - data.paidCents);
+      const amount = formatMoney(invoiceBalance(data));
       const due = `${data.dueDate.slice(5, 7)}/${data.dueDate.slice(8, 10)}/${data.dueDate.slice(0, 4)}`;
       const t = INVOICE_TEXT({ company: company.name, number: inv.number!, customer: customerName(cust), due: `${due} (${termsLabel(data.termsDays)})`, amount, dueDate: due, message: body.message, phone: company.phone, payUrl });
       const html = `<p>Hello ${esc(customerName(cust))},</p>${body.message ? `<p>${esc(body.message).replace(/\n/g, "<br>")}</p>` : ""}
@@ -321,6 +341,7 @@ ${payUrl ? `<p><a href="${esc(payUrl)}" style="display:inline-block;background:#
     }
     if (body.via.includes("paper")) await db.update(invoices).set({ needsMailing: true }).where(eq(invoices.id, inv.id));
     queueBillingSync(() => syncInvoice(companyId, inv.id, req.user.sub));
+    for (const creditId of creditsUsed) queueBillingSync(() => syncCredit(companyId, creditId, req.user.sub));
     const [out] = await db.select().from(invoices).where(eq(invoices.id, inv.id));
     return { ...out, status: fresh?.status ?? out.status };
   });
@@ -335,7 +356,7 @@ ${payUrl ? `<p><a href="${esc(payUrl)}" style="display:inline-block;background:#
       if (!inv) throw new HttpError(404, "Invoice not found");
       if (inv.status === "draft") throw new HttpError(400, "Send the invoice before recording a payment on it");
       if (inv.status === "void") throw new HttpError(400, "That invoice is void");
-      const due = inv.totalCents - inv.paidCents;
+      const due = invoiceBalance(inv);
       if (body.amountCents > due) throw new HttpError(400, `That's more than the ${formatMoney(due)} still owed. Overpayments become credit in Phase 2`);
       const [p] = await tx.insert(invoicePayments).values({ ...body, receivedOn: body.receivedOn ?? today, companyId, invoiceId: inv.id, customerId: inv.customerId, recordedById: sub }).returning();
       const updated = await refreshInvoice(tx, inv.id);
@@ -361,13 +382,31 @@ ${payUrl ? `<p><a href="${esc(payUrl)}" style="display:inline-block;background:#
       amountCents: z.number().int().positive().optional(),
       reason: z.enum(REFUND_REASONS).default("requested_by_customer"),
       note: z.string().trim().max(450).optional().nullable(),
+      /** Don't let the invoice owe it again: add a credit for the refund and use it on this invoice. */
+      writeOff: z.boolean().optional(),
     }), req.body);
     const [p] = await db.select({ id: invoicePayments.id }).from(invoicePayments)
       .where(and(eq(invoicePayments.id, req.params.paymentId), eq(invoicePayments.invoiceId, req.params.id), eq(invoicePayments.companyId, req.user.companyId)));
     if (!p) throw new HttpError(404, "Payment not found");
-    const result = await refundPayment(req.user.companyId, p.id, { ...body, note: body.note || null, by: req.user.sub });
+    const { writeOff, ...refund } = body;
+    const result = await refundPayment(req.user.companyId, p.id, { ...refund, note: refund.note || null, by: req.user.sub });
+    if (writeOff && result.status !== "failed" && result.status !== "canceled") {
+      const { companyId, sub } = req.user;
+      const [inv0] = await db.select().from(invoices).where(eq(invoices.id, req.params.id));
+      const [row] = await db.select({ id: paymentRefunds.id }).from(paymentRefunds).where(eq(paymentRefunds.stripeRefundId, result.refundId));
+      const credit = await db.transaction(async (tx) => {
+        const [c] = await tx.insert(customerCredits).values({
+          companyId, number: await nextCreditNumber(tx, companyId), customerId: inv0.customerId, propertyId: inv0.propertyId, amountCents: result.amountCents,
+          reason: "refund_writeoff", description: `Refund of ${formatMoney(result.amountCents)} on invoice ${inv0.number}`, note: refund.note || null,
+          issuedOn: await companyToday(companyId), refundId: row?.id ?? null, createdById: sub,
+        }).returning();
+        await applyCredit(tx, companyId, c.id, inv0.id, undefined, sub);
+        return c;
+      });
+      queueBillingSync(() => syncCredit(companyId, credit.id, sub));
+    }
     const [inv] = await db.select().from(invoices).where(eq(invoices.id, req.params.id));
-    return { ...result, invoice: { status: inv.status, paidCents: inv.paidCents, balanceCents: inv.totalCents - inv.paidCents } };
+    return { ...result, invoice: { status: inv.status, paidCents: inv.paidCents, creditedCents: inv.creditedCents, balanceCents: invoiceBalance(inv) } };
   });
 
   /** Voids a sent invoice (reason kept). Payments must be voided or refunded first. */
@@ -378,7 +417,13 @@ ${payUrl ? `<p><a href="${esc(payUrl)}" style="display:inline-block;background:#
     if (inv.status === "void") throw new HttpError(400, "It's already void");
     if (inv.status === "draft") throw new HttpError(400, "Drafts are deleted, not voided");
     if (inv.paidCents > 0) throw new HttpError(400, "Void or refund its payments first");
-    const [u] = await db.update(invoices).set({ status: "void", voidedAt: new Date(), voidReason: reason, needsMailing: false, updatedAt: new Date() }).where(eq(invoices.id, inv.id)).returning();
+    // Any credit on it goes back on the customer's account (and comes off in Bigcapital before the invoice goes).
+    const { u, credits } = await db.transaction(async (tx) => {
+      const credits = await removeInvoiceCredits(tx, inv.id);
+      const [u] = await tx.update(invoices).set({ status: "void", voidedAt: new Date(), voidReason: reason, needsMailing: false, updatedAt: new Date() }).where(eq(invoices.id, inv.id)).returning();
+      return { u, credits };
+    });
+    for (const creditId of credits) queueBillingSync(() => syncCredit(req.user.companyId, creditId, req.user.sub));
     queueBillingSync(() => syncInvoice(req.user.companyId, inv.id, req.user.sub));
     return u;
   });

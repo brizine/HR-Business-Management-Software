@@ -9,7 +9,7 @@ import { PortalFrame, SignOut, StaffBanner, StatusPill, longDate, methodText, po
 type Me = {
   company: PortalCompany; payments: { enabled: boolean; testMode?: boolean };
   viewer: { email: string; staff: boolean };
-  customers: { id: string; number: number; name: string; email: string | null; phone: string | null; billing: { street: string | null; city: string | null; state: string | null; zip: string | null }; balanceCents: number; overdueCents: number; properties: { id: string; address: string }[] }[];
+  customers: { id: string; number: number; name: string; email: string | null; phone: string | null; billing: { street: string | null; city: string | null; state: string | null; zip: string | null }; balanceCents: number; overdueCents: number; creditCents: number; properties: { id: string; address: string }[] }[];
   invoices: { id: string; number: number; customerId: string; status: string; issueDate: string; dueDate: string; totalCents: number; paidCents: number; balanceCents: number; pendingCents: number; overdue: boolean; serviceAddress: string | null }[];
   paymentHistory: PortalPayment[];
 };
@@ -84,6 +84,7 @@ function Home({ me, reload }: { me: Me; reload: () => void }) {
                 <div className="pt-label">{cust.name} · account #{cust.number}</div>
                 <div className="pt-amount">{formatMoney(cust.balanceCents)}</div>
                 <div className="pt-sub">{cust.balanceCents <= 0 ? "You're all paid up. Thank you!" : cust.overdueCents > 0 ? <span className="pt-bad">{formatMoney(cust.overdueCents)} is past due</span> : "Current balance"}</div>
+                {cust.creditCents > 0 && <div className="pt-sub pt-credit">{formatMoney(cust.creditCents)} credit on your account, used on your next invoice</div>}
               </div>
             </div>
             <h2 className="pt-h2">{open.length ? "Invoices to pay" : "No open invoices"}</h2>

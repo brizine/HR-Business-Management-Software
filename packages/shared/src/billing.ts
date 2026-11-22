@@ -167,9 +167,11 @@ export const billingSettingsSchema = z.object({
   footer: z.string().trim().max(1000).default(""),
   /** "Make checks payable to" (defaults to the company name). */
   payableTo: z.string().trim().max(160).default(""),
+  /** Use a customer's credit on their invoices automatically when the invoices are sent. */
+  autoApplyCredits: z.boolean().default(true),
 });
 export type BillingSettings = z.infer<typeof billingSettingsSchema>;
-export const DEFAULT_BILLING_SETTINGS: BillingSettings = { nextInvoiceNumber: 1001, termsDays: 0, footer: "", payableTo: "" };
+export const DEFAULT_BILLING_SETTINGS: BillingSettings = { nextInvoiceNumber: 1001, termsDays: 0, footer: "", payableTo: "", autoApplyCredits: true };
 
 export function termsLabel(days: number) {
   return days === 0 ? "Due on receipt" : `Net ${days}`;
@@ -177,3 +179,44 @@ export function termsLabel(days: number) {
 
 /** An unpaid invoice past its due date. */
 export const isOverdue = (i: { status: string; dueDate: string }, today: string) => (i.status === "sent" || i.status === "partial") && i.dueDate < today;
+
+/* ── Credits ── */
+
+/** Why a customer was given credit (goes on reports; the description is what the customer sees). */
+export const CREDIT_REASONS = ["service_issue", "goodwill", "billing_correction", "referral", "prepay_discount", "refund_writeoff", "other"] as const;
+export type CreditReason = (typeof CREDIT_REASONS)[number];
+export const CREDIT_REASON_LABELS: Record<CreditReason, string> = {
+  service_issue: "Missed or incomplete service",
+  goodwill: "Goodwill / customer satisfaction",
+  billing_correction: "Billing correction",
+  referral: "Referral reward",
+  prepay_discount: "Prepay or promotion discount",
+  refund_writeoff: "Refund written off",
+  other: "Other",
+};
+
+export const creditSchema = z.object({
+  customerId: z.string().uuid(),
+  /** Only for this property's invoices (empty: any of the customer's invoices). */
+  propertyId: z.string().uuid().nullable().optional(),
+  amountCents: z.number().int().positive("Enter the credit amount").max(10_000_000),
+  reason: z.enum(CREDIT_REASONS),
+  /** Shown to the customer on invoices and in the portal, e.g. "Missed back yard on 5/12". */
+  description: z.string().trim().min(1, "Describe the credit for the customer").max(200),
+  /** For the office only. */
+  note: z.string().trim().max(500).optional().transform((v) => v || undefined),
+  /** "open": use it on open invoices now (oldest first); "none": keep it for the next invoice; or one invoice's id. */
+  applyTo: z.union([z.literal("open"), z.literal("none"), z.string().uuid()]).default("open"),
+});
+export type CreditInput = z.infer<typeof creditSchema>;
+
+export const applyCreditSchema = z.object({
+  invoiceId: z.string().uuid(),
+  /** Defaults to as much as the credit and the invoice allow. */
+  amountCents: z.number().int().positive().max(10_000_000).optional(),
+});
+
+export const voidCreditSchema = z.object({ reason: z.string().trim().min(1, "Give a reason").max(300) });
+
+/** What's still owed on an invoice: the total, less payments and credits. */
+export const invoiceBalance = (i: { totalCents: number; paidCents: number; creditedCents?: number | null }) => i.totalCents - i.paidCents - (i.creditedCents ?? 0);

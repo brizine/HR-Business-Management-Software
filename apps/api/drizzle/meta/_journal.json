@@ -442,6 +442,13 @@
       "when": 1795324013458,
       "tag": "0062_payment_refunds",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1795326109958,
+      "tag": "0063_customer_credits",
+      "breakpoints": true
     }
   ]
 }

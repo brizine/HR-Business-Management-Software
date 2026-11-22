@@ -24,6 +24,8 @@ export interface PdfInvoice {
   customerName: string; billTo: string[]; serviceAddress: string | null; customerNumber: number;
   lines: { description: string; quantity: number; unitPriceCents: number; amountCents: number }[];
   footer: string; payableTo: string; copy?: boolean;
+  /** Customer credit used on this invoice. */
+  creditedCents?: number; credits?: { number: number; amountCents: number }[];
   /** "Pay online at …" on the stub, when the company takes online payments. */
   payOnline?: string | null;
 }
@@ -75,7 +77,7 @@ export async function addInvoicePages(doc: PDFDocument, c: PdfCompany, inv: PdfI
   const logo = await embedLogo(doc, c.logo);
   let page = doc.addPage([W, H]);
   let pen = new Pen(page, reg, bold);
-  const due = inv.totalCents - inv.paidCents;
+  const due = inv.totalCents - inv.paidCents - (inv.creditedCents ?? 0);
   const L = 0.5 * IN, R = W - 0.5 * IN;
 
   // Top window: who it's from (logo above the return address when there is one).
@@ -139,7 +141,9 @@ export async function addInvoicePages(doc: PDFDocument, c: PdfCompany, inv: PdfI
   const totals: [string, string, boolean][] = [["Subtotal", formatMoney(inv.subtotalCents), false]];
   if (inv.discountCents) totals.push(["Discount", `-${formatMoney(inv.discountCents)}`, false]);
   totals.push(["Total", formatMoney(inv.totalCents), true]);
-  if (inv.paidCents) totals.push(["Paid", `-${formatMoney(inv.paidCents)}`, false], ["Amount due", formatMoney(due), true]);
+  for (const cr of inv.credits ?? []) totals.push([`Credit CR-${cr.number}`, `-${formatMoney(cr.amountCents)}`, false]);
+  if (inv.paidCents) totals.push(["Paid", `-${formatMoney(inv.paidCents)}`, false]);
+  if (inv.paidCents || inv.credits?.length) totals.push(["Amount due", formatMoney(due), true]);
   const notes = inv.notes ? wrap(inv.notes, reg, 9, R - L - 200) : [];
   if (ty + totals.length * 13 + 10 > limit) { page = doc.addPage([W, H]); pen = new Pen(page, reg, bold); ty = 0.6 * IN; limit = H - 0.8 * IN; }
   pen.line(COL.price - 60, ty, R); ty += 6;
@@ -194,14 +198,14 @@ export async function batchPdf(c: PdfCompany, list: PdfInvoice[]): Promise<Uint8
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const cover = new Pen(doc.addPage([W, H]), reg, bold);
   cover.text("Invoices to mail", 0.75 * IN, 0.9 * IN, { size: 20, bold: true });
-  cover.text(`${list.length} invoice${list.length === 1 ? "" : "s"}, sorted by ZIP code · total due ${formatMoney(list.reduce((s, i) => s + i.totalCents - i.paidCents, 0))}`, 0.75 * IN, 0.9 * IN + 30, { size: 11 });
+  cover.text(`${list.length} invoice${list.length === 1 ? "" : "s"}, sorted by ZIP code · total due ${formatMoney(list.reduce((s, i) => s + i.totalCents - i.paidCents - (i.creditedCents ?? 0), 0))}`, 0.75 * IN, 0.9 * IN + 30, { size: 11 });
   let y = 0.9 * IN + 60;
   for (const i of list) {
     if (y > H - 0.8 * IN) break;
     cover.text(`#${i.number ?? "draft"}`, 0.75 * IN, y, { size: 9.5 });
     cover.text(i.customerName, 1.5 * IN, y, { size: 9.5 });
     cover.text(i.billTo[i.billTo.length - 1] ?? "", 4.4 * IN, y, { size: 9.5, color: MUTED });
-    cover.text(formatMoney(i.totalCents - i.paidCents), W - 0.75 * IN, y, { size: 9.5, right: true });
+    cover.text(formatMoney(i.totalCents - i.paidCents - (i.creditedCents ?? 0)), W - 0.75 * IN, y, { size: 9.5, right: true });
     y += 13;
   }
   for (const i of list) await addInvoicePages(doc, c, i);

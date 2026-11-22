@@ -6,6 +6,7 @@ import { PAYMENT_METHOD_LABELS, formatMoney, type PaymentMethod } from "@crewdes
 import { API_URL, api, fmtDate, fmtDateTime } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { useAuth } from "@/lib/auth";
+import { CreditForm, InvoiceCredits } from "@/components/credits";
 import { ErrorBox, PageHead } from "@/components/ui";
 import { InvoiceFields, InvoiceStatus, PaymentForm, SendPanel, invoiceBody, invoiceFormValue } from "@/components/invoices";
 
@@ -15,6 +16,7 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
   const invoice = useApi<any>(`/invoices/${id}`);
   const [panel, setPanel] = useState<"send" | "pay" | "edit" | "void" | null>(null);
   const [refunding, setRefunding] = useState<string | null>(null);
+  const [addingCredit, setAddingCredit] = useState(false);
   const { can } = useAuth();
   const action = useAction();
   // "Save and send" on the new-invoice page lands here with the send panel open.
@@ -26,7 +28,7 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
   if (invoice.error) return <><PageHead title="Invoice" /><ErrorBox error={invoice.error} /></>;
   if (!inv) return <PageHead title="Invoice" sub="Loading…" />;
   const done = () => { setPanel(null); invoice.reload(); };
-  const editable = inv.status !== "void" && inv.paidCents === 0;
+  const editable = inv.status !== "void" && inv.paidCents === 0 && !(inv.creditedCents > 0);
   const title = inv.number ? `Invoice ${inv.number}` : "Draft invoice";
 
   return (
@@ -35,6 +37,7 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
         sub={<><Link href={`/customers/${inv.customer.id}`}>{inv.customer.name}</Link> · <InvoiceStatus status={inv.status} overdue={inv.overdue} />{inv.needsMailing && <> · <span className="badge">to mail</span></>}</>}>
         {inv.status !== "void" && <button className="btn primary" onClick={() => setPanel(panel === "send" ? null : "send")}>{inv.number ? "Send again" : "Send"}</button>}
         {(inv.status === "sent" || inv.status === "partial") && <button className="btn" onClick={() => setPanel(panel === "pay" ? null : "pay")}>Record payment</button>}
+        {(inv.status === "sent" || inv.status === "partial") && <button className="btn" onClick={() => setAddingCredit(!addingCredit)}>Add credit</button>}
         <a className="btn" href={`${API_URL}/invoices/${id}/pdf`} target="_blank" rel="noopener noreferrer">PDF</a>
         {editable && <button className="btn" onClick={() => setPanel(panel === "edit" ? null : "edit")}>Edit</button>}
         {inv.status === "draft" && <button className="btn danger" disabled={action.busy} onClick={() => confirm("Delete this draft?") && action.run(async () => { await api(`/invoices/${id}`, { method: "DELETE" }); router.push("/invoices"); })}>Delete</button>}
@@ -49,7 +52,7 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
           <div className="card">
             <div className="money-box">
               <div><div className="v">{formatMoney(inv.totalCents)}</div><div className="l">Total</div></div>
-              <div><div className="v">{formatMoney(inv.paidCents)}</div><div className="l">Paid</div></div>
+              <div><div className="v">{formatMoney(inv.paidCents)}</div><div className="l">Paid{inv.creditedCents > 0 ? <> · credit <span className="ok-text">{formatMoney(inv.creditedCents)}</span></> : ""}</div></div>
               <div><div className="v" style={{ color: inv.overdue ? "var(--bad)" : undefined }}>{inv.status === "void" ? "—" : formatMoney(inv.balanceCents)}</div><div className="l">Balance{inv.overdue ? " (overdue)" : ""}</div></div>
               <div><div className="v" style={{ fontSize: 16 }}>{fmtDate(inv.dueDate)}</div><div className="l">Due</div></div>
             </div>
@@ -96,6 +99,9 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
             </table>
             {inv.notes && <p style={{ whiteSpace: "pre-wrap" }}>{inv.notes}</p>}
           </div>
+          <InvoiceCredits invoice={inv} onChange={invoice.reload} />
+          {addingCredit && <CreditForm customerId={inv.customer.id} properties={inv.property ? [{ id: inv.property.id, address: inv.property.address }] : []} invoiceId={id}
+            onDone={() => { setAddingCredit(false); invoice.reload(); }} onClose={() => setAddingCredit(false)} />}
           <div className="card">
             <h2 style={{ fontSize: 16, marginTop: 0 }}>Payments</h2>
             {inv.payments.length ? (
@@ -166,6 +172,7 @@ function RefundForm({ invoiceId, payment, onDone, onClose }: { invoiceId: string
   const [amount, setAmount] = useState((left / 100).toFixed(2));
   const [reason, setReason] = useState("requested_by_customer");
   const [note, setNote] = useState("");
+  const [writeOff, setWriteOff] = useState(false);
   const { busy, error, run } = useAction();
   const cents = Math.round(Number(amount) * 100);
   const valid = Number.isFinite(cents) && cents > 0 && cents <= left;
@@ -173,18 +180,20 @@ function RefundForm({ invoiceId, payment, onDone, onClose }: { invoiceId: string
     <form className="card stack refund-form" onSubmit={(e) => {
       e.preventDefault();
       if (!confirm(`Refund ${formatMoney(cents)} to ${payment.methodDetail ?? "the customer"}? This sends the money back and can't be undone.`)) return;
-      run(async () => { await api(`/invoices/${invoiceId}/payments/${payment.id}/refund`, { body: { amountCents: cents, reason, note: note || null } }); onDone(); });
+      run(async () => { await api(`/invoices/${invoiceId}/payments/${payment.id}/refund`, { body: { amountCents: cents, reason, note: note || null, writeOff } }); onDone(); });
     }}>
       <h3 style={{ margin: 0, fontSize: 15 }}>Refund {payment.methodDetail ? `to ${payment.methodDetail}` : "this payment"}</h3>
       <p className="muted" style={{ margin: 0 }}>
         The money goes back through Stripe ({payment.method === "ach" ? "bank refunds take up to 5 business days" : "cards show it in 5–10 business days"}) and the customer gets an email.
-        The invoice will owe this amount again; after a full refund you can void the invoice if it won&apos;t be collected. Stripe keeps its original fee.
+        Stripe keeps its original fee.
       </p>
       <div className="formgrid">
         <label>Amount ($)<input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /><span className="muted" style={{ fontSize: 12 }}>Up to {formatMoney(left)}</span></label>
         <label>Reason<select value={reason} onChange={(e) => setReason(e.target.value)}>{Object.entries(REFUND_REASON_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
       </div>
       <label>Note (for your records)<input value={note} onChange={(e) => setNote(e.target.value)} maxLength={450} placeholder="Missed the back yard, double payment…" /></label>
+      <label className="check"><input type="checkbox" checked={writeOff} onChange={(e) => setWriteOff(e.target.checked)} /> Write it off: the customer won&apos;t owe this again (adds a credit for the refund to this invoice)</label>
+      {!writeOff && <p className="muted" style={{ margin: 0 }}>Without writing it off, the invoice owes the refunded amount again (for example, a payment made with the wrong card).</p>}
       <ErrorBox error={error} />
       <div className="row">
         <button className="btn danger" disabled={busy || !valid}>{busy ? "Refunding…" : `Refund ${valid ? formatMoney(cents) : ""}`}</button>

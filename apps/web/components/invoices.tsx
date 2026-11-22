@@ -242,7 +242,7 @@ export function useServices(all = false) {
 
 /** Customer page: what they owe, and their invoices. */
 export function CustomerBilling({ customerId }: { customerId: string }) {
-  const summary = useApi<{ outstandingCents: number; pastDueCents: number; draftCount: number; paidThisYearCents: number }>(`/invoices/customer-summary/${customerId}`);
+  const summary = useApi<{ outstandingCents: number; pastDueCents: number; draftCount: number; paidThisYearCents: number; creditCents: number }>(`/invoices/customer-summary/${customerId}`);
   const list = useApi<{ rows: any[] }>(`/invoices?status=all&customerId=${customerId}&limit=50`);
   const s = summary.data;
   return (
@@ -256,7 +256,8 @@ export function CustomerBilling({ customerId }: { customerId: string }) {
           <div><div className="v" style={{ color: s.pastDueCents ? "var(--bad)" : undefined }}>{formatMoney(s.pastDueCents)}</div><div className="l">Past due</div></div>
           <div><div className="v">{formatMoney(s.outstandingCents)}</div><div className="l">Outstanding</div></div>
           <div><div className="v">{formatMoney(s.paidThisYearCents)}</div><div className="l">Paid this year</div></div>
-          <div><div className="v">{s.draftCount}</div><div className="l">Draft invoices</div></div>
+          {s.creditCents > 0 ? <div><div className="v ok-text">{formatMoney(s.creditCents)}</div><div className="l">Credit on account</div></div>
+            : <div><div className="v">{s.draftCount}</div><div className="l">Draft invoices</div></div>}
         </div>
       )}
       {list.data?.rows.length ? (

@@ -2,9 +2,9 @@ import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest 
 import { randomInt } from "node:crypto";
 import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import { customerName, formatAddress, isInactive, isOverdue } from "@crewdesk/shared";
+import { customerName, formatAddress, invoiceBalance, isInactive, isOverdue } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, customerContacts, customers, employees, invoiceLines, invoicePayments, invoices, paymentRefunds, portalCodes, properties, propertyAssignments } from "../db/schema";
+import { companies, creditApplications, customerContacts, customerCredits, customers, employees, invoiceLines, invoicePayments, invoices, paymentRefunds, portalCodes, properties, propertyAssignments } from "../db/schema";
 import { authenticate, requireRole, WEB_CLIENT_HEADER, type AuthUser } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { WEB_URL, sendSystemEmail } from "../lib/channels";
@@ -119,13 +119,17 @@ async function invoiceDetail(companyId: string, inv: typeof invoices.$inferSelec
   const pays = await db.select().from(invoicePayments).where(and(eq(invoicePayments.invoiceId, inv.id), inArray(invoicePayments.status, ["completed", "pending"])))
     .orderBy(asc(invoicePayments.createdAt));
   const pendingCents = pays.filter((p) => p.status === "pending").reduce((s, p) => s + p.amountCents, 0);
+  const credits = await db.select({ id: creditApplications.id, number: customerCredits.number, description: customerCredits.description, amountCents: creditApplications.amountCents })
+    .from(creditApplications).innerJoin(customerCredits, eq(customerCredits.id, creditApplications.creditId))
+    .where(and(eq(creditApplications.invoiceId, inv.id), isNull(creditApplications.removedAt))).orderBy(asc(creditApplications.createdAt));
   const refunds = await db.select().from(paymentRefunds).where(and(eq(paymentRefunds.invoiceId, inv.id), inArray(paymentRefunds.status, ["pending", "requires_action", "succeeded"])))
     .orderBy(asc(paymentRefunds.createdAt));
   const today = await companyToday(companyId);
   return {
     id: inv.id, number: inv.number, status: inv.status, issueDate: inv.issueDate, dueDate: inv.dueDate, poNumber: inv.poNumber, notes: inv.notes,
     subtotalCents: inv.subtotalCents, discountCents: inv.discountCents, totalCents: inv.totalCents, paidCents: inv.paidCents,
-    balanceCents: inv.status === "void" ? 0 : inv.totalCents - inv.paidCents, pendingCents, overdue: isOverdue(inv, today),
+    creditedCents: inv.creditedCents, balanceCents: inv.status === "void" ? 0 : invoiceBalance(inv), pendingCents, overdue: isOverdue(inv, today),
+    credits: credits.map((c) => ({ id: c.id, number: c.number, description: c.description, amountCents: c.amountCents })),
     customer: { id: cust.id, number: cust.number, name: customerName(cust) },
     serviceAddress: prop ? formatAddress(prop) : null,
     lines: lines.map((l) => ({ description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, amountCents: l.amountCents })),
@@ -229,6 +233,8 @@ const portalRoutes: FastifyPluginAsync = async (app) => {
     const invs = await db.select().from(invoices)
       .where(and(eq(invoices.companyId, v.companyId), inArray(invoices.customerId, v.customerIds), inArray(invoices.status, ["sent", "partial", "paid"])))
       .orderBy(desc(invoices.issueDate), desc(invoices.number)).limit(200);
+    const openCredit = await db.select({ customerId: customerCredits.customerId, amountCents: customerCredits.amountCents, appliedCents: customerCredits.appliedCents }).from(customerCredits)
+      .where(and(inArray(customerCredits.customerId, v.customerIds), eq(customerCredits.status, "open")));
     const pend = invs.length ? await db.select({ invoiceId: invoicePayments.invoiceId, cents: sql<number>`sum(${invoicePayments.amountCents})::int` }).from(invoicePayments)
       .where(and(inArray(invoicePayments.invoiceId, invs.map((i) => i.id)), eq(invoicePayments.status, "pending"))).groupBy(invoicePayments.invoiceId) : [];
     const pendingBy = new Map(pend.map((p) => [p.invoiceId, Number(p.cents)]));
@@ -240,7 +246,7 @@ const portalRoutes: FastifyPluginAsync = async (app) => {
       .orderBy(desc(invoicePayments.receivedOn), desc(invoicePayments.createdAt)).limit(50);
     const list = invs.map((i) => ({
       id: i.id, number: i.number, customerId: i.customerId, status: i.status, issueDate: i.issueDate, dueDate: i.dueDate,
-      totalCents: i.totalCents, paidCents: i.paidCents, balanceCents: i.totalCents - i.paidCents, pendingCents: pendingBy.get(i.id) ?? 0,
+      totalCents: i.totalCents, paidCents: i.paidCents, creditedCents: i.creditedCents, balanceCents: invoiceBalance(i), pendingCents: pendingBy.get(i.id) ?? 0,
       overdue: isOverdue(i, today), serviceAddress: i.propertyId ? propAddr.get(i.propertyId) ?? null : null,
     }));
     return {
@@ -253,6 +259,7 @@ const portalRoutes: FastifyPluginAsync = async (app) => {
           billing: { street: c.billingStreet, city: c.billingCity, state: c.billingState, zip: c.billingZip },
           balanceCents: open.reduce((s, i) => s + i.balanceCents, 0),
           overdueCents: open.filter((i) => i.overdue).reduce((s, i) => s + i.balanceCents, 0),
+          creditCents: openCredit.filter((x) => x.customerId === c.id).reduce((s, x) => s + x.amountCents - x.appliedCents, 0),
           properties: props.filter((p) => p.customerId === c.id).map((p) => ({ id: p.id, address: formatAddress(p) })),
         };
       }),

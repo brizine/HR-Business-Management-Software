@@ -1,8 +1,8 @@
 import { WEB_URL } from "./channels";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { DEFAULT_BILLING_SETTINGS, type BillingSettings } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, invoicePayments, invoices } from "../db/schema";
+import { companies, creditApplications, invoicePayments, invoices } from "../db/schema";
 import type { Tx } from "./crm";
 
 export async function billingSettings(companyId: string, tx: Tx = db): Promise<BillingSettings> {
@@ -23,18 +23,23 @@ export async function takeInvoiceNumber(tx: Tx, companyId: string): Promise<numb
   return n;
 }
 
-/** Re-adds the payments and sets the status: paid, partly paid or unpaid (drafts and void invoices keep theirs). */
+/**
+ * Re-adds the payments and credits and sets the status: paid, partly paid or unpaid (drafts and
+ * void invoices keep theirs). Paid means nothing is left to pay, by payments and credit together.
+ */
 export async function refreshInvoice(tx: Tx, invoiceId: string) {
   const [inv] = await tx.select().from(invoices).where(eq(invoices.id, invoiceId));
   if (!inv) return null;
   // Completed payments, less anything refunded.
   const [{ paid }] = await tx.select({ paid: sql<number>`coalesce(sum(${invoicePayments.amountCents} - ${invoicePayments.refundedCents}), 0)::int` }).from(invoicePayments)
     .where(and(eq(invoicePayments.invoiceId, invoiceId), eq(invoicePayments.status, "completed")));
+  const [{ credited }] = await tx.select({ credited: sql<number>`coalesce(sum(${creditApplications.amountCents}), 0)::int` }).from(creditApplications)
+    .where(and(eq(creditApplications.invoiceId, invoiceId), isNull(creditApplications.removedAt)));
   let status = inv.status;
-  if (status !== "draft" && status !== "void") status = paid >= inv.totalCents ? "paid" : paid > 0 ? "partial" : "sent";
+  if (status !== "draft" && status !== "void") status = paid + credited >= inv.totalCents ? "paid" : paid + credited > 0 ? "partial" : "sent";
   // Paid in full before it went out in the mail: no need to mail it any more.
   const needsMailing = status === "paid" && inv.status !== "paid" ? false : inv.needsMailing;
-  const [u] = await tx.update(invoices).set({ paidCents: paid, status, needsMailing, updatedAt: new Date() }).where(eq(invoices.id, invoiceId)).returning();
+  const [u] = await tx.update(invoices).set({ paidCents: paid, creditedCents: credited, status, needsMailing, updatedAt: new Date() }).where(eq(invoices.id, invoiceId)).returning();
   return u;
 }
 

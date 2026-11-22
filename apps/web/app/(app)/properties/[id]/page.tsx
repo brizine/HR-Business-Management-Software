@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, ErrorBox, PageHead } from "@/components/ui";
 import { CancelForm, CustomerPicker, PropertyFields, TagChips, propertyBody, propertyFormValue, useTags } from "@/components/customers";
+import { CreditForm } from "@/components/credits";
 
 export default function PropertyDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -19,6 +20,8 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
   const [cancelling, setCancelling] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [showPast, setShowPast] = useState(false);
+  const [crediting, setCrediting] = useState(false);
+  const [creditNote, setCreditNote] = useState<string | null>(null);
   const action = useAction();
   const p = property.data;
   if (property.error) return <><PageHead title="Property" /><ErrorBox error={property.error} /></>;
@@ -34,6 +37,7 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
       <PageHead title={p.street} before={<Link className="btn" href="/properties" aria-label="Back to properties">←</Link>}
         sub={<>{[p.name, [p.city, p.state, p.zip].filter(Boolean).join(" ")].filter(Boolean).join(" · ")} · <Badge value={p.status} />{p.sample && <> · <span className="tag tag-gray">Sample</span></>}</>}>
         <a className="btn" href={mapsLink} target="_blank" rel="noopener noreferrer">Map</a>
+        {billTo && can("manager", "customers") && <button className="btn" onClick={() => setCrediting(!crediting)}>Add credit</button>}
         {p.status !== "cancelled" && <button className="btn" onClick={() => setEditing(!editing)}>Edit</button>}
         {p.status !== "cancelled"
           ? <button className="btn danger" onClick={() => setCancelling(!cancelling)}>Cancel property</button>
@@ -44,6 +48,14 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
       </PageHead>
       <ErrorBox error={action.error} />
       {cancelling && <CancelForm what="property" onClose={() => setCancelling(false)} onSubmit={async (body) => { await api(`/properties/${id}/cancel`, { body }); property.reload(); }} />}
+      {crediting && billTo && (
+        <>
+          <p className="muted" style={{ margin: "0 0 6px" }}>Credit for <strong>{billTo.name}</strong> (the bill-to), for this property&apos;s invoices.</p>
+          <CreditForm customerId={billTo.customerId} properties={[{ id, address: formatAddress(p) }]} propertyId={id}
+            onDone={() => { setCrediting(false); setCreditNote(`Credit added for ${billTo.name}. It's on their page under Credits.`); }} onClose={() => setCrediting(false)} />
+        </>
+      )}
+      {creditNote && <p className="notice" role="status">{creditNote} <Link href={`/customers/${billTo?.customerId}`}>Open {billTo?.name}</Link></p>}
       {editing ? <EditProperty property={p} tags={tags} onDone={() => { setEditing(false); property.reload(); }} /> : (
         <div className="grid cols-2">
           <div className="card">

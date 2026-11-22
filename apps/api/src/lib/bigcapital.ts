@@ -120,6 +120,30 @@ export function bigcapital(baseUrl: string, apiKey: string, timeoutMs = 15_000) 
       return call("DELETE", `/payments-received/${id}`);
     },
 
+    /** A credit note (open, so it can be applied), one entry per line. */
+    async createCreditNote(body: { customerId: number; creditNoteDate: string; creditNoteNumber: string; referenceNo?: string; note?: string; entries: BigcapitalInvoice["entries"] }): Promise<string | null> {
+      return idOf(await call("POST", "/credit-notes", { ...body, open: true }));
+    },
+    async deleteCreditNote(id: string) {
+      return call("DELETE", `/credit-notes/${id}`);
+    },
+    async applyCreditNote(id: string, entries: { invoiceId: number; amount: number }[]) {
+      return call("POST", `/credit-notes/${id}/apply-invoices`, { entries });
+    },
+    /** Where a credit note is applied: each application's id, invoice and amount. */
+    async creditNoteApplications(id: string): Promise<{ id: string; invoiceId: number; amount: number }[]> {
+      const data = await call("GET", `/credit-notes/${id}/applied-invoices`);
+      const list: any[] = Array.isArray(data) ? data : data?.data ?? data?.appliedInvoices ?? data?.applied_invoices ?? [];
+      return list.map((a) => ({
+        id: String(a.id),
+        invoiceId: Number(pick(a, "invoiceId", "invoice_id") ?? pick<any>(a, "saleInvoice", "sale_invoice")?.id),
+        amount: Number(a.amount ?? 0),
+      }));
+    },
+    async deleteCreditApplication(applicationId: string) {
+      return call("DELETE", `/credit-notes/applied-invoices/${applicationId}`);
+    },
+
     /** Organization preferences, e.g. { group: "organization", key: "accounting_basis", value: "cash" }. */
     async saveSettings(options: { group: string; key: string; value: unknown }[]) {
       return call("PUT", "/settings", { options });

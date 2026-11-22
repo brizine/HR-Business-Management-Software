@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describePricing, formatMoney, invoiceSchema, invoiceTotals, isOverdue, priceFor, serviceTypeSchema } from "../src/billing";
+import { describePricing, formatMoney, invoiceSchema, invoiceTotals, isOverdue, priceFor, serviceTypeSchema, invoiceBalance, creditSchema, billingSettingsSchema } from "../src/billing";
 
 describe("price list", () => {
   it("prices flat, per 1,000 sq ft (with a minimum) and by lawn size", () => {
@@ -39,5 +39,23 @@ describe("invoices", () => {
     expect(invoiceSchema.safeParse({ ...ok, issueDate: "2026-03-10", dueDate: "2026-03-01" }).success).toBe(false);
     expect(isOverdue({ status: "sent", dueDate: "2026-03-01" }, "2026-03-02")).toBe(true);
     expect(isOverdue({ status: "paid", dueDate: "2026-03-01" }, "2026-03-02")).toBe(false);
+  });
+});
+
+describe("credits", () => {
+  it("what's owed is the total less payments and credits", () => {
+    expect(invoiceBalance({ totalCents: 8500, paidCents: 3000, creditedCents: 2000 })).toBe(3500);
+    expect(invoiceBalance({ totalCents: 8500, paidCents: 0 })).toBe(8500);
+  });
+  it("a credit needs an amount and a description the customer sees; it's used on open invoices unless told otherwise", () => {
+    const base = { customerId: "11111111-1111-4111-8111-111111111111", reason: "goodwill" as const, description: "Thanks for your patience" };
+    expect(creditSchema.parse({ ...base, amountCents: 2000 }).applyTo).toBe("open");
+    expect(creditSchema.parse({ ...base, amountCents: 2000, applyTo: "none" }).applyTo).toBe("none");
+    expect(creditSchema.safeParse({ ...base, amountCents: 0 }).success).toBe(false);
+    expect(creditSchema.safeParse({ ...base, amountCents: 100, description: " " }).success).toBe(false);
+    expect(creditSchema.safeParse({ ...base, amountCents: 100, applyTo: "someday" }).success).toBe(false);
+  });
+  it("using credit automatically is on unless turned off", () => {
+    expect(billingSettingsSchema.parse({ nextInvoiceNumber: 1001, termsDays: 0 }).autoApplyCredits).toBe(true);
   });
 });
