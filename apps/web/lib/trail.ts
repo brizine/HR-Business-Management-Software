@@ -9,7 +9,7 @@ import { useSyncExternalStore } from "react";
 
 export type TrailEntry = { key: string; href: string; title: string };
 /** How many earlier pages show before the current one. */
-export const TRAIL_BEFORE = 4;
+export const TRAIL_BEFORE = 3;
 export const UNNAMED = "…";
 
 let scope = "";
