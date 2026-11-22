@@ -421,6 +421,13 @@
       "when": 1795317707667,
       "tag": "0059_billing",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1795319939911,
+      "tag": "0060_bigcapital_links",
+      "breakpoints": true
     }
   ]
 }

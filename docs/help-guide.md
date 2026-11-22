@@ -178,6 +178,15 @@ Operations → **Billing** has **Invoices** and the **Price list** (managers in 
   To mail, Paid, Void, All) and search (invoice number, customer, address, PO) find them; the total due shows at the top.
 - **Customer page:** the **Billing** box shows past due, outstanding, paid this year and drafts, with the customer's
   invoices listed below.
+- **Bigcapital (your books):** when Bigcapital is connected (Settings → Integrations), Crewdesk sends billing to it as it
+  happens: the customer the first time one of their invoices is sent (and any later changes to their name, email, phone
+  or address); each sent invoice with the same number, each line in its service's income account; edits to an unpaid
+  invoice; and each payment (cash, checks and other payments to 1020 Undeposited Funds; card and bank payments to 1030
+  Card Processor Clearing). Voiding an invoice or a payment removes it from Bigcapital. Drafts never go to the books.
+  The invoice page shows **Bigcapital: in the books**, or why it isn't yet; anything that didn't get through (for
+  example while Bigcapital was restarting) is retried every few minutes, or click **Send to Bigcapital now**. Settings →
+  Integrations lists anything still waiting. Sample customers are only sent from the test company, never to the real
+  books.
 - **Settings → Customers & billing** (admins): the **next invoice number** (at switch-over, set it to follow Service
   Autopilot's last number), your usual **terms** (due on receipt, net 7/10/15/30), **make checks payable to**, and the
   **footer** printed on every invoice.
@@ -471,7 +480,8 @@ Job postings, a public careers page, an applicant board, and one-click hire.
 
 ## Accounting
 
-Connects to Bigcapital (the company's accounting system). Approved pay periods can post as journal
+Connects to Bigcapital (the company's accounting system). Customers, invoices and payments are sent as they happen
+(see Billing under Customers & Properties). Approved pay periods can post as journal
 entries (wages, bonuses and commissions to the wages account; reimbursements to the reimbursements
 account if one is chosen) and completed repair orders as expenses, automatically or by hand. Set up the connection and
 accounts in **Settings → Integrations** (payroll admins).

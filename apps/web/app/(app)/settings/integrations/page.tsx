@@ -12,7 +12,7 @@ export default function Integrations() {
       <SettingsTabs />
       <PageHead title="Integrations" sub="Connections to the other systems Crewdesk works with." />
       <h2 style={{ fontSize: 16, margin: "4px 0 8px" }}>Accounting (Bigcapital)</h2>
-      <p className="muted" style={{ marginTop: 0 }}>Your books are kept in Bigcapital. Crewdesk sends it approved payroll and repair order costs.</p>
+      <p className="muted" style={{ marginTop: 0 }}>Your books are kept in Bigcapital. Crewdesk sends it customers, invoices and payments as they happen, plus approved payroll and repair order costs.</p>
       {can("admin", "payroll") ? <AccountingCard /> : <p className="muted">Only payroll admins can see accounting.</p>}
     </>
   );

@@ -70,12 +70,13 @@ export function AccountingCard() {
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div>
           <h2 style={{ margin: 0 }}>Accounting (Bigcapital)</h2>
-          <p className="muted" style={{ margin: "4px 0 0" }}>Send approved payroll and repair order costs to your books, so nobody types them in twice.</p>
+          <p className="muted" style={{ margin: "4px 0 0" }}>Sends invoices and payments, approved payroll and repair order costs to your books, so nobody types them in twice.</p>
         </div>
         {st?.connected && st.baseUrl && <a className="btn" href={st.baseUrl} target="_blank" rel="noopener noreferrer">Open Bigcapital ↗</a>}
       </div>
 
       {me?.company.isTest && owner && st?.connected && <TestBooksSetup onDone={() => { setAccounts(null); saved.reload(); }} />}
+      {st?.connected && <BillingIssues />}
 
       {editing || !s.enabled ? (
         <form className="stack" onSubmit={(e) => {
@@ -206,6 +207,26 @@ function TestBooksSetup({ onDone }: { onDone: () => void }) {
           {result.skipped.length > 0 && <span className="warn-text"> Skipped: {result.skipped.join("; ")}</span>}</span>
       )}
       <div><button type="button" className="btn primary" disabled={busy} onClick={() => run(async () => { setResult(await api("/accounting/test-books", { method: "POST" })); onDone(); })}>Set up test books</button></div>
+    </div>
+  );
+}
+
+/** Invoices and payments that haven't reached Bigcapital yet (they retry every few minutes on their own). */
+function BillingIssues() {
+  const issues = useApi<{ kind: string; sourceId: string; error: string | null; invoiceId: string | null; invoiceNumber: number | null; amountCents: number }[]>("/accounting/billing-issues");
+  if (!issues.data?.length) return <p className="muted" style={{ margin: 0 }}>Invoices and payments: everything sent is in Bigcapital.</p>;
+  return (
+    <div className="card inset stack">
+      <strong className="bad-text">{issues.data.length} invoice{issues.data.length === 1 ? "" : "s"} or payment{issues.data.length === 1 ? "" : "s"} not in Bigcapital yet</strong>
+      <span className="muted">They retry by themselves every few minutes; open one to see why or to send it now.</span>
+      <ul className="plain-list">
+        {issues.data.map((i) => (
+          <li key={i.kind + i.sourceId}>
+            {i.invoiceId ? <a href={`/invoices/${i.invoiceId}`}>{i.kind === "invoice" ? "Invoice" : "Payment on invoice"} {i.invoiceNumber ?? ""}</a> : i.kind}
+            <span className="muted"> · ${(i.amountCents / 100).toFixed(2)} · {i.error}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

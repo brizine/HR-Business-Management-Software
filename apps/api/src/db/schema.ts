@@ -715,10 +715,10 @@ export const accountingPostings = pgTable(
   {
     id: id(),
     companyId: companyId(),
-    /** payroll | work_order */
+    /** payroll | work_order | invoice | payment | customer */
     kind: text("kind").notNull(),
     sourceId: uuid("source_id").notNull(),
-    /** posted | failed */
+    /** posted | failed | skipped (e.g. a sample customer outside the test company) */
     status: text("status").notNull(),
     /** Bigcapital's id for the journal / expense. */
     externalId: text("external_id"),
@@ -1431,4 +1431,19 @@ export const invoicePayments = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("invoice_payments_invoice_idx").on(t.invoiceId), index("invoice_payments_company_idx").on(t.companyId, t.receivedOn)],
+);
+
+/** Which Bigcapital record a Crewdesk thing became, where the thing has no column of its own (e.g. price-list items). */
+export const bigcapitalLinks = pgTable(
+  "bigcapital_links",
+  {
+    id: id(),
+    companyId: companyId(),
+    /** "item" (a service type, or "custom" for custom lines). */
+    kind: text("kind").notNull(),
+    localKey: text("local_key").notNull(),
+    externalId: text("external_id").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("bigcapital_links_key_idx").on(t.companyId, t.kind, t.localKey)],
 );

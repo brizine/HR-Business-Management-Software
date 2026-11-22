@@ -71,6 +71,7 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
                 {inv.mailedAt && <li>Mailed {fmtDate(inv.mailedAt)}</li>}
                 {inv.number && !inv.emailedAt && !inv.needsMailing && !inv.mailedAt && <li className="muted">Numbered, not delivered.</li>}
               </ul>
+              <BooksStatus inv={inv} onChange={invoice.reload} />
             </div>
           </div>
           <div className="card tablewrap">
@@ -93,7 +94,8 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
               <ul className="plain-list">
                 {inv.payments.map((p: any) => (
                   <li key={p.id} className="row" style={{ justifyContent: "space-between", opacity: p.status === "void" ? 0.55 : 1 }}>
-                    <span><strong>{formatMoney(p.amountCents)}</strong> {PAYMENT_METHOD_LABELS[p.method as PaymentMethod]}{p.reference ? ` #${p.reference}` : ""} <span className="muted">· {fmtDate(p.receivedOn)}{p.note ? ` · ${p.note}` : ""}{p.status === "void" ? " · void" : ""}</span></span>
+                    <span><strong>{formatMoney(p.amountCents)}</strong> {PAYMENT_METHOD_LABELS[p.method as PaymentMethod]}{p.reference ? ` #${p.reference}` : ""} <span className="muted">· {fmtDate(p.receivedOn)}{p.note ? ` · ${p.note}` : ""}{p.status === "void" ? " · void" : ""}</span>
+                      {inv.sync?.connected && p.status === "completed" && <PaymentBooks s={inv.sync.payments?.[p.id]} />}</span>
                     {p.status === "completed" && (p.method === "cash" || p.method === "check" || p.method === "other") && (
                       <button className="btn" disabled={action.busy} onClick={() => confirm("Void this payment? The invoice goes back to owing it.") && action.run(async () => { await api(`/invoices/${id}/payments/${p.id}/void`, { method: "POST" }); invoice.reload(); })}>Void payment</button>
                     )}
@@ -138,4 +140,30 @@ function VoidForm({ id, onDone, onClose }: { id: string; onDone: () => void; onC
       <div className="row"><button className="btn danger" disabled={busy}>Void invoice</button><button type="button" className="btn" onClick={onClose}>Keep it</button></div>
     </form>
   );
+}
+
+/** Where this invoice stands in Bigcapital, with a retry when it didn't get there. */
+function BooksStatus({ inv, onChange }: { inv: any; onChange: () => void }) {
+  const { busy, error, run } = useAction();
+  const s = inv.sync;
+  if (!s?.connected || !inv.number) return null;
+  const st = s.invoice?.status;
+  return (
+    <div className="books-status">
+      <strong>Bigcapital: </strong>
+      {st === "posted" ? <span className="ok-text">{inv.status === "void" ? "removed (void)" : "in the books"}</span>
+        : st === "skipped" ? <span className="muted">{s.invoice.error ?? "not sent"}</span>
+        : st === "failed" ? <span className="bad-text">not sent yet: {s.invoice.error}</span>
+        : <span className="muted">sending…</span>}
+      {(st === "failed" || !st) && <button className="btn" style={{ marginLeft: 8 }} disabled={busy} onClick={() => run(async () => { await api(`/invoices/${inv.id}/sync`, { method: "POST" }); onChange(); })}>Send to Bigcapital now</button>}
+      <ErrorBox error={error} />
+    </div>
+  );
+}
+
+function PaymentBooks({ s }: { s: { status: string; error: string | null } | null | undefined }) {
+  if (!s) return <span className="muted"> · sending to Bigcapital…</span>;
+  if (s.status === "posted") return <span className="ok-text"> · in Bigcapital</span>;
+  if (s.status === "skipped") return <span className="muted"> · not sent ({s.error})</span>;
+  return <span className="bad-text" title={s.error ?? ""}> · not in Bigcapital yet</span>;
 }

@@ -16,6 +16,7 @@ import { batchPdf, billToLines, invoicePdf, type PdfCompany, type PdfInvoice } f
 import { emailTransport } from "../lib/channels";
 import { randomToken } from "../lib/crypto";
 import { storage } from "../lib/storage";
+import { queueBillingSync, syncInvoice, syncInvoiceAndPayments, syncPayment, syncStatus } from "../lib/billingSync";
 
 const AREA = "customers" as const;
 
@@ -211,8 +212,9 @@ const routes: FastifyPluginAsync = async (app) => {
       .where(and(eq(customerContacts.customerId, row.cust.id), eq(customerContacts.getsInvoices, true), isNotNull(customerContacts.email)));
     const today = await companyToday(companyId);
     const { inv, cust, prop } = row;
+    const sync = await syncStatus(companyId, inv.id, payments.map((p) => p.id));
     return {
-      ...inv, balanceCents: inv.totalCents - inv.paidCents, overdue: isOverdue(inv, today), lines, payments,
+      ...inv, balanceCents: inv.totalCents - inv.paidCents, overdue: isOverdue(inv, today), lines, payments, sync,
       customer: { id: cust.id, number: cust.number, name: customerName(cust), email: cust.email, delivery: cust.delivery, poRequired: cust.poRequired, status: cust.status,
         billTo: billToLines(cust, prop), copies },
       property: prop ? { id: prop.id, street: prop.street, name: prop.name, address: formatAddress(prop), lawnSqFt: prop.lawnSqFt } : null,
@@ -223,7 +225,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.put<{ Params: { id: string } }>("/:id", async (req) => {
     const body = parse(invoiceSchema, req.body);
     const { companyId } = req.user;
-    return db.transaction(async (tx) => {
+    const updated = await db.transaction(async (tx) => {
       const [inv] = await tx.select().from(invoices).where(and(eq(invoices.id, req.params.id), eq(invoices.companyId, companyId)));
       if (!inv) throw new HttpError(404, "Invoice not found");
       if (inv.status === "void") throw new HttpError(400, "A void invoice can't be changed");
@@ -238,6 +240,9 @@ const routes: FastifyPluginAsync = async (app) => {
       await tx.insert(invoiceLines).values(body.lines.map((l, i) => ({ ...l, serviceTypeId: l.serviceTypeId ?? null, invoiceId: inv.id, amountCents: lineAmount(l), sortOrder: i })));
       return refreshInvoice(tx, u.id);
     });
+    // A sent invoice that changed: update the Bigcapital copy.
+    if (updated?.number != null) queueBillingSync(() => syncInvoice(companyId, updated.id, req.user.sub));
+    return updated;
   });
 
   app.delete<{ Params: { id: string } }>("/:id", async (req) => {
@@ -304,6 +309,7 @@ const routes: FastifyPluginAsync = async (app) => {
       await db.update(invoices).set({ emailedAt: new Date(), emailedTo: [to, ...copies].join(", ") }).where(eq(invoices.id, inv.id));
     }
     if (body.via.includes("paper")) await db.update(invoices).set({ needsMailing: true }).where(eq(invoices.id, inv.id));
+    queueBillingSync(() => syncInvoice(companyId, inv.id, req.user.sub));
     const [out] = await db.select().from(invoices).where(eq(invoices.id, inv.id));
     return { ...out, status: fresh?.status ?? out.status };
   });
@@ -323,7 +329,7 @@ const routes: FastifyPluginAsync = async (app) => {
       const [p] = await tx.insert(invoicePayments).values({ ...body, receivedOn: body.receivedOn ?? today, companyId, invoiceId: inv.id, customerId: inv.customerId, recordedById: sub }).returning();
       const updated = await refreshInvoice(tx, inv.id);
       return { payment: p, invoice: updated };
-    });
+    }).then((r) => { queueBillingSync(() => syncPayment(companyId, r.payment.id, sub)); return r; });
   });
 
   app.post<{ Params: { id: string; paymentId: string } }>("/:id/payments/:paymentId/void", async (req) => {
@@ -334,8 +340,8 @@ const routes: FastifyPluginAsync = async (app) => {
       if (p.status === "void") throw new HttpError(400, "That payment is already void");
       if (p.method === "card" || p.method === "ach") throw new HttpError(400, "Card and bank payments are refunded, not voided");
       await tx.update(invoicePayments).set({ status: "void", voidedAt: new Date() }).where(eq(invoicePayments.id, p.id));
-      return refreshInvoice(tx, req.params.id);
-    });
+      return { invoice: await refreshInvoice(tx, req.params.id), paymentId: p.id };
+    }).then((r) => { queueBillingSync(() => syncPayment(companyId, r.paymentId, req.user.sub)); return r.invoice; });
   });
 
   /** Voids a sent invoice (reason kept). Payments must be voided or refunded first. */
@@ -347,7 +353,20 @@ const routes: FastifyPluginAsync = async (app) => {
     if (inv.status === "draft") throw new HttpError(400, "Drafts are deleted, not voided");
     if (inv.paidCents > 0) throw new HttpError(400, "Void or refund its payments first");
     const [u] = await db.update(invoices).set({ status: "void", voidedAt: new Date(), voidReason: reason, needsMailing: false, updatedAt: new Date() }).where(eq(invoices.id, inv.id)).returning();
+    queueBillingSync(() => syncInvoice(req.user.companyId, inv.id, req.user.sub));
     return u;
+  });
+
+  /** "Send to Bigcapital" now: the invoice and its payments (also retries anything that failed). */
+  app.post<{ Params: { id: string } }>("/:id/sync", async (req) => {
+    const { companyId, sub } = req.user;
+    const [inv] = await db.select({ id: invoices.id, number: invoices.number }).from(invoices).where(and(eq(invoices.id, req.params.id), eq(invoices.companyId, companyId)));
+    if (!inv) throw new HttpError(404, "Invoice not found");
+    if (inv.number == null) throw new HttpError(400, "Send the invoice first; drafts stay out of the books");
+    const status = await syncInvoiceAndPayments(companyId, inv.id, sub);
+    if (status === "not_connected") throw new HttpError(400, "Bigcapital isn't connected (Settings → Integrations)");
+    const pays = await db.select({ id: invoicePayments.id }).from(invoicePayments).where(eq(invoicePayments.invoiceId, inv.id));
+    return syncStatus(companyId, inv.id, pays.map((p) => p.id));
   });
 };
 

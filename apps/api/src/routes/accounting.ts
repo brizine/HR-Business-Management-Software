@@ -3,7 +3,7 @@ import { and, desc, eq, gt, inArray, isNotNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { accountingSettingsSchema } from "@crewdesk/shared";
 import { db } from "../db";
-import { accountingPostings, assets, companies, payPeriods, workOrders } from "../db/schema";
+import { accountingPostings, assets, companies, invoicePayments, invoices, payPeriods, workOrders } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { encrypt } from "../lib/crypto";
@@ -92,6 +92,23 @@ const routes: FastifyPluginAsync = async (app) => {
     if (!company?.testOf) throw new HttpError(400, "This only runs in the test company, so your real books are never changed");
     const { bc } = await asHttp(() => clientFor(req.user.companyId));
     return asHttp(() => setUpTestBooks(bc));
+  });
+
+  /** Invoices and payments that couldn't be sent to Bigcapital (with the error), for the Integrations page. */
+  app.get("/billing-issues", async (req) => {
+    const rows = await db.select({ kind: accountingPostings.kind, sourceId: accountingPostings.sourceId, error: accountingPostings.error, updatedAt: accountingPostings.updatedAt, amountCents: accountingPostings.amountCents })
+      .from(accountingPostings)
+      .where(and(eq(accountingPostings.companyId, req.user.companyId), inArray(accountingPostings.kind, ["invoice", "payment"]), eq(accountingPostings.status, "failed")))
+      .orderBy(desc(accountingPostings.updatedAt)).limit(50);
+    const invIds = rows.filter((r) => r.kind === "invoice").map((r) => r.sourceId);
+    const payIds = rows.filter((r) => r.kind === "payment").map((r) => r.sourceId);
+    const pays = payIds.length ? await db.select({ id: invoicePayments.id, invoiceId: invoicePayments.invoiceId }).from(invoicePayments).where(inArray(invoicePayments.id, payIds)) : [];
+    const allInv = [...new Set([...invIds, ...pays.map((p) => p.invoiceId)])];
+    const invs = allInv.length ? await db.select({ id: invoices.id, number: invoices.number }).from(invoices).where(inArray(invoices.id, allInv)) : [];
+    return rows.map((r) => {
+      const invoiceId = r.kind === "invoice" ? r.sourceId : pays.find((p) => p.id === r.sourceId)?.invoiceId ?? null;
+      return { ...r, invoiceId, invoiceNumber: invs.find((i) => i.id === invoiceId)?.number ?? null };
+    });
   });
 
   app.post<{ Params: { id: string } }>("/payroll/:id", async (req) => asHttp(() => postPayPeriod(req.user.companyId, req.params.id, req.user.sub)));

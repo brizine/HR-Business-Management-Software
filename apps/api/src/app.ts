@@ -45,6 +45,7 @@ import customerRoutes from "./routes/customers";
 import propertyRoutes from "./routes/properties";
 import crmSettingsRoutes from "./routes/crmSettings";
 import searchRoutes from "./routes/search";
+import { flushBillingSync } from "./lib/billingSync";
 import serviceTypeRoutes from "./routes/serviceTypes";
 import invoiceRoutes from "./routes/invoices";
 
@@ -83,6 +84,8 @@ export async function buildApp(opts: AppOptions = {}) {
   // Every answer is personal and changes as people edit, so no proxy or browser may keep a copy.
   // Without this, a host's cache (e.g. SiteGround's dynamic cache) can keep serving an old schedule
   // after a shift is deleted. Routes that set their own caching (photos, logo) keep it.
+  // Let background Bigcapital syncs finish before shutting down.
+  app.addHook("onClose", async () => { await flushBillingSync(); });
   app.addHook("onSend", async (_req, reply, payload) => {
     if (!reply.hasHeader("cache-control")) reply.header("Cache-Control", "private, no-store");
     return payload;

@@ -7,6 +7,7 @@ import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
 import { assignCustomer, checkTags, customerInCompany, nextCustomerNumber, recordTagChanges } from "../lib/crm";
+import { queueBillingSync, syncCustomer } from "../lib/billingSync";
 
 const AREA = "customers" as const;
 
@@ -127,6 +128,8 @@ const routes: FastifyPluginAsync = async (app) => {
       await recordTagChanges(tx, { companyId, before: c.tagIds, after: tagIds, customerId: c.id, source: "hand", byId: sub });
       return u;
     });
+    // Already in Bigcapital: keep their name, email, phone and address in step there.
+    if (updated.bigcapitalCustomerId) queueBillingSync(() => syncCustomer(companyId, updated.id));
     return { ...updated, name: customerName(updated) };
   });
 

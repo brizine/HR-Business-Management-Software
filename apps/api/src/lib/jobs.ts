@@ -1,4 +1,5 @@
 import { refreshAddresses } from "./addresses";
+import { retryBillingSyncs } from "./billingSync";
 import { and, eq, gt, sql, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or } from "drizzle-orm";
 import { LOCATION_KEEP_DAYS, DEFAULT_RENEWAL_REMIND_DAYS, DEFAULT_RENEWAL_REPEAT_DAYS, INACTIVE_STATUSES, carryoverForfeit, renewalStatus, computeDue, resolveLead, workOrderDue, type FleetSettings, effectivePto, lastEndedPeriod, lastGrantDate, lastResetDate, yearsOfService, type PayFrequency } from "@crewdesk/shared";
 import { db } from "../db";
@@ -270,6 +271,8 @@ export async function runScheduledChecks(now = new Date()) {
   sent += await reviewChecks(now);
   // Location points are only kept for LOCATION_KEEP_DAYS.
   await db.delete(locationPings).where(lt(locationPings.recordedAt, new Date(now.getTime() - LOCATION_KEEP_DAYS * 86_400_000)));
+  // Invoices and payments that didn't reach Bigcapital yet (it was down, or not connected then).
+  try { await retryBillingSyncs(); } catch (e) { console.error("Bigcapital retry failed:", (e as Error).message); }
   return { sent };
 }
 

@@ -13,6 +13,16 @@ export class BigcapitalError extends Error {
   }
 }
 
+export interface BigcapitalCustomer {
+  customerType: "individual" | "business"; displayName: string; firstName?: string; lastName?: string; companyName?: string;
+  email?: string; workPhone?: string; personalPhone?: string; code?: string; active?: boolean;
+  billingAddress1?: string; billingAddressCity?: string; billingAddressState?: string; billingAddressPostcode?: string; billingAddressCountry?: string;
+}
+export interface BigcapitalInvoice {
+  customerId: number; invoiceDate: string; dueDate: string; invoiceNo: string; referenceNo?: string; delivered: boolean; invoiceMessage?: string;
+  discount?: number; discountType?: "amount" | "percentage";
+  entries: { index: number; itemId: number; rate: number; quantity: number; description?: string; sellAccountId?: number }[];
+}
 export interface BigcapitalAccount { id: number; name: string; code: string | null; type: string; active: boolean }
 
 const pick = <T>(o: any, ...keys: string[]): T | undefined => {
@@ -71,6 +81,43 @@ export function bigcapital(baseUrl: string, apiKey: string, timeoutMs = 15_000) 
 
     async inactivateAccount(id: number) {
       return call("POST", `/accounts/${id}/inactivate`);
+    },
+
+    /* ── Customers, items, sale invoices and payments received (billing sync) ── */
+
+    async createCustomer(body: BigcapitalCustomer): Promise<string | null> {
+      return idOf(await call("POST", "/customers", { currencyCode: "USD", ...body }));
+    },
+    async updateCustomer(id: string, body: BigcapitalCustomer) {
+      return call("PUT", `/customers/${id}`, body);
+    },
+
+    /** Items with this exact name (Bigcapital item names are unique). */
+    async findItemByName(name: string): Promise<string | null> {
+      const data = await call("GET", `/items?page_size=1000&search_keyword=${encodeURIComponent(name)}`);
+      const list: any[] = Array.isArray(data) ? data : data?.items ?? [];
+      const hit = list.find((i) => String(i.name).trim().toLowerCase() === name.trim().toLowerCase());
+      return hit ? String(hit.id) : null;
+    },
+    async createServiceItem(body: { name: string; sellAccountId: number; sellPrice?: number; sellDescription?: string }): Promise<string | null> {
+      return idOf(await call("POST", "/items", { type: "service", sellable: true, purchasable: false, active: true, ...body }));
+    },
+
+    async createInvoice(body: BigcapitalInvoice): Promise<string | null> {
+      return idOf(await call("POST", "/sale-invoices", body));
+    },
+    async updateInvoice(id: string, body: BigcapitalInvoice) {
+      return call("PUT", `/sale-invoices/${id}`, body);
+    },
+    async deleteInvoice(id: string) {
+      return call("DELETE", `/sale-invoices/${id}`);
+    },
+
+    async createPayment(body: { customerId: number; paymentDate: string; depositAccountId: number; referenceNo?: string; statement?: string; entries: { invoiceId: number; paymentAmount: number }[] }): Promise<string | null> {
+      return idOf(await call("POST", "/payments-received", { ...body, amount: body.entries.reduce((s, e) => s + e.paymentAmount, 0) }));
+    },
+    async deletePayment(id: string) {
+      return call("DELETE", `/payments-received/${id}`);
     },
 
     /** Organization preferences, e.g. { group: "organization", key: "accounting_basis", value: "cash" }. */
