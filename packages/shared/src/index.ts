@@ -30,3 +30,4 @@ export * from "./customers";
 export * from "./billing";
 export * from "./todos";
 export * from "./calendar";
+export * from "./visits";

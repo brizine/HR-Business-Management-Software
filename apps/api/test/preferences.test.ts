@@ -1,4 +1,5 @@
 /** Notification preferences and email/SMS delivery, with in-memory transports. */
+import { NOTIFICATION_CATEGORIES } from "@crewdesk/shared";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";
@@ -95,7 +96,7 @@ describe("defaults", () => {
     const res = await call("GET", "/notifications/preferences", "noapp");
     expect(res.body.hasApp).toBe(false);
     expect(res.body.channels).toEqual({ email: true, sms: false });
-    expect(res.body.preferences).toHaveLength(12);
+    expect(res.body.preferences).toHaveLength(NOTIFICATION_CATEGORIES.length);
     expect(res.body.preferences[0]).toEqual({ category: "pto", app: true, email: "no_app", sms: "never" });
   });
 });

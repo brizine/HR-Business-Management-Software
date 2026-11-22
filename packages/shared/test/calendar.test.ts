@@ -4,7 +4,7 @@ import { eventOnDay, eventsCsv, sortEvents, type CalendarEvent } from "../src";
 const ev = (over: Partial<CalendarEvent>): CalendarEvent => ({
   key: `todo:${over.id ?? "x"}`, type: "todo", id: "x", title: "A", date: "2026-11-23", endDate: null, startTime: null, endTime: null, color: null,
   status: "open", statusLabel: "Open", recurring: false, customer: null, property: null, location: null, people: [], hours: null, notes: null,
-  tagIds: [], href: null, canMove: false, canComplete: false, ...over,
+  tagIds: [], amountCents: null, invoiced: null, onSite: false, trackedMinutes: null, serviceIds: [], href: null, canMove: false, canComplete: false, ...over,
 });
 
 describe("calendar", () => {
@@ -21,6 +21,8 @@ describe("calendar", () => {
     expect(ids("customer")).toBe("312");
     expect(ids("status")).toBe("231");
     expect(ids("type")).toBe("213");
+    const paid = [ev({ id: "a", amountCents: 5000 }), ev({ id: "b", amountCents: 12000 }), ev({ id: "c" })];
+    expect(sortEvents(paid, "revenueDesc").map((e) => e.id).join("")).toBe("bac");
   });
 
   it("puts multi-day events on every day they run", () => {
@@ -31,7 +33,7 @@ describe("calendar", () => {
   it("exports to CSV safely", () => {
     const csv = eventsCsv([ev({ title: '=HYPERLINK("x")', notes: "Gate, side", people: [{ id: "p", name: "Ann Lee" }, { id: "q", name: "Bo" }], startTime: "08:00" })]);
     const [head, row] = csv.split("\n");
-    expect(head).toBe("Date,End date,Start,End,Type,Title,Status,Customer,Address or location,People,Hours,Notes");
-    expect(row).toBe(`2026-11-23,,08:00,,To-dos,"'=HYPERLINK(""x"")",Open,,,Ann Lee; Bo,,"Gate, side"`);
+    expect(head).toBe("Date,End date,Start,End,Type,Title,Status,Customer,Address or location,People,Hours,Amount,Notes");
+    expect(row).toBe(`2026-11-23,,08:00,,To-dos,"'=HYPERLINK(""x"")",Open,,,Ann Lee; Bo,,,"Gate, side"`);
   });
 });

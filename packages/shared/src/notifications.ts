@@ -20,9 +20,10 @@ export type NotificationLink =
   | { screen: "review-due"; employeeId: string; reviewType: string }
   | { screen: "attendance"; employeeId: string }
   | { screen: "training"; courseId: string }
-  | { screen: "todos"; id?: string };
+  | { screen: "todos"; id?: string }
+  | { screen: "workorder"; id: string };
 
-export const NOTIFICATION_CATEGORIES = ["pto", "time", "schedule", "fleet", "documents", "onboarding", "hiring", "payroll", "wiki", "reviews", "training", "todos"] as const;
+export const NOTIFICATION_CATEGORIES = ["pto", "time", "schedule", "fleet", "documents", "onboarding", "hiring", "payroll", "wiki", "reviews", "training", "todos", "workorders"] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
 /** Expo push tokens look like ExponentPushToken[xxxx] or ExpoPushToken[xxxx]. */
@@ -39,6 +40,7 @@ export const NOTIFICATION_CATEGORY_INFO: Record<NotificationCategory, { label: s
   wiki: { label: "Company wiki", description: "Pages your company flags as important when they're published or updated" },
   training: { label: "Training", description: "Courses assigned to you, reminders before they're due or expire, and (for managers) completions" },
   reviews: { label: "Reviews & discipline", description: "Reviews and disciplinary actions shared with you, and when one you wrote is acknowledged" },
+  workorders: { label: "Work orders", description: "Work orders given to you, and a reminder the morning they're scheduled" },
   todos: { label: "To-dos", description: "To-dos given to you, and a reminder the morning they're due" },
   payroll: { label: "Payroll & tax forms", description: "Pay periods to approve, and new or updated W-4s and direct deposit details to enter in payroll" },
 };
@@ -83,6 +85,7 @@ export function webPathFor(link: NotificationLink | null | undefined): string | 
     case "attendance": return `/attendance?employee=${link.employeeId}`;
     case "training": return `/training/${link.courseId}`;
     case "todos": return link.id ? `/todos?open=${link.id}` : "/todos";
+    case "workorder": return `/visits/${link.id}`;
     default: return null;
   }
 }

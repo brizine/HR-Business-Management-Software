@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { CALENDAR_COLORS, CALENDAR_SORTS, CALENDAR_TYPES, CALENDAR_TYPE_INFO, type CalendarEvent, type CalendarSort, type CalendarType } from "@crewdesk/shared";
+import { CALENDAR_COLORS, CALENDAR_SORTS, CALENDAR_TYPES, CALENDAR_TYPE_INFO, formatMoney, type CalendarEvent, type CalendarSort, type CalendarType } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
@@ -10,7 +10,7 @@ import { Icon } from "@/components/icons";
 import { PageHead } from "@/components/ui";
 import {
   AddTodoModal, DETAILS, DayView, EventCard, EventPopover, FILTER_LABELS, ListView, MiniMonth, MonthGrid, WeekGrid, applyFilters, days, downloadCsv,
-  fmt, localToday, rangeFor, rangeLabel, step, usePopover, useCalSettings, workHours, type CalFilter, type CalSettings, type CalView, type DetailKey, type FilterKind,
+  fmt, localToday, rangeFor, rangeLabel, step, usePopover, useCalSettings, workHours, workMoney, type CalFilter, type CalSettings, type CalView, type DetailKey, type FilterKind,
 } from "@/components/calendar";
 
 const VIEWS: { key: CalView; label: string; hotkey: string }[] = [{ key: "day", label: "Day", hotkey: "D" }, { key: "week", label: "Week", hotkey: "W" }, { key: "month", label: "Month", hotkey: "M" }];
@@ -87,13 +87,17 @@ function Sidebar({ s, set, anchor, from, to, today, onPick, counts }: {
 }
 
 /** "+ Filter": pick a kind, then a value; each filter shows as a chip you can remove. */
-function FilterBar({ filters, setFilters, events, tags }: { filters: CalFilter[]; setFilters: (f: CalFilter[]) => void; events: CalendarEvent[]; tags: { id: string; name: string }[] }) {
+function FilterBar({ filters, setFilters, events, tags, services }: { filters: CalFilter[]; setFilters: (f: CalFilter[]) => void; events: CalendarEvent[]; tags: { id: string; name: string }[]; services: { id: string; name: string }[] }) {
   const [kind, setKind] = useState<FilterKind | null>(null);
   const people = useMemo(() => { const m = new Map<string, string>(); for (const e of events) for (const p of e.people) m.set(p.id, p.name); return [...m].sort((a, b) => a[1].localeCompare(b[1])); }, [events]);
   const customers = useMemo(() => { const m = new Map<string, string>(); for (const e of events) if (e.customer) m.set(e.customer.id, e.customer.name); return [...m].sort((a, b) => a[1].localeCompare(b[1])); }, [events]);
   const options: Record<FilterKind, [string, string][]> = {
     status: [["open", "Open"], ["done", "Done"]],
     recurring: [["yes", "Repeating"], ["no", "One-time"]],
+    invoice: [["yes", "Invoiced"], ["no", "Not invoiced"]],
+    onsite: [["yes", "On site now"], ["no", "Not on site"]],
+    tracked: [["yes", "Has time tracked"], ["no", "No time tracked"]],
+    service: services.filter((x) => events.some((e) => e.serviceIds.includes(x.id))).map((x) => [x.id, x.name]),
     person: [...people, ["none", "Nobody assigned"]],
     customer: customers,
     tag: tags.map((t) => [t.id, t.name]),
@@ -118,7 +122,7 @@ function FilterBar({ filters, setFilters, events, tags }: { filters: CalFilter[]
             <button type="button" className="menu-heading linkish" onClick={() => setKind(null)}><Icon name="left" size={12} /> {FILTER_LABELS[kind]}</button>
             {options[kind].length ? options[kind].map(([v, l]) => (
               <button key={v} type="button" role="menuitem" onClick={() => { add({ kind, value: v, label: l }); setKind(null); close(); }}>{l}</button>
-            )) : <p className="muted cal-menu-empty">{kind === "tag" ? "No customer tags" : "Nothing in this range"}</p>}
+            )) : <p className="muted cal-menu-empty">{kind === "tag" ? "No customer tags" : kind === "service" ? "No services on work orders in this range" : "Nothing in this range"}</p>}
           </>
         )}
       </Menu>
@@ -152,6 +156,7 @@ function CalendarPage() {
   const data = useApi<{ events: CalendarEvent[]; today: string }>(`/events?from=${from}&to=${to}`);
   const unscheduled = useApi<CalendarEvent[]>(s.unscheduled ? "/events/unscheduled" : null);
   const tagList = useApi<{ id: string; name: string }[]>(can("manager", "customers") ? "/crm/tags" : null);
+  const serviceList = useApi<{ id: string; name: string }[]>(can("manager", "customers") ? "/service-types?all=1" : null);
   const reload = useCallback(() => { data.reload(); if (s.unscheduled) unscheduled.reload(); }, [data.reload, unscheduled.reload, s.unscheduled]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     window.addEventListener("crewdesk:todos", reload);
@@ -194,20 +199,21 @@ function CalendarPage() {
 
   const grid = { dayList, events: visible, s, today, onOpen: open, onMove: move, onAdd: (d: string) => setAdding(d), onDay: (d: string) => go("day", d) };
   const total = workHours(visible);
+  const money = workMoney(visible);
 
   return (
     <div className={`cal-page${s.sidebar ? "" : " no-side"}`}>
-      <PageHead title="Calendar" sub="To-dos, repair orders, time off, holidays and shifts in one place" />
+      <PageHead title="Calendar" sub="Work orders, to-dos, repair orders, time off, holidays and shifts in one place" />
       <p className="cal-print-title">Calendar · {rangeLabel(view, at)} · printed {fmt(today, { month: "short", day: "numeric", year: "numeric" })}</p>
       <div className="cal-layout">
         {s.sidebar && <Sidebar s={s} set={set} anchor={at} from={from} to={to} today={today} onPick={(d) => setAnchor(d)} counts={counts} />}
         <div className="cal-main">
           <div className="cal-toolbar card">
             {!s.sidebar && <button type="button" className="cal-icon-btn cal-tool" aria-label="Show the side panel" title="Show the side panel" onClick={() => set({ sidebar: true })}><Icon name="sidebar" size={17} /></button>}
-            <FilterBar filters={filters} setFilters={setFilters} events={all} tags={tagList.data ?? []} />
+            <FilterBar filters={filters} setFilters={setFilters} events={all} tags={tagList.data ?? []} services={serviceList.data ?? []} />
             <div className="cal-tools">
               <label className="cal-search"><Icon name="search" size={15} /><input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search events" aria-label="Search events" /></label>
-              <button type="button" className={`cal-icon-btn cal-tool${s.unscheduled ? " on" : ""}`} aria-pressed={s.unscheduled} aria-label="Unscheduled repair orders" title="Unscheduled: repair orders with no due date (drag one onto a day)" onClick={() => set({ unscheduled: !s.unscheduled })}><Icon name="hourglass" size={17} /></button>
+              <button type="button" className={`cal-icon-btn cal-tool${s.unscheduled ? " on" : ""}`} aria-pressed={s.unscheduled} aria-label="Waitlist" title="Waitlist: work orders with no date and repair orders with no due date (drag one onto a day)" onClick={() => set({ unscheduled: !s.unscheduled })}><Icon name="hourglass" size={17} /></button>
               <Menu label="Event card details" icon="sliders" align="right">
                 {() => (
                   <>
@@ -228,7 +234,8 @@ function CalendarPage() {
               <Menu label="More calendar options" icon="more" align="right">
                 {(close) => (
                   <>
-                    <button type="button" role="menuitem" onClick={() => { close(); setAdding(at); }}><span>Add a to-do</span><Icon name="plus" size={14} /></button>
+                    <button type="button" role="menuitem" onClick={() => { close(); setAdding(at); }}><span>Add a work order or to-do</span><Icon name="plus" size={14} /></button>
+                    <Link role="menuitem" href="/visits" onClick={close}><span>Open Work orders</span><Icon name="clipboard" size={14} /></Link>
                     <Link role="menuitem" href="/todos" onClick={close}><span>Open the To-dos page</span><Icon name="todo" size={14} /></Link>
                     <button type="button" role="menuitem" onClick={() => { close(); window.print(); }}><span>Print</span><Icon name="print" size={14} /></button>
                     <button type="button" role="menuitem" onClick={() => { close(); downloadCsv(visible, from, to); }}><span>Export (spreadsheet)</span><Icon name="download" size={14} /></button>
@@ -267,9 +274,9 @@ function CalendarPage() {
                   : <DayView day={at} {...grid} />}
               </div>
               {s.unscheduled && (
-                <aside className="cal-unscheduled" aria-label="Unscheduled repair orders">
-                  <div className="cal-unscheduled-head"><strong>Unscheduled</strong><button type="button" className="cal-icon-btn" aria-label="Close" onClick={() => set({ unscheduled: false })}><Icon name="close" size={14} /></button></div>
-                  <p className="muted">Repair orders with no due date.{can("manager", "fleet") ? " Drag one onto a day to schedule it." : ""}</p>
+                <aside className="cal-unscheduled" aria-label="Waitlist">
+                  <div className="cal-unscheduled-head"><strong>Waitlist</strong><button type="button" className="cal-icon-btn" aria-label="Close" onClick={() => set({ unscheduled: false })}><Icon name="close" size={14} /></button></div>
+                  <p className="muted">Work orders with no date and repair orders with no due date. Drag one onto a day to schedule it.</p>
                   {unscheduled.data?.length ? unscheduled.data.map((e) => <EventCard key={e.key} e={e} s={s} onOpen={open} />)
                     : unscheduled.data ? <p className="muted">Nothing waiting.</p> : null}
                 </aside>
@@ -279,13 +286,13 @@ function CalendarPage() {
               <span>{visible.length} event{visible.length === 1 ? "" : "s"}{visible.length !== all.length ? ` (of ${all.length})` : ""}</span>
               <button type="button" className="cal-icon-btn" aria-label="Print" title="Print" onClick={() => window.print()}><Icon name="print" size={16} /></button>
               <button type="button" className="cal-icon-btn" aria-label="Export" title="Export to a spreadsheet" onClick={() => downloadCsv(visible, from, to)}><Icon name="download" size={16} /></button>
-              <span className="cal-foot-total">{total ? `Total ${total} h budgeted` : ""}</span>
+              <span className="cal-foot-total">{[money != null ? `Total ${formatMoney(money)}` : null, total ? `${total} h budgeted` : null].filter(Boolean).join(" · ")}</span>
             </div>
           </div>
         </div>
       </div>
       {popup && <EventPopover key={popup.e.key} e={popup.e} s={s} anchor={popup.rect} onClose={() => setPopup(null)} onChanged={reload} />}
-      {adding && <AddTodoModal date={adding} onClose={() => setAdding(null)} onSaved={reload} />}
+      {adding && <AddTodoModal date={adding} canWorkOrder={can("manager", "customers")} onClose={() => setAdding(null)} onSaved={reload} />}
     </div>
   );
 }

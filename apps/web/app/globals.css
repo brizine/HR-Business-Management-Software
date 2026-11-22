@@ -1236,3 +1236,18 @@ a.pt-row:hover { background: var(--bg); }
   .cal-event { break-inside: avoid; }
 }
 
+/* Work orders */
+.month-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.month-chips button { min-width: 48px; padding: 5px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.month-chips button[aria-pressed="true"] { background: var(--bad-bg); border-color: var(--bad); color: var(--bad); text-decoration: line-through; }
+.visit-repeat { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.visit-lines td { vertical-align: top; }
+.visit-lines tfoot td { border-bottom: 0; padding-top: 8px; }
+.visit-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.visit-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 8px; }
+.visit-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.visit-table td { vertical-align: top; }
+.overdue-row td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
+.cal-add-kind { margin: 0 0 8px; background: var(--surface); }
+.cal-add-kind button { width: auto; padding: 0 14px; font: inherit; font-weight: 600; }
+

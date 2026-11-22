@@ -30,7 +30,13 @@ export function TasksBox({ employeeId, firstName, isSelf }: { employeeId: string
   const weekOut = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
   const todos = useApi<{ today: string; items: any[] }>(isSelf ? `/todos?mine=true&to=${weekOut}` : can("manager", "todos") ? `/todos?assigneeId=${employeeId}&to=${weekOut}` : null);
 
+  const workOrders7 = useApi<{ items: any[] }>(isSelf ? `/visits?mine=true&status=active&to=${weekOut}` : can("manager", "customers") ? `/visits?assigneeId=${employeeId}&status=active&to=${weekOut}` : null);
   const tasks: Task[] = [
+    ...(workOrders7.data?.items ?? []).map((v) => ({
+      key: `visit-${v.id}`, href: `/visits/${v.id}`, title: `WO-${v.number} ${v.title}`,
+      detail: ["Work order", v.date ? new Date(`${v.date}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }) : "waitlist", formatTodoTime(v.startTime, v.endTime), v.property?.address].filter(Boolean).join(" · "),
+      badge: v.status === "on_site" ? "on site" : v.date && v.date < (workOrders7.data as any).today ? "overdue" : undefined,
+    })),
     ...(todos.data?.items ?? []).map((t) => {
       const state = todoState(t, todos.data!.today);
       return {

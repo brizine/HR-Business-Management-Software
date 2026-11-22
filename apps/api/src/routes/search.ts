@@ -2,12 +2,13 @@ import type { FastifyPluginAsync } from "fastify";
 import { and, asc, desc, eq, ilike, inArray, not, or, sql } from "drizzle-orm";
 import { PAYMENT_METHOD_LABELS, customerName, formatAddress, hasRole, isInactive, type PaymentMethod } from "@crewdesk/shared";
 import { db } from "../db";
-import { assets, customers, employees, invoicePayments, invoices, properties, serviceTypes, todos, workOrders } from "../db/schema";
+import { assets, customers, employees, invoicePayments, invoices, properties, serviceTypes, todos, visits, workOrders } from "../db/schema";
 import { authenticate, roleIn } from "../lib/auth";
 import { todoVisibility } from "./todos";
+import { visitVisibility } from "./visits";
 
 export interface SearchHit {
-  kind: "customer" | "property" | "invoice" | "payment" | "service" | "employee" | "asset" | "workOrder" | "todo";
+  kind: "customer" | "property" | "visit" | "invoice" | "payment" | "service" | "employee" | "asset" | "workOrder" | "todo";
   id: string; title: string; sub: string | null; href: string;
 }
 
@@ -29,7 +30,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const like = `%${q}%`;
     const digits = q.replace(/\D/g, "");
     // A record number on its own or after its name: "1043", "#1043", "inv 1043", "invoice #1043", "RO 12".
-    const numbered = q.replace(/^(invoice|inv|repair order|ro|wo)?\s*#?\s*/i, "");
+    const numbered = q.replace(/^(invoice|inv|repair order|ro|work order|wo)?[\s#-]*/i, "");
     const number = /^\d{1,9}$/.test(numbered) ? Number(numbered) : null;
     const out: SearchHit[] = [];
 
@@ -82,6 +83,17 @@ const routes: FastifyPluginAsync = async (app) => {
         .from(serviceTypes).where(and(eq(serviceTypes.companyId, companyId), ilike(serviceTypes.name, like)))
         .orderBy(desc(serviceTypes.active), asc(serviceTypes.name)).limit(4);
       for (const v of svcs) out.push({ kind: "service", id: v.id, title: v.name, sub: v.active ? "Price list" : "Price list · inactive", href: "/price-list" });
+    }
+
+    // Work orders (customer jobs) by number or title: Customers & billing managers see all, the crew theirs.
+    const visitMatch = [ilike(visits.title, like)];
+    if (number !== null) visitMatch.push(eq(visits.number, number));
+    const vs = await db.select({ id: visits.id, number: visits.number, title: visits.title, date: visits.date, status: visits.status, customer: { kind: customers.kind, firstName: customers.firstName, lastName: customers.lastName, companyName: customers.companyName } })
+      .from(visits).innerJoin(customers, eq(customers.id, visits.customerId))
+      .where(and(eq(visits.companyId, companyId), visitVisibility(req), or(...visitMatch)))
+      .orderBy(sql`${visits.status} in ('completed', 'skipped')`, sql`${visits.date} nulls first`).limit(5);
+    for (const v of vs) {
+      out.push({ kind: "visit", id: v.id, title: `WO-${v.number} ${v.title}`, sub: [customerName(v.customer), v.date ?? "waitlist", v.status !== "open" ? v.status.replace("_", " ") : null].filter(Boolean).join(" · "), href: `/visits/${v.id}` });
     }
 
     const es = await db.select({ id: employees.id, firstName: employees.firstName, lastName: employees.lastName, title: employees.title, status: employees.status })

@@ -7,6 +7,7 @@ import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { LinkedTodos } from "@/components/todos";
+import { LinkedVisits } from "@/components/visits";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { CustomerBilling } from "@/components/invoices";
 import { CustomerCredits } from "@/components/credits";
@@ -113,6 +114,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
         properties={current.filter((p: any) => p.status !== "cancelled").map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", "), lawnSqFt: p.lawnSqFt }))} />
       <CustomerCredits customerId={id} onChange={() => setCreditVersion((v) => v + 1)}
         properties={current.filter((p: any) => p.status !== "cancelled").map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", ") }))} />
+      <LinkedVisits customerId={id} />
       <LinkedTodos customerId={id} customer={{ id, name: customerName(c) }} />
 
       {c.cancellations.length > 0 && (

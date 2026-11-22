@@ -2,12 +2,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  CALENDAR_TYPES, CALENDAR_TYPE_INFO, eventOnDay, eventsCsv, formatTodoTime, sortEvents,
+  CALENDAR_TYPES, CALENDAR_TYPE_INFO, eventOnDay, eventsCsv, formatMoney, formatTodoTime, sortEvents,
   type CalendarEvent, type CalendarSort, type CalendarType,
 } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { Icon } from "./icons";
 import { TodoForm, todosChanged } from "./todos";
+import { VisitForm } from "./visits";
 
 /* ───────── Dates ───────── */
 export const plusDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
@@ -37,7 +38,7 @@ export function rangeLabel(view: CalView, anchor: string) {
 
 /* ───────── Settings (kept per person in this browser) ───────── */
 export const DETAILS = {
-  time: "Time", location: "Address or location", customer: "Customer", people: "Who it's for", hours: "Hours", type: "Event type", status: "Status", notes: "Notes",
+  time: "Time", location: "Address or location", customer: "Customer", people: "Who it's for", amount: "Price (work orders)", hours: "Hours", type: "Event type", status: "Status", notes: "Notes",
 } as const;
 export type DetailKey = keyof typeof DETAILS;
 export interface CalSettings {
@@ -51,7 +52,7 @@ export const DEFAULT_SETTINGS: CalSettings = {
   types: Object.fromEntries(CALENDAR_TYPES.map((t) => [t, CALENDAR_TYPE_INFO[t].defaultOn])) as Record<CalendarType, boolean>,
   colors: Object.fromEntries(CALENDAR_TYPES.map((t) => [t, CALENDAR_TYPE_INFO[t].color])) as Record<CalendarType, string>,
   colorByType: true, groupByType: false, highContrast: false,
-  details: { time: true, location: true, customer: true, people: true, hours: false, type: false, status: false, notes: false },
+  details: { time: true, location: true, customer: true, people: true, amount: true, hours: false, type: false, status: false, notes: false },
   rollup: false, sidebar: true, unscheduled: false,
 };
 export function useCalSettings(userId: string | undefined) {
@@ -73,9 +74,11 @@ export function useCalSettings(userId: string | undefined) {
 }
 
 /* ───────── Filters ───────── */
-export type FilterKind = "status" | "recurring" | "person" | "customer" | "tag";
+export type FilterKind = "status" | "recurring" | "person" | "customer" | "tag" | "invoice" | "onsite" | "tracked" | "service";
 export type CalFilter = { kind: FilterKind; value: string; label: string };
-export const FILTER_LABELS: Record<FilterKind, string> = { status: "Status", recurring: "Repeats", person: "Person", customer: "Customer", tag: "Tag" };
+export const FILTER_LABELS: Record<FilterKind, string> = {
+  status: "Status", recurring: "Repeats", invoice: "Invoice", onsite: "On site", tracked: "Tracked time", person: "Person", customer: "Customer", service: "Item/Service", tag: "Tag",
+};
 export function applyFilters(list: CalendarEvent[], filters: CalFilter[], search: string) {
   const q = search.trim().toLowerCase();
   return list.filter((e) => {
@@ -86,6 +89,11 @@ export function applyFilters(list: CalendarEvent[], filters: CalFilter[], search
       if (f.kind === "person") return f.value === "none" ? !e.people.length : e.people.some((p) => p.id === f.value);
       if (f.kind === "customer") return e.customer?.id === f.value;
       if (f.kind === "tag") return e.tagIds.includes(f.value);
+      // Work-order filters leave everything else out.
+      if (f.kind === "invoice") return e.invoiced !== null && e.invoiced === (f.value === "yes");
+      if (f.kind === "onsite") return e.type === "visit" && e.onSite === (f.value === "yes");
+      if (f.kind === "tracked") return e.type === "visit" && (e.trackedMinutes != null) === (f.value === "yes");
+      if (f.kind === "service") return e.serviceIds.includes(f.value);
       return true;
     });
   });
@@ -148,6 +156,7 @@ export function EventCard({ e, s, onOpen, compact }: { e: CalendarEvent; s: CalS
     s.details.customer && e.customer?.name,
     s.details.location && (e.property?.address ?? e.location),
     s.details.people && e.people.map((p) => p.name).join(", "),
+    s.details.amount && e.amountCents != null ? formatMoney(e.amountCents) : null,
     s.details.hours && e.hours ? `${e.hours} h` : null,
     s.details.type && CALENDAR_TYPE_INFO[e.type].label,
     s.details.status && e.statusLabel,
@@ -194,6 +203,7 @@ export function EventPopover({ e, s, onClose, onChanged, anchor }: { e: Calendar
         {(e.property || e.location) && <><dt>{e.property ? "Address" : "Where"}</dt><dd>{e.property?.address ?? e.location}</dd></>}
         {e.people.length > 0 && <><dt>{e.type === "repair" ? "Assigned" : "For"}</dt><dd>{e.people.map((p) => p.name).join(", ")}</dd></>}
         {e.hours != null && <><dt>Hours</dt><dd>{e.hours}</dd></>}
+        {e.amountCents != null && <><dt>Price</dt><dd>{formatMoney(e.amountCents)}{e.invoiced ? " · invoiced" : ""}</dd></>}
         {e.notes && <><dt>Notes</dt><dd className="cal-pop-notes">{e.notes}</dd></>}
       </dl>
       {e.canMove && (
@@ -208,6 +218,12 @@ export function EventPopover({ e, s, onClose, onChanged, anchor }: { e: Calendar
           <button type="button" className="btn primary" disabled={busy} onClick={() => run(async () => { await api(`/todos/${e.id}/done`, { method: "POST", body: { done: e.status !== "done" } }); todosChanged(); })}>
             {e.status === "done" ? "Mark not done" : "Mark done"}
           </button>
+        )}
+        {e.type === "visit" && e.canComplete && !e.onSite && (
+          <button type="button" className="btn" disabled={busy} onClick={() => run(() => api(`/visits/${e.id}/start`, { method: "POST", body: {} }))}>Arrived</button>
+        )}
+        {e.type === "visit" && e.canComplete && (
+          <button type="button" className="btn primary" disabled={busy} onClick={() => run(() => api(`/visits/${e.id}/complete`, { method: "POST", body: {} }))}>Completed</button>
         )}
         {e.type === "repair" && e.canComplete && (
           <button type="button" className="btn primary" disabled={busy} onClick={() => confirm("Mark this repair order completed?") && run(() => api(`/work-orders/${e.id}`, { method: "PATCH", body: { status: "completed" } }))}>Complete</button>
@@ -243,11 +259,14 @@ function DayEvents({ list, s, onOpen, compact, max, onMore }: { list: CalendarEv
 }
 
 /** Budgeted hours on a day: to-dos and repair orders (work), not shifts, time off or holidays. */
-export const workHours = (list: CalendarEvent[]) => Math.round(list.filter((e) => e.type === "todo" || e.type === "repair").reduce((n, e) => n + (e.hours ?? 0), 0) * 100) / 100;
+const isWork = (e: CalendarEvent) => e.type === "visit" || e.type === "todo" || e.type === "repair";
+export const workHours = (list: CalendarEvent[]) => Math.round(list.filter(isWork).reduce((n, e) => n + (e.hours ?? 0), 0) * 100) / 100;
+/** What a day's work orders bill (null when there's nothing priced you can see). */
+export const workMoney = (list: CalendarEvent[]) => { const priced = list.filter((e) => e.amountCents != null); return priced.length ? priced.reduce((n, e) => n + (e.amountCents ?? 0), 0) : null; };
 function Rollup({ list }: { list: CalendarEvent[] }) {
   const by = new Map<string, number>();
   for (const e of list) {
-    if (e.type !== "todo" && e.type !== "repair") continue;
+    if (!isWork(e)) continue;
     const share = (e.hours ?? 0) / Math.max(e.people.length, 1);
     for (const p of e.people.length ? e.people : [{ id: "none", name: "Nobody assigned" }]) by.set(p.name, (by.get(p.name) ?? 0) + share);
   }
@@ -285,10 +304,10 @@ function WeekColumn({ day, list, s, today, onOpen, onMove, onAdd, onDay }: { day
         <button type="button" className="cal-day-link" onClick={() => onDay(day)} aria-label={`Open ${fmt(day, { weekday: "long", month: "long", day: "numeric" })}`}>
           {fmt(day, { weekday: "short" })} <span className={day === today ? "cal-today" : undefined}>{Number(day.slice(8))}</span>
         </button>
-        <button type="button" className="cal-icon-btn cal-add" aria-label={`Add a to-do on ${fmt(day, { month: "long", day: "numeric" })}`} title="Add a to-do" onClick={() => onAdd(day)}><Icon name="plus" size={14} /></button>
+        <button type="button" className="cal-icon-btn cal-add" aria-label={`Add on ${fmt(day, { month: "long", day: "numeric" })}`} title="Add a work order or to-do" onClick={() => onAdd(day)}><Icon name="plus" size={14} /></button>
       </div>
       <div className="cal-col-body"><DayEvents list={list} s={s} onOpen={onOpen} /></div>
-      <div className="cal-col-foot"><span>{list.length} event{list.length === 1 ? "" : "s"}</span><strong>{workHours(list) ? `${workHours(list)} h` : ""}</strong></div>
+      <div className="cal-col-foot"><span>{list.length} event{list.length === 1 ? "" : "s"}</span><strong>{[workMoney(list) != null ? formatMoney(workMoney(list)) : null, workHours(list) ? `${workHours(list)} h` : null].filter(Boolean).join(" · ")}</strong></div>
       {s.rollup && <Rollup list={list} />}
     </div>
   );
@@ -304,10 +323,10 @@ function MonthCell({ day, list, s, today, anchorMonth, onOpen, onMove, onAdd, on
     <div className={`cal-cell${drop.over ? " over" : ""}${anchorMonth && day.slice(0, 7) !== anchorMonth ? " out" : ""}`} {...drop.props}>
       <div className="cal-cell-head">
         <button type="button" className="cal-day-link" onClick={() => onDay(day)}><span className={day === today ? "cal-today" : undefined}>{Number(day.slice(8))}</span></button>
-        <button type="button" className="cal-icon-btn cal-add" aria-label={`Add a to-do on ${fmt(day, { month: "long", day: "numeric" })}`} title="Add a to-do" onClick={() => onAdd(day)}><Icon name="plus" size={13} /></button>
+        <button type="button" className="cal-icon-btn cal-add" aria-label={`Add on ${fmt(day, { month: "long", day: "numeric" })}`} title="Add a work order or to-do" onClick={() => onAdd(day)}><Icon name="plus" size={13} /></button>
       </div>
       <DayEvents list={list} s={s} onOpen={onOpen} compact max={4} onMore={() => onDay(day)} />
-      {s.rollup && workHours(list) > 0 && <div className="cal-cell-hours">{workHours(list)} h</div>}
+      {(s.rollup && workHours(list) > 0) || workMoney(list) ? <div className="cal-cell-hours">{[workMoney(list) ? formatMoney(workMoney(list)) : null, s.rollup && workHours(list) ? `${workHours(list)} h` : null].filter(Boolean).join(" · ")}</div> : null}
     </div>
   );
 }
@@ -328,7 +347,7 @@ export function DayView({ day, events, s, today, onOpen, onMove, onAdd }: { day:
     <div className={`cal-dayview${drop.over ? " over" : ""}`} {...drop.props}>
       <div className="cal-col-head">
         <strong>{fmt(day, { weekday: "long", month: "long", day: "numeric" })}{day === today ? " · Today" : ""}</strong>
-        <button type="button" className="btn" onClick={() => onAdd(day)}><Icon name="plus" size={14} /> Add to-do</button>
+        <button type="button" className="btn" onClick={() => onAdd(day)}><Icon name="plus" size={14} /> Add</button>
       </div>
       {list.length ? <div className="cal-dayview-list"><DayEvents list={list} s={s} onOpen={onOpen} /></div> : <p className="cal-empty">No events on this day</p>}
       {s.rollup && <Rollup list={list} />}
@@ -362,13 +381,23 @@ export function downloadCsv(list: CalendarEvent[], from: string, to: string) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-/** "Add a to-do" from a day on the calendar, in a pop-up. */
-export function AddTodoModal({ date, onClose, onSaved }: { date: string; onClose: () => void; onSaved: () => void }) {
+/** "+" on a day: a new work order (Customers & billing managers) or to-do for that date, in a pop-up. */
+export function AddTodoModal({ date, onClose, onSaved, canWorkOrder }: { date: string; onClose: () => void; onSaved: () => void; canWorkOrder?: boolean }) {
+  const [kind, setKind] = useState<"visit" | "todo">(canWorkOrder ? "visit" : "todo");
+  // The customer picker's results and colour pop-ups live inside the modal, so outside clicks only.
   const ref = usePopover(true, onClose);
   return (
     <div className="cal-modal-backdrop">
-      <div className="cal-modal" ref={ref} role="dialog" aria-label="New to-do">
-        <TodoForm preset={{ date }} today={localToday()} onCancel={onClose} onSaved={() => { onSaved(); onClose(); }} />
+      <div className="cal-modal" ref={ref} role="dialog" aria-label={kind === "visit" ? "New work order" : "New to-do"}>
+        {canWorkOrder && (
+          <div className="cal-seg cal-add-kind" role="group" aria-label="What to add">
+            <button type="button" aria-pressed={kind === "visit"} onClick={() => setKind("visit")}>Work order</button>
+            <button type="button" aria-pressed={kind === "todo"} onClick={() => setKind("todo")}>To-do</button>
+          </div>
+        )}
+        {kind === "visit"
+          ? <VisitForm preset={{ date }} onCancel={onClose} onSaved={() => { onSaved(); onClose(); }} />
+          : <TodoForm preset={{ date }} today={localToday()} onCancel={onClose} onSaved={() => { onSaved(); onClose(); }} />}
       </div>
     </div>
   );

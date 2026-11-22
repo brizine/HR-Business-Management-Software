@@ -3,16 +3,17 @@
  * label, an icon, a default color and whether it shows before you change anything.
  */
 
-export const CALENDAR_TYPES = ["todo", "repair", "timeoff", "holiday", "shift"] as const;
+export const CALENDAR_TYPES = ["visit", "todo", "repair", "timeoff", "holiday", "shift"] as const;
 export type CalendarType = (typeof CALENDAR_TYPES)[number];
 
 export const CALENDAR_TYPE_INFO: Record<CalendarType, { label: string; color: string; icon: string; defaultOn: boolean }> = {
+  visit: { label: "Work orders", color: "#2563eb", icon: "clipboard", defaultOn: true },
   todo: { label: "To-dos", color: "#7c3aed", icon: "todo", defaultOn: true },
   repair: { label: "Repair orders", color: "#78716c", icon: "truck", defaultOn: true },
   timeoff: { label: "Time off", color: "#0d9488", icon: "calendar", defaultOn: true },
   holiday: { label: "Holidays", color: "#db2777", icon: "sun", defaultOn: true },
   // Every shift for everyone fills the calendar fast, so they start hidden.
-  shift: { label: "Shifts", color: "#2563eb", icon: "clock", defaultOn: false },
+  shift: { label: "Shifts", color: "#0891b2", icon: "clock", defaultOn: false },
 };
 
 /** Colors to pick from for an event type (plus any custom color). */
@@ -45,6 +46,16 @@ export interface CalendarEvent {
   notes: string | null;
   /** The customer's tags, for the Tag filter. */
   tagIds: string[];
+  /** Work orders: what it bills (null when you can't see prices or it isn't billed). */
+  amountCents: number | null;
+  /** Work orders: whether it's on an invoice (null when it isn't billed). */
+  invoiced: boolean | null;
+  /** Work orders: the crew is there now. */
+  onSite: boolean;
+  /** Work orders: minutes from arriving to finishing (null when not tracked). */
+  trackedMinutes: number | null;
+  /** Work orders: the price list services on it, for the Item/Service filter. */
+  serviceIds: string[];
   href: string | null;
   /** Whether you can drag it to another day. */
   canMove: boolean;
@@ -55,6 +66,8 @@ export interface CalendarEvent {
 export const CALENDAR_SORTS = {
   time: "Time, earliest first",
   timeDesc: "Time, latest first",
+  revenueDesc: "Revenue, high to low",
+  revenueAsc: "Revenue, low to high",
   hoursDesc: "Budgeted hours, high to low",
   hoursAsc: "Budgeted hours, low to high",
   customer: "Customer A-Z",
@@ -71,6 +84,8 @@ export function sortEvents(list: CalendarEvent[], sort: CalendarSort): CalendarE
   const cmp: Record<CalendarSort, (a: CalendarEvent, b: CalendarEvent) => number> = {
     time: (a, b) => time(a).localeCompare(time(b)) || byTitle(a, b),
     timeDesc: (a, b) => time(b).localeCompare(time(a)) || byTitle(a, b),
+    revenueDesc: (a, b) => (b.amountCents ?? 0) - (a.amountCents ?? 0) || byTitle(a, b),
+    revenueAsc: (a, b) => (a.amountCents ?? 0) - (b.amountCents ?? 0) || byTitle(a, b),
     hoursDesc: (a, b) => (b.hours ?? 0) - (a.hours ?? 0) || byTitle(a, b),
     hoursAsc: (a, b) => (a.hours ?? 0) - (b.hours ?? 0) || byTitle(a, b),
     customer: (a, b) => (a.customer?.name ?? "￿").localeCompare(b.customer?.name ?? "￿") || byTitle(a, b),
@@ -91,10 +106,11 @@ export function eventsCsv(list: CalendarEvent[]): string {
     const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
     return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
   };
-  const head = ["Date", "End date", "Start", "End", "Type", "Title", "Status", "Customer", "Address or location", "People", "Hours", "Notes"];
+  const head = ["Date", "End date", "Start", "End", "Type", "Title", "Status", "Customer", "Address or location", "People", "Hours", "Amount", "Notes"];
   const rows = list.map((e) => [
     e.date, e.endDate ?? "", e.startTime ?? "", e.endTime ?? "", CALENDAR_TYPE_INFO[e.type].label, e.title, e.statusLabel,
-    e.customer?.name ?? "", e.property?.address ?? e.location ?? "", e.people.map((p) => p.name).join("; "), e.hours ?? "", e.notes ?? "",
+    e.customer?.name ?? "", e.property?.address ?? e.location ?? "", e.people.map((p) => p.name).join("; "), e.hours ?? "",
+    e.amountCents != null ? (e.amountCents / 100).toFixed(2) : "", e.notes ?? "",
   ].map(q).join(","));
   return [head.join(","), ...rows].join("\n");
 }

@@ -290,7 +290,7 @@ function ProfileMenu() {
 
 type Hit = { kind: string; id: string; title: string; sub: string | null; href: string };
 const KIND_LABELS: Record<string, string> = {
-  page: "Pages", customer: "Customers", property: "Properties", invoice: "Invoices", payment: "Payments", service: "Price list",
+  page: "Pages", customer: "Customers", property: "Properties", visit: "Work orders", invoice: "Invoices", payment: "Payments", service: "Price list",
   employee: "People", asset: "Fleet", workOrder: "Repair orders", todo: "To-dos", quick: "Quick links", account: "Account",
 };
 

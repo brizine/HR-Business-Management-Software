@@ -36,7 +36,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
 - **Notifications bell:** the red number is unread items. Click it to see your new notifications; click one to
   open what it's about (it's marked read). **Mark all as read** clears them; **View all** opens the full list.
 - **+ New:** everything you can add, in columns like Homeworks: **Team & Resources** (Employee, Time off request,
-  Item & service, Equipment), **Finance** (Invoice), **Events** (To-do, Repair order) and **Customer** (Customer,
+  Item & service, Equipment), **Finance** (Invoice), **Events** (Work order, To-do, Repair order) and **Customer** (Customer,
   Property). Each opens its page with the add form showing; you only see what your access allows.
 - **Your initials:** My profile, Company Wiki, Notification settings, Security, All settings, Help, **Back to the
   real company** (in the test company) and **Sign out**.
@@ -53,7 +53,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   straight away. **Company Wiki**, **Settings**, **Help** and light or dark mode are at the bottom. The top bar's menu button widens
   the menu to list every page under its group, with your company logo on top (click it again to narrow it);
   Crewdesk remembers your choice on that computer.
-- **Operations:** **Customers** (Customers, Properties), **Schedule** (Calendar, To-dos), **Billing** (Invoices, Price list), **Field**
+- **Operations:** **Customers** (Customers, Properties), **Schedule** (Calendar, Work orders, To-dos), **Billing** (Invoices, Price list), **Field**
   (Property Measure, Spray Mix Calculator), **Fleet** (Assets, Repair Orders, Inspections) and **Reports**
   (managers). Scheduling and customer messages will be added here.
 - **Team:** **Dashboard** (managers), **People** (Team, Shifts, Time Clock, Attendance, Time Off, Reviews &
@@ -334,10 +334,48 @@ A separate company, named after yours with "(Test)", for trying things out witho
 - **Starting over:** the owner can **Delete test company** (Settings → Company Info); everything in it goes, and
   the real company isn't affected. Creating it again starts fresh.
 
+## Work orders
+
+A **work order** is a scheduled job at a customer's property, like Homeworks' visits: "Round 3: fertilizer & weed
+control", "Core aeration". (Jobs on your own trucks and equipment are **repair orders**, under Fleet.) Work orders
+are numbered **WO-1001**, **WO-1002** and so on. Open them from **Schedule → Work orders**, the **Calendar**,
+**+ New → Work order**, or the **Work orders** box on a customer's or property's page.
+
+- **Making one** (Customers & billing managers), laid out like Homeworks' visit form:
+  - **Title or description**, the **customer** and their **property** (required), an optional **location** and a
+    **color**.
+  - **Billing:** **Invoice services** or **Don't invoice** (a free call-back, an estimate visit).
+  - **Line items:** pick a service from the price list (it's priced for the property's lawn size, like invoices)
+    or type a custom item; set the quantity, **budgeted hours** and rate. The total is what it bills.
+  - **Scheduling:** **Single work order**, a **Repeating series** (every N days, weeks, months or years until a
+    date, up to three years), or **Add to the waitlist** (no date yet). A series can skip an **off-season** (tap
+    the months with no work, such as Dec, Jan, Feb). The form shows how many work orders it will make and their
+    total. Also **More than one day**, **Set a time** and **Budgeted hours** (blank: the line items' hours).
+  - **Crew:** tick the people doing it; they get a notification, and a reminder the morning it's scheduled.
+  - **Notes for the crew:** gate, where to start, what to watch for.
+- **Who sees what:** Customers & billing managers see, schedule and invoice every work order. Everyone else sees
+  the ones they're on, without prices.
+- **The crew's steps** (website or phone): **Arrived (on site)**, then **Completed** (with optional notes), or
+  **Skip** with a reason. The time from arriving to finishing is kept as **time on site**. **Undo** reopens it
+  (not once it's on an invoice).
+- **The Work orders page:** **Show** Coming up, Waitlist, **Ready to invoice**, Completed, Skipped or All;
+  filter by **Crew** and **Search** (WO number, title or notes). Overdue open ones are marked.
+- **Invoicing:** on a work order, **Create invoice** makes a draft invoice with its line items. Or choose
+  **Show → Ready to invoice**, pick several and **Create invoices**: one draft per customer and property, each line
+  dated. Review and send them from Invoices as usual. Deleting a draft (or voiding an invoice) puts the work
+  orders back in Ready to invoice.
+- **Changing one:** **Edit** on the work order (a repeating one asks: just this one, or this and the later ones
+  that aren't done; moving the date moves them all by as many days). Put it **On the waitlist** to take its date
+  off. **Delete** (one, or this and later); work orders on an invoice stay.
+- **On the calendar** they show first, with their price (managers), the day's **$ total** and the range's total.
+  The **Invoice**, **On site**, **Tracked time** and **Item/Service** filters and the **Revenue** sorts work on them.
+  The waitlist (hourglass) lists work orders with no date: drag one onto a day. **+** on a day asks **Work order**
+  or **To-do**.
+
 ## Calendar
 
 **Schedule → Calendar** (Operations) shows everything with a date in one place, laid out like Homeworks'
-calendar: **To-dos**, **Repair orders** (by due date), **Time off** (approved), **Holidays** and **Shifts**.
+calendar: **Work orders**, **To-dos**, **Repair orders** (by due date), **Time off** (approved), **Holidays** and **Shifts**.
 
 - **Views:** **Day**, **Week** and **Month** (the menu by the date, or press **D**, **W** or **M**), and **‹ Today ›**
   to move (or the arrow keys, and **T** for today). Click the date for a month to jump to any day. The two buttons
@@ -351,7 +389,7 @@ calendar: **To-dos**, **Repair orders** (by due date), **Time off** (approved), 
 - **Filter:** **+ Filter** adds a filter you can remove: **Status** (open or done), **Repeats** (repeating or
   one-time), **Person**, **Customer** or **Tag** (the customer's tags). **Search events** finds a title, customer,
   address, note or person.
-- **Toolbar buttons:** the hourglass opens **Unscheduled** (repair orders with no due date); the sliders choose
+- **Toolbar buttons:** the hourglass opens the **Waitlist** (work orders with no date and repair orders with no due date); the sliders choose
   what each card shows (time, address, customer, people, hours, type, status, notes); the clock shows **budgeted
   hours by person** under each day; **…** has Add a to-do, Print, Export and Reset calendar settings.
 - **Each day** shows how many events and the budgeted hours (to-dos and repair orders). The bottom shows the total
@@ -759,6 +797,8 @@ automatically.
 
 Location is required to use the app (it's recorded at clock in/out and every 5 minutes while
 clocked in with the app open). Clock in and out, schedule and open shifts, time off, assigned vehicles, meter readings, fuel (with receipt photos),
-inspections, issue reports, repair orders, to-dos, training, onboarding tasks and signing documents.
+inspections, issue reports, repair orders, work orders, to-dos, training, onboarding tasks and signing documents.
+- **Work orders** (Tasks tab): yours for the next week with the customer, the address (tap it for directions), gate
+  code, pets, the services and notes, and **Arrived**, **Completed** (with notes) and **Skip** (with a reason).
 - **To-dos** (Tasks tab): yours for the next week with **Done**, the customer, the address (tap it for
   directions), gate code and notes. **Quick add** makes one for yourself for today or tomorrow.

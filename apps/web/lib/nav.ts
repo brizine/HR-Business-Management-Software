@@ -24,6 +24,7 @@ export const NAV: Record<Side, NavGroup[]> = {
       key: "schedule", label: "Schedule", icon: "calendar",
       items: [
         { href: "/calendar", label: "Calendar" },
+        { href: "/visits", label: "Work orders" },
         { href: "/todos", label: "To-dos" },
       ],
     },
@@ -115,6 +116,7 @@ export const NEW_MENU: { group: string; items: NewItem[] }[] = [
   {
     group: "Events",
     items: [
+      { label: "Work order", href: "/visits/new", icon: "clipboard", min: "manager", area: "customers" },
       { label: "To-do", href: "/todos?new=1", icon: "todo" },
       { label: "Repair order", href: "/work-orders?new=1", icon: "settings" },
     ],

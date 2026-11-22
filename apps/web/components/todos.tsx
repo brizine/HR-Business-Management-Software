@@ -106,7 +106,7 @@ export function TodoDetails({ t, onEdit, onDeleted }: { t: Todo; onEdit: () => v
         {!t.property && t.location && <><dt>Location</dt><dd>{t.location}</dd></>}
         <dt>When</dt><dd>{todoWhen(t)}{t.seriesId ? ` · ${(TODO_REPEAT_LABELS[t.repeat as TodoRepeat] ?? "repeats").toLowerCase()}` : ""}</dd>
         <dt>For</dt><dd>{t.assignees.length ? people(t) : "Nobody in particular"}</dd>
-        {t.budgetedHours != null && <><dt>Budgeted</dt><dd>{t.budgetedHours} hours</dd></>}
+        {t.budgetedHours != null && <><dt>Budgeted</dt><dd>{t.budgetedHours} hour{t.budgetedHours === 1 ? "" : "s"}</dd></>}
         {t.createdBy && <><dt>Made by</dt><dd>{t.createdBy}</dd></>}
         {t.doneAt && <><dt>Done</dt><dd>{new Date(t.doneAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}{t.doneBy ? ` by ${t.doneBy}` : ""}</dd></>}
       </dl>

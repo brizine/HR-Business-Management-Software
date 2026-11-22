@@ -6,7 +6,7 @@ import { LOCATION_KEEP_DAYS, DEFAULT_RENEWAL_REMIND_DAYS, DEFAULT_RENEWAL_REPEAT
 import { db } from "../db";
 import { fleetSettingsFor } from "./fleet";
 import { syncCurrentPay } from "./payRates";
-import { assets, attendanceOverrides, locationPings, companies, courseEnrollments, courses, employees, maintenanceSchedules, notificationLog, payRates, workOrders, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, ptoRequests, shifts, timeEntries, todos, todoAssignees, properties } from "../db/schema";
+import { assets, attendanceOverrides, locationPings, companies, courseEnrollments, courses, employees, maintenanceSchedules, notificationLog, payRates, workOrders, onboardingTasks, payPeriodApprovers, payPeriods, ptoLedger, ptoPolicies, ptoRequests, shifts, timeEntries, todos, todoAssignees, properties, visits, visitAssignees } from "../db/schema";
 import { attendanceRulesFor, computeAttendance } from "./attendance";
 import { assignCourse, autoAssignees, companyToday, describeEnrollments, latestEnrollments } from "./training";
 import { taskOwners } from "../routes/onboarding";
@@ -100,8 +100,9 @@ export async function runScheduledChecks(now = new Date()) {
   // Registration and insurance: reminders to renew as each date nears, and while expired.
   sent += await renewalReminders(now, settingsFor);
 
-  // To-dos: a reminder to each person the morning one starts.
+  // To-dos and work orders: a reminder to each person the morning one starts.
   sent += await todoReminders(now);
+  sent += await workOrderReminders(now);
 
   // Forgotten clock-outs: remind the employee and let their manager know.
   const stale = await db
@@ -489,6 +490,36 @@ export async function todoReminders(now: Date) {
         title: `To-do today: ${t.title}`,
         body: [formatTodoTime(t.startTime, t.endTime) || (t.endDate ? `Through ${t.endDate.slice(5).replace("-", "/")}` : "Today"), place].filter(Boolean).join(" · "),
         link: { screen: "todos", id: t.id },
+      });
+      sent++;
+    }
+  }
+  return sent;
+}
+
+/** The morning a work order is scheduled (after REMINDER_HOUR local time), remind its crew, once. */
+export async function workOrderReminders(now: Date) {
+  let sent = 0;
+  const utc = now.toISOString().slice(0, 10);
+  const near = [-1, 0, 1].map((n) => new Date(Date.parse(`${utc}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10));
+  const withWork = await db.selectDistinct({ id: companies.id, tz: companies.timezone }).from(companies)
+    .innerJoin(visits, eq(visits.companyId, companies.id)).where(and(eq(visits.status, "open"), inArray(visits.date, near)));
+  for (const c of withWork) {
+    const local = localParts(now, c.tz);
+    if (local.minutes < REMINDER_HOUR * 60) continue;
+    const due = await db.select({ v: visits, street: properties.street, city: properties.city }).from(visits)
+      .leftJoin(properties, eq(properties.id, visits.propertyId))
+      .where(and(eq(visits.companyId, c.id), eq(visits.date, local.date), eq(visits.status, "open")));
+    if (!due.length) continue;
+    const crew = await db.select().from(visitAssignees).where(inArray(visitAssignees.visitId, due.map((d) => d.v.id)));
+    for (const { v, street, city } of due) {
+      const to = crew.filter((p) => p.visitId === v.id).map((p) => p.employeeId);
+      if (!to.length || !(await firstTime(c.id, `visit:${v.id}:${v.date}`))) continue;
+      notify(c.id, to, {
+        category: "workorders",
+        title: `Work order today: ${v.title}`,
+        body: [`WO-${v.number}`, formatTodoTime(v.startTime, v.endTime), street ? [street, city].filter(Boolean).join(", ") : v.location].filter(Boolean).join(" · "),
+        link: { screen: "workorder", id: v.id },
       });
       sent++;
     }

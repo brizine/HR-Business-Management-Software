@@ -1687,3 +1687,82 @@ export const todoAssignees = pgTable(
   },
   (t) => [primaryKey({ columns: [t.todoId, t.employeeId] }), index("todo_assignees_employee_idx").on(t.employeeId)],
 );
+
+/**
+ * Work orders (Homeworks calls them visits): a scheduled job at a customer's property. Stored as
+ * "visits" because repair orders already use work_orders. No date = on the waitlist. A repeating
+ * series makes one row per date up front, sharing a seriesId.
+ */
+export const visits = pgTable(
+  "visits",
+  {
+    id: id(),
+    companyId: companyId(),
+    /** WO-1001, WO-1002… per company. */
+    number: integer("number").notNull(),
+    title: text("title").notNull(),
+    customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+    propertyId: uuid("property_id").references(() => properties.id, { onDelete: "set null" }),
+    color: text("color").notNull().default("#2563eb"),
+    location: text("location"),
+    /** "invoice" or "none". */
+    billing: text("billing").notNull().default("invoice"),
+    date: date("date"),
+    endDate: date("end_date"),
+    startTime: text("start_time"),
+    endTime: text("end_time"),
+    budgetedHours: doublePrecision("budgeted_hours"),
+    totalCents: integer("total_cents").notNull().default(0),
+    /** open | on_site | completed | skipped */
+    status: text("status").notNull().default("open"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    skippedAt: timestamp("skipped_at", { withTimezone: true }),
+    finishedById: uuid("finished_by_id").references(() => employees.id, { onDelete: "set null" }),
+    skipReason: text("skip_reason"),
+    /** For the crew. */
+    notes: text("notes"),
+    /** What the crew wrote when they finished. */
+    completionNotes: text("completion_notes"),
+    seriesId: uuid("series_id"),
+    /** "Every 6 weeks (not Dec, Jan, Feb)" for a series. */
+    repeatLabel: text("repeat_label"),
+    invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("visits_company_number_idx").on(t.companyId, t.number),
+    index("visits_company_date_idx").on(t.companyId, t.date),
+    index("visits_customer_idx").on(t.customerId),
+    index("visits_property_idx").on(t.propertyId),
+    index("visits_series_idx").on(t.seriesId),
+    index("visits_invoice_idx").on(t.invoiceId),
+  ],
+);
+
+export const visitLines = pgTable(
+  "visit_lines",
+  {
+    id: id(),
+    visitId: uuid("visit_id").notNull().references(() => visits.id, { onDelete: "cascade" }),
+    serviceTypeId: uuid("service_type_id").references(() => serviceTypes.id, { onDelete: "set null" }),
+    description: text("description").notNull(),
+    quantity: doublePrecision("quantity").notNull().default(1),
+    budgetedHours: doublePrecision("budgeted_hours"),
+    unitPriceCents: integer("unit_price_cents").notNull().default(0),
+    amountCents: integer("amount_cents").notNull().default(0),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("visit_lines_visit_idx").on(t.visitId)],
+);
+
+export const visitAssignees = pgTable(
+  "visit_assignees",
+  {
+    visitId: uuid("visit_id").notNull().references(() => visits.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.visitId, t.employeeId] }), index("visit_assignees_employee_idx").on(t.employeeId)],
+);

@@ -1,0 +1,336 @@
+"use client";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import {
+  DEFAULT_TODO_COLOR, MONTH_SHORT, REPEAT_UNITS, TODO_COLORS, VISIT_BILLING, VISIT_BILLING_LABELS, VISIT_SCHEDULING, VISIT_SCHEDULING_LABELS,
+  describePricing, formatMoney, formatTodoTime, isInactive, lineAmount, priceFor, visitDates, visitLineHours, visitNumber,
+  type RepeatUnit, type VisitBilling, type VisitScheduling,
+} from "@crewdesk/shared";
+import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { useAction, useApi } from "@/lib/hooks";
+import { CustomerPicker } from "./customers";
+import { Icon } from "./icons";
+import { ErrorBox } from "./ui";
+
+export interface VisitLine { id?: string; serviceTypeId: string | null; description: string; quantity: number; budgetedHours: number | null; unitPriceCents: number | null; amountCents: number | null }
+export interface Visit {
+  id: string; number: number; title: string; color: string; location: string | null; billing: VisitBilling;
+  date: string | null; endDate: string | null; startTime: string | null; endTime: string | null; budgetedHours: number | null; totalCents: number | null;
+  status: "open" | "on_site" | "completed" | "skipped"; statusLabel: string; startedAt: string | null; completedAt: string | null; skippedAt: string | null;
+  skipReason: string | null; notes: string | null; completionNotes: string | null; seriesId: string | null; repeatLabel: string | null;
+  customerId: string; propertyId: string | null; invoiceId: string | null; invoiced: boolean | null; trackedMinutes: number | null;
+  customer: { id: string; name: string; phone: string | null };
+  property: { id: string; name: string | null; address: string; gateCode: string | null; pets: string | null; accessNotes: string | null; lawnSqFt: number | null; lat: number | null; lng: number | null } | null;
+  invoice: { id: string; number: number | null; status: string } | null;
+  lines: VisitLine[]; assignees: { id: string; firstName: string; lastName: string }[];
+  finishedBy: string | null; createdBy: string | null;
+}
+
+export const dayLabel = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+export const visitWhen = (v: Pick<Visit, "date" | "endDate" | "startTime" | "endTime">) =>
+  !v.date ? "Waitlist (no date yet)" : [v.endDate ? `${dayLabel(v.date)} – ${dayLabel(v.endDate)}` : dayLabel(v.date), formatTodoTime(v.startTime, v.endTime)].filter(Boolean).join(" · ");
+export const crewNames = (v: Pick<Visit, "assignees">) => v.assignees.map((a) => `${a.firstName} ${a.lastName}`).join(", ");
+const TONE: Record<string, string> = { open: "", on_site: "warn", completed: "ok", skipped: "bad" };
+export function VisitStatus({ v }: { v: Pick<Visit, "status" | "statusLabel"> }) {
+  return <span className={`badge ${TONE[v.status] ?? ""}`}>{v.statusLabel}</span>;
+}
+export const trackedLabel = (m: number | null) => (m == null ? null : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`);
+const plusDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+const localToday = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 10); };
+const dollars = (c: number | null | undefined) => (c == null ? "" : (c / 100).toFixed(2));
+const toCents = (s: string) => { const n = Number(String(s).replace(/[$,\s]/g, "")); return Number.isFinite(n) ? Math.round(n * 100) : NaN; };
+
+/** Arrived / Done / Skip (and Undo) for the crew and the office. */
+export function CrewButtons({ v, onChange, compact }: { v: Visit; onChange: (v: Visit) => void; compact?: boolean }) {
+  const act = useAction();
+  const [mode, setMode] = useState<null | "complete" | "skip">(null);
+  const [text, setText] = useState("");
+  const run = (path: string, body?: unknown) => act.run(async () => { onChange(await api<Visit>(`/visits/${v.id}/${path}`, { method: "POST", body: body ?? {} })); setMode(null); setText(""); });
+  if (mode) {
+    return (
+      <div className="stack" style={{ gap: 6 }}>
+        <label>{mode === "complete" ? "Notes about the work (optional)" : "Why was it skipped?"}
+          <textarea value={text} autoFocus onChange={(e) => setText(e.target.value)} placeholder={mode === "complete" ? "Applied round 3; back gate was open" : "Rain, locked gate, customer asked to wait…"} />
+        </label>
+        <div className="row">
+          <button type="button" className="btn primary" disabled={act.busy || (mode === "skip" && !text.trim())} onClick={() => run(mode, mode === "complete" ? { notes: text } : { reason: text })}>{mode === "complete" ? "Mark completed" : "Skip it"}</button>
+          <button type="button" className="btn" onClick={() => setMode(null)}>Cancel</button>
+        </div>
+        <ErrorBox error={act.error} />
+      </div>
+    );
+  }
+  return (
+    <div className="row" style={{ gap: 6 }}>
+      {v.status === "open" && <button type="button" className={compact ? "btn" : "btn"} disabled={act.busy} onClick={() => run("start")}>Arrived (on site)</button>}
+      {(v.status === "open" || v.status === "on_site") && <button type="button" className="btn primary" disabled={act.busy} onClick={() => setMode("complete")}>Completed</button>}
+      {(v.status === "open" || v.status === "on_site") && <button type="button" className="btn" disabled={act.busy} onClick={() => setMode("skip")}>Skip</button>}
+      {(v.status === "completed" || v.status === "skipped") && !v.invoiced && <button type="button" className="btn" disabled={act.busy} onClick={() => run("reopen")}>Undo ({v.status === "completed" ? "not done" : "not skipped"})</button>}
+      <ErrorBox error={act.error} />
+    </div>
+  );
+}
+
+type LineDraft = { serviceTypeId: string | null; description: string; quantity: string; hours: string; price: string };
+const draftLine = (l?: VisitLine): LineDraft => ({ serviceTypeId: l?.serviceTypeId ?? null, description: l?.description ?? "", quantity: l ? String(l.quantity) : "1", hours: l?.budgetedHours != null ? String(l.budgetedHours) : "", price: dollars(l?.unitPriceCents) });
+
+/**
+ * New or changed work order, laid out like Homeworks' visit form: title; customer, property, color and
+ * location; billing; line items from the price list (priced for the lawn); scheduling (single,
+ * repeating with an off-season, or the waitlist); crew; notes.
+ */
+export function VisitForm({ visit, preset, onSaved, onCancel }: {
+  visit?: Visit; preset?: { customer?: { id: string; name: string }; propertyId?: string; date?: string };
+  onSaved: (v: Visit, created: number) => void; onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(visit?.title ?? "");
+  const [customer, setCustomer] = useState<{ id: string; name: string } | null>(visit ? { id: visit.customer.id, name: visit.customer.name } : preset?.customer ?? null);
+  const [propertyId, setPropertyId] = useState(visit?.propertyId ?? preset?.propertyId ?? "");
+  const [color, setColor] = useState(visit?.color ?? DEFAULT_TODO_COLOR);
+  const [location, setLocation] = useState(visit?.location ?? "");
+  const [billing, setBilling] = useState<VisitBilling>(visit?.billing ?? "invoice");
+  const [lines, setLines] = useState<LineDraft[]>(visit?.lines.length ? visit.lines.map(draftLine) : [draftLine()]);
+  const [scheduling, setScheduling] = useState<VisitScheduling>(visit && !visit.date ? "waitlist" : "single");
+  const [date, setDate] = useState(visit?.date ?? preset?.date ?? localToday());
+  const [multi, setMulti] = useState(!!visit?.endDate);
+  const [endDate, setEndDate] = useState(visit?.endDate ?? plusDays(visit?.date ?? preset?.date ?? localToday(), 1));
+  const [timed, setTimed] = useState(!!visit?.startTime);
+  const [startTime, setStartTime] = useState(visit?.startTime ?? "08:00");
+  const [endTime, setEndTime] = useState(visit?.endTime ?? "");
+  const [hours, setHours] = useState(visit?.budgetedHours != null && visit.budgetedHours !== visitLineHours(visit.lines) ? String(visit.budgetedHours) : "");
+  const [every, setEvery] = useState("6");
+  const [unit, setUnit] = useState<RepeatUnit>("week");
+  const [until, setUntil] = useState(plusDays(date, 180));
+  const [offMonths, setOffMonths] = useState<number[]>([]);
+  const [crew, setCrew] = useState<string[]>(visit?.assignees.map((a) => a.id) ?? []);
+  const [notes, setNotes] = useState(visit?.notes ?? "");
+  const [applyTo, setApplyTo] = useState<"one" | "following">("one");
+  const save = useAction();
+  const services = useApi<any[]>("/service-types");
+  const detail = useApi<any>(customer ? `/customers/${customer.id}` : null);
+  const staff = useApi<any[]>("/employees");
+  const properties: any[] = (detail.data?.properties ?? []).filter((p: any) => !p.endDate);
+  const property = properties.find((p) => p.id === propertyId);
+  useEffect(() => { if (detail.data && !propertyId && properties.length === 1) setPropertyId(properties[0].id); }, [detail.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const setLine = (i: number, patch: Partial<LineDraft>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const pickService = (i: number, id: string) => {
+    if (!id) return setLine(i, { serviceTypeId: null });
+    const s = services.data?.find((x) => x.id === id);
+    if (!s) return;
+    const price = priceFor(s, property?.lawnSqFt ?? null);
+    setLine(i, { serviceTypeId: s.id, description: lines[i].description && lines[i].serviceTypeId === null ? lines[i].description : s.name, price: price != null ? dollars(price) : lines[i].price });
+  };
+  // Changing the property re-prices the lawn-size services.
+  useEffect(() => {
+    if (!property || !services.data) return;
+    setLines((ls) => ls.map((l) => {
+      const s = services.data!.find((x) => x.id === l.serviceTypeId);
+      const p = s ? priceFor(s, property.lawnSqFt ?? null) : null;
+      return s && s.pricing !== "flat" && p != null ? { ...l, price: dollars(p) } : l;
+    }));
+  }, [propertyId, services.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const parsed = lines.filter((l) => l.description.trim()).map((l) => ({ serviceTypeId: l.serviceTypeId, description: l.description.trim(), quantity: Number(l.quantity) || 0, budgetedHours: l.hours.trim() === "" ? null : Number(l.hours), unitPriceCents: toCents(l.price || "0") }));
+  const total = parsed.reduce((s, l) => s + (Number.isFinite(l.unitPriceCents) ? lineAmount(l) : 0), 0);
+  const lineHours = visitLineHours(parsed);
+  const count = scheduling === "repeat" && date && until ? visitDates(date, unit, Number(every) || 1, until, offMonths).length : 1;
+  const team = (staff.data ?? []).filter((e) => !isInactive(e.status) || crew.includes(e.id));
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    save.run(async () => {
+      if (parsed.some((l) => !Number.isFinite(l.unitPriceCents))) throw new Error("Check the line item prices");
+      const body = {
+        title, customerId: customer?.id, propertyId, color, location, billing, lines: parsed, notes,
+        date: scheduling === "waitlist" ? null : date, endDate: multi && scheduling === "single" ? endDate : null,
+        startTime: timed && scheduling !== "waitlist" ? startTime : null, endTime: timed && scheduling !== "waitlist" ? endTime || null : null,
+        budgetedHours: hours.trim() === "" ? null : Number(hours), assigneeIds: crew,
+        ...(visit ? {} : { scheduling, repeatEvery: Number(every) || 1, repeatUnit: unit, repeatUntil: scheduling === "repeat" ? until : null, offMonths }),
+      };
+      const r = visit
+        ? await api<Visit & { changed: number }>(`/visits/${visit.id}${visit.seriesId && applyTo === "following" ? "?applyTo=following" : ""}`, { method: "PUT", body })
+        : await api<Visit & { created: number }>("/visits", { method: "POST", body });
+      onSaved(r, "created" in r ? r.created : 1);
+    });
+  };
+
+  return (
+    <form className="card stack todo-form visit-form" onSubmit={submit}>
+      <h2>{visit ? `Edit ${visitNumber(visit.number)}` : "New work order"}</h2>
+      <label>Work order title or description *<input required autoFocus={!visit} maxLength={300} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Round 3: fertilizer & weed control" /></label>
+
+      <h3 className="todo-section">Customer</h3>
+      <div className="formgrid">
+        {customer ? (
+          <div className="stack" style={{ gap: 4 }}>
+            <span className="todo-label">Customer *</span>
+            <div className="row"><strong>{customer.name}</strong><button type="button" className="linkbtn" onClick={() => { setCustomer(null); setPropertyId(""); }}>Change</button></div>
+          </div>
+        ) : <CustomerPicker label="Customer *" onPick={(c) => { setCustomer({ id: c.id, name: c.name }); setPropertyId(""); }} />}
+        {customer && (
+          <label>Property *
+            <select required value={propertyId} onChange={(e) => setPropertyId(e.target.value)}>
+              <option value="">Pick the property</option>
+              {properties.map((p) => <option key={p.id} value={p.id}>{p.street}{p.name ? ` (${p.name})` : ""}{p.lawnSqFt ? ` · ${Math.round(p.lawnSqFt).toLocaleString()} sq ft` : ""}</option>)}
+            </select>
+          </label>
+        )}
+        <label>Location (optional)<input maxLength={300} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Back yard, the HOA entrance…" /></label>
+      </div>
+      <div className="stack" style={{ gap: 4 }}>
+        <span className="todo-label">Color</span>
+        <div className="todo-colors" role="radiogroup" aria-label="Color">
+          {TODO_COLORS.map((c) => <button key={c.key} type="button" role="radio" aria-checked={color.toLowerCase() === c.key} aria-label={c.label} title={c.label} style={{ background: c.key }} onClick={() => setColor(c.key)} />)}
+        </div>
+      </div>
+
+      <h3 className="todo-section">Billing and line items</h3>
+      <label style={{ maxWidth: 320 }}>Billing
+        <select value={billing} onChange={(e) => setBilling(e.target.value as VisitBilling)}>
+          {VISIT_BILLING.map((b) => <option key={b} value={b}>{VISIT_BILLING_LABELS[b]}</option>)}
+        </select>
+      </label>
+      <div className="tablewrap">
+        <table className="invoice-lines visit-lines">
+          <thead><tr><th style={{ width: "34%" }}>Item / service</th><th style={{ width: 80 }}>Qty</th><th style={{ width: 100 }}>Budgeted hours</th><th style={{ width: 110 }}>Rate</th><th style={{ width: 100, textAlign: "right" }}>Total</th><th style={{ width: 40 }} /></tr></thead>
+          <tbody>{lines.map((l, i) => {
+            const s = services.data?.find((x) => x.id === l.serviceTypeId);
+            const unpriced = s && priceFor(s, property?.lawnSqFt ?? null) == null;
+            const amount = { quantity: Number(l.quantity) || 0, unitPriceCents: toCents(l.price || "0") };
+            return (
+              <tr key={i}>
+                <td>
+                  <select aria-label={`Line ${i + 1} service`} value={l.serviceTypeId ?? ""} onChange={(e) => pickService(i, e.target.value)}>
+                    <option value="">Custom item</option>
+                    {(services.data ?? []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                  </select>
+                  <input aria-label={`Line ${i + 1} description`} value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} placeholder="Description" style={{ marginTop: 4 }} />
+                  {s && <div className="muted" style={{ fontSize: 12 }}>{describePricing(s)}{unpriced ? " · add the lawn size to price it" : ""}</div>}
+                </td>
+                <td><input aria-label={`Line ${i + 1} quantity`} inputMode="decimal" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></td>
+                <td><input aria-label={`Line ${i + 1} budgeted hours`} inputMode="decimal" placeholder="0" value={l.hours} onChange={(e) => setLine(i, { hours: e.target.value })} /></td>
+                <td><input aria-label={`Line ${i + 1} rate`} inputMode="decimal" placeholder="0.00" value={l.price} onChange={(e) => setLine(i, { price: e.target.value })} /></td>
+                <td style={{ textAlign: "right" }}>{Number.isFinite(amount.unitPriceCents) ? formatMoney(lineAmount(amount)) : "—"}</td>
+                <td><button type="button" className="btn" aria-label={`Remove line ${i + 1}`} onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((_, j) => j !== i) : [draftLine()]))}>✕</button></td>
+              </tr>
+            );
+          })}</tbody>
+          <tfoot><tr><td colSpan={2}><button type="button" className="btn" onClick={() => setLines((ls) => [...ls, draftLine()])}><Icon name="plus" size={14} /> Add line</button></td>
+            <td className="muted">{lineHours ? `${lineHours} h` : ""}</td><td style={{ textAlign: "right" }}><strong>Total</strong></td><td style={{ textAlign: "right" }}><strong>{formatMoney(total)}</strong></td><td /></tr></tfoot>
+        </table>
+      </div>
+
+      <h3 className="todo-section">Scheduling</h3>
+      <div className="formgrid">
+        {!visit ? (
+          <label>Scheduling
+            <select value={scheduling} onChange={(e) => setScheduling(e.target.value as VisitScheduling)}>
+              {VISIT_SCHEDULING.map((s) => <option key={s} value={s}>{VISIT_SCHEDULING_LABELS[s]}</option>)}
+            </select>
+          </label>
+        ) : (
+          <label>Scheduling
+            <select value={scheduling} onChange={(e) => setScheduling(e.target.value as VisitScheduling)}>
+              <option value="single">On a date</option><option value="waitlist">On the waitlist (no date)</option>
+            </select>
+          </label>
+        )}
+        {scheduling !== "waitlist" && <label>{scheduling === "repeat" ? "First date" : multi ? "First day" : "Date"}<input type="date" required value={date} onChange={(e) => { setDate(e.target.value); if (endDate <= e.target.value) setEndDate(plusDays(e.target.value, 1)); }} /></label>}
+        {multi && scheduling === "single" && <label>Last day<input type="date" required min={date} value={endDate} onChange={(e) => setEndDate(e.target.value)} /></label>}
+        <label>Budgeted hours<input inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} placeholder={lineHours ? `${lineHours} (from the line items)` : "0"} /></label>
+      </div>
+      {scheduling !== "waitlist" && (
+        <div className="row" style={{ gap: 16 }}>
+          {scheduling === "single" && <label className="check"><input type="checkbox" checked={multi} onChange={(e) => setMulti(e.target.checked)} /> More than one day</label>}
+          <label className="check"><input type="checkbox" checked={timed} onChange={(e) => setTimed(e.target.checked)} /> Set a time</label>
+        </div>
+      )}
+      {timed && scheduling !== "waitlist" && (
+        <div className="formgrid">
+          <label>Start time<input type="time" required value={startTime} onChange={(e) => setStartTime(e.target.value)} /></label>
+          <label>End time (optional)<input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} /></label>
+        </div>
+      )}
+      {scheduling === "repeat" && (
+        <div className="visit-repeat stack">
+          <div className="formgrid">
+            <label>Repeat every
+              <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+                <input inputMode="numeric" value={every} onChange={(e) => setEvery(e.target.value.replace(/\D/g, "").slice(0, 2))} style={{ width: 70 }} aria-label="How many" />
+                <select value={unit} onChange={(e) => setUnit(e.target.value as RepeatUnit)} aria-label="Days, weeks, months or years">
+                  {REPEAT_UNITS.map((u) => <option key={u} value={u}>{u}{Number(every) === 1 ? "" : "s"}</option>)}
+                </select>
+              </div>
+            </label>
+            <label>Until<input type="date" required min={plusDays(date, 1)} value={until} onChange={(e) => setUntil(e.target.value)} /></label>
+          </div>
+          <div className="stack" style={{ gap: 4 }}>
+            <span className="todo-label">Off-season (no work these months)</span>
+            <div className="month-chips" role="group" aria-label="Off-season months">
+              {MONTH_SHORT.map((m, i) => (
+                <button key={m} type="button" aria-pressed={offMonths.includes(i + 1)} onClick={() => setOffMonths((o) => (o.includes(i + 1) ? o.filter((x) => x !== i + 1) : [...o, i + 1]))}>{m}</button>
+              ))}
+            </div>
+          </div>
+          <p className="muted" style={{ margin: 0 }}>{count} work order{count === 1 ? "" : "s"}{total ? `, ${formatMoney(total * count)} in all` : ""}.</p>
+        </div>
+      )}
+
+      <h3 className="todo-section">Crew</h3>
+      <div className="todo-people" role="group" aria-label="Crew">
+        {team.map((e) => (
+          <label key={e.id} className="check"><input type="checkbox" checked={crew.includes(e.id)} onChange={() => setCrew((c) => (c.includes(e.id) ? c.filter((x) => x !== e.id) : [...c, e.id]))} /> {e.firstName} {e.lastName}{e.title ? <span className="muted"> · {e.title}</span> : null}</label>
+        ))}
+      </div>
+      <label>Notes for the crew (optional)<textarea maxLength={5000} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Gate code, where to start, what to watch for" /></label>
+      {visit?.seriesId && (
+        <div className="row" style={{ gap: 16 }}>
+          <label className="check"><input type="radio" checked={applyTo === "one"} onChange={() => setApplyTo("one")} /> Change just this one</label>
+          <label className="check"><input type="radio" checked={applyTo === "following"} onChange={() => setApplyTo("following")} /> This one and the later ones that aren&apos;t done</label>
+        </div>
+      )}
+      <ErrorBox error={save.error} />
+      <div className="row">
+        <button className="btn primary" disabled={save.busy}>{save.busy ? "Saving…" : visit ? "Save" : count > 1 ? `Create ${count} work orders` : "Create work order"}</button>
+        <button type="button" className="btn" onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+/** Customer and property pages: their work orders coming up and done lately, with Add work order. */
+export function LinkedVisits({ customerId, propertyId }: { customerId?: string; propertyId?: string }) {
+  const { can } = useAuth();
+  const q = customerId ? `customerId=${customerId}` : `propertyId=${propertyId}`;
+  const coming = useApi<{ today: string; items: Visit[] }>(`/visits?${q}&status=active`);
+  const recent = useApi<{ items: Visit[] }>(`/visits?${q}&order=recent&limit=6`);
+  if (!can("manager", "customers")) return null;
+  const done = (recent.data?.items ?? []).filter((v) => v.status === "completed" || v.status === "skipped").slice(0, 5);
+  const upcoming = coming.data?.items ?? [];
+  const row = (v: Visit) => (
+    <li key={v.id} className="visit-row" style={{ borderLeftColor: v.color }}>
+      <div style={{ minWidth: 0 }}>
+        <Link href={`/visits/${v.id}`}><strong>{visitNumber(v.number)}</strong> {v.title}</Link>
+        <div className="muted" style={{ fontSize: 13 }}>{[visitWhen(v), crewNames(v) || "No crew", v.totalCents != null ? formatMoney(v.totalCents) : null].filter(Boolean).join(" · ")}</div>
+      </div>
+      <VisitStatus v={v} />
+    </li>
+  );
+  return (
+    <div className="card">
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <h2 style={{ margin: 0 }}>Work orders{upcoming.length ? <span className="muted" style={{ fontWeight: 400, fontSize: 14 }}> · {upcoming.length} open</span> : null}</h2>
+        <Link className="btn" href={`/visits/new?${customerId ? `customerId=${customerId}` : ""}${propertyId ? `&propertyId=${propertyId}` : ""}`}><Icon name="plus" size={14} /> Add work order</Link>
+      </div>
+      {upcoming.length || done.length ? (
+        <ul className="visit-list">
+          {upcoming.slice(0, 8).map(row)}
+          {upcoming.length > 8 && <li className="muted">and {upcoming.length - 8} more…</li>}
+          {done.length > 0 && <li className="menu-heading" style={{ paddingLeft: 0 }}>Done lately</li>}
+          {done.map(row)}
+        </ul>
+      ) : coming.data ? <p className="muted" style={{ margin: "8px 0 0" }}>No work orders yet.</p> : null}
+    </div>
+  );
+}
