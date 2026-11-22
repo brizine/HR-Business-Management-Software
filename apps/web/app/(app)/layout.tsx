@@ -118,9 +118,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app">
-      <TopBar side={side} onSwitch={switchTo} unread={unread} onMenu={() => setDrawer(true)} visibleItems={(s) => groupsFor(s).flatMap((g) => g.items)} />
+      <TopBar side={side} onSwitch={switchTo} unread={unread} onMenu={() => setDrawer(true)} onToggleRail={toggleRail} railExpanded={expanded} visibleItems={(s) => groupsFor(s).flatMap((g) => g.items)} />
       <div className="shell">
-        <Rail side={side} groups={groupsFor(side)} expanded={expanded} onToggle={toggleRail} drawer={drawer} onCloseDrawer={() => setDrawer(false)} onSwitch={switchTo} renderItem={renderItem} />
+        <Rail side={side} groups={groupsFor(side)} expanded={expanded} drawer={drawer} onCloseDrawer={() => setDrawer(false)} onSwitch={switchTo} renderItem={renderItem} />
         <main className="main"><Trail /><PageLayoutRoot>{children}</PageLayoutRoot></main>
       </div>
     </div>

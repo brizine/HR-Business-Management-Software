@@ -88,28 +88,34 @@ export function sideOf(path: string): Side | null {
 }
 
 /** The "+ New" menu, grouped; each opens the page with its add form showing. */
-export type NewItem = { label: string; href: string; min?: Role; area?: PermissionArea };
+export type NewItem = { label: string; href: string; icon?: string; min?: Role; area?: PermissionArea };
 export const NEW_MENU: { group: string; items: NewItem[] }[] = [
   {
-    group: "Customers",
+    group: "Team & Resources",
     items: [
-      { label: "Customer", href: "/customers?new=1", min: "manager", area: "customers" },
-      { label: "Property", href: "/properties?new=1", min: "manager", area: "customers" },
-      { label: "Invoice", href: "/invoices/new", min: "manager", area: "customers" },
+      { label: "Employee", href: "/people?new=1", icon: "user", min: "admin", area: "people" },
+      { label: "Time off request", href: "/time-off?new=1", icon: "calendar" },
+      { label: "Item & service", href: "/price-list?new=1", icon: "billing", min: "admin", area: "customers" },
+      { label: "Equipment", href: "/fleet?new=1", icon: "truck", min: "manager", area: "fleet" },
     ],
   },
   {
-    group: "Team",
+    group: "Finance",
     items: [
-      { label: "Employee", href: "/people?new=1", min: "admin", area: "people" },
-      { label: "Time off request", href: "/time-off?new=1" },
+      { label: "Invoice", href: "/invoices/new", icon: "billing", min: "manager", area: "customers" },
     ],
   },
   {
-    group: "Fleet",
+    group: "Events",
     items: [
-      { label: "Repair order", href: "/work-orders?new=1" },
-      { label: "Asset", href: "/fleet?new=1", min: "manager", area: "fleet" },
+      { label: "Repair order", href: "/work-orders?new=1", icon: "settings" },
+    ],
+  },
+  {
+    group: "Customer",
+    items: [
+      { label: "Customer", href: "/customers?new=1", icon: "user", min: "manager", area: "customers" },
+      { label: "Property", href: "/properties?new=1", icon: "property", min: "manager", area: "customers" },
     ],
   },
 ];

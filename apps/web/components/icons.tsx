@@ -25,6 +25,9 @@ const PATHS: Record<string, string> = {
   home: "M3 10.5 12 3l9 7.5V21H3zM9 21v-7h6v7",
   property: "M3 10.5 12 3l9 7.5V21H3zM9 21v-7h6v7",
   user: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8",
+  sidebar: "M3 4h18v16H3zM9 4v16",
+  clockOff: "M5.64 5.64A9 9 0 0 0 18.36 18.36M8.1 3.9A9 9 0 0 1 20.1 15.9M12 7v3M3 3l18 18",
+  logout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
 };
 
 export function Icon({ name, size = 20, className }: { name: string; size?: number; className?: string }) {

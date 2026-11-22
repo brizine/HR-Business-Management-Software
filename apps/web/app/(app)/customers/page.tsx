@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { CUSTOMER_KIND_LABELS, formatPhone, type CustomerKind } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -15,7 +15,7 @@ import {
 
 const STATUSES = [["current", "Current"], ["active", "Active"], ["lead", "Leads"], ["cancelled", "Cancelled"], ["all", "All"]] as const;
 
-export default function Customers() {
+function Customers() {
   const { can } = useAuth();
   const router = useRouter();
   const { tags, reload: reloadTags } = useTags();
@@ -27,6 +27,10 @@ export default function Customers() {
   useNewForm(() => setAdding(true));
   // Search waits for a pause in typing so the list doesn't reload on every key.
   useEffect(() => { const t = setTimeout(() => setQuery(q), 250); return () => clearTimeout(t); }, [q]);
+  // "See all customers…" from the top bar's search opens this page searching for what was typed.
+  // (Also when you're already on this page.)
+  const asked = useSearchParams().get("q");
+  useEffect(() => { if (asked) setQ(asked); }, [asked]);
   const params = [`status=${status}`, ...(query.trim() ? [`q=${encodeURIComponent(query.trim())}`] : []), ...tagQuery(tagFilter)].join("&");
   const list = useApi<{ total: number; rows: any[] }>(`/customers?${params}`);
   const filtering = !!query.trim() || status !== "current" || tagFilter.all.length + tagFilter.not.length > 0;
@@ -141,4 +145,8 @@ function SampleCustomersCard({ onChange }: { onChange: () => void }) {
       )}
     </div>
   );
+}
+
+export default function Page() {
+  return <Suspense><Customers /></Suspense>;
 }

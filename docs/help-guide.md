@@ -12,29 +12,39 @@ question, get step-by-step answers) and **User Manual** (this guide, with conten
 
 Every page has a **top bar**, and a **left menu** for the side you're on.
 
-- **Top bar** (left to right): your company's logo or name; the **Operations | Team** switch; **Search**
-  (or press **Ctrl+K**, **⌘K** on a Mac) to find customers, properties, people, fleet assets and pages by
-  name, address, phone or customer number; **Clock in** / **On the clock** (click to clock in or out; it
-  follows your company's location rules like the Time Clock page); **+ New** (add a customer, property,
-  employee, time off request, repair order or asset, depending on your access); **Notifications** (the
-  number is unread items); **Help**; and your initials, for My Info, Security, notification settings,
-  all settings and Sign out.
+- **Top bar** (laid out like Homeworks, left to right): the **menu button** (shows or hides the page names in the
+  left menu); your company's name (click it for the home page); the **Operations | Team** switch; **Search** in
+  the middle (click it or press **Ctrl+K**, **⌘K** on a Mac); **Clocked out** / **Clocked in** (click to clock
+  in or out after a quick "are you sure?"; it shows how long you've been on and follows your company's location
+  rules like the Time Clock page); the **Notifications** bell; **+ New**; and your initials.
+- **Search:** click it before typing for quick links (Customers, Team, Shifts and Account settings). Type a name,
+  address, phone, customer number, asset or page and the matches drop down under the box, grouped (Customers,
+  Properties, People, Fleet, Pages). **» See all customers…** opens the Customers list already searching for what
+  you typed. Arrow keys and Enter work too; Esc closes it.
+- **Notifications bell:** the red number is unread items. Click it to see your new notifications; click one to
+  open what it's about (it's marked read). **Mark all as read** clears them; **View all** opens the full list.
+- **+ New:** everything you can add, in columns like Homeworks: **Team & Resources** (Employee, Time off request,
+  Item & service, Equipment), **Finance** (Invoice), **Events** (Repair order) and **Customer** (Customer,
+  Property). Each opens its page with the add form showing; you only see what your access allows.
+- **Your initials:** My profile, Company Wiki, Notification settings, Security, All settings, Help, **Back to the
+  real company** (in the test company) and **Sign out**.
 - **Breadcrumb trail:** at the top of every page, the last pages you visited, oldest first, ending with the page
-  you're on (in bold), such as **Jane Example › Invoice 1043 › Price list › Invoices**. Click one to go back to
+  you're on (in bold), such as **Jane Example / Invoice 1043 / Price list / Invoices**. Click one to go back to
   it. It shows your last three pages before this one; opening a page that's already in the trail moves it to the
   end. The trail is yours alone, kept in this browser (the test company has its own).
 - **Left menu:** one icon per group. Point at (or click) a group to see its pages; groups with one page open
-  straight away. **Company Wiki** and **Settings** are at the bottom. The **»** button at the very bottom
-  widens the menu to list every page under its group (**«** narrows it again); Crewdesk remembers your choice
-  on that computer.
+  straight away. **Company Wiki**, **Settings** and **Help** are at the bottom. The top bar's menu button widens
+  the menu to list every page under its group, with your company logo on top (click it again to narrow it);
+  Crewdesk remembers your choice on that computer.
 - **Operations:** **Customers** (Customers, Properties), **Field** (Property Measure, Spray Mix Calculator),
   **Fleet** (Assets, Repair Orders, Inspections) and **Reports** (managers). Scheduling, billing and messages
   will be added here.
 - **Team:** **Dashboard** (managers), **People** (Team, Shifts, Time Clock, Attendance, Time Off, Reviews &
   Discipline, Training, Documents, Onboarding, Hiring), **Pay** (Payroll, Accounting, Pay & Tax Forms) and
   **Reports** (managers).
-- **On a phone:** the **☰** button at the top left opens the menu, with the Operations | Team switch at its top;
-  the search, clock, **+**, notifications and help buttons stay in the top bar as icons.
+- **On a phone:** the menu button at the top left opens the menu, with the Operations | Team switch at its top
+  and Wiki, Settings and Help at the bottom; search (opens full screen), the clock, notifications, **+** and your
+  initials stay in the top bar as icons.
 - Opening a page (or a link someone sent) switches to that page's side by itself, and the menu remembers the
   side you used last on that computer.
 - **Reports** on each side lists the reports you can see there, such as Fuel & Costs, Repair Orders and
@@ -90,8 +100,8 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
 
 ## Notifications
 
-The **Notifications** bell in the top bar opens your inbox; the red number is unread
-alerts. Phone pop-ups need the Crewdesk app installed and signed in.
+The **Notifications** bell in the top bar shows your new alerts in a pop-up (the red number is how many are
+unread); **View all** there, or the Notifications page, has the full inbox. Phone pop-ups need the Crewdesk app installed and signed in.
 
 ## Dashboard
 

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { INCOME_ACCOUNTS, PRICING_KINDS, PRICING_LABELS, describePricing, type PricingKind } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useAction } from "@/lib/hooks";
+import { useAction, useNewForm } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
 import { dollars, toCents, useServices, type ServiceType } from "@/components/invoices";
 
@@ -14,6 +14,7 @@ export default function PriceList() {
   const admin = can("admin", "customers");
   const services = useServices(true);
   const [editing, setEditing] = useState<ServiceType | "new" | null>(null);
+  useNewForm(() => { if (admin) setEditing("new"); });
   const action = useAction();
   const list = services.list;
   const move = (i: number, d: number) => {
