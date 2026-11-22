@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { EMPLOYEE_STATUSES, formatPhone } from "@crewdesk/shared";
 import { api, fmtDate, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useAction, useApi } from "@/lib/hooks";
+import { useAction, useApi, useNewForm } from "@/lib/hooks";
 import { Badge, ErrorBox, PageHead } from "@/components/ui";
 import { EmployeeFields, employeeBody } from "@/components/employee-form";
 import { InviteResult } from "@/components/invite-result";
@@ -41,6 +41,7 @@ function People() {
   const { can } = useAuth();
   const { data, reload } = useApi<any[]>("/employees");
   const [adding, setAdding] = useState(false);
+  useNewForm(() => setAdding(true));
   const [added, setAdded] = useState<any>(null);
   const { busy, error, run } = useAction();
 

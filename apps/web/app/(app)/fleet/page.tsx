@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useAction, useApi } from "@/lib/hooks";
+import { useAction, useApi, useNewForm } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
 import { AssetFields, assetBody } from "@/components/asset-form";
 import { useMenus } from "@/components/menu-select";
@@ -20,6 +20,7 @@ export default function Fleet() {
   const { data, reload } = useApi<any[]>("/assets");
   const employees = useApi<any[]>("/employees");
   const [adding, setAdding] = useState(false);
+  useNewForm(() => setAdding(true));
   const [reminders, setReminders] = useState(false);
   const { label } = useMenuData();
   const [filters, setFilters] = useState(NO_FILTERS);

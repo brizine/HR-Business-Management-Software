@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { useAction, useApi } from "@/lib/hooks";
+import { useAction, useApi, useNewForm } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { CustomerPicker, PropertyFields, TagChips, TagFilter, propertyBody, propertyFormValue, tagQuery, useTags, type TagFilterState } from "@/components/customers";
 
@@ -17,6 +17,7 @@ export default function Properties() {
   const [tagFilter, setTagFilter] = useState<TagFilterState>({ all: [], not: [] });
   const [customerTags, setCustomerTags] = useState<TagFilterState>({ all: [], not: [] });
   const [adding, setAdding] = useState(false);
+  useNewForm(() => setAdding(true));
   useEffect(() => { const t = setTimeout(() => setQuery(q), 250); return () => clearTimeout(t); }, [q]);
   const params = [
     `status=${status}`, ...(query.trim() ? [`q=${encodeURIComponent(query.trim())}`] : []), ...(mapCode.trim() ? [`mapCode=${encodeURIComponent(mapCode.trim())}`] : []),

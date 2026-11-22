@@ -1,7 +1,7 @@
 # Crewdesk user guide
 
 This guide is what the Help assistant answers from. Keep it in plain language and up to date when
-features change. Menu names are written as they appear in the left sidebar.
+features change. Menu names are written as they appear in the top bar and the left menu.
 
 ## Getting help
 
@@ -10,17 +10,29 @@ question, get step-by-step answers) and **User Manual** (this guide, with conten
 
 ## Finding your way: Operations and Team
 
-The left menu has two sides. The **Operations | Team** switch near the top flips between them:
+Every page has a **top bar**, and a **left menu** for the side you're on.
 
-- **Operations:** **Reports** (managers), **Customers** (**Customers**, **Properties**), **Tools**
-  (**Property Measure**, **Spray Mix Calculator**) and **Fleet & Equipment** (**Assets**, **Repair Orders**,
-  **Inspections**). Scheduling and billing will be added here.
-- **Team:** **Dashboard** and **Reports** (managers), **People** (**Team**, **Shifts**, **Time Clock**,
-  **Attendance**, **Time Off**, **Reviews & Discipline**, **Training**, **Documents**, **Onboarding**,
-  **Hiring**) and **Pay** (**Payroll**, **Pay & Tax Forms**).
-- **Always shown:** **Notifications**, **Company Wiki**, **Help** and **Settings**.
-- Opening a page (or a link someone sent) switches the menu to that page's side by itself, and the
-  menu remembers the side you used last on that computer.
+- **Top bar** (left to right): your company's logo or name; the **Operations | Team** switch; **Search**
+  (or press **Ctrl+K**, **⌘K** on a Mac) to find customers, properties, people, fleet assets and pages by
+  name, address, phone or customer number; **Clock in** / **On the clock** (click to clock in or out; it
+  follows your company's location rules like the Time Clock page); **+ New** (add a customer, property,
+  employee, time off request, repair order or asset, depending on your access); **Notifications** (the
+  number is unread items); **Help**; and your initials, for My Info, Security, notification settings,
+  all settings and Sign out.
+- **Left menu:** one icon per group. Point at (or click) a group to see its pages; groups with one page open
+  straight away. **Company Wiki** and **Settings** are at the bottom. The **»** button at the very bottom
+  widens the menu to list every page under its group (**«** narrows it again); Crewdesk remembers your choice
+  on that computer.
+- **Operations:** **Customers** (Customers, Properties), **Field** (Property Measure, Spray Mix Calculator),
+  **Fleet** (Assets, Repair Orders, Inspections) and **Reports** (managers). Scheduling, billing and messages
+  will be added here.
+- **Team:** **Dashboard** (managers), **People** (Team, Shifts, Time Clock, Attendance, Time Off, Reviews &
+  Discipline, Training, Documents, Onboarding, Hiring), **Pay** (Payroll, Accounting, Pay & Tax Forms) and
+  **Reports** (managers).
+- **On a phone:** the **☰** button at the top left opens the menu, with the Operations | Team switch at its top;
+  the search, clock, **+**, notifications and help buttons stay in the top bar as icons.
+- Opening a page (or a link someone sent) switches to that page's side by itself, and the menu remembers the
+  side you used last on that computer.
 - **Reports** on each side lists the reports you can see there, such as Fuel & Costs, Repair Orders and
   Inspections (Operations), or Attendance, Timesheets, Time Off, Training Progress and Payroll (Team).
 
@@ -32,7 +44,7 @@ The left menu has two sides. The **Operations | Team** switch near the top flips
 - **Settings → Permissions** (owners, and anyone given "manages permissions") sets, area by area,
   what each person can do: no access, view, manage, or admin. **Settings → Layout Editor → Role
   access** sets the defaults for each role.
-- Some sidebar items only appear for the roles that can use them (for example Payroll for
+- Some menu items only appear for the roles that can use them (for example Payroll for
   admins, Hiring, Dashboard and Reports for managers).
 
 ## Signing in and security
@@ -74,7 +86,7 @@ The left menu has two sides. The **Operations | Team** switch near the top flips
 
 ## Notifications
 
-The **Notifications** link at the top of the sidebar is your inbox; the red number is unread
+The **Notifications** bell in the top bar opens your inbox; the red number is unread
 alerts. Phone pop-ups need the Crewdesk app installed and signed in.
 
 ## Dashboard

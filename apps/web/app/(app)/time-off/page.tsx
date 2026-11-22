@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useAction, useApi } from "@/lib/hooks";
+import { useAction, useApi, useNewForm } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
 import { PtoPolicyForm } from "@/components/pto-policy-form";
 import { PaidHolidays } from "@/components/paid-holidays";
@@ -24,6 +24,7 @@ export default function TimeOff() {
   const pending = useApi<any[]>(can("manager", "timeoff") ? "/pto/requests?status=pending" : null);
   const employees = useApi<any[]>(can("admin", "timeoff") ? "/employees" : null);
   const [requesting, setRequesting] = useState(false);
+  useNewForm(() => setRequesting(true));
   const [editingPolicy, setEditingPolicy] = useState<string | null>(null);
   const req = useAction();
   const adj = useAction();

@@ -47,7 +47,7 @@ function LogoCard({ info, onChange }: { info: Info; onChange: (i: Info) => Promi
       </div>
       <div className="stack" style={{ flex: 1, minWidth: 200 }}>
         <strong>Company Logo</strong>
-        <span className="muted" style={{ fontSize: 13 }}>Shows at the top of everyone&apos;s sidebar. JPEG, PNG or WebP up to 5 MB; a transparent PNG looks best.</span>
+        <span className="muted" style={{ fontSize: 13 }}>Shows at the left of everyone&apos;s top bar. JPEG, PNG or WebP up to 5 MB; a transparent PNG looks best.</span>
         {info.canEdit && (
           <div className="row">
             <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
@@ -76,7 +76,7 @@ export default function CompanyInfo() {
 
   return (
     <>
-      <PageHead title="Company Info" sub={d?.canEdit ? "Your company's details. The name shows in the sidebar; the legal name, EIN and address print on tax forms." : "Your company's details."} />
+      <PageHead title="Company Info" sub={d?.canEdit ? "Your company's details. The name shows in the top bar; the legal name, EIN and address print on tax forms." : "Your company's details."} />
       <SettingsTabs />
       {d && <LogoCard info={d} onChange={async (next) => { info.setData(next); await signIn(); }} />}
       {!d ? <ErrorBox error={info.error} /> : (

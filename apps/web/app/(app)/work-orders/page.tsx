@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { WORK_ORDER_STATUSES } from "@crewdesk/shared";
 import { api, fmtDate, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useAction, useApi } from "@/lib/hooks";
+import { useAction, useApi, useNewForm } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead, formValues } from "@/components/ui";
 import { LabeledSelect } from "@/components/menu-select";
 import { useMenuData } from "@/lib/menus";
@@ -101,6 +101,7 @@ function WorkOrders() {
   const employees = useApi<any[]>("/employees");
   const [open, setOpen] = useState<string | null>(highlight);
   const [creating, setCreating] = useState(false);
+  useNewForm(() => setCreating(true));
   const [newAsset, setNewAsset] = useState("");
   const create = useAction();
   const [filters, setFilters] = useState(NO_FILTERS);

@@ -47,3 +47,22 @@ export function useAction() {
   }, []);
   return { busy, error, run, setError };
 }
+
+/**
+ * Opens a page's add form when it's reached from the top bar's "+ New" menu (`?new=1`), then tidies
+ * the address. Also works when already on the page (the menu fires "crewdesk:new").
+ */
+export function useNewForm(open: () => void) {
+  useEffect(() => {
+    const check = () => {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("new") !== "1") return;
+      open();
+      url.searchParams.delete("new");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    };
+    check();
+    window.addEventListener("crewdesk:new", check);
+    return () => window.removeEventListener("crewdesk:new", check);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+}

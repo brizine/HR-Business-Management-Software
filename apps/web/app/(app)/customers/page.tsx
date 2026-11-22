@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { CUSTOMER_KIND_LABELS, formatPhone, type CustomerKind } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useAction, useApi } from "@/lib/hooks";
+import { useAction, useApi, useNewForm } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { openTestCompany, useTestCompany } from "@/components/test-company";
 import {
@@ -24,6 +24,7 @@ export default function Customers() {
   const [status, setStatus] = useState("current");
   const [tagFilter, setTagFilter] = useState<TagFilterState>({ all: [], not: [] });
   const [adding, setAdding] = useState(false);
+  useNewForm(() => setAdding(true));
   // Search waits for a pause in typing so the list doesn't reload on every key.
   useEffect(() => { const t = setTimeout(() => setQuery(q), 250); return () => clearTimeout(t); }, [q]);
   const params = [`status=${status}`, ...(query.trim() ? [`q=${encodeURIComponent(query.trim())}`] : []), ...tagQuery(tagFilter)].join("&");

@@ -44,6 +44,7 @@ import measurementRoutes from "./routes/measurements";
 import customerRoutes from "./routes/customers";
 import propertyRoutes from "./routes/properties";
 import crmSettingsRoutes from "./routes/crmSettings";
+import searchRoutes from "./routes/search";
 
 export interface AppOptions {
   logger?: boolean;
@@ -131,4 +132,5 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(customerRoutes, { prefix: "/customers" });
   await app.register(propertyRoutes, { prefix: "/properties" });
   await app.register(crmSettingsRoutes, { prefix: "/crm" });
+  await app.register(searchRoutes, { prefix: "/search" });
 }

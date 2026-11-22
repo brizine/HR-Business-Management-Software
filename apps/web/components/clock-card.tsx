@@ -5,15 +5,21 @@ import { api, fmtDateTime } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox } from "@/components/ui";
 
-/** Clock in or out as the signed-in person (Time clock page and their own employee page). */
-export function ClockCard({ title = "My time clock" }: { title?: string }) {
+/**
+ * The signed-in person's clock: whether they're on it, and clocking in or out (asking the browser
+ * for location when the company's rules need it). Used by the Time Clock card and the top bar.
+ */
+export function useClockPunch() {
   const status = useApi("/time/status");
-  const { busy, error, run } = useAction();
+  const { busy, error, run, setError } = useAction();
   const [, tick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 30_000);
-    return () => clearInterval(t);
-  }, []);
+    // Another page (or the top bar) clocked in or out: refresh.
+    const reload = () => status.reload();
+    window.addEventListener("crewdesk:clock", reload);
+    return () => { clearInterval(t); window.removeEventListener("crewdesk:clock", reload); };
+  }, [status.reload]); // eslint-disable-line react-hooks/exhaustive-deps
   const open = status.data?.openEntry;
   const rule: LocationPolicy = (open ? status.data?.locationPolicy?.clockOut : status.data?.locationPolicy?.clockIn) ?? "optional";
   const [result, setResult] = useState<string | null>(null);
@@ -36,7 +42,14 @@ export function ClockCard({ title = "My time clock" }: { title?: string }) {
       const at = row.siteName ? ` at ${row.siteName}` : "";
       setResult(`${kind === "clock-in" ? "Clocked in" : "Clocked out"}${at}.${row.clockInFlag || row.clockOutFlag ? " This punch was away from a job site, so it's flagged for your manager." : ""}`);
       status.reload();
+      window.dispatchEvent(new Event("crewdesk:clock"));
     });
+  return { status, open, rule, busy, error, setError, result, setResult, punch };
+}
+
+/** Clock in or out as the signed-in person (Time clock page and their own employee page). */
+export function ClockCard({ title = "My time clock" }: { title?: string }) {
+  const { status, open, rule, busy, error, result, punch } = useClockPunch();
 
   return (
     <div className="card">
