@@ -46,6 +46,7 @@ import propertyRoutes from "./routes/properties";
 import crmSettingsRoutes from "./routes/crmSettings";
 import searchRoutes from "./routes/search";
 import todoRoutes from "./routes/todos";
+import eventRoutes from "./routes/events";
 import { flushBillingSync } from "./lib/billingSync";
 import serviceTypeRoutes from "./routes/serviceTypes";
 import invoiceRoutes from "./routes/invoices";
@@ -144,6 +145,7 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(crmSettingsRoutes, { prefix: "/crm" });
   await app.register(searchRoutes, { prefix: "/search" });
   await app.register(todoRoutes, { prefix: "/todos" });
+  await app.register(eventRoutes, { prefix: "/events" });
   await app.register(serviceTypeRoutes, { prefix: "/service-types" });
   await app.register(invoiceRoutes, { prefix: "/invoices" });
   await app.register(creditRoutes, { prefix: "/credits" });

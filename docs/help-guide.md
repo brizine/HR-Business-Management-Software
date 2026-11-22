@@ -53,7 +53,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   straight away. **Company Wiki**, **Settings**, **Help** and light or dark mode are at the bottom. The top bar's menu button widens
   the menu to list every page under its group, with your company logo on top (click it again to narrow it);
   Crewdesk remembers your choice on that computer.
-- **Operations:** **Customers** (Customers, Properties), **To-dos**, **Billing** (Invoices, Price list), **Field**
+- **Operations:** **Customers** (Customers, Properties), **Schedule** (Calendar, To-dos), **Billing** (Invoices, Price list), **Field**
   (Property Measure, Spray Mix Calculator), **Fleet** (Assets, Repair Orders, Inspections) and **Reports**
   (managers). Scheduling and customer messages will be added here.
 - **Team:** **Dashboard** (managers), **People** (Team, Shifts, Time Clock, Attendance, Time Off, Reviews &
@@ -334,10 +334,42 @@ A separate company, named after yours with "(Test)", for trying things out witho
 - **Starting over:** the owner can **Delete test company** (Settings → Company Info); everything in it goes, and
   the real company isn't affected. Creating it again starts fresh.
 
+## Calendar
+
+**Schedule → Calendar** (Operations) shows everything with a date in one place, laid out like Homeworks'
+calendar: **To-dos**, **Repair orders** (by due date), **Time off** (approved), **Holidays** and **Shifts**.
+
+- **Views:** **Day**, **Week** and **Month** (the menu by the date, or press **D**, **W** or **M**), and **‹ Today ›**
+  to move (or the arrow keys, and **T** for today). Click the date for a month to jump to any day. The two buttons
+  on the right of the toolbar switch between **calendar** and **list** (each day's events in rows).
+- **The side panel:** the month (click a day to go there), **Sort events** (time, budgeted hours, customer A-Z,
+  status or event type) and **Event types**: tick the ones to show (Shifts start hidden, since every shift for
+  everyone fills the calendar fast). Point at a type and click the pencil to change its color (or any color with
+  **+**); **High contrast** fills the cards with the color. **Color by event type** (brush) colors cards by type;
+  turn it off to see each to-do in its own color. **Group by event type** (layers) puts each day's events under
+  their type. Hide the panel with the button at its bottom (the toolbar's panel button brings it back).
+- **Filter:** **+ Filter** adds a filter you can remove: **Status** (open or done), **Repeats** (repeating or
+  one-time), **Person**, **Customer** or **Tag** (the customer's tags). **Search events** finds a title, customer,
+  address, note or person.
+- **Toolbar buttons:** the hourglass opens **Unscheduled** (repair orders with no due date); the sliders choose
+  what each card shows (time, address, customer, people, hours, type, status, notes); the clock shows **budgeted
+  hours by person** under each day; **…** has Add a to-do, Print, Export and Reset calendar settings.
+- **Each day** shows how many events and the budgeted hours (to-dos and repair orders). The bottom shows the total
+  for the range, **Print** and **Export** (a spreadsheet of the events shown).
+- **Click an event** to see everything about it, then **Open** it, **Mark done** (to-dos) or **Complete** (repair
+  orders), or **Move to** another date.
+- **Drag and drop:** drag a to-do or repair order to another day to move it (a multi-day to-do keeps its length);
+  drag one from **Unscheduled** onto a day to give it a due date. Whoever made a to-do or a manager can move it;
+  fleet managers move repair orders.
+- **Add a to-do:** point at a day and click **+** (or **Add to-do** in Day view); the form opens with that date.
+- **Who sees what:** your own to-dos (managers everyone's), every repair order, your own time off (time-off and
+  schedule managers everyone's), the published shifts (schedule managers drafts too) and the holidays.
+- Your choices (view, sort, types, colors, card details) are kept for you in that browser.
+
 ## To-dos
 
 To-dos are jobs for the office or the crew, like Homeworks' to-dos: "call the HOA about the gate code", "fix
-the sprinkler head at Jane's", "fuel up the trucks every Monday". Open them from **To-dos** in the Operations menu,
+the sprinkler head at Jane's", "fuel up the trucks every Monday". Open them from **Schedule → To-dos** in the Operations menu,
 the to-do button in the top bar, **+ New → To-do**, or the **To-dos** box on a customer's or property's page.
 
 - **Adding one** (**Add to-do**), laid out like Homeworks:

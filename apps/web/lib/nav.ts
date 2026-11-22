@@ -20,7 +20,13 @@ export const NAV: Record<Side, NavGroup[]> = {
         { href: "/properties", label: "Properties", min: "manager", area: "customers" },
       ],
     },
-    { key: "todos", label: "To-dos", icon: "todo", items: [{ href: "/todos", label: "To-dos" }] },
+    {
+      key: "schedule", label: "Schedule", icon: "calendar",
+      items: [
+        { href: "/calendar", label: "Calendar" },
+        { href: "/todos", label: "To-dos" },
+      ],
+    },
     {
       key: "billing", label: "Billing", icon: "billing",
       items: [

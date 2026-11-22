@@ -26,7 +26,7 @@ export function todoVisibility(req: FastifyRequest): SQL | undefined {
 }
 
 /** To-dos with their customer, property and people, ready to show. */
-async function present(rows: Todo[]) {
+export async function present(rows: Todo[]) {
   if (!rows.length) return [];
   const ids = rows.map((t) => t.id);
   const people = await db.select({ todoId: todoAssignees.todoId, id: employees.id, firstName: employees.firstName, lastName: employees.lastName })
