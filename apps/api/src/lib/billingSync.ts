@@ -536,6 +536,13 @@ export async function retryBillingSyncs(limit = 25) {
   const sync = { invoice: syncInvoice, credit: syncCredit, prepayment: syncPrepayment, payment: syncPayment } as Record<string, (c: string, id: string) => Promise<unknown>>;
   for (const f of failed) { tried++; await (sync[f.kind] ?? syncPayment)(f.companyId, f.sourceId); }
   for (const p of unsentPrepayments) { tried++; await syncPrepayment(p.companyId, p.id); }
+  // Booked before prepayments counted as income when received (into 2400, through 1045): redo them.
+  const oldPrepayments = await db.select({ companyId: prepayments.companyId, id: prepayments.id }).from(prepayments)
+    .where(and(isNotNull(prepayments.bigcapitalReceiptId), eq(prepayments.bigcapitalAsIncome, false))).limit(limit);
+  const oldUses = await db.select({ companyId: invoicePayments.companyId, id: invoicePayments.id }).from(invoicePayments)
+    .where(and(eq(invoicePayments.method, "prepaid"), isNotNull(invoicePayments.bigcapitalJournalId))).limit(limit);
+  for (const p of oldPrepayments) { tried++; await syncPrepayment(p.companyId, p.id); }
+  for (const p of oldUses) { tried++; await syncPayment(p.companyId, p.id); }
   for (const c of unsentCredits) { tried++; await syncCredit(c.companyId, c.id); }
   for (const i of neverSent) { tried++; await syncInvoice(i.companyId, i.id); }
   for (const p of unpaidPayments) { tried++; await syncPayment(p.companyId, p.id); }

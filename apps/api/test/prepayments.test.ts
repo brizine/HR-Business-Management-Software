@@ -217,7 +217,9 @@ describe("Prepayments", () => {
     const { eq } = await import("drizzle-orm");
     await db.update(prepayments).set({ bigcapitalAsIncome: false }).where(eq(prepayments.id, r.body.id));
     calls.length = 0;
-    expect((await call("POST", `/prepayments/${r.body.id}/sync`, "office")).body.result).toBe("posted");
+    // The regular retry pass picks it up on its own.
+    const { retryBillingSyncs } = await import("../src/lib/billingSync");
+    await retryBillingSyncs();
     expect(calls.filter((c) => c.method !== "GET").map((c) => `${c.method} ${c.path.replace(/\d+/g, "#")}`)).toEqual(["DELETE /manual-journals/#", "POST /manual-journals"]);
     expect(calls.find((c) => c.method === "POST")!.body.entries[1]).toMatchObject({ accountId: 1026, credit: 40 });
   });
