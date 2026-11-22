@@ -2,7 +2,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import bcrypt from "bcryptjs";
 import { randomInt } from "node:crypto";
 import { and, count, eq, gt, isNull } from "drizzle-orm";
-import { loginSchema, signupSchema, isInactive, type Role } from "@crewdesk/shared";
+import { hasRole, loginSchema, signupSchema, isInactive, type Role } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
 import { companies, employees, passwordResets, recoveryCodes } from "../db/schema";
@@ -15,6 +15,7 @@ import {
   companyPolicy,
   issueToken,
   requireRole,
+  roleIn,
   twoFactorRequired,
   verifyToken,
 } from "../lib/auth";
@@ -23,6 +24,8 @@ import { decrypt, encrypt, randomToken, sha256 } from "../lib/crypto";
 import { HttpError, parse } from "../lib/errors";
 import { newTotpSecret, otpauthUri, verifyTotp } from "../lib/totp";
 import { publicEmployee } from "./employees";
+import { addSamples } from "../lib/sampleCustomers";
+import { companyToday } from "../lib/payRates";
 
 /** Which area of the Permissions page controls access here. */
 const AREA = "company" as const;
@@ -157,8 +160,11 @@ async function newRecoveryCodes(employeeId: string) {
  */
 function publicCompany(company: typeof companies.$inferSelect) {
   const { logoKey, accountingKey, accounting, helpGuide, helpGuideBase, reviewProgram, ...companyInfo } = company;
-  return { ...companyInfo, hasLogo: !!logoKey };
+  return { ...companyInfo, hasLogo: !!logoKey, isTest: !!company.testOfCompanyId };
 }
+
+/** Test-company sign-ins get an address that can never receive mail (RFC 2606 ".invalid"). */
+const testEmail = (realEmployeeId: string) => `${realEmployeeId}@test.crewdesk.invalid`;
 
 const routes: FastifyPluginAsync = async (app) => {
   const session = async (req: FastifyRequest, reply: FastifyReply, user: EmployeeRow) => {
@@ -306,6 +312,82 @@ const routes: FastifyPluginAsync = async (app) => {
       .from(recoveryCodes)
       .where(and(eq(recoveryCodes.employeeId, user.id), isNull(recoveryCodes.usedAt)));
     return { ...(await session(req, reply, fresh)), recoveryCodesLeft: remaining[0].n };
+  });
+
+  /* ── Test company: a sandbox beside the real company, for trying things with sample customers ── */
+
+  /** Owners and admins, and managers in Customers & billing, can go into the test company. */
+  const canUseTest = (req: FastifyRequest) => hasRole(req.user.role, "admin") || hasRole(roleIn(req, "customers"), "manager");
+
+  async function testCompanyOf(realCompanyId: string) {
+    const [t] = await db.select().from(companies).where(eq(companies.testOfCompanyId, realCompanyId));
+    return t ?? null;
+  }
+
+  app.get("/test-company", { preHandler: authenticate }, async (req) => {
+    const [company] = await db.select().from(companies).where(eq(companies.id, req.user.companyId));
+    if (company.testOfCompanyId) {
+      const [real] = await db.select({ name: companies.name }).from(companies).where(eq(companies.id, company.testOfCompanyId));
+      return { isTest: true, realCompanyName: real?.name ?? null };
+    }
+    const test = await testCompanyOf(company.id);
+    return { isTest: false, exists: !!test, name: test?.name ?? null, canCreate: req.user.role === "owner", canOpen: canUseTest(req) };
+  });
+
+  /** The owner makes the test company (once). It gets its own copy of nothing: no people, customers or settings. */
+  app.post("/test-company", { preHandler: authenticate }, async (req) => {
+    if (req.user.role !== "owner") throw new HttpError(403, "Only the owner can create the test company");
+    const [company] = await db.select().from(companies).where(eq(companies.id, req.user.companyId));
+    if (company.testOfCompanyId) throw new HttpError(400, "This is already the test company");
+    if (await testCompanyOf(company.id)) throw new HttpError(409, "The test company already exists");
+    // Getting in always goes through a signed-in session in the real company, so two-factor isn't asked again.
+    const [test] = await db.insert(companies).values({ name: `${company.name} (Test)`, timezone: company.timezone, testOfCompanyId: company.id, twoFactorRequiredFor: "none" }).returning();
+    return { id: test.id, name: test.name };
+  });
+
+  /** Switches into the test company, making this person's test sign-in the first time (owner stays owner; others are admins). */
+  app.post("/test-company/open", { preHandler: authenticate }, async (req, reply) => {
+    if (!canUseTest(req)) throw new HttpError(403, "You don't have access to the test company");
+    const test = await testCompanyOf(req.user.companyId);
+    if (!test) throw new HttpError(404, "There's no test company yet");
+    const [me] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
+    let [linked] = await db.select().from(employees).where(and(eq(employees.companyId, test.id), eq(employees.linkedEmployeeId, me.id)));
+    if (!linked) {
+      const [{ people }] = await db.select({ people: count() }).from(employees).where(eq(employees.companyId, test.id));
+      [linked] = await db.insert(employees).values({
+        companyId: test.id, linkedEmployeeId: me.id, firstName: me.firstName, lastName: me.lastName,
+        email: testEmail(me.id), role: me.role === "owner" ? "owner" : "admin", payType: "salary",
+      }).returning();
+      // The very first visit finds the sample customers already there.
+      if (people === 0) {
+        const today = await companyToday(test.id);
+        const firstIn = linked;
+        await db.transaction((tx) => addSamples(tx, test.id, firstIn.id, today));
+      }
+    } else if (isInactive(linked.status)) throw new HttpError(403, "Your test company sign-in has been turned off");
+    return session(req, reply, linked);
+  });
+
+  /** Back from the test company to the real one, as the real person (who must still have access). */
+  app.post("/test-company/back", { preHandler: authenticate }, async (req, reply) => {
+    const [me] = await db.select().from(employees).where(eq(employees.id, req.user.sub));
+    const [company] = await db.select().from(companies).where(eq(companies.id, me.companyId));
+    if (!company.testOfCompanyId || !me.linkedEmployeeId) throw new HttpError(400, "You're not in the test company");
+    const [real] = await db.select().from(employees).where(eq(employees.id, me.linkedEmployeeId));
+    if (!real || real.companyId !== company.testOfCompanyId || isInactive(real.status)) {
+      clearSessionCookie(reply);
+      throw new HttpError(401, "Please sign in again.");
+    }
+    return session(req, reply, real);
+  });
+
+  /** The owner deletes the test company and everything in it (the real company is untouched). */
+  app.delete("/test-company", { preHandler: authenticate }, async (req) => {
+    if (req.user.role !== "owner") throw new HttpError(403, "Only the owner can delete the test company");
+    const test = await testCompanyOf(req.user.companyId);
+    if (!test) throw new HttpError(404, "There's no test company");
+    await db.delete(companies).where(eq(companies.id, test.id));
+    return { ok: true };
   });
 
   app.get("/me", { preHandler: authenticate }, async (req) => {

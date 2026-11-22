@@ -1,14 +1,14 @@
 import type { FastifyPluginAsync } from "fastify";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { bulkTagSchema, cancelReasonSchema, lawnTotal, tagSchema, type TagColor } from "@crewdesk/shared";
+import { bulkTagSchema, cancelReasonSchema, tagSchema } from "@crewdesk/shared";
 import { db } from "../db";
-import { cancellationReasons, crmTags, customerContacts, customers, properties, tagEvents } from "../db/schema";
+import { cancellationReasons, crmTags, customers, properties, tagEvents } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
-import { assignCustomer, nextCustomerNumber, reasonsFor, recordTagChanges, type Tx } from "../lib/crm";
-import { SAMPLE_CUSTOMERS } from "../lib/sampleCustomers";
+import { reasonsFor, recordTagChanges } from "../lib/crm";
+import { addSamples } from "../lib/sampleCustomers";
 
 const AREA = "customers" as const;
 
@@ -146,46 +146,5 @@ const routes: FastifyPluginAsync = async (app) => {
     return removed;
   });
 };
-
-/** Finds or makes the company's tags by name (case doesn't matter). */
-async function tagsByName(tx: Tx, companyId: string, wanted: Record<string, TagColor>) {
-  const existing = await tx.select().from(crmTags).where(eq(crmTags.companyId, companyId));
-  const out: Record<string, string> = {};
-  for (const [name, color] of Object.entries(wanted)) {
-    const hit = existing.find((t) => t.name.toLowerCase() === name.toLowerCase());
-    out[name] = hit ? hit.id : (await tx.insert(crmTags).values({ companyId, name, color }).returning())[0].id;
-  }
-  return out;
-}
-
-async function addSamples(tx: Tx, companyId: string, byId: string, today: string) {
-  const tags = await tagsByName(tx, companyId, { Sample: "gray", Commercial: "blue", HOA: "purple", "Dog in yard": "orange", "Gate code needed": "yellow", Prepay: "green", "Outside service area": "red" });
-  const tagged = (names: string[] = []) => ["Sample", ...names].map((n) => tags[n]);
-  const ids: Record<string, string> = {};
-  let count = 0;
-  for (const s of SAMPLE_CUSTOMERS) {
-    const number = await nextCustomerNumber(tx, companyId);
-    const { key, tags: ctags, contacts, properties: props, ...c } = s;
-    const [row] = await tx.insert(customers).values({ ...c, companyId, number, sample: true, tagIds: tagged(ctags), createdById: byId }).returning();
-    await recordTagChanges(tx, { companyId, before: [], after: row.tagIds, customerId: row.id, source: "sample", byId });
-    ids[key] = row.id;
-    count++;
-    if (contacts?.length) await tx.insert(customerContacts).values(contacts.map((k, i) => ({ ...k, companyId, customerId: row.id, sortOrder: i })));
-    for (const p of props ?? []) {
-      const { residentKey, tags: ptags, ...pv } = p;
-      const [prop] = await tx.insert(properties).values({ ...pv, lawnSqFt: lawnTotal(pv), companyId, sample: true, tagIds: tagged(ptags), createdById: byId }).returning();
-      await recordTagChanges(tx, { companyId, before: [], after: prop.tagIds, propertyId: prop.id, source: "sample", byId });
-      await assignCustomer(tx, { companyId, propertyId: prop.id, customerId: row.id, role: "bill_to", startDate: today });
-      if (residentKey) {
-        // Tenants are their own customers, on the property as residents.
-        const r = SAMPLE_CUSTOMERS.find((x) => x.key === residentKey)!;
-        const rid = ids[residentKey];
-        if (!rid) throw new Error(`Sample resident ${r.key} must come before the property that uses it`);
-        await assignCustomer(tx, { companyId, propertyId: prop.id, customerId: rid, role: "resident", startDate: today });
-      }
-    }
-  }
-  return count;
-}
 
 export default routes;

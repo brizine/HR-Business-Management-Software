@@ -9,6 +9,7 @@ import { HttpError, parse } from "../lib/errors";
 import { encrypt } from "../lib/crypto";
 import { bigcapital, BigcapitalError } from "../lib/bigcapital";
 import { ACCOUNTING_KEY_PURPOSE, accountingConfig, clientFor, postPayPeriod, postWorkOrder } from "../lib/accounting";
+import { setUpTestBooks } from "../lib/testBooks";
 
 /** Accounting sits with payroll: payroll admins see and send; the owner (payroll settings) connects. */
 const AREA = "payroll" as const;
@@ -80,6 +81,17 @@ const routes: FastifyPluginAsync = async (app) => {
         return { id: wo.id, number: wo.number, title: wo.title, assetName, completedAt: wo.completedAt, totalCents: total, posting: post, changedSincePosting: !!post && post.status === "posted" && post.amountCents !== total };
       }),
     };
+  });
+
+  /**
+   * Test company only: sets up the connected (test) Bigcapital organization to match ProSpray's real
+   * chart of accounts and preferences. Refused in the real company so it can never touch the real books.
+   */
+  app.post("/test-books", { preHandler: requireRole("owner", AREA) }, async (req) => {
+    const [company] = await db.select({ testOf: companies.testOfCompanyId }).from(companies).where(eq(companies.id, req.user.companyId));
+    if (!company?.testOf) throw new HttpError(400, "This only runs in the test company, so your real books are never changed");
+    const { bc } = await asHttp(() => clientFor(req.user.companyId));
+    return asHttp(() => setUpTestBooks(bc));
   });
 
   app.post<{ Params: { id: string } }>("/payroll/:id", async (req) => asHttp(() => postPayPeriod(req.user.companyId, req.params.id, req.user.sub)));

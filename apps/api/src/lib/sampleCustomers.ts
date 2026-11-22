@@ -1,3 +1,8 @@
+import { eq } from "drizzle-orm";
+import { lawnTotal, type TagColor } from "@crewdesk/shared";
+import { crmTags, customerContacts, customers, properties } from "../db/schema";
+import { assignCustomer, nextCustomerNumber, recordTagChanges, type Tx } from "./crm";
+
 /**
  * Ten sample accounts (plus two tenants) for testing the customer system, each covering one tricky
  * case. Names and addresses are made up; emails use example.com and phones the 555-01xx range, so
@@ -98,3 +103,46 @@ export const SAMPLE_CUSTOMERS: SampleCustomer[] = [
     properties: [{ street: "18200 County Line Rd", city: "Blanchard", zip: "73010", lat: 35.1371, lng: -97.6583, lawnSqFt: 15000, tags: ["Outside service area"] }],
   },
 ];
+
+/** Finds or makes the company's tags by name (case doesn't matter). */
+async function tagsByName(tx: Tx, companyId: string, wanted: Record<string, TagColor>) {
+  const existing = await tx.select().from(crmTags).where(eq(crmTags.companyId, companyId));
+  const out: Record<string, string> = {};
+  for (const [name, color] of Object.entries(wanted)) {
+    const hit = existing.find((t) => t.name.toLowerCase() === name.toLowerCase());
+    out[name] = hit ? hit.id : (await tx.insert(crmTags).values({ companyId, name, color }).returning())[0].id;
+  }
+  return out;
+}
+
+/** Adds the sample customers (in a transaction); returns how many customers were made. */
+export async function addSamples(tx: Tx, companyId: string, byId: string, today: string) {
+  const tags = await tagsByName(tx, companyId, { Sample: "gray", Commercial: "blue", HOA: "purple", "Dog in yard": "orange", "Gate code needed": "yellow", Prepay: "green", "Outside service area": "red" });
+  const tagged = (names: string[] = []) => ["Sample", ...names].map((n) => tags[n]);
+  const ids: Record<string, string> = {};
+  let count = 0;
+  for (const s of SAMPLE_CUSTOMERS) {
+    const number = await nextCustomerNumber(tx, companyId);
+    const { key, tags: ctags, contacts, properties: props, ...c } = s;
+    const [row] = await tx.insert(customers).values({ ...c, companyId, number, sample: true, tagIds: tagged(ctags), createdById: byId }).returning();
+    await recordTagChanges(tx, { companyId, before: [], after: row.tagIds, customerId: row.id, source: "sample", byId });
+    ids[key] = row.id;
+    count++;
+    if (contacts?.length) await tx.insert(customerContacts).values(contacts.map((k, i) => ({ ...k, companyId, customerId: row.id, sortOrder: i })));
+    for (const p of props ?? []) {
+      const { residentKey, tags: ptags, ...pv } = p;
+      const [prop] = await tx.insert(properties).values({ ...pv, lawnSqFt: lawnTotal(pv), companyId, sample: true, tagIds: tagged(ptags), createdById: byId }).returning();
+      await recordTagChanges(tx, { companyId, before: [], after: prop.tagIds, propertyId: prop.id, source: "sample", byId });
+      await assignCustomer(tx, { companyId, propertyId: prop.id, customerId: row.id, role: "bill_to", startDate: today });
+      if (residentKey) {
+        // Tenants are their own customers, on the property as residents.
+        const r = SAMPLE_CUSTOMERS.find((x) => x.key === residentKey)!;
+        const rid = ids[residentKey];
+        if (!rid) throw new Error(`Sample resident ${r.key} must come before the property that uses it`);
+        await assignCustomer(tx, { companyId, propertyId: prop.id, customerId: rid, role: "resident", startDate: today });
+      }
+    }
+  }
+  return count;
+}
+

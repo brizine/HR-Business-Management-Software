@@ -6,7 +6,7 @@ import { saveLastCompanyName } from "./last-company";
 
 export interface Me {
   user: { id: string; firstName: string; lastName: string; email: string; role: Role; employmentType?: string };
-  company: { id: string; name: string; hasLogo?: boolean; logoUpdatedAt?: string | null };
+  company: { id: string; name: string; hasLogo?: boolean; logoUpdatedAt?: string | null; isTest?: boolean };
   /** Access by area from the Permissions page (levels that differ from their role). */
   access?: { areas: AreaLevels; managesPermissions: boolean };
 }

@@ -2,6 +2,7 @@ import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
 import {
+  type AnyPgColumn,
   boolean,
   primaryKey,
   date,
@@ -32,6 +33,8 @@ const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull(
 export const companies = pgTable("companies", {
   id: id(),
   name: text("name").notNull(),
+  /** Set on a test company: the real company it's a sandbox for (sample customers, test mode payments). */
+  testOfCompanyId: uuid("test_of_company_id").references((): AnyPgColumn => companies.id, { onDelete: "cascade" }),
   timezone: text("timezone").notNull().default("America/Chicago"),
   /** "csv" exports timesheets only; "check" pushes to the Check payroll API. */
   payrollProvider: text("payroll_provider").notNull().default("csv"),
@@ -145,6 +148,8 @@ export const employees = pgTable(
     invitedAt: timestamp("invited_at", { withTimezone: true }),
     /** Bumped to sign the person out of every device; sessions carry the version they were issued with. */
     tokenVersion: integer("token_version").notNull().default(0),
+    /** In a test company: the real person this sign-in belongs to (reached by switching, never by password). */
+    linkedEmployeeId: uuid("linked_employee_id").references((): AnyPgColumn => employees.id, { onDelete: "cascade" }),
     failedLoginCount: integer("failed_login_count").notNull().default(0),
     lockedUntil: timestamp("locked_until", { withTimezone: true }),
     /** Authenticator-app secret, encrypted (see lib/crypto). Set once two-factor is turned on. */

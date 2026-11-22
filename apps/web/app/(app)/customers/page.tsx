@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
+import { openTestCompany, useTestCompany } from "@/components/test-company";
 import {
   CustomerFields, PropertyFields, TagChips, TagFilter, customerBody, customerFormValue, propertyBody, propertyFormValue, tagQuery, useTags,
   type TagFilterState,
@@ -28,13 +29,18 @@ export default function Customers() {
   const params = [`status=${status}`, ...(query.trim() ? [`q=${encodeURIComponent(query.trim())}`] : []), ...tagQuery(tagFilter)].join("&");
   const list = useApi<{ total: number; rows: any[] }>(`/customers?${params}`);
   const filtering = !!query.trim() || status !== "current" || tagFilter.all.length + tagFilter.not.length > 0;
+  const testCo = useTestCompany();
+  const test = testCo.data && !testCo.data.isTest && testCo.data.exists && testCo.data.canOpen ? testCo.data : null;
+  const switching = useAction();
 
   return (
     <>
       <PageHead title="Customers" sub={<span role="status">{list.data ? `${list.data.total} ${list.data.total === 1 ? "customer" : "customers"}` : "Loading…"}</span>}>
+        {test && <button className="btn" disabled={switching.busy} onClick={() => switching.run(openTestCompany)}>Open test company</button>}
         <Link className="btn" href="/properties">Properties</Link>
         <button className="btn primary" onClick={() => setAdding(!adding)}>Add customer</button>
       </PageHead>
+      <ErrorBox error={switching.error} />
       {can("admin", "customers") && <SampleCustomersCard onChange={() => { list.reload(); reloadTags(); }} />}
       {adding && <AddCustomer tags={tags} onCancel={() => setAdding(false)} onSaved={(id) => router.push(`/customers/${id}`)} />}
       <form className="card filters" role="search" aria-label="Filter customers" onSubmit={(e) => e.preventDefault()}>

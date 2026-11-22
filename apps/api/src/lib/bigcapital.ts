@@ -52,6 +52,32 @@ export function bigcapital(baseUrl: string, apiKey: string, timeoutMs = 15_000) 
   };
 
   return {
+    /** Every account, active and inactive, flat (sub-accounts included), as Bigcapital returns them. */
+    async allAccountsRaw(): Promise<any[]> {
+      const list = (d: any): any[] => (Array.isArray(d) ? d : d?.accounts ?? []);
+      const active = list(await call("GET", "/accounts?structure=flat"));
+      const inactive = list(await call("GET", "/accounts?structure=flat&only_inactive=true"));
+      const seen = new Set(active.map((a) => a.id));
+      return [...active, ...inactive.filter((a) => !seen.has(a.id))];
+    },
+
+    async updateAccount(id: number, body: { name: string; code: string; accountType: string; description?: string | null; parentAccountId?: number | null }) {
+      return call("PUT", `/accounts/${id}`, body);
+    },
+
+    async createAccount(body: { name: string; code: string; accountType: string; description?: string | null; parentAccountId?: number | null }): Promise<string | null> {
+      return idOf(await call("POST", "/accounts", body));
+    },
+
+    async inactivateAccount(id: number) {
+      return call("POST", `/accounts/${id}/inactivate`);
+    },
+
+    /** Organization preferences, e.g. { group: "organization", key: "accounting_basis", value: "cash" }. */
+    async saveSettings(options: { group: string; key: string; value: unknown }[]) {
+      return call("PUT", "/settings", { options });
+    },
+
     async accounts(): Promise<BigcapitalAccount[]> {
       const data = await call("GET", "/accounts");
       const list: any[] = Array.isArray(data) ? data : data?.accounts ?? [];

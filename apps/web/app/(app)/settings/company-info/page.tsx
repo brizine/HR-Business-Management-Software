@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead, formValues } from "@/components/ui";
 import { SettingsTabs } from "@/components/settings-tabs";
+import { TestCompanyCard } from "@/components/test-company";
 import { BusinessAddressFields, businessAddressValues } from "@/components/business-address-fields";
 import { phoneInput } from "@/lib/phone-input";
 import { formatPhone } from "@crewdesk/shared";
@@ -120,6 +121,7 @@ export default function CompanyInfo() {
           ) : <p className="muted" style={{ margin: 0 }}>Only the owner can change company info.</p>}
         </form>
       )}
+      {d?.canEdit && <TestCompanyCard />}
     </>
   );
 }

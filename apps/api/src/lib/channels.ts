@@ -19,10 +19,15 @@ export interface EmailTransport {
   send(msg: EmailMessage): Promise<void>;
 }
 
+/** Addresses on the reserved ".invalid" domain (test-company sign-ins) never get mail. */
+export const isUndeliverable = (to: string) => /\.invalid>?\s*$/i.test(to.trim());
+
 /** Any SMTP provider (Postmark, SendGrid, SES, Mailgun, Google Workspace…) via SMTP_URL. */
 class SmtpEmail implements EmailTransport {
   private transporter = nodemailer.createTransport(process.env.SMTP_URL);
   async send(msg: EmailMessage) {
+    // Test-company sign-ins use ".invalid" addresses, which can never receive mail; don't try.
+    if (isUndeliverable(msg.to)) return;
     await this.transporter.sendMail({ from: process.env.EMAIL_FROM ?? "Crewdesk <no-reply@example.com>", ...msg });
   }
 }

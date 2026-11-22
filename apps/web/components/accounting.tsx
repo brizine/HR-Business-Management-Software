@@ -35,7 +35,7 @@ function SyncCell({ posting, changed, onSend, busy }: { posting: Posting; change
 
 /** Payroll page: connect Bigcapital, choose accounts, and see what's been sent. */
 export function AccountingCard() {
-  const { can } = useAuth();
+  const { can, me } = useAuth();
   const owner = can("owner", "payroll");
   const saved = useApi<AccountingSettings & { hasKey: boolean }>("/accounting/settings");
   const status = useApi<Status>("/accounting/status");
@@ -74,6 +74,8 @@ export function AccountingCard() {
         </div>
         {st?.connected && st.baseUrl && <a className="btn" href={st.baseUrl} target="_blank" rel="noopener noreferrer">Open Bigcapital ↗</a>}
       </div>
+
+      {me?.company.isTest && owner && st?.connected && <TestBooksSetup onDone={() => { setAccounts(null); saved.reload(); }} />}
 
       {editing || !s.enabled ? (
         <form className="stack" onSubmit={(e) => {
@@ -183,6 +185,27 @@ export function PayPeriodAccounting({ periodId, approved }: { periodId: string; 
           ? p.changedSincePosting && <span className="muted" style={{ fontSize: 12, color: "var(--warn)" }}>Reopened and approved again since it was sent: adjust the journal in Bigcapital</span>
           : <SyncCell posting={p?.posting ?? null} changed={false} busy={send.busy} onSend={() => send.run(async () => { try { await api(`/accounting/payroll/${periodId}`, { method: "POST" }); } finally { status.reload(); } })} />}
       </span>
+    </div>
+  );
+}
+
+/**
+ * Test company only: makes the connected test Bigcapital organization match ProSpray's real chart of
+ * accounts and preferences (the server refuses this in the real company).
+ */
+function TestBooksSetup({ onDone }: { onDone: () => void }) {
+  const { busy, error, run } = useAction();
+  const [result, setResult] = useState<{ renamed: number; inactivated: number; created: number; skipped: string[] } | null>(null);
+  return (
+    <div className="card inset stack">
+      <strong>Set up the test books</strong>
+      <span className="muted">Gives the test Bigcapital organization the same chart of accounts and preferences as your real books (cash basis, account codes, no sales tax). Safe to run again.</span>
+      <ErrorBox error={error} />
+      {result && (
+        <span>Done: {result.renamed} accounts renamed, {result.created} added, {result.inactivated} made inactive.
+          {result.skipped.length > 0 && <span className="warn-text"> Skipped: {result.skipped.join("; ")}</span>}</span>
+      )}
+      <div><button type="button" className="btn primary" disabled={busy} onClick={() => run(async () => { setResult(await api("/accounting/test-books", { method: "POST" })); onDone(); })}>Set up test books</button></div>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 "use client";
+import { TestCompanyBanner } from "@/components/test-company";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -205,7 +206,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           Sign Out
         </a>
       </nav>
-      <main className="main"><PageLayoutRoot>{children}</PageLayoutRoot></main>
+      <main className="main"><TestCompanyBanner /><PageLayoutRoot>{children}</PageLayoutRoot></main>
     </div>
   );
 }

@@ -134,6 +134,21 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
 - **Deleting:** admins can delete leads, sample customers and customers or properties with no history; anyone
   else is cancelled instead, so the history is kept.
 
+### Test company
+
+A separate company, named after yours with "(Test)", for trying things out without touching real customers or books.
+
+- **Getting in:** owners, admins, managers and anyone with Customers & billing access click **Open test company** on
+  the Customers page (or Settings → Company Info). No separate password: you switch in as yourself, and a yellow
+  bar at the top of every page says you're in the test company, with **Back to the real company**.
+- **What's in it:** the sample customers are loaded the first time anyone opens it. Nothing else is copied: it has
+  no employees, payroll or settings of its own beyond what you add. Its sign-ins never get email.
+- **Test books:** connect it to a test organization in Bigcapital (Settings → Integrations, with that
+  organization's own API key), then click **Set up test books** to give it the same chart of accounts and
+  preferences as your real books. This button only exists in the test company and is refused anywhere else.
+- **Starting over:** the owner can **Delete test company** (Settings → Company Info); everything in it goes, and
+  the real company isn't affected. Creating it again starts fresh.
+
 ## Spray Mix Calculator
 
 Enter the tank size in gallons and tap **Update total** to see how much of each product to add.
