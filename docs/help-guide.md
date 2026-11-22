@@ -12,9 +12,9 @@ question, get step-by-step answers) and **User Manual** (this guide, with conten
 
 The left menu has two sides. The **Operations | Team** switch near the top flips between them:
 
-- **Operations:** **Reports** (managers), **Tools** (**Property Measure**, **Spray Mix Calculator**) and
-  **Fleet & Equipment** (**Assets**, **Repair Orders**, **Inspections**). Customers, scheduling and
-  billing will be added here.
+- **Operations:** **Reports** (managers), **Customers** (**Customers**, **Properties**), **Tools**
+  (**Property Measure**, **Spray Mix Calculator**) and **Fleet & Equipment** (**Assets**, **Repair Orders**,
+  **Inspections**). Scheduling and billing will be added here.
 - **Team:** **Dashboard** and **Reports** (managers), **People** (**Team**, **Shifts**, **Time Clock**,
   **Attendance**, **Time Off**, **Reviews & Discipline**, **Training**, **Documents**, **Onboarding**,
   **Hiring**) and **Pay** (**Payroll**, **Pay & Tax Forms**).
@@ -69,6 +69,7 @@ The left menu has two sides. The **Operations | Team** switch near the top flips
   assistant use the edited copy. When Crewdesk's standard manual is updated, a notice offers the
   **Standard manual** tab so you can copy in what's new.
 - **Permissions:** per-person access by area, with search and filters.
+- **Customers** (admins in Customers & billing): the tag list and the cancellation reasons (see Customers & Properties).
 - **Integrations** (payroll admins): connections to other systems; today, **Accounting (Bigcapital)**.
 
 ## Notifications
@@ -86,6 +87,52 @@ registrations at a glance (managers and up). It's on the **Team** side of the me
 Pages and sub-pages for policies and how-tos. Each page has who can see it and who can edit it
 (everyone, managers, admins). Search, pin important pages, view history and restore an older
 version. Read on the phone, edit on the website.
+
+## Customers & Properties
+
+Customers are the people and companies you bill; properties are the service addresses. They're separate
+records: a property is assigned to one **bill-to** customer (who gets the invoices and pays) and any number
+of **residents** (tenants, who get reminders). One customer can have many properties. Seeing and editing
+customers takes manager access in **Customers & billing** (Settings → Permissions).
+
+- **Customers** (Operations → Customers): search by name, phone, email, service address or customer number,
+  filter by status (Current = active and leads; Active; Leads; Cancelled; All) and by tags. Click a tag once to
+  show only customers with it, again to show only those without it, and again to clear it.
+- **Add customer:** Residential, Commercial or HOA (commercial and HOA accounts are listed by company name),
+  contact details, billing address, how invoices are sent (email, paper, text; any of them), how they heard
+  about you, tags, notes and **Other contacts** (a spouse, property manager or accounts payable; tick **Copy on
+  invoices** for anyone who should get a copy). Commercial accounts can be marked **Needs a PO number**. Tick
+  **Add their service address now** to create their first property with them as bill-to (or untick **Service
+  address is the billing address** to type a different one). Choose **Lead** for someone who hasn't bought yet.
+- **Customer page:** contact and billing details, other contacts, their properties (current, and past ones
+  under **Show past properties**) and any cancellations. **Add a property** creates a new service address for
+  them as bill-to or resident.
+- **Properties** (Operations → Properties): search by address, ZIP, label or customer; filter by **Map Code
+  starts with** (e.g. 80 for 800–809; type **none** for properties without one), status, property tags, and the
+  bill-to customer's tags (e.g. properties whose customer is tagged Commercial).
+- **Property page:** Map Code, lawn size (front, back and total), gate code, pets, access notes, tags and the
+  **People** on it. **Add a person** puts an existing customer on the property as a resident, or as the new
+  bill-to: the old bill-to's time ends the day before, their past invoices stay with them, and the property's
+  history stays with the property (**Show history**). **Moved out** ends a resident's time. **Map** opens the
+  address in Google Maps.
+- **Lawn size:** type front and back (the total is worked out) or just a total, or click **Use a saved
+  Property Measure** to take the sizes from a measurement saved on the Property Measure page.
+- **Cancelling:** **Cancel customer** or **Cancel property** asks for a reason from the list, an effective date
+  and a comment (required for some reasons, such as Other). Cancelling a customer also cancels the properties
+  they're the bill-to for; properties where they're only a resident are left alone. Cancelled records are
+  hidden from everyday lists but kept with their history; **Reactivate** brings them back (reactivate each
+  property from its own page).
+- **Tags** (Settings → Customers, admins): add tags with a name, color and description, **Archive** ones no
+  longer used (they stay where they are but can't be added), or **Merge** one tag into another. Every tag added
+  or removed is recorded with who did it and when.
+- **Cancellation reasons** (Settings → Customers, admins): add, rename, reorder (↑ ↓), mark as the customer's or
+  your decision, require a comment, or retire reasons.
+- **Sample customers** (admins, top of the Customers page): **Load sample customers** adds 10 made-up accounts
+  plus 2 tenants, tagged Sample, covering the tricky cases (paper invoices, a landlord with tenants, a property
+  manager, a PO-number account, an HOA, two properties, a prepay customer and a lead outside the service area).
+  Their emails use example.com, so nothing reaches a real person. **Remove sample customers** deletes them all.
+- **Deleting:** admins can delete leads, sample customers and customers or properties with no history; anyone
+  else is cancelled instead, so the history is kept.
 
 ## Spray Mix Calculator
 

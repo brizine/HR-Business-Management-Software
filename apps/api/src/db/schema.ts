@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import { sql } from "drizzle-orm";
 import type { AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
 import {
   boolean,
@@ -1121,3 +1122,197 @@ export const addressCounties = pgTable("address_counties", {
   status: text("status"),
   error: text("error"),
 });
+
+/* ───────────── Customers and properties (customer system, Phase 1) ───────────── */
+
+/** Tags for customers and properties: a managed list, so the same thing isn't tagged three ways. */
+export const crmTags = pgTable(
+  "crm_tags",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    color: text("color").notNull().default("gray"),
+    description: text("description"),
+    archived: boolean("archived").notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("crm_tags_company_name_idx").on(t.companyId, sql`lower(${t.name})`)],
+);
+
+/** The cancellation drop-down: admins add, rename, reorder and retire reasons. */
+export const cancellationReasons = pgTable(
+  "cancellation_reasons",
+  {
+    id: id(),
+    companyId: companyId(),
+    label: text("label").notNull(),
+    /** "customer" or "company" (e.g. non-payment). */
+    initiatedBy: text("initiated_by").notNull().default("customer"),
+    commentRequired: boolean("comment_required").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    retired: boolean("retired").notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [index("cancellation_reasons_company_idx").on(t.companyId, t.sortOrder)],
+);
+
+export const customers = pgTable(
+  "customers",
+  {
+    id: id(),
+    companyId: companyId(),
+    /** Customer number, per company (e.g. 1001). */
+    number: integer("number").notNull(),
+    kind: text("kind").notNull().default("residential"),
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    companyName: text("company_name"),
+    email: text("email"),
+    phone: text("phone"),
+    altPhone: text("alt_phone"),
+    billingStreet: text("billing_street"),
+    billingCity: text("billing_city"),
+    billingState: text("billing_state").notNull().default("OK"),
+    billingZip: text("billing_zip"),
+    /** Any of "email", "paper", "text". */
+    delivery: text("delivery").array().notNull().default(sql`ARRAY['email']::text[]`),
+    source: text("source"),
+    poRequired: boolean("po_required").notNull().default(false),
+    notes: text("notes"),
+    /** "lead", "active" or "cancelled". */
+    status: text("status").notNull().default("active"),
+    tagIds: uuid("tag_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
+    /** Made by the sample-customer button, so they can be removed in one go. */
+    sample: boolean("sample").notNull().default(false),
+    stripeCustomerId: text("stripe_customer_id"),
+    bigcapitalCustomerId: integer("bigcapital_customer_id"),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("customers_company_number_idx").on(t.companyId, t.number),
+    index("customers_company_status_idx").on(t.companyId, t.status),
+    index("customers_tags_idx").using("gin", t.tagIds),
+  ],
+);
+
+/** Extra people on an account (spouse, property manager, accounts payable), and who gets invoices. */
+export const customerContacts = pgTable(
+  "customer_contacts",
+  {
+    id: id(),
+    companyId: companyId(),
+    customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    relation: text("relation"),
+    email: text("email"),
+    phone: text("phone"),
+    getsInvoices: boolean("gets_invoices").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("customer_contacts_customer_idx").on(t.customerId)],
+);
+
+export const properties = pgTable(
+  "properties",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name"),
+    street: text("street").notNull(),
+    city: text("city"),
+    state: text("state").notNull().default("OK"),
+    zip: text("zip"),
+    lat: doublePrecision("lat"),
+    lng: doublePrecision("lng"),
+    /** Map Code (MC); set from the pin once MC outlines exist, or by hand. */
+    mapCode: text("map_code"),
+    mapCodeManual: boolean("map_code_manual").notNull().default(false),
+    lawnSqFt: doublePrecision("lawn_sq_ft"),
+    frontSqFt: doublePrecision("front_sq_ft"),
+    backSqFt: doublePrecision("back_sq_ft"),
+    /** The saved Property Measure the lawn size came from. */
+    measurementId: uuid("measurement_id").references(() => measurements.id, { onDelete: "set null" }),
+    gateCode: text("gate_code"),
+    pets: text("pets"),
+    accessNotes: text("access_notes"),
+    notes: text("notes"),
+    /** "active" or "cancelled". */
+    status: text("status").notNull().default("active"),
+    tagIds: uuid("tag_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
+    sample: boolean("sample").notNull().default(false),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("properties_company_status_idx").on(t.companyId, t.status),
+    index("properties_company_map_code_idx").on(t.companyId, t.mapCode),
+    index("properties_tags_idx").using("gin", t.tagIds),
+  ],
+);
+
+/**
+ * Which customers are on a property and as what: one current bill-to (who's invoiced) and any
+ * residents. Ended assignments stay as history; a property's past invoices stay with the old customer.
+ */
+export const propertyAssignments = pgTable(
+  "property_assignments",
+  {
+    id: id(),
+    companyId: companyId(),
+    propertyId: uuid("property_id").notNull().references(() => properties.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+    /** "bill_to" or "resident". */
+    role: text("role").notNull(),
+    startDate: date("start_date").notNull(),
+    /** The last day; null while current. */
+    endDate: date("end_date"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("property_assignments_property_idx").on(t.propertyId),
+    index("property_assignments_customer_idx").on(t.customerId),
+    uniqueIndex("property_assignments_one_bill_to_idx").on(t.propertyId).where(sql`${t.role} = 'bill_to' and ${t.endDate} is null`),
+  ],
+);
+
+/** Each cancellation (and any reactivation) of a customer or property, for reports and win-back lists. */
+export const cancellations = pgTable(
+  "cancellations",
+  {
+    id: id(),
+    companyId: companyId(),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "cascade" }),
+    propertyId: uuid("property_id").references(() => properties.id, { onDelete: "cascade" }),
+    reasonId: uuid("reason_id").references(() => cancellationReasons.id, { onDelete: "set null" }),
+    /** The reason's wording at the time, in case it's renamed later. */
+    reasonLabel: text("reason_label").notNull(),
+    effectiveDate: date("effective_date").notNull(),
+    comment: text("comment"),
+    byId: uuid("by_id").references(() => employees.id, { onDelete: "set null" }),
+    reactivatedAt: timestamp("reactivated_at", { withTimezone: true }),
+    reactivatedById: uuid("reactivated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("cancellations_company_idx").on(t.companyId, t.effectiveDate)],
+);
+
+/** Every tag added or removed, by whom and how (hand, bulk, import, sample, automation): the feed for automations. */
+export const tagEvents = pgTable(
+  "tag_events",
+  {
+    id: id(),
+    companyId: companyId(),
+    tagId: uuid("tag_id").notNull().references(() => crmTags.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "cascade" }),
+    propertyId: uuid("property_id").references(() => properties.id, { onDelete: "cascade" }),
+    action: text("action").notNull(),
+    source: text("source").notNull().default("hand"),
+    byId: uuid("by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("tag_events_company_idx").on(t.companyId, t.createdAt)],
+);

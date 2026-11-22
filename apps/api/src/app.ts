@@ -41,6 +41,9 @@ import calendarRoutes from "./routes/calendar";
 import publicCompanyRoutes from "./routes/publicCompany";
 import sprayMixRoutes from "./routes/sprayMix";
 import measurementRoutes from "./routes/measurements";
+import customerRoutes from "./routes/customers";
+import propertyRoutes from "./routes/properties";
+import crmSettingsRoutes from "./routes/crmSettings";
 
 export interface AppOptions {
   logger?: boolean;
@@ -125,4 +128,7 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(publicCompanyRoutes, { prefix: "/public/company" });
   await app.register(sprayMixRoutes, { prefix: "/spray-mixes" });
   await app.register(measurementRoutes, { prefix: "/measurements" });
+  await app.register(customerRoutes, { prefix: "/customers" });
+  await app.register(propertyRoutes, { prefix: "/properties" });
+  await app.register(crmSettingsRoutes, { prefix: "/crm" });
 }

@@ -25,12 +25,13 @@ export function registerErrorHandler(app: FastifyInstance) {
     if (err instanceof ZodError) {
       return reply.status(400).send({ error: "Validation failed", issues: err.issues });
     }
-    const status = err.statusCode ?? 500;
-    if (status >= 500) req.log.error(err);
-    // Postgres unique violation
-    if ((err as { code?: string }).code === "23505") {
+    // Postgres unique violation (Drizzle wraps the driver's error, so look at its cause too).
+    const pgCode = (err as { code?: string }).code ?? (err as { cause?: { code?: string } }).cause?.code;
+    if (pgCode === "23505") {
       return reply.status(409).send({ error: "A record with that value already exists" });
     }
+    const status = err.statusCode ?? 500;
+    if (status >= 500) req.log.error(err);
     const code = err instanceof HttpError ? err.code : undefined;
     // Unexpected errors stay vague; an HttpError's message was written to be shown, whatever its status.
     return reply.status(status).send({ error: status >= 500 && !(err instanceof HttpError) ? "Internal server error" : err.message, ...(code ? { code } : {}) });

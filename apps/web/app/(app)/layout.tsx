@@ -9,12 +9,19 @@ import { PageLayoutRoot } from "@/components/page-layout";
 
 type NavItem = { href: string; label: string; min?: Role; area?: PermissionArea };
 type NavSection = { section: string; items: NavItem[] };
-/** The sidebar has two sides: Operations (field work, tools, fleet; customers later) and Team (people and pay). */
+/** The sidebar has two sides: Operations (customers, field tools, fleet) and Team (people and pay). */
 type Side = "operations" | "team";
 const SIDES: { key: Side; label: string }[] = [{ key: "operations", label: "Operations" }, { key: "team", label: "Team" }];
 const NAV: Record<Side, NavSection[]> = {
   operations: [
     { section: "", items: [{ href: "/reports/operations", label: "Reports", min: "manager", area: "fleet" }] },
+    {
+      section: "Customers",
+      items: [
+        { href: "/customers", label: "Customers", min: "manager", area: "customers" },
+        { href: "/properties", label: "Properties", min: "manager", area: "customers" },
+      ],
+    },
     {
       section: "Tools",
       items: [
