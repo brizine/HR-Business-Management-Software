@@ -85,9 +85,10 @@ export const INVOICE_STATUSES = ["draft", "sent", "partial", "paid", "void"] as 
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = { draft: "Draft", sent: "Unpaid", partial: "Partly paid", paid: "Paid", void: "Void" };
 
-export const PAYMENT_METHODS = ["cash", "check", "card", "ach", "other"] as const;
+/** "prepaid" = paid from a customer's prepayment. */
+export const PAYMENT_METHODS = ["cash", "check", "card", "ach", "other", "prepaid"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
-export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = { cash: "Cash", check: "Check", card: "Card", ach: "Bank (ACH)", other: "Other" };
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = { cash: "Cash", check: "Check", card: "Card", ach: "Bank (ACH)", other: "Other", prepaid: "Prepaid" };
 /** Recorded by hand in Phase 1; card and bank payments come through the portal (Stripe). */
 export const MANUAL_PAYMENT_METHODS = ["cash", "check", "other"] as const;
 
@@ -220,3 +221,67 @@ export const voidCreditSchema = z.object({ reason: z.string().trim().min(1, "Giv
 
 /** What's still owed on an invoice: the total, less payments and credits. */
 export const invoiceBalance = (i: { totalCents: number; paidCents: number; creditedCents?: number | null }) => i.totalCents - i.paidCents - (i.creditedCents ?? 0);
+
+/* ── Prepayments ── */
+
+/**
+ * A prepayment: money paid ahead (a season, some services, or any amount), with an optional
+ * discount. It pays the customer's invoices as they're sent; each invoice gets its share of the
+ * discount, so revenue by service stays accurate.
+ */
+export const PREPAY_HOW = ["cash", "check", "other", "link"] as const;
+export type PrepayHow = (typeof PREPAY_HOW)[number];
+export const PREPAY_HOW_LABELS: Record<PrepayHow, string> = { cash: "Cash (received now)", check: "Check (received now)", other: "Other (received now)", link: "Send a pay link (card or bank account)" };
+export const PREPAYMENT_STATUS_LABELS: Record<string, string> = { requested: "Waiting for payment", pending: "Bank payment clearing", open: "Paid", closed: "Closed", void: "Void" };
+
+export const prepaymentLineSchema = z.object({
+  serviceTypeId: z.string().uuid().nullable().optional(),
+  description: z.string().trim().min(1).max(200),
+  quantity: z.number().positive().max(1000),
+  unitPriceCents: z.number().int().min(0).max(10_000_000),
+});
+
+export const prepaymentSchema = z.object({
+  customerId: z.string().uuid(),
+  /** Only for this property's invoices (empty: any of the customer's invoices). */
+  propertyId: z.string().uuid().nullable().optional(),
+  /** What it covers, as the customer sees it ("2027 season: rounds 1-7"). */
+  description: z.string().trim().min(1, "Say what the prepayment covers").max(200),
+  /** The services it covers (to work out the amount); empty: the amount is entered directly. */
+  lines: z.array(prepaymentLineSchema).max(30).default([]),
+  /** Value of what it covers, before the discount (entered directly when there are no lines). */
+  coversCents: z.number().int().positive("Enter the amount").max(50_000_000),
+  discountKind: z.enum(["none", "percent", "amount"]).default("none"),
+  discountValue: z.number().min(0).max(10_000_000).default(0),
+  how: z.enum(PREPAY_HOW),
+  /** Check number or other reference (cash, check, other). */
+  reference: z.string().trim().max(60).optional().transform((v) => v || undefined),
+  note: z.string().trim().max(500).optional().transform((v) => v || undefined),
+  /** Also pay the customer's open invoices with it now (otherwise it waits for the next invoices). */
+  useNow: z.boolean().default(false),
+  /** For a pay link: send it to this address instead of the customer's. */
+  emailTo: z.string().trim().toLowerCase().email().max(254).optional().or(z.literal("").transform(() => undefined)),
+}).superRefine((v, ctx) => {
+  if (v.discountKind === "percent" && v.discountValue > 50) ctx.addIssue({ code: "custom", path: ["discountValue"], message: "A prepay discount over 50% isn't allowed" });
+  if (v.discountKind === "amount" && Math.round(v.discountValue) >= v.coversCents) ctx.addIssue({ code: "custom", path: ["discountValue"], message: "The discount must be less than the amount" });
+});
+export type PrepaymentInput = z.infer<typeof prepaymentSchema>;
+
+/** What the customer pays: what it covers, less the discount (percent, or a set amount in cents). */
+export function prepayTotals(coversCents: number, discountKind: "none" | "percent" | "amount", discountValue: number) {
+  const discountCents = discountKind === "percent" ? Math.round((coversCents * discountValue) / 100) : discountKind === "amount" ? Math.round(discountValue) : 0;
+  const d = Math.max(0, Math.min(discountCents, coversCents - 1));
+  return { coversCents, discountCents: d, amountCents: coversCents - d };
+}
+
+/** Splits part of a prepayment's value into the cash and discount that pay it, in the prepayment's proportions. */
+export function prepaySplit(valueCents: number, cashLeftCents: number, discountLeftCents: number) {
+  const total = cashLeftCents + discountLeftCents;
+  if (total <= 0 || valueCents <= 0) return { cashCents: 0, discountCents: 0 };
+  const v = Math.min(valueCents, total);
+  let discountCents = discountLeftCents > 0 ? Math.round((v * discountLeftCents) / total) : 0;
+  let cashCents = v - discountCents;
+  if (cashCents > cashLeftCents) { cashCents = cashLeftCents; discountCents = v - cashCents; }
+  if (discountCents > discountLeftCents) { discountCents = discountLeftCents; cashCents = v - discountCents; }
+  return { cashCents, discountCents };
+}

@@ -208,6 +208,34 @@ Operations → **Billing** has **Invoices** and the **Price list** (managers in 
     same invoices; taking credit off unapplies it, and voiding removes the credit note. Credit kept on the account
     shows in Bigcapital as the customer's unused credit.
   - **Customers** see their credit in the portal: on each invoice, and "credit on your account" on the home page.
+- **Prepayments:** money a customer pays ahead (a season, some services, or any amount), with an optional prepay
+  discount. On the customer's page, **Prepayments → Take a prepayment**: say what it covers (the customer sees it),
+  choose a property if it's only for one, then **work it out from services** (pick services from the price list,
+  priced for the lawn size, and how many) or **enter an amount**, and the discount (percent or dollars off). Crewdesk
+  shows what it covers, the discount and what the customer pays.
+  - **How they pay:** **cash**, **check** (with its number) or **other**, received now; or **Send a pay link**: the
+    customer gets an email with a link to pay by card or bank account (Stripe must be connected). The link works for
+    30 days; **copy** it or **email again** from the Prepayments box. Customers can also **prepay any amount** in the
+    portal, and pay a prepay offer from the office there.
+  - **Using it:** a paid prepayment pays the customer's invoices as they're sent (a property's prepayment only that
+    property's), after any credit. Each invoice gets a **Prepaid (PP-3)** payment for the cash share and, with a
+    discount, a "Prepay discount" credit for its share, so the discount is spread over the services it covers. Tick
+    **Also pay their open invoices** to use it on invoices already sent. What's left shows on the customer's page,
+    the invoice page's Billing box, and in the portal.
+  - **Voiding a prepaid payment** on an invoice puts the money (and its discount) back on the prepayment.
+  - **The customer cancels** (admins): **Take back discount** charges the full price for what was done, paid from the
+    prepayment as far as it goes (anything more shows as owed on the invoices), and no more discount is given. Then
+    **Refund the rest**: back to the card or bank account through Stripe, or record how you paid it back (a check
+    number) for cash and checks. Or leave the rest to pay future invoices. A refund made in Stripe's dashboard closes
+    it too.
+  - **Void** a pay link nobody used, or a cash or check prepayment entered by mistake (only before it has paid an
+    invoice).
+  - **Bigcapital:** the money received goes into **2400 Customer Prepayments** (from Undeposited Funds for cash and
+    checks, Card Processor Clearing for card and bank). Each invoice it pays gets a payment through **1045
+    Prepayments Applied**, a clearing account Crewdesk adds that always nets to zero, plus a journal taking the same
+    amount out of 2400, so the invoice shows paid and the income is recorded when the work is billed. The prepay
+    discount goes to 4900 as a credit note. A refund is a journal taking it back out of 2400. Ask your CPA how prepaid
+    amounts should count for taxes.
 - **Settings → Customers & billing** (admins): the **next invoice number** (at switch-over, set it to follow Service
   Autopilot's last number), your usual **terms** (due on receipt, net 7/10/15/30), **make checks payable to**, and the
   **footer** printed on every invoice, and whether a customer's credit is **used automatically** on their invoices

@@ -9,6 +9,7 @@ import { useAction, useApi } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { CustomerBilling } from "@/components/invoices";
 import { CustomerCredits } from "@/components/credits";
+import { CustomerPrepayments } from "@/components/prepayments";
 import { CancelForm, CustomerFields, PropertyFields, TagChips, customerBody, customerFormValue, propertyBody, propertyFormValue, useTags } from "@/components/customers";
 
 export default function CustomerDetail({ params }: { params: Promise<{ id: string }> }) {
@@ -107,6 +108,8 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
       </div>
 
       <CustomerBilling customerId={id} key={`billing-${creditVersion}`} />
+      <CustomerPrepayments customerId={id} onChange={() => setCreditVersion((v) => v + 1)}
+        properties={current.filter((p: any) => p.status !== "cancelled").map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", "), lawnSqFt: p.lawnSqFt }))} />
       <CustomerCredits customerId={id} onChange={() => setCreditVersion((v) => v + 1)}
         properties={current.filter((p: any) => p.status !== "cancelled").map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", ") }))} />
 

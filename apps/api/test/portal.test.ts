@@ -523,6 +523,71 @@ describe("Refunds", () => {
   });
 });
 
+describe("Prepayments online", () => {
+  it("the office sends a prepay link; the customer pays by card; it pays their next invoice", async () => {
+    sent.length = 0;
+    const r = await call("POST", "/prepayments", "office", { customerId: ID.other, description: "2027 season", coversCents: 40000, discountKind: "amount", discountValue: 2000, how: "link" });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ status: "requested", amountCents: 38000, emailedTo: email("olive") });
+    const token = r.body.payLink.split("/prepay/")[1];
+    expect(sent.find((m) => m.to === email("olive"))!.text).toContain(`/prepay/${token}`);
+    const view = await call("GET", `/prepay/${token}`, null);
+    expect(view.body.prepayment).toMatchObject({ amountCents: 38000, discountCents: 2000, status: "requested", customer: { name: "Olive Other" } });
+    const start = await call("POST", `/prepay/${token}/pay`, null);
+    expect(start.body.amountCents).toBe(38000);
+    const pi = intents.get(start.body.paymentIntentId)!;
+    expect(pi.metadata.crewdeskPrepaymentId).toBe(r.body.id);
+    pi.status = "succeeded";
+    sent.length = 0;
+    const done = await call("POST", `/prepay/${token}/confirm`, null, { paymentIntentId: pi.id });
+    expect(done.body).toMatchObject({ status: "completed", prepayment: { status: "open", methodDetail: "Visa ·· 4242", cashLeftCents: 38000 } });
+    expect(sent.find((m) => m.to === email("olive"))!.subject).toMatch(/^Prepayment received: \$380\.00/);
+    // The webhook says the same: nothing changes.
+    expect(await webhook("payment_intent.succeeded", pi.id)).toBe(200);
+    const inv = await sentInvoice(ID.other, 10000, ["paper"]);
+    const i = (await call("GET", `/invoices/${inv}`, "office")).body;
+    expect(i).toMatchObject({ status: "paid", paidCents: 9500, creditedCents: 500 });
+    ID.ppOnline = r.body.id; ID.ppPi = pi.id;
+  });
+
+  it("refunding the rest goes back to the card; a refund made in Stripe's dashboard closes it too", async () => {
+    const r = await call("POST", `/prepayments/${ID.ppOnline}/refund`, "owner", {});
+    expect(r.body).toMatchObject({ status: "closed", refundedCents: 28500 });
+    const made = [...calls].reverse().find((c) => c.method === "POST" && c.path === "/v1/refunds")!;
+    expect(made.form.get("payment_intent")).toBe(ID.ppPi);
+    expect(made.form.get("amount")).toBe("28500");
+    // Another prepayment refunded in Stripe's dashboard.
+    const pp2 = (await call("POST", "/prepayments", "office", { customerId: ID.other, description: "Fall aeration", coversCents: 9500, how: "link" })).body;
+    const token = pp2.payLink.split("/prepay/")[1];
+    const pi = intents.get((await call("POST", `/prepay/${token}/pay`, null)).body.paymentIntentId)!;
+    pi.status = "succeeded";
+    await call("POST", `/prepay/${token}/confirm`, null, { paymentIntentId: pi.id });
+    const re = addRefund(pi.id, 9500);
+    expect(await webhook("refund.created", pi.id, WEBHOOK_SECRET, re)).toBe(200);
+    const list = (await call("GET", `/prepayments?customerId=${ID.other}`, "office")).body.prepayments;
+    expect(list.find((x: any) => x.id === pp2.id)).toMatchObject({ status: "closed", refundedCents: 9500, cashLeftCents: 0 });
+  });
+
+  it("customers can prepay any amount in the portal, and see what they've prepaid", async () => {
+    const cookie = await signInPortal(email("olive"));
+    expect((await portal("POST", "/portal/prepay", cookie, { customerId: ID.pat, amountCents: 5000 })).status).toBe(404);
+    const small = await portal("POST", "/portal/prepay", cookie, { customerId: ID.other, amountCents: 100 });
+    expect(small.status).toBe(400);
+    expect(JSON.stringify(small.body)).toMatch(/smallest prepayment/);
+    const start = await portal("POST", "/portal/prepay", cookie, { customerId: ID.other, amountCents: 5000 });
+    expect(start.body).toMatchObject({ amountCents: 5000 });
+    const pi = intents.get(start.body.paymentIntentId)!;
+    pi.pmType = "us_bank_account"; pi.status = "processing";
+    const c = await portal("POST", `/portal/prepayments/${start.body.prepaymentId}/pay/confirm`, cookie, { paymentIntentId: pi.id });
+    expect(c.body).toMatchObject({ status: "pending", prepayment: { status: "pending" } });
+    pi.status = "succeeded";
+    expect(await webhook("payment_intent.succeeded", pi.id)).toBe(200);
+    const me = (await portal("GET", "/portal/me", cookie)).body;
+    expect(me.customers[0].prepaidCents).toBe(5000);
+    expect(me.prepayments.find((x: any) => x.id === start.body.prepaymentId)).toMatchObject({ status: "open", cashLeftCents: 5000, methodDetail: "Arvest Bank checking ·· 6789" });
+  });
+});
+
 describe("Disconnecting Stripe", () => {
   it("turns online payments off (pay links still show the invoice)", async () => {
     const id = await sentInvoice(ID.pat, 2000, ["paper"]);

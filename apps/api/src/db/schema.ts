@@ -1437,6 +1437,10 @@ export const invoicePayments = pgTable(
     /** "Visa ·· 4242" or "Arvest checking ·· 6789". */
     methodDetail: text("method_detail"),
     feeCents: integer("fee_cents"),
+    /** For "prepaid": the prepayment it came from. */
+    prepaymentId: uuid("prepayment_id").references(() => prepayments.id, { onDelete: "restrict" }),
+    /** For "prepaid": the Bigcapital journal moving it out of 2400 Customer Prepayments. */
+    bigcapitalJournalId: text("bigcapital_journal_id"),
     /** Refunded so far (refunds pending or done); what counts toward the invoice is amount − refunded. */
     refundedCents: integer("refunded_cents").notNull().default(0),
     bigcapitalPaymentId: text("bigcapital_payment_id"),
@@ -1468,6 +1472,64 @@ export const bigcapitalLinks = pgTable(
 
 /** One-time sign-in codes (and links) for the customer portal. Only hashes are kept. */
 /**
+ * Money a customer paid ahead (a season, some services, or any amount), with an optional discount.
+ * Held in 2400 Customer Prepayments until it pays their invoices; each invoice it pays gets its share
+ * of the discount (as a credit). What's left can stay for later invoices or be refunded.
+ */
+export const prepayments = pgTable(
+  "prepayments",
+  {
+    id: id(),
+    companyId: companyId(),
+    /** PP-1, PP-2… per company. */
+    number: integer("number").notNull(),
+    customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "restrict" }),
+    propertyId: uuid("property_id").references(() => properties.id, { onDelete: "set null" }),
+    /** What it covers, as the customer sees it. */
+    description: text("description").notNull(),
+    lines: jsonb("lines").$type<{ serviceTypeId?: string | null; description: string; quantity: number; unitPriceCents: number }[]>().notNull().default([]),
+    /** Value of what it covers; amount (what the customer pays) + discount. */
+    coversCents: integer("covers_cents").notNull(),
+    discountCents: integer("discount_cents").notNull().default(0),
+    amountCents: integer("amount_cents").notNull(),
+    /** "requested" (link sent), "pending" (bank payment clearing), "open" (paid), "closed" (rest refunded) or "void". */
+    status: text("status").notNull(),
+    /** How it was paid: "cash", "check", "other", "card" or "ach". */
+    method: text("method"),
+    methodDetail: text("method_detail"),
+    reference: text("reference"),
+    receivedOn: date("received_on"),
+    note: text("note"),
+    /** Pay its customer's open invoices too as soon as it's paid. */
+    useNow: boolean("use_now").notNull().default(false),
+    /** Cash used on invoices, discount given on them, and refunded (kept up to date from what they come from). */
+    appliedCents: integer("applied_cents").notNull().default(0),
+    appliedDiscountCents: integer("applied_discount_cents").notNull().default(0),
+    refundedCents: integer("refunded_cents").notNull().default(0),
+    /** The customer cancelled: no more discount, and the discount given was taken back. */
+    discountReversed: boolean("discount_reversed").notNull().default(false),
+    stripePaymentId: text("stripe_payment_id"),
+    feeCents: integer("fee_cents"),
+    payToken: text("pay_token"),
+    payTokenExpiresAt: timestamp("pay_token_expires_at", { withTimezone: true }),
+    bigcapitalReceiptId: text("bigcapital_receipt_id"),
+    bigcapitalRefundId: text("bigcapital_refund_id"),
+    bigcapitalRefundCents: integer("bigcapital_refund_cents").notNull().default(0),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidReason: text("void_reason"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("prepayments_customer_idx").on(t.customerId),
+    uniqueIndex("prepayments_number_idx").on(t.companyId, t.number),
+    uniqueIndex("prepayments_stripe_idx").on(t.stripePaymentId),
+    uniqueIndex("prepayments_token_idx").on(t.payToken),
+  ],
+);
+
+/**
  * Credit given to a customer (a missed service, goodwill, a billing correction, a refund written
  * off…). It lowers what they owe once it's used on invoices; what isn't used yet stays on their
  * account. Optionally for one property's invoices only.
@@ -1496,6 +1558,8 @@ export const customerCredits = pgTable(
     voidReason: text("void_reason"),
     /** The refund it writes off, when it came from "write it off" on a refund. */
     refundId: uuid("refund_id").references(() => paymentRefunds.id, { onDelete: "set null" }),
+    /** A prepayment's discount on one invoice (only ever used with that prepayment). */
+    prepaymentId: uuid("prepayment_id").references(() => prepayments.id, { onDelete: "cascade" }),
     bigcapitalCreditNoteId: text("bigcapital_credit_note_id"),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
     createdAt: createdAt(),

@@ -109,14 +109,14 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
                 {inv.payments.map((p: any) => (
                   <li key={p.id} className="stack" style={{ gap: 6 }}>
                   <div className="row" style={{ justifyContent: "space-between", opacity: p.status === "void" || p.status === "failed" || (p.refundedCents > 0 && p.refundedCents >= p.amountCents) ? 0.55 : 1 }}>
-                    <span><strong>{formatMoney(p.amountCents)}</strong> {PAYMENT_METHOD_LABELS[p.method as PaymentMethod]}{p.methodDetail ? ` (${p.methodDetail})` : ""}{p.reference ? ` #${p.reference}` : ""}
+                    <span><strong>{formatMoney(p.amountCents)}</strong> {PAYMENT_METHOD_LABELS[p.method as PaymentMethod]}{p.prepaymentNumber ? ` (PP-${p.prepaymentNumber})` : ""}{p.methodDetail ? ` (${p.methodDetail})` : ""}{p.reference ? ` #${p.reference}` : ""}
                       {p.status === "pending" && <> <span className="badge warn" title="Bank payments take about 4 business days to clear">clearing</span></>}
                       {p.status === "failed" && <> <span className="badge bad" title="The bank returned it; the invoice still owes this">failed</span></>}
                       {p.refundedCents > 0 && <> <span className="badge warn">{p.refundedCents >= p.amountCents ? "refunded" : `${formatMoney(p.refundedCents)} refunded`}</span></>}
                       {" "}<span className="muted">· {fmtDate(p.receivedOn)}{p.note ? ` · ${p.note}` : ""}{p.feeCents ? ` · Stripe fee ${formatMoney(p.feeCents)}` : ""}{p.status === "void" ? " · void" : ""}</span>
                       {inv.sync?.connected && p.status === "completed" && <PaymentBooks s={inv.sync.payments?.[p.id]} />}</span>
-                    {p.status === "completed" && (p.method === "cash" || p.method === "check" || p.method === "other") && (
-                      <button className="btn" disabled={action.busy} onClick={() => confirm("Void this payment? The invoice goes back to owing it.") && action.run(async () => { await api(`/invoices/${id}/payments/${p.id}/void`, { method: "POST" }); invoice.reload(); })}>Void payment</button>
+                    {p.status === "completed" && (p.method === "cash" || p.method === "check" || p.method === "other" || p.method === "prepaid") && (
+                      <button className="btn" disabled={action.busy} onClick={() => confirm(p.method === "prepaid" ? "Void this payment? The money (and its discount) goes back to the prepayment, and the invoice owes it again." : "Void this payment? The invoice goes back to owing it.") && action.run(async () => { await api(`/invoices/${id}/payments/${p.id}/void`, { method: "POST" }); invoice.reload(); })}>Void payment</button>
                     )}
                     {p.status === "completed" && p.stripePaymentId && p.amountCents > p.refundedCents && can("admin", "customers") && (
                       <button className="btn" onClick={() => setRefunding(refunding === p.id ? null : p.id)}>Refund</button>

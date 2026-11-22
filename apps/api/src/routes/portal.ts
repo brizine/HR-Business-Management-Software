@@ -4,7 +4,7 @@ import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { customerName, formatAddress, invoiceBalance, isInactive, isOverdue } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, creditApplications, customerContacts, customerCredits, customers, employees, invoiceLines, invoicePayments, invoices, paymentRefunds, portalCodes, properties, propertyAssignments } from "../db/schema";
+import { companies, creditApplications, customerContacts, customerCredits, customers, employees, invoiceLines, invoicePayments, invoices, paymentRefunds, portalCodes, prepayments, properties, propertyAssignments } from "../db/schema";
 import { authenticate, requireRole, WEB_CLIENT_HEADER, type AuthUser } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { WEB_URL, sendSystemEmail } from "../lib/channels";
@@ -12,7 +12,9 @@ import { randomToken, sha256 } from "../lib/crypto";
 import { companyToday } from "../lib/payRates";
 import { invoicePdf } from "../lib/invoicePdf";
 import { queueBillingSync, syncCustomer } from "../lib/billingSync";
-import { recordPaymentIntent, startInvoicePayment, stripeConfig } from "../lib/stripe";
+import { recordPaymentIntent, startInvoicePayment, startPrepaymentPayment, stripeConfig } from "../lib/stripe";
+import { cashLeft, nextPrepaymentNumber } from "../lib/prepayments";
+import { prepaymentView } from "./prepayments";
 import { companyForPdf, pdfInvoice, sendPdf } from "./invoices";
 
 /**
@@ -91,6 +93,14 @@ async function viewer(app: FastifyInstance, req: FastifyRequest): Promise<Viewer
 
 function noStaff(v: Viewer, what: string) {
   if (v.staff) throw new HttpError(403, `You're viewing as the customer, so you can't ${what} here. The customer can, from their own sign-in.`);
+}
+
+/** A prepayment the viewer may see. */
+async function viewerPrepayment(v: Viewer, id: string) {
+  if (!uuidRe.test(id)) throw new HttpError(404, "Prepayment not found");
+  const [p] = await db.select().from(prepayments).where(and(eq(prepayments.id, id), eq(prepayments.companyId, v.companyId), inArray(prepayments.customerId, v.customerIds)));
+  if (!p || p.status === "void") throw new HttpError(404, "Prepayment not found");
+  return p;
 }
 
 /** An invoice the viewer may see (sent, partial, paid or void; never a draft). */
@@ -234,7 +244,9 @@ const portalRoutes: FastifyPluginAsync = async (app) => {
       .where(and(eq(invoices.companyId, v.companyId), inArray(invoices.customerId, v.customerIds), inArray(invoices.status, ["sent", "partial", "paid"])))
       .orderBy(desc(invoices.issueDate), desc(invoices.number)).limit(200);
     const openCredit = await db.select({ customerId: customerCredits.customerId, amountCents: customerCredits.amountCents, appliedCents: customerCredits.appliedCents }).from(customerCredits)
-      .where(and(inArray(customerCredits.customerId, v.customerIds), eq(customerCredits.status, "open")));
+      .where(and(inArray(customerCredits.customerId, v.customerIds), eq(customerCredits.status, "open"), isNull(customerCredits.prepaymentId)));
+    const pps = await db.select().from(prepayments).where(and(inArray(prepayments.customerId, v.customerIds), inArray(prepayments.status, ["requested", "pending", "open", "closed"])))
+      .orderBy(desc(prepayments.createdAt)).limit(50);
     const pend = invs.length ? await db.select({ invoiceId: invoicePayments.invoiceId, cents: sql<number>`sum(${invoicePayments.amountCents})::int` }).from(invoicePayments)
       .where(and(inArray(invoicePayments.invoiceId, invs.map((i) => i.id)), eq(invoicePayments.status, "pending"))).groupBy(invoicePayments.invoiceId) : [];
     const pendingBy = new Map(pend.map((p) => [p.invoiceId, Number(p.cents)]));
@@ -260,10 +272,12 @@ const portalRoutes: FastifyPluginAsync = async (app) => {
           balanceCents: open.reduce((s, i) => s + i.balanceCents, 0),
           overdueCents: open.filter((i) => i.overdue).reduce((s, i) => s + i.balanceCents, 0),
           creditCents: openCredit.filter((x) => x.customerId === c.id).reduce((s, x) => s + x.amountCents - x.appliedCents, 0),
+          prepaidCents: pps.filter((x) => x.customerId === c.id).reduce((s, x) => s + cashLeft(x), 0),
           properties: props.filter((p) => p.customerId === c.id).map((p) => ({ id: p.id, address: formatAddress(p) })),
         };
       }),
       invoices: list,
+      prepayments: await Promise.all(pps.filter((x) => x.status !== "requested" || (x.payTokenExpiresAt && x.payTokenExpiresAt > new Date())).map((x) => prepaymentView(x))),
       paymentHistory: pays.map(({ p, number }) => ({ id: p.id, invoiceId: p.invoiceId, invoiceNumber: number, amountCents: p.amountCents, refundedCents: p.refundedCents, method: p.method, methodDetail: p.methodDetail, receivedOn: p.receivedOn, status: p.status })),
     };
   });
@@ -296,6 +310,40 @@ const portalRoutes: FastifyPluginAsync = async (app) => {
     const { paymentIntentId } = parse(z.object({ paymentIntentId: z.string().regex(/^pi_[A-Za-z0-9]+$/) }), req.body);
     const result = await recordPaymentIntent(v.companyId, paymentIntentId);
     return { ...result, invoice: await invoiceDetail(v.companyId, (await viewerInvoice(v, inv.id))) };
+  });
+
+  /** Pays a prepayment the office asked for (a prepay offer). */
+  app.post<{ Params: { id: string } }>("/prepayments/:id/pay", async (req) => {
+    const v = await viewer(app, req);
+    noStaff(v, "pay");
+    const p = await viewerPrepayment(v, req.params.id);
+    return startPrepaymentPayment(v.companyId, p.id);
+  });
+
+  app.post<{ Params: { id: string } }>("/prepayments/:id/pay/confirm", async (req) => {
+    const v = await viewer(app, req);
+    const p = await viewerPrepayment(v, req.params.id);
+    const { paymentIntentId } = parse(z.object({ paymentIntentId: z.string().regex(/^pi_[A-Za-z0-9]+$/) }), req.body);
+    const result = await recordPaymentIntent(v.companyId, paymentIntentId);
+    const [fresh] = await db.select().from(prepayments).where(eq(prepayments.id, p.id));
+    return { ...result, prepayment: await prepaymentView(fresh) };
+  });
+
+  /** A prepayment of any amount, from the customer (it pays their next invoices). */
+  app.post("/prepay", async (req) => {
+    const v = await viewer(app, req);
+    noStaff(v, "pay");
+    const body = parse(z.object({ customerId: z.string().uuid(), amountCents: z.number().int().min(500, "The smallest prepayment is $5.00").max(5_000_000) }), req.body);
+    if (!v.customerIds.includes(body.customerId)) throw new HttpError(404, "Not found");
+    if (!(await stripeConfig(v.companyId))) throw new HttpError(400, "Online payments aren't set up yet. Please call the office");
+    const p = await db.transaction(async (tx) => {
+      const [row] = await tx.insert(prepayments).values({
+        companyId: v.companyId, number: await nextPrepaymentNumber(tx, v.companyId), customerId: body.customerId, description: "Prepayment toward future services",
+        coversCents: body.amountCents, amountCents: body.amountCents, status: "requested", note: "Made in the customer portal",
+      }).returning();
+      return row;
+    });
+    return { prepaymentId: p.id, ...(await startPrepaymentPayment(v.companyId, p.id)) };
   });
 
   /** Customers can fix their phone number and billing address. */

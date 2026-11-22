@@ -28,6 +28,7 @@ export async function nextCreditNumber(tx: Tx, companyId: string) {
 }
 
 export const creditLeft = (c: Pick<Credit, "amountCents" | "appliedCents" | "status">) => (c.status === "void" ? 0 : c.amountCents - c.appliedCents);
+export const lockCustomerCredit = (tx: Tx, customerId: string) => lockCustomer(tx, customerId);
 
 async function refreshCredit(tx: Tx, creditId: string) {
   const [{ applied }] = await tx.select({ applied: sql<number>`coalesce(sum(${creditApplications.amountCents}), 0)::int` }).from(creditApplications)
@@ -37,7 +38,7 @@ async function refreshCredit(tx: Tx, creditId: string) {
 }
 
 /** What credit can still go on an invoice: what's owed, less bank payments still clearing. */
-async function roomOn(tx: Tx, inv: Invoice) {
+export async function roomOn(tx: Tx, inv: Invoice) {
   const [{ pending }] = await tx.select({ pending: sql<number>`coalesce(sum(${invoicePayments.amountCents}), 0)::int` }).from(invoicePayments)
     .where(and(eq(invoicePayments.invoiceId, inv.id), eq(invoicePayments.status, "pending")));
   return invoiceBalance(inv) - pending;
@@ -53,7 +54,7 @@ async function insertApplication(tx: Tx, c: Credit, inv: Invoice, amountCents: n
 }
 
 /** Uses a credit on one invoice: the amount given, or as much as both allow. */
-export async function applyCredit(tx: Tx, companyId: string, creditId: string, invoiceId: string, amountCents: number | undefined, by: string | null) {
+export async function applyCredit(tx: Tx, companyId: string, creditId: string, invoiceId: string, amountCents: number | undefined, by: string | null, opts: { forPrepayment?: boolean } = {}) {
   const [c0] = await tx.select().from(customerCredits).where(and(eq(customerCredits.id, creditId), eq(customerCredits.companyId, companyId)));
   if (!c0) throw new HttpError(404, "Credit not found");
   await lockCustomer(tx, c0.customerId);
@@ -61,6 +62,7 @@ export async function applyCredit(tx: Tx, companyId: string, creditId: string, i
   const [inv] = await tx.select().from(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId))).for("update");
   if (!inv) throw new HttpError(404, "Invoice not found");
   if (c.status === "void") throw new HttpError(400, "That credit was voided");
+  if (c.prepaymentId && !opts.forPrepayment) throw new HttpError(400, "That's a prepayment's discount; it's used with its prepayment");
   if (inv.customerId !== c.customerId) throw new HttpError(400, "That credit belongs to a different customer");
   if (!fits(c, inv)) throw new HttpError(400, "That credit is for a different property than this invoice");
   if (inv.status === "draft") throw new HttpError(400, "Send the invoice first; credit goes on sent invoices");
@@ -83,6 +85,8 @@ export async function autoApplyCredits(tx: Tx, companyId: string, customerId: st
   await lockCustomer(tx, customerId);
   const credits = (await tx.select().from(customerCredits)
     .where(and(eq(customerCredits.companyId, companyId), eq(customerCredits.customerId, customerId), eq(customerCredits.status, "open"),
+      // A prepayment's discount is only used with that prepayment.
+      isNull(customerCredits.prepaymentId),
       sql`${customerCredits.appliedCents} < ${customerCredits.amountCents}`, ...(o.creditIds ? [inArray(customerCredits.id, o.creditIds)] : [])))
     .orderBy(asc(customerCredits.issuedOn), asc(customerCredits.number))).filter((c) => creditLeft(c) > 0);
   if (!credits.length) return [];

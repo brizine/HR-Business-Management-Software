@@ -1,15 +1,16 @@
 import Stripe from "stripe";
-import { and, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { customerName, formatMoney } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, customers, invoicePayments, invoices, paymentRefunds } from "../db/schema";
+import { companies, customers, invoicePayments, invoices, paymentRefunds, prepayments } from "../db/schema";
 import { localDate } from "./tz";
 import { decrypt, encrypt } from "./crypto";
 import { HttpError } from "./errors";
 import { companyToday } from "./payRates";
 import { refreshInvoice } from "./invoices";
 import { emailTransport } from "./channels";
-import { queueBillingSync, syncPayment } from "./billingSync";
+import { queueBillingSync, syncCredit, syncPayment, syncPrepayment } from "./billingSync";
+import { applyPrepayments, cashLeft, closeRefunded } from "./prepayments";
 
 /**
  * Stripe for customer payments (card and US bank account). Each company has its own Stripe keys
@@ -148,6 +149,7 @@ export async function recordPaymentIntent(companyId: string, paymentIntentId: st
 }
 
 export async function applyPaymentIntent(companyId: string, pi: Stripe.PaymentIntent) {
+  if (pi.metadata?.crewdeskPrepaymentId) return applyPrepaymentIntent(companyId, pi);
   const invoiceId = pi.metadata?.crewdeskInvoiceId;
   if (!invoiceId || pi.metadata?.crewdeskCompanyId !== companyId) return { ignored: true };
   const [inv] = await db.select().from(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)));
@@ -221,9 +223,14 @@ export async function verifyWebhook(companyId: string, raw: Buffer, signature: s
  * check catches any update that didn't arrive (a missed webhook, or a server Stripe can't reach).
  */
 export async function checkPendingStripePayments(now = new Date()) {
-  const rows = await db.select({ companyId: invoicePayments.companyId, pi: invoicePayments.stripePaymentId }).from(invoicePayments)
-    .where(and(eq(invoicePayments.status, "pending"), isNotNull(invoicePayments.stripePaymentId), lt(invoicePayments.createdAt, new Date(now.getTime() - 10 * 60_000))))
-    .limit(500);
+  const rows = [
+    ...(await db.select({ companyId: invoicePayments.companyId, pi: invoicePayments.stripePaymentId }).from(invoicePayments)
+      .where(and(eq(invoicePayments.status, "pending"), isNotNull(invoicePayments.stripePaymentId), lt(invoicePayments.createdAt, new Date(now.getTime() - 10 * 60_000))))
+      .limit(500)),
+    // Prepayments paid by bank account, still clearing.
+    ...(await db.select({ companyId: prepayments.companyId, pi: prepayments.stripePaymentId }).from(prepayments)
+      .where(and(eq(prepayments.status, "pending"), isNotNull(prepayments.stripePaymentId))).limit(500)),
+  ];
   for (const r of rows) {
     try { await recordPaymentIntent(r.companyId, r.pi!); } catch (e) { console.error(`Stripe check for ${r.pi} failed:`, (e as Error).message); }
   }
@@ -243,7 +250,7 @@ export const REFUND_REASONS = ["requested_by_customer", "duplicate", "fraudulent
  */
 export async function syncRefunds(companyId: string, paymentIntentId: string) {
   const [p] = await db.select().from(invoicePayments).where(and(eq(invoicePayments.companyId, companyId), eq(invoicePayments.stripePaymentId, paymentIntentId)));
-  if (!p) return { ignored: true as const };
+  if (!p) return syncPrepaymentRefunds(companyId, paymentIntentId);
   const { stripe } = await stripeFor(companyId);
   const [co] = await db.select({ tz: companies.timezone }).from(companies).where(eq(companies.id, companyId));
   for await (const r of stripe.refunds.list({ payment_intent: paymentIntentId, limit: 100 })) {
@@ -354,4 +361,127 @@ export async function updateWebhookEvents() {
     }
   }
   return rows.length;
+}
+
+/* ── Prepayments ── */
+
+/** Starts paying a prepayment by card or bank account. */
+export async function startPrepaymentPayment(companyId: string, prepaymentId: string) {
+  const { cfg, stripe } = await stripeFor(companyId);
+  const [row] = await db.select({ p: prepayments, cust: customers }).from(prepayments).innerJoin(customers, eq(customers.id, prepayments.customerId))
+    .where(and(eq(prepayments.id, prepaymentId), eq(prepayments.companyId, companyId)));
+  if (!row) throw new HttpError(404, "Prepayment not found");
+  const { p, cust } = row;
+  if (p.status === "open" || p.status === "closed") throw new HttpError(400, "This prepayment is already paid. Thank you!");
+  if (p.status === "pending") throw new HttpError(400, "A bank payment for this prepayment is already on its way");
+  if (p.status === "void") throw new HttpError(400, "This prepayment request was cancelled. Please call the office");
+  const pi = await stripe.paymentIntents.create({
+    amount: p.amountCents, currency: "usd", customer: await stripeCustomerId(stripe, cust),
+    allowed_payment_method_types: ["card", "us_bank_account"],
+    description: `Prepayment PP-${p.number} to ${cfg.companyName}: ${p.description}`.slice(0, 900),
+    metadata: { crewdeskCompanyId: companyId, crewdeskPrepaymentId: p.id, prepaymentNumber: String(p.number) },
+  }, { idempotencyKey: `pp-${p.id}-${p.amountCents}` });
+  return { clientSecret: pi.client_secret, publishableKey: cfg.publishableKey, amountCents: p.amountCents, paymentIntentId: pi.id };
+}
+
+async function applyPrepaymentIntent(companyId: string, pi: Stripe.PaymentIntent) {
+  if (pi.metadata?.crewdeskCompanyId !== companyId) return { ignored: true };
+  const [p] = await db.select().from(prepayments).where(and(eq(prepayments.id, pi.metadata.crewdeskPrepaymentId), eq(prepayments.companyId, companyId)));
+  if (!p) return { ignored: true };
+  const next = pi.status === "succeeded" ? "open" : pi.status === "processing" ? "pending" : ["requires_payment_method", "canceled"].includes(pi.status) ? "failed" : null;
+  if (!next) return { ignored: true, prepaymentId: p.id };
+  if (p.status === "open" || p.status === "closed" || p.status === "void") return { status: p.status === "void" ? "void" : "completed", prepaymentId: p.id };
+  if (next === "failed") {
+    // A bank payment that was clearing came back: it can be paid again.
+    if (p.status === "pending") await db.update(prepayments).set({ status: "requested", note: [p.note, "A bank payment for it failed"].filter(Boolean).join(" · ") }).where(eq(prepayments.id, p.id));
+    return { status: "failed", prepaymentId: p.id };
+  }
+  const { method, detail } = describeMethod(pi.payment_method as Stripe.PaymentMethod);
+  const charge = typeof pi.latest_charge === "object" ? pi.latest_charge : null;
+  const bt = charge && typeof charge.balance_transaction === "object" ? charge.balance_transaction : null;
+  const [u] = await db.update(prepayments).set({
+    status: next, method, methodDetail: detail, stripePaymentId: pi.id, feeCents: next === "open" ? bt?.fee ?? null : null, receivedOn: await companyToday(companyId),
+  }).where(and(eq(prepayments.id, p.id), inArray(prepayments.status, ["requested", "pending"]))).returning();
+  if (!u) return { status: "completed", prepaymentId: p.id };
+  if (next === "open") {
+    queueBillingSync(() => syncPrepayment(companyId, u.id));
+    if (u.useNow) {
+      const made = await db.transaction((tx) => applyPrepayments(tx, companyId, u.customerId, { prepaymentIds: [u.id], by: null }));
+      for (const id of made.paymentIds) queueBillingSync(() => syncPayment(companyId, id));
+      for (const id of made.creditIds) queueBillingSync(() => syncCredit(companyId, id));
+    }
+    await sendPrepayReceipt(companyId, u.id).catch((e) => console.error("Prepayment receipt failed:", (e as Error).message));
+  }
+  return { status: next === "open" ? "completed" : "pending", prepaymentId: u.id };
+}
+
+/** Refunds made in Stripe's dashboard on a prepayment: the rest is refunded (closed) once nothing is left. */
+async function syncPrepaymentRefunds(companyId: string, paymentIntentId: string) {
+  const [p] = await db.select().from(prepayments).where(and(eq(prepayments.companyId, companyId), eq(prepayments.stripePaymentId, paymentIntentId)));
+  if (!p) return { ignored: true as const };
+  const { stripe } = await stripeFor(companyId);
+  let total = 0;
+  for await (const r of stripe.refunds.list({ payment_intent: paymentIntentId, limit: 100 })) if (REFUNDING.includes(r.status ?? "pending")) total += r.amount;
+  // Only what hasn't paid invoices can be refunded from it.
+  const refunded = Math.min(total, p.amountCents - p.appliedCents);
+  if (refunded !== p.refundedCents) {
+    const left = p.amountCents - p.appliedCents - refunded;
+    await db.update(prepayments).set({ refundedCents: refunded, ...(left <= 0 && p.status === "open" ? { status: "closed", closedAt: new Date() } : {}) }).where(eq(prepayments.id, p.id));
+    queueBillingSync(() => syncPrepayment(companyId, p.id));
+  }
+  return { refundedCents: refunded };
+}
+
+/**
+ * Refunds what's left of a prepayment and closes it: back to the card or bank account through
+ * Stripe, or (cash, check) recorded as paid back by the office.
+ */
+export async function refundPrepaymentRest(companyId: string, prepaymentId: string, o: { reference?: string | null }) {
+  const [p] = await db.select().from(prepayments).where(and(eq(prepayments.id, prepaymentId), eq(prepayments.companyId, companyId)));
+  if (!p) throw new HttpError(404, "Prepayment not found");
+  if (p.status !== "open") throw new HttpError(400, p.status === "closed" ? "It's already closed" : "Only a paid prepayment can be refunded");
+  const left = cashLeft(p);
+  if (left <= 0) throw new HttpError(400, "Nothing is left on this prepayment to refund");
+  let reference = o.reference || null;
+  if ((p.method === "card" || p.method === "ach") && p.stripePaymentId) {
+    const { stripe } = await stripeFor(companyId);
+    try {
+      const r = await stripe.refunds.create({ payment_intent: p.stripePaymentId, amount: left, reason: "requested_by_customer", metadata: { crewdeskCompanyId: companyId, crewdeskPrepaymentId: p.id } },
+        { idempotencyKey: `pp-refund-${p.id}-${p.refundedCents}-${left}` });
+      reference = reference ?? `Stripe refund ${r.id}`;
+    } catch (e) {
+      throw new HttpError(400, `Stripe didn't make the refund: ${(e as Error).message}`);
+    }
+  }
+  const u = await db.transaction((tx) => closeRefunded(tx, p.id, left, reference));
+  queueBillingSync(() => syncPrepayment(companyId, p.id));
+  await sendPrepayEmail(companyId, p.id, "refund", left).catch((e) => console.error("Prepayment refund email failed:", (e as Error).message));
+  return u;
+}
+
+const escHtml = (l: string) => l.replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[ch]!);
+
+async function sendPrepayReceipt(companyId: string, prepaymentId: string) {
+  return sendPrepayEmail(companyId, prepaymentId, "receipt", 0);
+}
+
+async function sendPrepayEmail(companyId: string, prepaymentId: string, kind: "receipt" | "refund", refundCents: number) {
+  const transport = emailTransport();
+  if (!transport) return;
+  const [row] = await db.select({ p: prepayments, cust: customers, co: companies }).from(prepayments).innerJoin(customers, eq(customers.id, prepayments.customerId))
+    .innerJoin(companies, eq(companies.id, prepayments.companyId)).where(eq(prepayments.id, prepaymentId));
+  const to = row?.cust.email;
+  if (!row || !to) return;
+  const { p, cust, co } = row;
+  const lines = kind === "receipt"
+    ? [`Thank you, ${customerName(cust)}.`, "", `We received your prepayment of ${formatMoney(p.amountCents)} for ${p.description}${p.methodDetail ? ` (${p.methodDetail})` : ""}.`,
+      p.discountCents ? `You saved ${formatMoney(p.discountCents)} by paying ahead.` : "", "It pays your invoices as the work is done; you can see what's left any time when you sign in to see your bills.", "", co.name]
+    : [`Hello ${customerName(cust)},`, "", `We've refunded ${formatMoney(refundCents)}, what was left of your prepayment for ${p.description}${p.methodDetail ? `, to your ${p.methodDetail}` : ""}.`,
+      p.method === "card" ? "Card refunds usually show up within 5 to 10 business days." : p.method === "ach" ? "Bank refunds usually arrive within 5 business days." : "",
+      "", `Questions? Just reply to this email${co.phone ? ` or call ${co.phone}` : ""}.`, "", co.name];
+  const kept = lines.filter((l, i) => l !== "" || lines[i - 1] !== "");
+  await transport.send({
+    to, subject: kind === "receipt" ? `Prepayment received: ${formatMoney(p.amountCents)} for ${p.description}` : `Refund of ${formatMoney(refundCents)} from ${co.name}`,
+    text: kept.join("\n"), fromName: co.name, replyTo: co.email ?? undefined, html: kept.map((l) => (l ? `<p>${escHtml(l)}</p>` : "")).join(""),
+  });
 }

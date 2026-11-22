@@ -449,6 +449,13 @@
       "when": 1795326109958,
       "tag": "0063_customer_credits",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1795328400406,
+      "tag": "0064_prepayments",
+      "breakpoints": true
     }
   ]
 }

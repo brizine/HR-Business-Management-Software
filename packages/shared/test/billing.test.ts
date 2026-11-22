@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describePricing, formatMoney, invoiceSchema, invoiceTotals, isOverdue, priceFor, serviceTypeSchema, invoiceBalance, creditSchema, billingSettingsSchema } from "../src/billing";
+import { describePricing, formatMoney, invoiceSchema, invoiceTotals, isOverdue, priceFor, serviceTypeSchema, invoiceBalance, creditSchema, billingSettingsSchema, prepayTotals, prepaySplit, prepaymentSchema } from "../src/billing";
 
 describe("price list", () => {
   it("prices flat, per 1,000 sq ft (with a minimum) and by lawn size", () => {
@@ -57,5 +57,27 @@ describe("credits", () => {
   });
   it("using credit automatically is on unless turned off", () => {
     expect(billingSettingsSchema.parse({ nextInvoiceNumber: 1001, termsDays: 0 }).autoApplyCredits).toBe(true);
+  });
+});
+
+describe("prepayments", () => {
+  it("works out the discount (percent or dollars) and what the customer pays", () => {
+    expect(prepayTotals(50000, "percent", 5)).toEqual({ coversCents: 50000, discountCents: 2500, amountCents: 47500 });
+    expect(prepayTotals(29750, "percent", 5)).toEqual({ coversCents: 29750, discountCents: 1488, amountCents: 28262 });
+    expect(prepayTotals(18500, "amount", 1500)).toEqual({ coversCents: 18500, discountCents: 1500, amountCents: 17000 });
+    expect(prepayTotals(10000, "none", 0).amountCents).toBe(10000);
+  });
+  it("splits a payment between cash and discount in the prepayment's proportions, never more than is left", () => {
+    expect(prepaySplit(10000, 47500, 2500)).toEqual({ cashCents: 9500, discountCents: 500 });
+    expect(prepaySplit(45000, 38000, 2000)).toEqual({ cashCents: 38000, discountCents: 2000 });
+    expect(prepaySplit(7000, 9500, 0)).toEqual({ cashCents: 7000, discountCents: 0 });
+    expect(prepaySplit(0, 100, 10)).toEqual({ cashCents: 0, discountCents: 0 });
+  });
+  it("checks the prepayment form", () => {
+    const base = { customerId: "11111111-1111-4111-8111-111111111111", description: "2027 season", coversCents: 50000, how: "check" as const };
+    expect(prepaymentSchema.safeParse(base).success).toBe(true);
+    expect(prepaymentSchema.safeParse({ ...base, discountKind: "percent", discountValue: 60 }).success).toBe(false);
+    expect(prepaymentSchema.safeParse({ ...base, discountKind: "amount", discountValue: 50000 }).success).toBe(false);
+    expect(prepaymentSchema.safeParse({ ...base, description: "" }).success).toBe(false);
   });
 });

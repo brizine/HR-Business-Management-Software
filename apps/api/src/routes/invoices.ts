@@ -6,7 +6,7 @@ import {
   invoiceBalance, sendInvoiceSchema, termsLabel, voidSchema, type InvoiceInput,
 } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, creditApplications, customerContacts, customerCredits, customers, invoiceLines, invoicePayments, invoices, paymentRefunds, properties, serviceTypes } from "../db/schema";
+import { companies, creditApplications, customerContacts, customerCredits, customers, invoiceLines, invoicePayments, invoices, paymentRefunds, prepayments, properties, serviceTypes } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
@@ -20,6 +20,8 @@ import { storage } from "../lib/storage";
 import { queueBillingSync, syncCredit, syncInvoice, syncInvoiceAndPayments, syncPayment, syncStatus } from "../lib/billingSync";
 import { applyCredit, autoApplyCredits, nextCreditNumber, removeInvoiceCredits } from "../lib/credits";
 import { creditsFor } from "./credits";
+import { prepaymentsFor } from "./prepayments";
+import { applyPrepayments, returnToPrepayment } from "../lib/prepayments";
 
 const AREA = "customers" as const;
 
@@ -150,7 +152,8 @@ const routes: FastifyPluginAsync = async (app) => {
     const [p] = await db.select({ paid: sql<number>`coalesce(sum(${invoicePayments.amountCents} - ${invoicePayments.refundedCents}), 0)::int` }).from(invoicePayments)
       .where(and(eq(invoicePayments.companyId, companyId), eq(invoicePayments.customerId, req.params.customerId), eq(invoicePayments.status, "completed"), sql`${invoicePayments.receivedOn} >= ${`${today.slice(0, 4)}-01-01`}`));
     const credit = await creditsFor(companyId, req.params.customerId);
-    return { outstandingCents: s.outstanding, pastDueCents: s.pastDue, draftCount: s.drafts, paidThisYearCents: p.paid, creditCents: credit.availableCents };
+    const prepaid = await prepaymentsFor(companyId, req.params.customerId);
+    return { outstandingCents: s.outstanding, pastDueCents: s.pastDue, draftCount: s.drafts, paidThisYearCents: p.paid, creditCents: credit.availableCents, prepaidCents: prepaid.prepaidCents };
   });
 
   app.get("/settings", async (req) => billingSettings(req.user.companyId));
@@ -218,7 +221,9 @@ const routes: FastifyPluginAsync = async (app) => {
     const lines = await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, row.inv.id)).orderBy(asc(invoiceLines.sortOrder));
     const paymentRows = await db.select().from(invoicePayments).where(eq(invoicePayments.invoiceId, row.inv.id)).orderBy(desc(invoicePayments.receivedOn), desc(invoicePayments.createdAt));
     const refunds = await db.select().from(paymentRefunds).where(eq(paymentRefunds.invoiceId, row.inv.id)).orderBy(asc(paymentRefunds.createdAt));
-    const payments = paymentRows.map((p) => ({ ...p, refunds: refunds.filter((r) => r.paymentId === p.id) }));
+    const ppIds = [...new Set(paymentRows.map((p) => p.prepaymentId).filter((x): x is string => !!x))];
+    const ppNumbers = new Map((ppIds.length ? await db.select({ id: prepayments.id, number: prepayments.number }).from(prepayments).where(inArray(prepayments.id, ppIds)) : []).map((x) => [x.id, x.number]));
+    const payments = paymentRows.map((p) => ({ ...p, refunds: refunds.filter((r) => r.paymentId === p.id), prepaymentNumber: p.prepaymentId ? ppNumbers.get(p.prepaymentId) ?? null : null }));
     const copies = await db.select({ name: customerContacts.name, email: customerContacts.email }).from(customerContacts)
       .where(and(eq(customerContacts.customerId, row.cust.id), eq(customerContacts.getsInvoices, true), isNotNull(customerContacts.email)));
     const today = await companyToday(companyId);
@@ -227,7 +232,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const appliedCredits = await db.select({ id: creditApplications.id, creditId: creditApplications.creditId, amountCents: creditApplications.amountCents, appliedOn: creditApplications.appliedOn, number: customerCredits.number, description: customerCredits.description, reason: customerCredits.reason })
       .from(creditApplications).innerJoin(customerCredits, eq(customerCredits.id, creditApplications.creditId))
       .where(and(eq(creditApplications.invoiceId, inv.id), isNull(creditApplications.removedAt))).orderBy(asc(creditApplications.createdAt));
-    const openCredits = (await creditsFor(companyId, cust.id)).credits.filter((c) => c.leftCents > 0);
+    const openCredits = (await creditsFor(companyId, cust.id)).credits.filter((c) => c.leftCents > 0 && !c.prepaymentId);
     return {
       ...inv, payToken: undefined, balanceCents: invoiceBalance(inv), overdue: isOverdue(inv, today), lines, payments, sync, credits: appliedCredits,
       availableCreditCents: inv.status === "sent" || inv.status === "partial" ? openCredits.filter((c) => !c.propertyId || c.propertyId === inv.propertyId).reduce((sum, c) => sum + c.leftCents, 0) : 0,
@@ -309,6 +314,9 @@ const routes: FastifyPluginAsync = async (app) => {
       const made = await db.transaction((tx) => autoApplyCredits(tx, companyId, inv.customerId, { invoiceIds: [inv.id], by: req.user.sub }));
       creditsUsed = [...new Set(made.map((a) => a.creditId))];
     }
+    // Then anything the customer prepaid pays it (with its share of any prepay discount).
+    const prepaid = await db.transaction((tx) => applyPrepayments(tx, companyId, inv.customerId, { invoiceIds: [inv.id], by: req.user.sub }));
+    creditsUsed.push(...prepaid.creditIds);
     // Each send restarts the pay link's 30 days.
     const [linked] = await db.update(invoices).set({ payToken: inv.payToken ?? randomToken(24), payTokenExpiresAt: new Date(Date.now() + PAY_LINK_DAYS * 86_400_000) })
       .where(eq(invoices.id, inv.id)).returning();
@@ -341,6 +349,7 @@ ${payUrl ? `<p><a href="${esc(payUrl)}" style="display:inline-block;background:#
     }
     if (body.via.includes("paper")) await db.update(invoices).set({ needsMailing: true }).where(eq(invoices.id, inv.id));
     queueBillingSync(() => syncInvoice(companyId, inv.id, req.user.sub));
+    for (const paymentId of prepaid.paymentIds) queueBillingSync(() => syncPayment(companyId, paymentId, req.user.sub));
     for (const creditId of creditsUsed) queueBillingSync(() => syncCredit(companyId, creditId, req.user.sub));
     const [out] = await db.select().from(invoices).where(eq(invoices.id, inv.id));
     return { ...out, status: fresh?.status ?? out.status };
@@ -372,8 +381,14 @@ ${payUrl ? `<p><a href="${esc(payUrl)}" style="display:inline-block;background:#
       if (p.status === "void") throw new HttpError(400, "That payment is already void");
       if (p.method === "card" || p.method === "ach") throw new HttpError(400, "Card and bank payments are refunded, not voided");
       await tx.update(invoicePayments).set({ status: "void", voidedAt: new Date() }).where(eq(invoicePayments.id, p.id));
-      return { invoice: await refreshInvoice(tx, req.params.id), paymentId: p.id };
-    }).then((r) => { queueBillingSync(() => syncPayment(companyId, r.paymentId, req.user.sub)); return r.invoice; });
+      // Paid from a prepayment: the money (and its discount on this invoice) goes back to the prepayment.
+      const credits = p.method === "prepaid" ? await returnToPrepayment(tx, companyId, p) : [];
+      return { invoice: await refreshInvoice(tx, req.params.id), paymentId: p.id, credits };
+    }).then((r) => {
+      queueBillingSync(() => syncPayment(companyId, r.paymentId, req.user.sub));
+      for (const id of r.credits) queueBillingSync(() => syncCredit(companyId, id, req.user.sub));
+      return r.invoice;
+    });
   });
 
   /** Refunds a card or bank payment (all or part) through Stripe. Admins only: it sends money back. */

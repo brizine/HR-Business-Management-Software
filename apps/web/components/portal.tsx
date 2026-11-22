@@ -126,10 +126,20 @@ export function PayBox({ inv, payments, start, confirm, onPaid }: {
   inv: PortalInvoice; payments: PortalPayments;
   start: () => Promise<Started>; confirm: (paymentIntentId: string) => Promise<Confirmed>; onPaid: (inv: PortalInvoice) => void;
 }) {
+  const due = inv.balanceCents - inv.pendingCents;
+  return <StripePay payable={payments.enabled && inv.status !== "paid" && inv.status !== "void" && due > 0} dueCents={due} payments={payments}
+    start={start} confirm={confirm} onConfirmed={(r) => r?.invoice && onPaid(r.invoice)} />;
+}
+
+/** Stripe's card / bank form for any amount: `start` makes the payment, `confirm` tells Crewdesk how it went. */
+export function StripePay({ payable, dueCents, payments, start, confirm, onConfirmed }: {
+  payable: boolean; dueCents: number; payments: PortalPayments;
+  start: () => Promise<Started>; confirm: (paymentIntentId: string) => Promise<any>; onConfirmed: (result: any) => void;
+}) {
   const [phase, setPhase] = useState<"idle" | "loading" | "form" | "paying" | "done">("idle");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [amount, setAmount] = useState(inv.balanceCents);
+  const [amount, setAmount] = useState(dueCents);
   const box = useRef<HTMLDivElement>(null);
   const s = useRef<{ stripe: Stripe; elements: StripeElements } | null>(null);
   const pending = useRef<{ stripe: Stripe; elements: StripeElements } | null>(null);
@@ -141,7 +151,7 @@ export function PayBox({ inv, payments, start, confirm, onPaid }: {
     if (!pi) return;
     url.searchParams.delete("payment_intent"); url.searchParams.delete("payment_intent_client_secret"); url.searchParams.delete("redirect_status");
     window.history.replaceState(window.history.state, "", url.pathname + url.search);
-    confirm(pi).then((r) => { onPaid(r.invoice); setMessage(RESULT[r.status === "completed" ? "succeeded" : r.status === "pending" ? "processing" : ""] ?? null); setPhase("done"); }, (e) => setError((e as Error).message));
+    confirm(pi).then((r) => { onConfirmed(r); setMessage(RESULT[r.status === "completed" ? "succeeded" : r.status === "pending" ? "processing" : ""] ?? null); setPhase("done"); }, (e) => setError((e as Error).message));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Show Stripe's form once its box is on the page.
@@ -154,7 +164,7 @@ export function PayBox({ inv, payments, start, confirm, onPaid }: {
   }, [phase]);
 
   // Nothing to pay (but keep the thank-you message showing once they've paid).
-  if (phase !== "done" && !message && (!payments.enabled || inv.status === "paid" || inv.status === "void" || inv.balanceCents <= 0 || inv.pendingCents >= inv.balanceCents)) return null;
+  if (phase !== "done" && !message && (!payments.enabled || !payable)) return null;
 
   const begin = async () => {
     setError(null); setPhase("loading");
@@ -185,8 +195,7 @@ export function PayBox({ inv, payments, start, confirm, onPaid }: {
     const { error: err, paymentIntent } = result;
     if (err) { setError(err.message ?? "The payment didn't go through."); setPhase("form"); return; }
     try {
-      const r = await confirm(paymentIntent!.id);
-      onPaid(r.invoice);
+      onConfirmed(await confirm(paymentIntent!.id));
     } catch { /* the webhook records it */ }
     setMessage(RESULT[paymentIntent!.status] ?? "Thank you! We're processing your payment.");
     setPhase("done");
@@ -198,7 +207,7 @@ export function PayBox({ inv, payments, start, confirm, onPaid }: {
       {phase === "done" ? <p className="pt-note ok" role="status">{message}</p> : (
         <>
           {phase === "idle" || phase === "loading" ? (
-            <button className="pt-btn primary big" disabled={phase === "loading"} onClick={begin}>{phase === "loading" ? "Loading…" : `Pay ${formatMoney(inv.balanceCents - inv.pendingCents)}`}</button>
+            <button className="pt-btn primary big" disabled={phase === "loading"} onClick={begin}>{phase === "loading" ? "Loading…" : `Pay ${formatMoney(dueCents)}`}</button>
           ) : (
             <>
               <h2 className="pt-h2">Pay {formatMoney(amount)}</h2>

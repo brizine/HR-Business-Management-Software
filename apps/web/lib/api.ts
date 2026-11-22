@@ -39,7 +39,7 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
     const data = await res.json().catch(() => ({}));
     // The session ended (signed out everywhere, password changed, account disabled): back to sign-in.
     // (Not for the customer portal and pay links, which have their own sign-in.)
-    if (res.status === 401 && !init.token && typeof window !== "undefined" && !/^\/(auth|portal|pay)\//.test(path)) {
+    if (res.status === 401 && !init.token && typeof window !== "undefined" && !/^\/(auth|portal|pay|prepay)\//.test(path)) {
       window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
     }
     const detail = data.issues?.map((i: { path: string[]; message: string }) => `${i.path.join(".")}: ${i.message}`).join("; ");

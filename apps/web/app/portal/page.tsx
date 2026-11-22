@@ -1,17 +1,18 @@
 "use client";
 import Link from "next/link";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { formatMoney } from "@crewdesk/shared";
 import { ApiError, api } from "@/lib/api";
-import { PortalFrame, SignOut, StaffBanner, StatusPill, longDate, methodText, portalApi, type PortalCompany, type PortalPayment } from "@/components/portal";
+import { PortalFrame, SignOut, StaffBanner, StatusPill, StripePay, longDate, methodText, portalApi, type PortalCompany, type PortalPayment, type PortalPayments } from "@/components/portal";
 
 type Me = {
   company: PortalCompany; payments: { enabled: boolean; testMode?: boolean };
   viewer: { email: string; staff: boolean };
-  customers: { id: string; number: number; name: string; email: string | null; phone: string | null; billing: { street: string | null; city: string | null; state: string | null; zip: string | null }; balanceCents: number; overdueCents: number; creditCents: number; properties: { id: string; address: string }[] }[];
+  customers: { id: string; number: number; name: string; email: string | null; phone: string | null; billing: { street: string | null; city: string | null; state: string | null; zip: string | null }; balanceCents: number; overdueCents: number; creditCents: number; prepaidCents: number; properties: { id: string; address: string }[] }[];
   invoices: { id: string; number: number; customerId: string; status: string; issueDate: string; dueDate: string; totalCents: number; paidCents: number; balanceCents: number; pendingCents: number; overdue: boolean; serviceAddress: string | null }[];
   paymentHistory: PortalPayment[];
+  prepayments: { id: string; number: number; description: string; amountCents: number; discountCents: number; status: string; receivedOn: string | null; methodDetail: string | null; cashLeftCents: number; customer: { id: string } }[];
 };
 
 /** The customer portal: sign in with an emailed code, then see invoices, balance and payments. */
@@ -85,6 +86,7 @@ function Home({ me, reload }: { me: Me; reload: () => void }) {
                 <div className="pt-amount">{formatMoney(cust.balanceCents)}</div>
                 <div className="pt-sub">{cust.balanceCents <= 0 ? "You're all paid up. Thank you!" : cust.overdueCents > 0 ? <span className="pt-bad">{formatMoney(cust.overdueCents)} is past due</span> : "Current balance"}</div>
                 {cust.creditCents > 0 && <div className="pt-sub pt-credit">{formatMoney(cust.creditCents)} credit on your account, used on your next invoice</div>}
+                {cust.prepaidCents > 0 && <div className="pt-sub pt-credit">{formatMoney(cust.prepaidCents)} prepaid, used on your next invoices</div>}
               </div>
             </div>
             <h2 className="pt-h2">{open.length ? "Invoices to pay" : "No open invoices"}</h2>
@@ -119,6 +121,7 @@ function Home({ me, reload }: { me: Me; reload: () => void }) {
                 )}
               </>
             )}
+            <Prepayments me={me} customerId={cust.id} staff={staff} onPaid={reload} />
             <Details cust={cust} staff={staff} onSaved={reload} />
           </section>
         );
@@ -137,6 +140,74 @@ function Home({ me, reload }: { me: Me; reload: () => void }) {
         </section>
       )}
     </PortalFrame>
+  );
+}
+
+/** Prepayments: what's prepaid, offers from the office to pay, and prepaying any amount. */
+function Prepayments({ me, customerId, staff, onPaid }: { me: Me; customerId: string; staff: boolean; onPaid: () => void }) {
+  const mine = me.prepayments.filter((p) => p.customer.id === customerId);
+  const [paying, setPaying] = useState<string | null>(null);
+  const [own, setOwn] = useState(false);
+  const [amount, setAmount] = useState("");
+  const created = useRef<string | null>(null);
+  const online = me.payments.enabled;
+  if (!mine.length && !online) return null;
+  const pays = me.payments as PortalPayments;
+  const cents = Math.round(Number(amount) * 100);
+  return (
+    <>
+      <h2 className="pt-h2">Prepayments</h2>
+      {mine.length > 0 && (
+        <ul className="pt-list">
+          {mine.map((p) => (
+            <li key={p.id}>
+              <div className="pt-row static">
+                <span>
+                  <strong>{p.description}</strong> <span className="pt-muted">· PP-{p.number}</span>
+                  <span className="pt-muted block">
+                    {p.status === "requested" ? <>Offer: {formatMoney(p.amountCents)}{p.discountCents ? ` (you save ${formatMoney(p.discountCents)})` : ""}</>
+                      : p.status === "pending" ? "Bank payment clearing"
+                      : <>Paid {p.receivedOn ? longDate(p.receivedOn) : ""}{p.methodDetail ? ` · ${p.methodDetail}` : ""}</>}
+                  </span>
+                </span>
+                <span className="pt-right">
+                  {p.status === "open" ? <><strong>{formatMoney(p.cashLeftCents)}</strong><span className="pt-muted block">left of {formatMoney(p.amountCents)}</span></>
+                    : p.status === "closed" ? <span className="pt-pill gray">Closed</span>
+                    : <strong>{formatMoney(p.amountCents)}</strong>}
+                  {p.status === "requested" && online && !staff && paying !== p.id && <button className="pt-btn primary small" onClick={() => setPaying(p.id)}>Pay</button>}
+                </span>
+              </div>
+              {paying === p.id && (
+                <div style={{ padding: "0 14px 12px" }}>
+                  <StripePay payable dueCents={p.amountCents} payments={pays}
+                    start={() => api(`/portal/prepayments/${p.id}/pay`, { method: "POST" })}
+                    confirm={(paymentIntentId) => api(`/portal/prepayments/${p.id}/pay/confirm`, { body: { paymentIntentId } })}
+                    onConfirmed={() => onPaid()} />
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {online && !staff && (
+        <div className="pt-card">
+          {!own ? (
+            <button className="pt-link" style={{ margin: 0 }} onClick={() => setOwn(true)}>Prepay toward future services</button>
+          ) : (
+            <>
+              <p className="pt-muted" style={{ marginTop: 0 }}>Pay ahead any amount; it pays your next invoices as the work is done.</p>
+              <label className="pt-field">Amount ($)<input inputMode="decimal" value={amount} onChange={(e) => { setAmount(e.target.value); created.current = null; }} placeholder="100.00" /></label>
+              {cents >= 500 && (
+                <StripePay key={cents} payable dueCents={cents} payments={pays}
+                  start={async () => { const r = await api<any>("/portal/prepay", { body: { customerId, amountCents: cents } }); created.current = r.prepaymentId; return r; }}
+                  confirm={(paymentIntentId) => api(`/portal/prepayments/${created.current}/pay/confirm`, { body: { paymentIntentId } })}
+                  onConfirmed={() => onPaid()} />
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 

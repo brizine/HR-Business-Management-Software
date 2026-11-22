@@ -28,7 +28,7 @@ export async function creditsFor(companyId: string, customerId: string) {
     applications: apps.filter((x) => x.a.creditId === c.id).map((x) => ({ id: x.a.id, invoiceId: x.a.invoiceId, invoiceNumber: x.number, amountCents: x.a.amountCents, appliedOn: x.a.appliedOn })),
     books: (() => { const p = posts.find((x) => x.sourceId === c.id); return p ? { status: p.status, error: p.error } : null; })(),
   }));
-  return { credits, availableCents: credits.reduce((s, c) => s + c.leftCents, 0) };
+  return { credits, availableCents: credits.filter((c) => !c.prepaymentId).reduce((s, c) => s + c.leftCents, 0) };
 }
 
 /** Customer credits: add, use on invoices, take off, void. Managers in Customers & billing. */

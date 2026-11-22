@@ -162,7 +162,7 @@ export function bigcapital(baseUrl: string, apiKey: string, timeoutMs = 15_000) 
     },
 
     /** A published manual journal entry (debits must equal credits). */
-    async createJournal(j: { date: string; reference: string; description: string; lines: { accountId: number; debitCents?: number; creditCents?: number; note?: string }[] }) {
+    async createJournal(j: { date: string; reference: string; description: string; lines: { accountId: number; debitCents?: number; creditCents?: number; note?: string; contactId?: number }[] }) {
       const debit = j.lines.reduce((s, l) => s + (l.debitCents ?? 0), 0);
       const credit = j.lines.reduce((s, l) => s + (l.creditCents ?? 0), 0);
       if (debit !== credit || !debit) throw new BigcapitalError("The journal entry doesn't balance");
@@ -177,9 +177,13 @@ export function bigcapital(baseUrl: string, apiKey: string, timeoutMs = 15_000) 
           ...(l.debitCents ? { debit: dollars(l.debitCents) } : {}),
           ...(l.creditCents ? { credit: dollars(l.creditCents) } : {}),
           ...(l.note ? { note: l.note } : {}),
+          ...(l.contactId ? { contactId: l.contactId } : {}),
         })),
       });
       return idOf(data);
+    },
+    async deleteJournal(id: string) {
+      return call("DELETE", `/manual-journals/${id}`);
     },
 
     /** A published expense paid from `paymentAccountId`. */
