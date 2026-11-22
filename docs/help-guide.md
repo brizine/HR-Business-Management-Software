@@ -17,10 +17,19 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   the middle (click it or press **Ctrl+K**, **⌘K** on a Mac); **Clocked out** / **Clocked in** (click to clock
   in or out after a quick "are you sure?"; it shows how long you've been on and follows your company's location
   rules like the Time Clock page); the **Notifications** bell; **+ New**; and your initials.
-- **Search:** click it before typing for quick links (Customers, Team, Shifts and Account settings). Type a name,
-  address, phone, customer number, asset or page and the matches drop down under the box, grouped (Customers,
-  Properties, People, Fleet, Pages). **» See all customers…** opens the Customers list already searching for what
-  you typed. Arrow keys and Enter work too; Esc closes it.
+- **Search:** click it before typing for quick links (Customers, Team, Shifts and Account settings). Then type and
+  the matches drop down under the box, grouped:
+  - **Customers** (name, email, phone or customer number) and **Properties** (street, property name or ZIP);
+    **» See all customers…** opens the Customers list already searching for what you typed.
+  - **Invoices** by number (**1043**, **#1043** or **inv 1043**) or PO number, with the customer, total and status.
+  - **Payments** by check or reference number (**4417** finds "Check 4417", the invoice it paid and who paid it).
+  - **Price list** services by name.
+  - **People** by name, **Fleet** assets by name, make, model, plate or VIN, and **Repair orders** by number
+    (**RO 12**) or title. Opening a repair order shows it on the Repair Orders page, even if it's completed.
+  - **Pages** you can open, by name.
+
+  Customers, properties, invoices, payments and the price list only show for people with Customers & billing
+  access. Arrow keys and Enter work too; Esc closes it.
 - **Notifications bell:** the red number is unread items. Click it to see your new notifications; click one to
   open what it's about (it's marked read). **Mark all as read** clears them; **View all** opens the full list.
 - **+ New:** everything you can add, in columns like Homeworks: **Team & Resources** (Employee, Time off request,
@@ -32,8 +41,13 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   you're on (in bold), such as **Jane Example / Invoice 1043 / Price list / Invoices**. Click one to go back to
   it. It shows your last three pages before this one; opening a page that's already in the trail moves it to the
   end. The trail is yours alone, kept in this browser (the test company has its own).
+- **Light or dark mode:** at the bottom of the left menu, like Homeworks. With the menu open there are three icons:
+  sun (**Light**), moon (**Dark**) and screen (**Auto**, which follows your phone or computer's own setting and
+  switches with it). With the menu narrow, click the button under Help and pick one. Crewdesk remembers your
+  choice in that browser (other people and other computers keep their own). The customer portal follows the
+  customer's device.
 - **Left menu:** one icon per group. Point at (or click) a group to see its pages; groups with one page open
-  straight away. **Company Wiki**, **Settings** and **Help** are at the bottom. The top bar's menu button widens
+  straight away. **Company Wiki**, **Settings**, **Help** and light or dark mode are at the bottom. The top bar's menu button widens
   the menu to list every page under its group, with your company logo on top (click it again to narrow it);
   Crewdesk remembers your choice on that computer.
 - **Operations:** **Customers** (Customers, Properties), **Field** (Property Measure, Spray Mix Calculator),

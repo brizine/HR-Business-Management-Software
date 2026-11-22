@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { WORK_ORDER_STATUSES } from "@crewdesk/shared";
 import { api, fmtDate, money } from "@/lib/api";
@@ -94,12 +94,15 @@ function WorkOrders() {
   const { me, can } = useAuth();
   const params = useSearchParams();
   const highlight = params.get("highlight");
-  const [status, setStatus] = useState("active");
+  const [status, setStatus] = useState(highlight ? "all" : "active");
   const [mine, setMine] = useState(params.get("mine") === "true");
   const list = useApi<any[]>(`/work-orders?status=${status === "all" ? "" : status}${mine ? "&mine=true" : ""}`);
   const assets = useApi<any[]>("/assets");
   const employees = useApi<any[]>("/employees");
   const [open, setOpen] = useState<string | null>(highlight);
+  // Opened from search (?highlight=…): show that repair order, whatever its status, and scroll to it.
+  useEffect(() => { if (highlight) { setOpen(highlight); setStatus("all"); } }, [highlight]);
+  useEffect(() => { if (highlight && list.data) document.getElementById(`wo-${highlight}`)?.scrollIntoView({ block: "center" }); }, [highlight, list.data]);
   const [creating, setCreating] = useState(false);
   useNewForm(() => setCreating(true));
   const [newAsset, setNewAsset] = useState("");
@@ -207,7 +210,7 @@ function WorkOrders() {
             <tbody>{rows.map(({ workOrder: w, assetName, assignee, assetMeter, due }) => {
               const editable = can("manager", "fleet") || w.assignedToId === me?.user.id;
               return [
-                <tr key={w.id} onClick={() => editable && setOpen(open === w.id ? null : w.id)} style={{ cursor: editable ? "pointer" : undefined, background: open === w.id ? "var(--info-bg)" : undefined }}>
+                <tr key={w.id} id={`wo-${w.id}`} onClick={() => editable && setOpen(open === w.id ? null : w.id)} style={{ cursor: editable ? "pointer" : undefined, background: open === w.id ? "var(--info-bg)" : undefined }}>
                   <td>{w.number}</td>
                   <td><strong>{w.title}</strong></td>
                   <td>{assetName}</td>

@@ -19,7 +19,7 @@
   --radius: 10px;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0d1117;
     --surface: #161b22;
     --border: #2b323c;
@@ -37,6 +37,27 @@
     --stripe: #3d3510;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --border: #2b323c;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --primary: #4c8dff;
+  --sidebar: #0a0d12;
+  --ok-bg: #11301f;
+  --ok: #4ad295;
+  --warn-bg: #3a2a07;
+  --warn: #f0b949;
+  --bad-bg: #3d1210;
+  --bad: #ff8a80;
+  --info-bg: #14233d;
+  --stripe: #3d3510;
+}
+/* Native controls (date pickers, checkboxes, scrollbars) match the theme too. */
+:root { color-scheme: light dark; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body {
@@ -447,7 +468,12 @@ tr.openrow td { background: var(--bg); }
 .pp-payday { position: absolute; top: 1px; right: 4px; font-size: 10px; font-weight: 700; color: #15803d; }
 .pp-day.selected .pp-payday { color: #fff; }
 .pp-payday-inline { font-weight: 700; color: #15803d; }
-@media (prefers-color-scheme: dark) { .pp-day.pp-a { background: rgba(96, 165, 250, .16); } .pp-day.pp-b { background: rgba(52, 211, 153, .18); } .pp-payday, .pp-payday-inline { color: #4ade80; } }
+@media (prefers-color-scheme: dark) { :where(:root:not([data-theme="light"])) .pp-day.pp-a { background: rgba(96, 165, 250, .16); }
+:where(:root:not([data-theme="light"])) .pp-day.pp-b { background: rgba(52, 211, 153, .18); }
+:where(:root:not([data-theme="light"])) .pp-payday, :where(:root:not([data-theme="light"])) .pp-payday-inline { color: #4ade80; } }
+:where(:root[data-theme="dark"]) .pp-day.pp-a { background: rgba(96, 165, 250, .16); }
+:where(:root[data-theme="dark"]) .pp-day.pp-b { background: rgba(52, 211, 153, .18); }
+:where(:root[data-theme="dark"]) .pp-payday, :where(:root[data-theme="dark"]) .pp-payday-inline { color: #4ade80; }
 .picker-right .payperiod-pop { left: auto; right: 0; }
 /* Reviews & discipline */
 .record-table tr.open td { background: var(--info-bg); }
@@ -485,12 +511,17 @@ tr.openrow td { background: var(--bg); }
 .att-c-green { color: #15803d; } .att-c-yellow { color: #a16207; } .att-c-red { color: #b91c1c; } .att-c-blue { color: #1d4ed8; }
 .att-editor { max-width: 420px; }
 @media (prefers-color-scheme: dark) {
-  .att-green { background: #14532d; border-color: #166534; color: #dcfce7; }
-  .att-yellow { background: #713f12; border-color: #854d0e; color: #fef9c3; }
-  .att-red { background: #7f1d1d; border-color: #991b1b; color: #fee2e2; }
-  .att-blue { background: #1e3a8a; border-color: #1d4ed8; color: #dbeafe; }
-  .att-grey { background: #374151; border-color: #4b5563; color: #f3f4f6; }
+  :where(:root:not([data-theme="light"])) .att-green { background: #14532d; border-color: #166534; color: #dcfce7; }
+  :where(:root:not([data-theme="light"])) .att-yellow { background: #713f12; border-color: #854d0e; color: #fef9c3; }
+  :where(:root:not([data-theme="light"])) .att-red { background: #7f1d1d; border-color: #991b1b; color: #fee2e2; }
+  :where(:root:not([data-theme="light"])) .att-blue { background: #1e3a8a; border-color: #1d4ed8; color: #dbeafe; }
+  :where(:root:not([data-theme="light"])) .att-grey { background: #374151; border-color: #4b5563; color: #f3f4f6; }
 }
+:where(:root[data-theme="dark"]) .att-green { background: #14532d; border-color: #166534; color: #dcfce7; }
+:where(:root[data-theme="dark"]) .att-yellow { background: #713f12; border-color: #854d0e; color: #fef9c3; }
+:where(:root[data-theme="dark"]) .att-red { background: #7f1d1d; border-color: #991b1b; color: #fee2e2; }
+:where(:root[data-theme="dark"]) .att-blue { background: #1e3a8a; border-color: #1d4ed8; color: #dbeafe; }
+:where(:root[data-theme="dark"]) .att-grey { background: #374151; border-color: #4b5563; color: #f3f4f6; }
 .att-legend i.att-green { background: #4ade80; border-color: #16a34a; }
 .att-legend i.att-yellow { background: #facc15; border-color: #ca8a04; }
 .att-legend i.att-red { background: #f87171; border-color: #dc2626; }
@@ -832,6 +863,16 @@ kbd { font: 11px ui-monospace, monospace; padding: 1px 6px; border-radius: 4px; 
 .new-col button svg { color: var(--muted); flex-shrink: 0; }
 .new-col button:hover, .new-col button:focus-visible { background: var(--info-bg); }
 .topbar-menu-list .menu-danger { display: flex; align-items: center; gap: 8px; color: var(--bad); border-top: 1px solid var(--border); border-radius: 0 0 6px 6px; margin-top: 4px; padding-top: 9px; }
+/* Light / dark / auto at the bottom of the menu */
+.theme-switch { display: flex; gap: 2px; align-self: center; margin: 8px 0 2px; padding: 3px; border-radius: 999px; background: rgba(255,255,255,.07); }
+.theme-switch button { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 28px; border: 0; border-radius: 999px; background: transparent;
+  color: var(--sidebar-text); cursor: pointer; }
+.theme-switch button:hover { background: rgba(255,255,255,.08); color: #fff; }
+.theme-switch button[aria-checked="true"] { background: rgba(255,255,255,.18); color: #fff; }
+.rail-flyout.up { top: auto; bottom: 0; }
+.rail-flyout .theme-option { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: inherit; cursor: pointer; text-align: left; }
+.rail-flyout .theme-option:hover { background: var(--info-bg); }
+.rail-flyout .theme-option[aria-checked="true"] { color: var(--primary); font-weight: 600; }
 /* Company logo at the top of the expanded menu */
 .rail-logo { display: flex; justify-content: center; padding: 4px 8px 12px; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,.08); }
 .rail-logo img { max-width: 100%; max-height: 52px; object-fit: contain; }
@@ -887,7 +928,8 @@ dl.facts.totals dd { min-width: 90px; font-variant-numeric: tabular-nums; }
 
 /* ---------- Customer portal and pay links (customer-facing) ---------- */
 :root { --pt-accent: #1f7a3a; --pt-accent-ink: #ffffff; }
-@media (prefers-color-scheme: dark) { :root { --pt-accent: #3fae64; --pt-accent-ink: #06140b; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --pt-accent: #3fae64; --pt-accent-ink: #06140b; } }
+:root[data-theme="dark"] { --pt-accent: #3fae64; --pt-accent-ink: #06140b; }
 .pt-page { min-height: 100vh; background: var(--bg); color: var(--text); display: flex; flex-direction: column; }
 .pt-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
 .pt-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }

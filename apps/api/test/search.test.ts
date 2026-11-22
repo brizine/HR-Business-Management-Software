@@ -48,4 +48,36 @@ describe("search", () => {
     const r = await call("GET", "/search?q=prairie", "tech");
     expect(r.body.results.map((h: { kind: string }) => h.kind)).toEqual(["asset"]);
   });
+
+  it("finds invoices by number or PO, payments by check number, services and repair orders", async () => {
+    const pm = (await call("GET", "/search?q=prairie", "owner")).body.results.find((h: { kind: string }) => h.kind === "customer");
+    const inv = await call("POST", "/invoices", "owner", { customerId: pm.id, poNumber: "PO-55321", lines: [{ description: "Spring cleanup", quantity: 1, unitPriceCents: 25000 }] });
+    expect(inv.status).toBe(200);
+    // A draft has no number yet, but its PO finds it.
+    expect((await call("GET", "/search?q=55321", "owner")).body.results).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "invoice", title: "Draft invoice", sub: expect.stringContaining("PO PO-55321"), href: `/invoices/${inv.body.id}` }),
+    ]));
+    const sent = await call("POST", `/invoices/${inv.body.id}/send`, "owner", { via: ["paper"] });
+    const n = sent.body.number as number;
+    for (const q of [String(n), `%23${n}`, `inv%20${n}`, `Invoice%20%23${n}`]) {
+      const hit = (await call("GET", `/search?q=${q}`, "owner")).body.results.find((h: { kind: string }) => h.kind === "invoice");
+      expect(hit, q).toMatchObject({ title: `Invoice ${n}`, sub: "Prairie Property Management · $250.00 · sent · PO PO-55321" });
+    }
+    expect((await call("POST", `/invoices/${inv.body.id}/payments`, "owner", { amountCents: 10000, method: "check", reference: "88417" })).status).toBe(200);
+    expect((await call("GET", "/search?q=8841", "owner")).body.results.find((h: { kind: string }) => h.kind === "payment"))
+      .toMatchObject({ title: "Check 88417", sub: `$100.00 · Invoice ${n} · Prairie Property Management`, href: `/invoices/${inv.body.id}` });
+
+    await call("POST", "/service-types", "owner", { name: "Grub control round", pricing: "flat", priceCents: 6500 });
+    expect((await call("GET", "/search?q=grub", "owner")).body.results.find((h: { kind: string }) => h.kind === "service")).toMatchObject({ title: "Grub control round", href: "/price-list" });
+
+    const truck = (await call("GET", "/search?q=prairie%20truck", "owner")).body.results.find((h: { kind: string }) => h.kind === "asset");
+    const wo = await call("POST", "/work-orders", "owner", { assetId: truck.id, title: "Replace hydraulic hose", priority: "high" });
+    const woHit = { kind: "workOrder", title: `#${wo.body.number} Replace hydraulic hose`, sub: "Prairie Truck · open", href: `/work-orders?highlight=${wo.body.id}` };
+    expect((await call("GET", "/search?q=hydraulic", "owner")).body.results).toContainEqual(expect.objectContaining(woHit));
+    // Techs find repair orders too, but no billing records.
+    const tech = (await call("GET", "/search?q=hydraulic", "tech")).body.results;
+    expect(tech).toContainEqual(expect.objectContaining(woHit));
+    expect((await call("GET", `/search?q=${n}`, "tech")).body.results.filter((h: { kind: string }) => ["invoice", "payment", "service", "customer"].includes(h.kind))).toEqual([]);
+    expect((await call("GET", "/search?q=8841", "tech")).body.results).toEqual([]);
+  });
 });

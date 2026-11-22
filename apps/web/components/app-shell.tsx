@@ -10,6 +10,7 @@ import { NAV, NEW_MENU, SIDES, pathMatches, type NavGroup, type NavItem, type Si
 import { Icon } from "@/components/icons";
 import { useClockPunch } from "@/components/clock-card";
 import { TestBadge, backToRealCompany } from "@/components/test-company";
+import { THEME_CHOICES, setTheme, useTheme } from "@/lib/theme";
 
 /** Closes a pop-up when you click outside it or press Escape. */
 function useDismiss(open: boolean, close: () => void, ref: React.RefObject<HTMLElement | null>) {
@@ -227,7 +228,10 @@ function ProfileMenu() {
 }
 
 type Hit = { kind: string; id: string; title: string; sub: string | null; href: string };
-const KIND_LABELS: Record<string, string> = { page: "Pages", customer: "Customers", property: "Properties", employee: "People", asset: "Fleet", quick: "Quick links", account: "Account", more: "" };
+const KIND_LABELS: Record<string, string> = {
+  page: "Pages", customer: "Customers", property: "Properties", invoice: "Invoices", payment: "Payments", service: "Price list",
+  employee: "People", asset: "Fleet", workOrder: "Repair orders", quick: "Quick links", account: "Account",
+};
 
 /**
  * What search finds for what you've typed: customers, properties, people and fleet (from the server),
@@ -277,7 +281,7 @@ function ResultList({ list, active, setActive, go, empty }: { list: Hit[]; activ
   return (
     <>
       {list.map((h, i) => {
-        const heading = h.kind !== lastKind && KIND_LABELS[h.kind] !== "" ? <div className="menu-heading" key={`h-${h.kind}`}>{KIND_LABELS[h.kind] ?? h.kind}</div> : null;
+        const heading = h.kind !== lastKind ? <div className="menu-heading" key={`h-${h.kind}`}>{KIND_LABELS[h.kind] ?? h.kind}</div> : null;
         lastKind = h.kind;
         return (
           <div key={`${h.kind}-${h.id}`}>
@@ -323,14 +327,14 @@ function InlineSearch({ inputRef, visibleItems }: { inputRef: React.RefObject<HT
   return (
     <div className="topbar-search" ref={ref}>
       <Icon name="search" size={16} />
-      <input ref={inputRef} value={q} placeholder="Search" aria-label="Search customers, properties, people, assets or pages (Ctrl+K)"
+      <input ref={inputRef} value={q} placeholder="Search" aria-label="Search customers, properties, invoices, people, fleet or pages (Ctrl+K)"
         role="combobox" aria-expanded={open} aria-controls="topbar-search-results" autoComplete="off"
         onFocus={() => setOpen(true)} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onKeyDown={onKeyDown} />
       {!open && <kbd>Ctrl+K</kbd>}
       {open && (
         <div className="topbar-popover search-drop" id="topbar-search-results" role="listbox">
           <ResultList list={list} active={active} setActive={setActive} go={go}
-            empty={<p className="muted palette-hint">{term.length < 2 ? "Type a name, address, phone, customer number, asset or page." : "No matches."}</p>} />
+            empty={<p className="muted palette-hint">{term.length < 2 ? "Type a name, address, phone, customer or invoice number, check number, asset, repair order or page." : "No matches."}</p>} />
         </div>
       )}
     </div>
@@ -352,7 +356,7 @@ function SearchPalette({ onClose, visibleItems }: { onClose: () => void; visible
       <div className="palette" role="dialog" aria-label="Search">
         <div className="palette-input">
           <Icon name="search" size={18} />
-          <input ref={input} value={q} placeholder="Search customers, properties, people, assets or pages" aria-label="Search"
+          <input ref={input} value={q} placeholder="Search customers, invoices, people, fleet…" aria-label="Search"
             onChange={(e) => setQ(e.target.value)} onKeyDown={onKeyDown} />
           <button type="button" className="topbar-icon palette-close" aria-label="Close search" onClick={onClose}><Icon name="close" size={18} /></button>
         </div>
@@ -365,6 +369,22 @@ function SearchPalette({ onClose, visibleItems }: { onClose: () => void; visible
 }
 
 /* ───────────────────────── Left menu ───────────────────────── */
+
+const THEME_SLOT = "__theme";
+
+/** Light, dark or auto (match the device), like Homeworks: three icons at the bottom of the open menu. */
+function ThemeSwitch() {
+  const theme = useTheme();
+  return (
+    <div className="theme-switch" role="radiogroup" aria-label="Light or dark mode">
+      {THEME_CHOICES.map((c) => (
+        <button key={c.key} type="button" role="radio" aria-checked={theme === c.key} aria-label={c.hint} title={c.hint} onClick={() => setTheme(c.key)}>
+          <Icon name={c.icon} size={16} />
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /**
  * The left menu: one icon per group for the side you're on. Narrow, a group pops out its pages
@@ -384,6 +404,8 @@ export function Rail(props: {
   useDismiss(!!openGroup, close, railRef);
   useEffect(() => { setOpenGroup(null); }, [path]);
   const wide = props.expanded || props.drawer;
+  const theme = useTheme();
+  const themeNow = THEME_CHOICES.find((c) => c.key === theme) ?? THEME_CHOICES[2];
   const groupActive = (g: NavGroup) => g.items.some((i) => pathMatches(path, i.href)) || (g.key === "pay" && (path.startsWith("/pay-periods") || path.startsWith("/tax-forms")));
   const pick = () => { setOpenGroup(null); props.onCloseDrawer(); };
 
@@ -447,12 +469,30 @@ export function Rail(props: {
             <Link href="/wiki" className={`rail-link ${path.startsWith("/wiki") ? "active" : ""}`} onClick={pick}><Icon name="book" size={18} /><span>Company Wiki</span></Link>
             <Link href="/settings/security" className={`rail-link ${path.startsWith("/settings") ? "active" : ""}`} onClick={pick}><Icon name="settings" size={18} /><span>Settings</span></Link>
             <Link href="/help" className={`rail-link ${path.startsWith("/help") ? "active" : ""}`} onClick={pick}><Icon name="help" size={18} /><span>Help</span></Link>
+            <ThemeSwitch />
           </>
         ) : (
           <>
             <Link href="/wiki" className={`rail-btn ${path.startsWith("/wiki") ? "active" : ""}`} title="Company Wiki"><Icon name="book" /><span>Wiki</span></Link>
             <Link href="/settings/security" className={`rail-btn ${path.startsWith("/settings") ? "active" : ""}`} title="Settings"><Icon name="settings" /><span>Settings</span></Link>
             <Link href="/help" className={`rail-btn ${path.startsWith("/help") ? "active" : ""}`} title="Help"><Icon name="help" /><span>Help</span></Link>
+            <div className="rail-slot">
+              <button type="button" className="rail-btn" aria-haspopup="menu" aria-expanded={openGroup === THEME_SLOT} title="Light or dark mode"
+                onClick={() => setOpenGroup(openGroup === THEME_SLOT ? null : THEME_SLOT)}>
+                <Icon name={themeNow.icon} /><span>{themeNow.label}</span>
+              </button>
+              {openGroup === THEME_SLOT && (
+                <div className="rail-flyout up" role="menu" aria-label="Light or dark mode">
+                  <div className="menu-heading">Light or dark mode</div>
+                  {THEME_CHOICES.map((c) => (
+                    <button key={c.key} type="button" role="menuitemradio" aria-checked={theme === c.key} className="theme-option"
+                      onClick={() => { setTheme(c.key); setOpenGroup(null); }}>
+                      <Icon name={c.icon} size={16} /><span>{c.label}</span>{c.key === "auto" && <span className="muted">(this device)</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </>
         )}
       </nav>

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { loadStripe, type PaymentIntentResult, type Stripe, type StripeElements } from "@stripe/stripe-js";
 import { formatMoney } from "@crewdesk/shared";
 import { API_URL, api } from "@/lib/api";
+import { isDark } from "@/lib/theme";
 
 /* Customer-facing pages: the portal (/portal) and invoice pay links (/pay/<token>). */
 
@@ -173,7 +174,7 @@ export function StripePay({ payable, dueCents, payments, start, confirm, onConfi
       setAmount(r.amountCents);
       const stripe = await loadStripe(r.publishableKey);
       if (!stripe) throw new Error("Couldn't load the payment form. Check your connection and try again.");
-      const dark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+      const dark = isDark();
       const elements = stripe.elements({ clientSecret: r.clientSecret, appearance: { theme: dark ? "night" : "stripe", variables: { colorPrimary: "#1f7a3a", borderRadius: "8px" } } });
       pending.current = { stripe, elements };
       setPhase("form");
