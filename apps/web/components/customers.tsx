@@ -91,6 +91,7 @@ export interface CustomerFormValue {
   poRequired: boolean; notes: string; status: string; tagIds: string[]; contacts: CustomerContactInput[];
   custom: CustomValues; newRecord: boolean;
   taxExempt: boolean; taxExemptNumber: string; taxRate: string;
+  title: string; county: string; discountPercent: string; termsDays: string; invoiceNotes: string;
 }
 
 export function customerFormValue(c?: any): CustomerFormValue {
@@ -102,6 +103,8 @@ export function customerFormValue(c?: any): CustomerFormValue {
     tagIds: c?.tagIds ?? [], contacts: (c?.contacts ?? []).map((k: any) => ({ name: k.name, relation: k.relation ?? "", email: k.email ?? "", phone: k.phone ?? "", getsInvoices: !!k.getsInvoices })),
     custom: c?.custom ?? {}, newRecord: !c,
     taxExempt: !!c?.taxExempt, taxExemptNumber: blank(c?.taxExemptNumber), taxRate: c?.taxRate != null ? String(c.taxRate) : "",
+    title: blank(c?.title), county: blank(c?.county), discountPercent: c?.discountPercent ? String(c.discountPercent) : "",
+    termsDays: c?.termsDays != null ? String(c.termsDays) : "", invoiceNotes: blank(c?.invoiceNotes),
   };
 }
 
@@ -124,6 +127,7 @@ export function CustomerFields({ value, onChange, tags, showStatus }: { value: C
           </select>
         </label>
         {value.kind !== "residential" && text("companyName", value.kind === "hoa" ? "HOA name" : "Company name", { required: true })}
+        {text("title", "Title", { placeholder: "Mr., Mrs., Dr.", maxLength: 20 })}
         {text("firstName", value.kind === "residential" ? "First name" : "Contact first name", { autoComplete: "off" })}
         {text("lastName", value.kind === "residential" ? "Last name" : "Contact last name", { autoComplete: "off" })}
         {value.kind === "residential" && text("companyName", "Company (optional)")}
@@ -150,6 +154,7 @@ export function CustomerFields({ value, onChange, tags, showStatus }: { value: C
         {text("billingCity", "City")}
         {text("billingState", "State", { maxLength: 2 })}
         {text("billingZip", "ZIP", { inputMode: "numeric" })}
+        {text("county", "County", { maxLength: 60 })}
       </div>
       <fieldset className="checks">
         <legend>Send invoices and estimates by</legend>
@@ -171,6 +176,14 @@ export function CustomerFields({ value, onChange, tags, showStatus }: { value: C
             ? <label>Exemption certificate number<input maxLength={60} value={value.taxExemptNumber} onChange={(e) => set({ taxExemptNumber: e.target.value })} placeholder="Optional" /></label>
             : <label>Their own tax rate (%)<input inputMode="decimal" value={value.taxRate} onChange={(e) => set({ taxRate: e.target.value })} placeholder="Blank: the property's, else the company's" /></label>}
         </div>
+      </fieldset>
+      <fieldset className="contacts">
+        <legend>Their invoices and estimates <span className="muted">(defaults for new ones)</span></legend>
+        <div className="formgrid">
+          <label>Discount %<input inputMode="decimal" value={value.discountPercent} onChange={(e) => set({ discountPercent: e.target.value })} placeholder="0" /></label>
+          <label>Days to pay<input inputMode="numeric" value={value.termsDays} onChange={(e) => set({ termsDays: e.target.value })} placeholder="Blank: your usual terms" /></label>
+        </div>
+        <label>Notes on their invoices<textarea rows={2} maxLength={2000} value={value.invoiceNotes} onChange={(e) => set({ invoiceNotes: e.target.value })} placeholder="e.g. Gate code 1234. Bill to the HOA office." /></label>
       </fieldset>
       <TagPicker value={value.tagIds} onChange={(tagIds) => set({ tagIds })} tags={tags} />
       <label>Notes<textarea rows={2} value={value.notes} onChange={(e) => set({ notes: e.target.value })} /></label>
@@ -197,7 +210,8 @@ export function CustomerFields({ value, onChange, tags, showStatus }: { value: C
 export function customerBody(v: CustomerFormValue) {
   const strip = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, x]) => x !== ""));
   return {
-    ...strip({ ...v, contacts: undefined, newRecord: undefined, taxRate: undefined, taxExemptNumber: undefined }), contacts: v.contacts.map((k) => strip(k as Record<string, unknown>)),
+    ...strip({ ...v, contacts: undefined, newRecord: undefined, taxRate: undefined, taxExemptNumber: undefined, discountPercent: undefined, termsDays: undefined }), contacts: v.contacts.map((k) => strip(k as Record<string, unknown>)),
+    discountPercent: Number(v.discountPercent) || 0, termsDays: v.termsDays.trim() === "" ? null : Number(v.termsDays),
     // Blank clears these.
     taxRate: v.taxRate.trim() === "" ? null : Number(v.taxRate), taxExemptNumber: v.taxExempt && v.taxExemptNumber.trim() ? v.taxExemptNumber.trim() : null,
   };

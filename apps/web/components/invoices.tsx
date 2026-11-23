@@ -75,15 +75,23 @@ export function invoiceBody(v: InvoiceFormValue): { body?: Record<string, unknow
 }
 
 /** Customer, service address, dates, PO number, lines from the price list (priced from the lawn size), discount and notes. */
-export function InvoiceFields({ value, onChange, lockCustomer }: { value: InvoiceFormValue; onChange: (v: InvoiceFormValue) => void; lockCustomer?: boolean }) {
+export function InvoiceFields({ value, onChange, lockCustomer, fresh }: { value: InvoiceFormValue; onChange: (v: InvoiceFormValue) => void; lockCustomer?: boolean; fresh?: boolean }) {
   const set = (patch: Partial<InvoiceFormValue>) => onChange({ ...value, ...patch });
   const services = useApi<ServiceType[]>("/service-types");
   const customer = useApi<any>(value.customer ? `/customers/${value.customer.id}` : null);
   const properties: any[] = (customer.data?.properties ?? []).filter((p: any) => !p.endDate);
   const property = properties.find((p) => p.id === value.propertyId);
-  // A customer with one property gets it picked automatically.
+  // A customer with one property gets it picked automatically; a new invoice starts with their discount.
+  const discounted = useRef<string | null>(null);
   useEffect(() => {
-    if (customer.data && !value.propertyId && properties.length === 1) set({ propertyId: properties[0].id });
+    if (!customer.data) return;
+    const patch: Partial<InvoiceFormValue> = {};
+    if (!value.propertyId && properties.length === 1) patch.propertyId = properties[0].id;
+    if (fresh && discounted.current !== customer.data.id && value.discountKind === "none" && customer.data.discountPercent > 0) {
+      patch.discountKind = "percent"; patch.discount = String(customer.data.discountPercent);
+    }
+    discounted.current = customer.data.id;
+    if (Object.keys(patch).length) set(patch);
   }, [customer.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const setLine = (i: number, patch: Partial<Line>) => set({ lines: value.lines.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
   // Sales tax: the rate for this customer and property (property, then customer, then the default; exempt: none).
@@ -265,17 +273,17 @@ export function useServices(all = false) {
 }
 
 /** Customer page: what they owe, and their invoices. */
-export function CustomerBilling({ customerId }: { customerId: string }) {
+export function CustomerBilling({ customerId, hideSummary }: { customerId: string; hideSummary?: boolean }) {
   const summary = useApi<{ outstandingCents: number; pastDueCents: number; draftCount: number; paidThisYearCents: number; creditCents: number; prepaidCents: number }>(`/invoices/customer-summary/${customerId}`);
   const list = useApi<{ rows: any[] }>(`/invoices?status=all&customerId=${customerId}&limit=50`);
   const s = summary.data;
   return (
     <div className="card stack">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <h2 style={{ fontSize: 16, margin: 0 }}>Billing</h2>
+        <h2 style={{ fontSize: 16, margin: 0 }}>{hideSummary ? "Invoices" : "Billing"}</h2>
         <Link className="btn" href={`/invoices/new?customerId=${customerId}`}>New invoice</Link>
       </div>
-      {s && (
+      {s && !hideSummary && (
         <div className="money-box">
           <div><div className="v" style={{ color: s.pastDueCents ? "var(--bad)" : undefined }}>{formatMoney(s.pastDueCents)}</div><div className="l">Past due</div></div>
           <div><div className="v">{formatMoney(s.outstandingCents)}</div><div className="l">Outstanding</div></div>

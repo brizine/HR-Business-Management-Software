@@ -89,6 +89,14 @@ const customerFields = z.object({
   taxExemptNumber: z.preprocess((v) => (typeof v === "string" && !v.trim() ? null : v), z.string().trim().max(60).nullable()).optional(),
   taxRate: optionalTaxRateSchema,
   notes: optText(5000),
+  /** Mr., Mrs., Dr. ... */
+  title: optText(20),
+  county: optText(60),
+  /** Defaults for their new invoices and estimates. */
+  discountPercent: z.coerce.number().min(0).max(100).multipleOf(0.01).default(0),
+  invoiceNotes: optText(2000),
+  /** Days to pay (blank: the company's usual terms). */
+  termsDays: z.preprocess((v) => (v === "" || v === undefined ? null : v), z.coerce.number().int().min(0).max(365).nullable()).optional(),
   status: z.enum(["lead", "active"]).default("active"),
   tagIds: z.array(z.string().uuid()).max(50).default([]),
   contacts: z.array(customerContactSchema).max(20).default([]),
@@ -206,3 +214,12 @@ export function dayBefore(iso: string): string {
   d.setUTCDate(d.getUTCDate() - 1);
   return d.toISOString().slice(0, 10);
 }
+
+/** A call or note on a customer (like Homeworks' Call Notes): who to tell, and an optional follow-up to-do. */
+export const customerNoteSchema = z.object({
+  kind: z.enum(["call", "note"]).default("call"),
+  body: z.string().trim().min(1, "Write the note").max(5000),
+  notifyIds: z.array(z.string().uuid()).max(20).default([]),
+  todoId: z.string().uuid().optional(),
+});
+export type CustomerNoteInput = z.infer<typeof customerNoteSchema>;

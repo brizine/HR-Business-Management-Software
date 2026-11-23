@@ -232,6 +232,8 @@ const routes: FastifyPluginAsync = async (app) => {
         assignmentId: propertyAssignments.id, role: propertyAssignments.role, startDate: propertyAssignments.startDate, endDate: propertyAssignments.endDate,
         id: properties.id, name: properties.name, street: properties.street, city: properties.city, state: properties.state, zip: properties.zip,
         mapCode: properties.mapCode, lawnSqFt: properties.lawnSqFt, status: properties.status, tagIds: properties.tagIds, taxRate: properties.taxRate,
+        lastService: sql<string | null>`(select max(v.date)::text from visits v where v.property_id = ${properties.id} and v.status = 'completed')`,
+        nextService: sql<string | null>`(select min(v.date)::text from visits v where v.property_id = ${properties.id} and v.status in ('open', 'on_site') and v.date >= current_date)`,
       })
       .from(propertyAssignments)
       .innerJoin(properties, eq(properties.id, propertyAssignments.propertyId))
@@ -250,7 +252,9 @@ const routes: FastifyPluginAsync = async (app) => {
       // Cancelling and reactivating have their own steps (with a reason); a lead can become active here.
       const nextStatus = c.status === "cancelled" ? "cancelled" : status;
       const custom = await updatedCustom(companyId, "customer", (req.body as { custom?: unknown })?.custom, c.custom);
-      const [u] = await tx.update(customers).set({ ...body, ...(custom ? { custom } : {}), status: nextStatus, tagIds, updatedAt: new Date() }).where(eq(customers.id, c.id)).returning();
+      // The form sends the whole customer: a box left blank clears it.
+      const cleared = { title: body.title ?? null, county: body.county ?? null, invoiceNotes: body.invoiceNotes ?? null, notes: body.notes ?? null, source: body.source ?? null, altPhone: body.altPhone ?? null, termsDays: body.termsDays ?? null };
+      const [u] = await tx.update(customers).set({ ...body, ...cleared, ...(custom ? { custom } : {}), status: nextStatus, tagIds, updatedAt: new Date() }).where(eq(customers.id, c.id)).returning();
       await tx.delete(customerContacts).where(eq(customerContacts.customerId, c.id));
       if (contacts.length) await tx.insert(customerContacts).values(contacts.map((k, i) => ({ ...k, companyId, customerId: c.id, sortOrder: i })));
       await recordTagChanges(tx, { companyId, before: c.tagIds, after: tagIds, customerId: c.id, source: "hand", byId: sub });

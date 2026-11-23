@@ -28,7 +28,7 @@ export default function NewInvoice() {
     <>
       <PageHead title="New invoice" before={<Link className="btn" href="/invoices" aria-label="Back to invoices">←</Link>} />
       <form className="card stack" onSubmit={(e) => { e.preventDefault(); save(true); }}>
-        <InvoiceFields value={value} onChange={setValue} />
+        <InvoiceFields value={value} onChange={setValue} fresh />
         <ErrorBox error={error} />
         <div className="row">
           <button className="btn primary" disabled={busy}>Save and send…</button>

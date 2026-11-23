@@ -27,6 +27,8 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
   useEffect(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.get("send") === "1") { setPanel("send"); url.searchParams.delete("send"); window.history.replaceState(window.history.state, "", url.pathname); }
+    // From a customer's page: "Record payment".
+    if (url.searchParams.get("pay") === "1") { setPanel("pay"); url.searchParams.delete("pay"); window.history.replaceState(window.history.state, "", url.pathname); }
   }, []);
   const inv = invoice.data;
   if (invoice.error) return <><PageHead title="Invoice" /><ErrorBox error={invoice.error} /></>;

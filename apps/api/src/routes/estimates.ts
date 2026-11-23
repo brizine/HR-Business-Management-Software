@@ -335,7 +335,7 @@ const routes: FastifyPluginAsync = async (app) => {
       });
       const t = estimateTotals(lines.map((l) => ({ ...l, optional: false })), e.discountPercent);
       const [row] = await tx.insert(invoices).values({
-        companyId, customerId: e.customerId, propertyId: e.propertyId, issueDate: today, dueDate: addDays(today, settings.termsDays), poNumber: e.poNumber,
+        companyId, customerId: e.customerId, propertyId: e.propertyId, issueDate: today, dueDate: addDays(today, (await db.select({ t: customers.termsDays }).from(customers).where(eq(customers.id, e.customerId)))[0]?.t ?? settings.termsDays), poNumber: e.poNumber,
         notes: e.customerNotes ? e.customerNotes.slice(0, 2000) : null, discountKind: e.discountPercent > 0 ? "percent" : "none", discountValue: e.discountPercent,
         subtotalCents: t.subtotalCents, discountCents: t.discountCents, taxCents: t.taxCents, totalCents: t.totalCents, createdById: sub,
       }).returning();

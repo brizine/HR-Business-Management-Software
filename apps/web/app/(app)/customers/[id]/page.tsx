@@ -2,22 +2,32 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
-import { CUSTOMER_KIND_LABELS, DELIVERY_LABELS, customerName, PROPERTY_ROLE_LABELS, formatAddress, formatPhone, type CustomerKind, type DeliveryMethod, type PropertyRole } from "@crewdesk/shared";
+import { CUSTOMER_KIND_LABELS, customerName, PROPERTY_ROLE_LABELS, formatAddress, formatPhone, type CustomerKind, type PropertyRole } from "@crewdesk/shared";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { LinkedTodos } from "@/components/todos";
-import { LinkedVisits } from "@/components/visits";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
+import { Icon } from "@/components/icons";
 import { CustomerBilling } from "@/components/invoices";
 import { CustomerCredits } from "@/components/credits";
 import { CustomerPrepayments } from "@/components/prepayments";
 import { CancelForm, CustomerFields, PropertyFields, TagChips, customerBody, customerFormValue, propertyBody, propertyFormValue, useTags } from "@/components/customers";
 import { CustomFieldsCard } from "@/components/custom-fields";
-import { CustomerEmails } from "@/components/customer-messages";
+import { CopyPhones, CustomerEmails, EmailComposer } from "@/components/customer-messages";
 import { PaymentMethodsCard } from "@/components/payment-methods";
 import { LinkedEstimates } from "@/components/estimates";
+import { Popover } from "@/components/customer-list";
+import { VisitFiles } from "@/components/visit-files";
+import { AccountBox, CallNotes, CustomerNotesBox, DeliveryBox, InvoiceDefaultsBox, JobsBox, PayPicker, PaymentsBox, PortalBox, StatsBox, Timeline } from "@/components/customer-page";
 
+/**
+ * A customer's page, laid out like Homeworks': Send, Create and More menus; tabs for details,
+ * communication, and photos and documents; and two columns of boxes (main info, notes, jobs,
+ * properties, estimates, invoices, payments, delivery, custom fields and stats on the left; the
+ * account, call notes, timeline, cards on file, invoice settings, portal, contacts, prepayments
+ * and credits on the right).
+ */
 export default function CustomerDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { can } = useAuth();
@@ -29,115 +39,191 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
   const [addingProperty, setAddingProperty] = useState(false);
   const [showPast, setShowPast] = useState(false);
   const [creditVersion, setCreditVersion] = useState(0);
+  const [tab, setTab] = useState<"details" | "communication" | "files">("details");
+  const [panel, setPanel] = useState<null | "email" | "text" | "pay">(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
+  const [version, setVersion] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
   const action = useAction();
   const c = customer.data;
   if (customer.error) return <><PageHead title="Customer" /><ErrorBox error={customer.error} /></>;
   if (!c) return <PageHead title="Customer" sub="Loading…" />;
   const current = c.properties.filter((p: any) => !p.endDate);
   const past = c.properties.filter((p: any) => p.endDate);
-  const person = [c.firstName, c.lastName].filter(Boolean).join(" ");
+  const person = [c.title, c.firstName, c.lastName].filter(Boolean).join(" ");
+  const toggle = (k: string) => (o: boolean) => setOpen(o ? k : null);
+  const reload = () => { customer.reload(); setVersion((v) => v + 1); };
+  const viewAs = () => {
+    // Open the tab now (browsers block tabs opened after a wait), then point it at the portal.
+    const w = window.open("about:blank", "_blank");
+    action.run(async () => {
+      try { await api("/portal/view-as", { body: { customerId: id } }); } catch (e) { w?.close(); throw e; }
+      if (w) w.location.href = "/portal"; else window.location.href = "/portal";
+    });
+  };
+  const propOptions = current.filter((p: any) => p.status !== "cancelled");
 
   return (
     <>
-      <PageHead title={c.name} before={<Link className="btn" href="/customers" aria-label="Back to customers">←</Link>}
+      <PageHead title={c.name} before={<Link className="btn no-print" href="/customers" aria-label="Back to customers">←</Link>}
         sub={<>#{c.number} · {CUSTOMER_KIND_LABELS[c.kind as CustomerKind]} · <Badge value={c.status} />{c.sample && <> · <span className="tag tag-gray">Sample</span></>}</>}>
-        {c.status !== "cancelled" && <button className="btn" onClick={() => setEditing(!editing)}>Edit</button>}
-        <button className="btn" title="Opens the customer portal as this customer sees it (read-only)" disabled={action.busy} onClick={() => {
-          // Open the tab now (browsers block tabs opened after a wait), then point it at the portal.
-          const tab = window.open("about:blank", "_blank");
-          action.run(async () => {
-            try { await api("/portal/view-as", { body: { customerId: id } }); } catch (e) { tab?.close(); throw e; }
-            if (tab) tab.location.href = "/portal"; else window.location.href = "/portal";
-          });
-        }}>View as customer</button>
-        {c.status !== "cancelled"
-          ? <button className="btn danger" onClick={() => setCancelling(!cancelling)}>Cancel customer</button>
-          : <button className="btn primary" disabled={action.busy} onClick={() => action.run(async () => { await api(`/customers/${id}/reactivate`, { method: "POST" }); customer.reload(); })}>Reactivate</button>}
-        {can("admin", "customers") && (c.status === "lead" || c.sample || c.properties.length === 0) && (
-          <button className="btn danger" disabled={action.busy} onClick={() => confirm(`Delete ${c.name}? This can't be undone.`) && action.run(async () => { await api(`/customers/${id}`, { method: "DELETE" }); router.push("/customers"); })}>Delete</button>
-        )}
+        {c.status !== "cancelled" && <button className="btn no-print" onClick={() => { setEditing(!editing); setTab("details"); }}>Edit</button>}
+        <Popover label={<>Send ▾</>} open={open === "send"} setOpen={toggle("send")} align="right" buttonClass="btn no-print">
+          <div className="cl-menu">
+            <button type="button" disabled={!c.email} onClick={() => { setPanel("email"); setOpen(null); }}>Email{!c.email ? " (no email on file)" : "…"}</button>
+            <button type="button" onClick={() => { setPanel("text"); setOpen(null); }}>Text…</button>
+          </div>
+        </Popover>
+        <Popover label={<>Create ▾</>} open={open === "create"} setOpen={toggle("create")} align="right" buttonClass="btn primary no-print">
+          <div className="cl-menu">
+            <Link href={`/visits/new?customerId=${id}`}>Work order</Link>
+            <button type="button" onClick={() => { setPanel("pay"); setOpen(null); }}>Payment…</button>
+            <Link href={`/estimates/new?customerId=${id}`}>Estimate</Link>
+            <Link href={`/invoices/new?customerId=${id}`}>Invoice</Link>
+            <Link href={`/todos?new=1&customerId=${id}`}>To-do</Link>
+            {c.status !== "cancelled" && <button type="button" onClick={() => { setAddingProperty(true); setTab("details"); setOpen(null); }}>Property</button>}
+          </div>
+        </Popover>
+        <Popover label={<Icon name="more" size={16} />} title="More" open={open === "more"} setOpen={toggle("more")} align="right" buttonClass="btn no-print">
+          <div className="cl-menu">
+            <button type="button" onClick={() => { setOpen(null); setTimeout(() => window.print(), 50); }}>Print customer</button>
+            <button type="button" disabled={action.busy} onClick={() => { setOpen(null); viewAs(); }}>View as customer</button>
+            {c.status !== "cancelled"
+              ? <button type="button" className="bad-text" onClick={() => { setCancelling(true); setOpen(null); }}>Cancel customer…</button>
+              : <button type="button" disabled={action.busy} onClick={() => { setOpen(null); action.run(async () => { await api(`/customers/${id}/reactivate`, { method: "POST" }); reload(); }); }}>Reactivate</button>}
+            {can("admin", "customers") && (c.status === "lead" || c.sample || c.properties.length === 0) && (
+              <button type="button" className="bad-text" disabled={action.busy} onClick={() => { setOpen(null); if (confirm(`Delete ${c.name}? This can't be undone.`)) action.run(async () => { await api(`/customers/${id}`, { method: "DELETE" }); router.push("/customers"); }); }}>Delete</button>
+            )}
+          </div>
+        </Popover>
       </PageHead>
       <ErrorBox error={action.error} />
+      {notice && <div className="notice" role="status">{notice} <button type="button" className="linkbtn" onClick={() => setNotice(null)}>OK</button></div>}
+      {panel === "email" && (
+        <EmailComposer selection={{ ids: [id] }} audience={c.name} onClose={() => setPanel(null)}
+          onSent={() => { setPanel(null); setNotice(`Emailing ${c.name}. It shows on the timeline once it's gone.`); setTimeout(reload, 3000); }} />
+      )}
+      {panel === "text" && <CopyPhones selection={{ ids: [id] }} onClose={() => setPanel(null)} />}
+      {panel === "pay" && <PayPicker customerId={id} onClose={() => setPanel(null)} />}
       {cancelling && (
         <>
           {current.some((p: any) => p.role === "bill_to" && p.status === "active") && (
             <p className="muted">Properties they&apos;re the bill-to for will be cancelled too. Properties where they&apos;re only a resident stay as they are.</p>
           )}
-          <CancelForm what="customer" onClose={() => setCancelling(false)} onSubmit={async (body) => { await api(`/customers/${id}/cancel`, { body }); customer.reload(); }} />
+          <CancelForm what="customer" onClose={() => setCancelling(false)} onSubmit={async (body) => { await api(`/customers/${id}/cancel`, { body }); reload(); }} />
         </>
       )}
-      {editing ? <EditCustomer customer={c} tags={tags} onDone={() => { setEditing(false); customer.reload(); }} /> : (
-        <div className="grid cols-2">
-          <div className="card">
-            <h2 style={{ fontSize: 16, marginTop: 0 }}>Contact &amp; billing</h2>
-            <dl className="facts">
-              {c.kind !== "residential" && person && <><dt>Contact</dt><dd>{person}</dd></>}
-              <dt>Email</dt><dd>{c.email ? <a href={`mailto:${c.email}`}>{c.email}</a> : "—"}</dd>
-              <dt>Phone</dt><dd>{c.phone ? <a href={`tel:${c.phone}`}>{formatPhone(c.phone)}</a> : "—"}{c.altPhone && <div>{formatPhone(c.altPhone)}</div>}</dd>
-              <dt>Billing address</dt><dd>{formatAddress({ street: c.billingStreet, city: c.billingCity, state: c.billingState, zip: c.billingZip }) || "—"}</dd>
-              <dt>Invoices by</dt><dd>{c.delivery.map((d: DeliveryMethod) => DELIVERY_LABELS[d]).join(", ")}{c.poRequired && " · needs a PO number"}</dd>
-              <dt>Heard about us</dt><dd>{c.source ?? "—"}</dd>
-              <dt>Tags</dt><dd><TagChips ids={c.tagIds} tags={tags} /> {!c.tagIds.length && "—"}</dd>
-              <dt>Customer since</dt><dd>{fmtDate(c.createdAt)}</dd>
-            </dl>
-            {c.notes && <p style={{ whiteSpace: "pre-wrap" }}>{c.notes}</p>}
+
+      <nav className="cal-seg cp-tabs no-print" aria-label="Customer sections">
+        {([["details", "Customer details"], ["communication", "Communication"], ["files", "Photos & documents"]] as const).map(([k, l]) => (
+          <button key={k} type="button" aria-pressed={tab === k} onClick={() => setTab(k)}>{l}</button>
+        ))}
+      </nav>
+
+      {tab === "communication" && (
+        <div className="cp-grid">
+          <div className="cp-col">
+            <CallNotes customerId={id} customerName={c.name} onSaved={() => setVersion((v) => v + 1)} />
+            <CustomerEmails customerId={id} />
           </div>
-          <div className="card">
-            <h2 style={{ fontSize: 16, marginTop: 0 }}>Other contacts</h2>
-            {c.contacts.length ? (
-              <ul className="plain-list">
-                {c.contacts.map((k: any) => (
-                  <li key={k.id}>
-                    <strong>{k.name}</strong>{k.relation && <span className="muted"> · {k.relation}</span>}{k.getsInvoices && <span className="badge" style={{ marginLeft: 6 }}>gets invoices</span>}
-                    <div className="muted">{[k.email, k.phone && formatPhone(k.phone)].filter(Boolean).join(" · ")}</div>
-                  </li>
-                ))}
-              </ul>
-            ) : <p className="muted">None. Add a spouse, property manager or accounts payable contact with Edit.</p>}
-          </div>
+          <div className="cp-col"><Timeline customerId={id} version={version} title="Calls, messages, emails and notes" filter /></div>
         </div>
       )}
-
-      <div className="card" style={{ marginTop: 16 }}>
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <h2 style={{ fontSize: 16, margin: 0 }}>Properties</h2>
-          {c.status !== "cancelled" && <button className="btn" onClick={() => setAddingProperty(!addingProperty)}>Add a property</button>}
-        </div>
-        {addingProperty && <AddProperty customerId={id} tags={tags} onDone={() => { setAddingProperty(false); customer.reload(); }} />}
-        {current.length ? <PropertyTable rows={current} tags={tags} /> : <Empty>Not on any property yet.</Empty>}
-        {past.length > 0 && (
-          <>
-            <button className="btn" onClick={() => setShowPast(!showPast)}>{showPast ? "Hide" : "Show"} past properties ({past.length})</button>
-            {showPast && <PropertyTable rows={past} tags={tags} past />}
-          </>
-        )}
-      </div>
-
-      <CustomerBilling customerId={id} key={`billing-${creditVersion}`} />
-      <LinkedEstimates customerId={id} />
-      <PaymentMethodsCard customerId={id} />
-      <CustomerPrepayments customerId={id} onChange={() => setCreditVersion((v) => v + 1)}
-        properties={current.filter((p: any) => p.status !== "cancelled").map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", "), lawnSqFt: p.lawnSqFt }))} />
-      <CustomerCredits customerId={id} onChange={() => setCreditVersion((v) => v + 1)}
-        properties={current.filter((p: any) => p.status !== "cancelled").map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", ") }))} />
-      <CustomFieldsCard target="customer" id={id} canEdit values={c.custom ?? {}} onSaved={() => customer.reload()} />
-      <LinkedVisits customerId={id} />
-      <LinkedTodos customerId={id} customer={{ id, name: customerName(c) }} />
-      <CustomerEmails customerId={id} />
-
-      {c.cancellations.length > 0 && (
-        <div className="card">
-          <h2 style={{ fontSize: 16, marginTop: 0 }}>Cancellations</h2>
-          <ul className="plain-list">
-            {c.cancellations.map((x: any) => (
-              <li key={x.id}>
-                <strong>{x.reasonLabel}</strong> <span className="muted">effective {fmtDate(x.effectiveDate)}{x.reactivatedAt ? ` · reactivated ${fmtDate(x.reactivatedAt)}` : ""}</span>
-                {x.comment && <div>{x.comment}</div>}
-              </li>
-            ))}
-          </ul>
-        </div>
+      {tab === "files" && (
+        <div className="card"><VisitFiles base={`/customers/${id}`} canAdd canManage /></div>
       )}
+      {tab === "details" && (editing ? <EditCustomer customer={c} tags={tags} onDone={() => { setEditing(false); reload(); }} /> : (
+        <div className="cp-grid">
+          <div className="cp-col">
+            <div className="card">
+              <h2 className="cp-h">Main info</h2>
+              <dl className="facts cp-facts">
+                {c.kind !== "residential" && person && <><dt>Contact</dt><dd>{person}</dd></>}
+                {c.kind === "residential" && c.title && <><dt>Name</dt><dd>{person}</dd></>}
+                <dt>Phone</dt><dd>{c.phone ? <a href={`tel:${c.phone}`}>{formatPhone(c.phone)}</a> : "—"}</dd>
+                <dt>Email</dt><dd>{c.email ? <a href={`mailto:${c.email}`}>{c.email}</a> : "—"}</dd>
+                <dt>Billing address</dt><dd>{formatAddress({ street: c.billingStreet, city: c.billingCity, state: c.billingState, zip: c.billingZip }) || "—"}</dd>
+                <dt>Tags</dt><dd><TagChips ids={c.tagIds} tags={tags} /> {!c.tagIds.length && "—"}</dd>
+                {more && (
+                  <>
+                    <dt>Customer #</dt><dd>{c.number}</dd>
+                    <dt>Other phone</dt><dd>{c.altPhone ? <a href={`tel:${c.altPhone}`}>{formatPhone(c.altPhone)}</a> : "—"}</dd>
+                    <dt>County</dt><dd>{c.county ?? "—"}</dd>
+                    <dt>Heard about us</dt><dd>{c.source ?? "—"}</dd>
+                    <dt>Customer since</dt><dd>{fmtDate(c.createdAt)}</dd>
+                    <dt>Tax exempt</dt><dd>{c.taxExempt ? `Yes${c.taxExemptNumber ? ` (${c.taxExemptNumber})` : ""}` : "No"}</dd>
+                    <dt>Discount</dt><dd>{c.discountPercent ? `${c.discountPercent}%` : "None"}</dd>
+                  </>
+                )}
+              </dl>
+              <button type="button" className="btn no-print" style={{ marginTop: 8 }} onClick={() => setMore(!more)}>{more ? "Show less" : "Show more"}</button>
+            </div>
+            <CustomerNotesBox key={`notes-${c.updatedAt}`} customer={c} onSaved={reload} />
+            <JobsBox customerId={id} />
+            <div className="card">
+              <div className="row" style={{ justifyContent: "space-between" }}>
+                <h2 className="cp-h">Properties</h2>
+                {c.status !== "cancelled" && <button className="btn no-print" onClick={() => setAddingProperty(!addingProperty)}>Add a property</button>}
+              </div>
+              {addingProperty && <AddProperty customerId={id} tags={tags} onDone={() => { setAddingProperty(false); reload(); }} />}
+              {current.length ? <PropertyTable rows={current} tags={tags} /> : <Empty>Not on any property yet.</Empty>}
+              {past.length > 0 && (
+                <>
+                  <button className="btn" onClick={() => setShowPast(!showPast)}>{showPast ? "Hide" : "Show"} past properties ({past.length})</button>
+                  {showPast && <PropertyTable rows={past} tags={tags} past />}
+                </>
+              )}
+            </div>
+            <LinkedEstimates customerId={id} />
+            <CustomerBilling customerId={id} key={`billing-${creditVersion}`} hideSummary />
+            <PaymentsBox customerId={id} key={`pays-${creditVersion}`} />
+            <DeliveryBox customer={c} onSaved={reload} />
+            <CustomFieldsCard target="customer" id={id} canEdit values={c.custom ?? {}} onSaved={() => customer.reload()} />
+            <StatsBox customerId={id} />
+            <LinkedTodos customerId={id} customer={{ id, name: customerName(c) }} />
+          </div>
+          <div className="cp-col">
+            <AccountBox key={`acct-${creditVersion}-${version}`} customerId={id} name={c.name} onPay={() => setPanel("pay")} />
+            <CallNotes customerId={id} customerName={c.name} onSaved={() => setVersion((v) => v + 1)} />
+            <Timeline customerId={id} version={version} />
+            <PaymentMethodsCard customerId={id} />
+            <InvoiceDefaultsBox customer={c} onEdit={() => setEditing(true)} />
+            <PortalBox customer={c} busy={action.busy} onViewAs={viewAs} />
+            <div className="card">
+              <h2 className="cp-h">Other contacts</h2>
+              {c.contacts.length ? (
+                <ul className="plain-list">
+                  {c.contacts.map((k: any) => (
+                    <li key={k.id}>
+                      <strong>{k.name}</strong>{k.relation && <span className="muted"> · {k.relation}</span>}{k.getsInvoices && <span className="badge" style={{ marginLeft: 6 }}>gets invoices</span>}
+                      <div className="muted">{[k.email, k.phone && formatPhone(k.phone)].filter(Boolean).join(" · ")}</div>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="muted" style={{ margin: 0 }}>None. Add a spouse, property manager or accounts payable contact with Edit.</p>}
+            </div>
+            <CustomerPrepayments customerId={id} onChange={() => setCreditVersion((v) => v + 1)}
+              properties={propOptions.map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", "), lawnSqFt: p.lawnSqFt }))} />
+            <CustomerCredits customerId={id} onChange={() => setCreditVersion((v) => v + 1)}
+              properties={propOptions.map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", ") }))} />
+            {c.cancellations.length > 0 && (
+              <div className="card">
+                <h2 className="cp-h">Cancellations</h2>
+                <ul className="plain-list">
+                  {c.cancellations.map((x: any) => (
+                    <li key={x.id}>
+                      <strong>{x.reasonLabel}</strong> <span className="muted">effective {fmtDate(x.effectiveDate)}{x.reactivatedAt ? ` · reactivated ${fmtDate(x.reactivatedAt)}` : ""}</span>
+                      {x.comment && <div>{x.comment}</div>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="card"><VisitFiles base={`/customers/${id}`} canAdd canManage /></div>
+          </div>
+        </div>
+      ))}
     </>
   );
 }
@@ -146,13 +232,14 @@ function PropertyTable({ rows, tags, past }: { rows: any[]; tags: any[]; past?: 
   return (
     <div className="tablewrap">
       <table>
-        <thead><tr><th>Address</th><th>Role</th><th>MC</th><th>Lawn</th><th>Tags</th><th>{past ? "Dates" : "Status"}</th></tr></thead>
+        <thead><tr><th>Address</th><th>Role</th><th>Lawn</th><th>Last serviced</th><th>Next service</th><th>Tags</th><th>{past ? "Dates" : "Status"}</th></tr></thead>
         <tbody>{rows.map((p) => (
           <tr key={p.assignmentId}>
             <td><Link href={`/properties/${p.id}`}><strong>{p.street}</strong></Link>{p.name && <div className="muted">{p.name}</div>}<div className="muted">{[p.city, p.zip].filter(Boolean).join(" ")}</div></td>
             <td>{PROPERTY_ROLE_LABELS[p.role as PropertyRole]}</td>
-            <td>{p.mapCode ?? <span className="muted">—</span>}</td>
-            <td>{p.lawnSqFt ? `${Math.round(p.lawnSqFt).toLocaleString()} sq ft` : "—"}</td>
+            <td className="nowrap">{p.lawnSqFt ? `${Math.round(p.lawnSqFt).toLocaleString()} sq ft` : "—"}{p.mapCode && <div className="muted">MC {p.mapCode}</div>}</td>
+            <td className="nowrap">{p.lastService ? fmtDate(p.lastService) : "—"}</td>
+            <td className="nowrap">{p.nextService ? fmtDate(p.nextService) : "—"}</td>
             <td><TagChips ids={p.tagIds} tags={tags} /></td>
             <td>{past ? `${fmtDate(p.startDate)} – ${fmtDate(p.endDate)}` : <Badge value={p.status} />}</td>
           </tr>

@@ -173,12 +173,16 @@ async function invoiceVisits(req: FastifyRequest, ids: string[]) {
         serviceTypeId: l.serviceTypeId, description: several && v.date ? `${fmtDay(v.date)}: ${l.description}` : l.description,
         quantity: l.quantity, unitPriceCents: l.unitPriceCents, incomeAccountCode: account ?? "4000", taxRate: l.taxRate,
       })));
-      const totals = invoiceTotals(items, "none", 0);
-      const [payer] = await tx.select({ custom: customers.custom }).from(customers).where(eq(customers.id, group[0].customerId));
+      const [payer] = await tx.select({ custom: customers.custom, discountPercent: customers.discountPercent, invoiceNotes: customers.invoiceNotes, termsDays: customers.termsDays })
+        .from(customers).where(eq(customers.id, group[0].customerId));
+      // The customer's own defaults (discount %, days to pay, notes on invoices), else the company's.
+      const pct = payer?.discountPercent ?? 0;
+      const totals = invoiceTotals(items, pct > 0 ? "percent" : "none", pct);
       const custom = await newRecordCustom(companyId, "invoice", undefined, [{ target: "workorder", values: group[0].custom }, { target: "customer", values: payer?.custom }]);
+      const woNote = `Work order${several ? "s" : ""} ${group.map((v) => visitNumber(v.number)).join(", ")}`;
       const [inv] = await tx.insert(invoices).values({
-        custom, companyId, customerId: group[0].customerId, propertyId: group[0].propertyId, issueDate: today, dueDate: addDays(today, settings.termsDays),
-        notes: `Work order${several ? "s" : ""} ${group.map((v) => visitNumber(v.number)).join(", ")}`, discountKind: "none", discountValue: 0, ...totals, createdById: sub,
+        custom, companyId, customerId: group[0].customerId, propertyId: group[0].propertyId, issueDate: today, dueDate: addDays(today, payer?.termsDays ?? settings.termsDays),
+        notes: payer?.invoiceNotes ? `${woNote}\n${payer.invoiceNotes}`.slice(0, 2000) : woNote, discountKind: pct > 0 ? "percent" : "none", discountValue: pct, ...totals, createdById: sub,
       }).returning();
       await tx.insert(invoiceLines).values(items.map((l, i) => ({ ...l, invoiceId: inv.id, amountCents: lineAmount(l), sortOrder: i })));
       await tx.update(visits).set({ invoiceId: inv.id, updatedAt: new Date() }).where(inArray(visits.id, group.map((v) => v.id)));

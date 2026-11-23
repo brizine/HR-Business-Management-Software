@@ -174,14 +174,14 @@ const routes: FastifyPluginAsync = async (app) => {
     const { companyId, sub } = req.user;
     const today = await companyToday(companyId);
     const settings = await billingSettings(companyId);
-    const [payer] = await db.select({ custom: customers.custom }).from(customers).where(and(eq(customers.id, body.customerId), eq(customers.companyId, companyId)));
+    const [payer] = await db.select({ custom: customers.custom, termsDays: customers.termsDays, invoiceNotes: customers.invoiceNotes }).from(customers).where(and(eq(customers.id, body.customerId), eq(customers.companyId, companyId)));
     const custom = await newRecordCustom(companyId, "invoice", (req.body as { custom?: unknown })?.custom, [{ target: "customer", values: payer?.custom }]);
     return db.transaction(async (tx) => {
       const { totals } = await prepare(tx, companyId, body);
       const issueDate = body.issueDate ?? today;
       const [inv] = await tx.insert(invoices).values({
-        custom, companyId, customerId: body.customerId, propertyId: body.propertyId ?? null, issueDate, dueDate: body.dueDate ?? addDays(issueDate, settings.termsDays),
-        poNumber: body.poNumber ?? null, notes: body.notes ?? null, discountKind: body.discountKind, discountValue: body.discountValue, ...totals, createdById: sub,
+        custom, companyId, customerId: body.customerId, propertyId: body.propertyId ?? null, issueDate, dueDate: body.dueDate ?? addDays(issueDate, payer?.termsDays ?? settings.termsDays),
+        poNumber: body.poNumber ?? null, notes: body.notes ?? payer?.invoiceNotes ?? null, discountKind: body.discountKind, discountValue: body.discountValue, ...totals, createdById: sub,
       }).returning();
       await tx.insert(invoiceLines).values(body.lines.map((l, i) => ({ ...l, serviceTypeId: l.serviceTypeId ?? null, invoiceId: inv.id, amountCents: lineAmount(l), sortOrder: i })));
       return inv;

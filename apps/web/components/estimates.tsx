@@ -49,7 +49,12 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
   const detail = useApi<any>(customer ? `/customers/${customer.id}` : null);
   const properties: any[] = (detail.data?.properties ?? []).filter((p: any) => !p.endDate);
   const property = properties.find((p) => p.id === propertyId);
-  useEffect(() => { if (detail.data && !propertyId && properties.length === 1) setPropertyId(properties[0].id); }, [detail.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!detail.data) return;
+    if (!propertyId && properties.length === 1) setPropertyId(properties[0].id);
+    // A new estimate starts with the customer's own discount.
+    if (!estimate && !discount && detail.data.discountPercent > 0) setDiscount(String(detail.data.discountPercent));
+  }, [detail.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const billing = useBillingSettings();
   const settings = billing.data ?? { taxEnabled: false, taxName: "Sales tax", defaultTaxRate: 0 };
   const rate = taxRateFor({ settings, customer: detail.data, property });

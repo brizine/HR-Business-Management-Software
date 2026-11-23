@@ -201,9 +201,37 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
   invoices** for anyone who should get a copy). Commercial accounts can be marked **Needs a PO number**. Tick
   **Add their service address now** to create their first property with them as bill-to (or untick **Service
   address is the billing address** to type a different one). Choose **Lead** for someone who hasn't bought yet.
-- **Customer page:** contact and billing details, other contacts, their properties (current, and past ones
-  under **Show past properties**) and any cancellations. **Add a property** creates a new service address for
-  them as bill-to or resident.
+- **Customer page**, laid out like Homeworks':
+  - **At the top:** **Edit**; **Send ▾** (**Email…** writes them an email with fill-in fields and a preview;
+    **Text…** shows their number to copy); **Create ▾** (work order, payment, estimate, invoice, to-do,
+    property); **⋯** (print the page, view as customer, cancel or reactivate, delete).
+  - **Tabs:** **Customer details**; **Communication** (call notes and the timeline, which you can narrow to
+    notes and calls, emails, estimates, payments, work orders or account changes, plus emails sent to many
+    customers); and **Photos & documents** (drop in photos, PDFs or short videos, up to 25 MB each).
+  - **Left column:**
+    - **Main info**, with **Show more** for customer #, other phone, county, how they heard about us, customer
+      since, tax exempt and discount.
+    - **Customer notes:** office-only notes you can save right there.
+    - **Jobs:** one-time work orders coming up, repeating ones (with how often and what's next), and history.
+    - **Properties**, with when each was last serviced and next scheduled.
+    - **Estimates**, **Invoices**, and **Payments** (pick a month and year).
+    - **Invoice delivery preference** (tick email, paper or text right there), **Custom fields**, **Customer
+      stats** (collected, owed, average visit value, work orders done, past-due invoices, last and next
+      service) and **To-dos**.
+  - **Right column:**
+    - The **account box**: past due, outstanding, paid this year, credit and prepaid. **Record payment** picks an
+      open invoice. **Show revenue projection** shows what scheduled work brings in today, this week, this
+      month or this year.
+    - **Call notes:** call or note; tick **Notify someone** to send them a notification, and **Create a
+      follow-up to-do** to make a to-do for a day and person. Then the **Timeline** of everything that
+      happened with them, newest first.
+    - **Cards & bank accounts on file**, **Invoice settings** (days to pay, discount, notes on their invoices,
+      PO, sales tax, autopay; **Change** edits them), **Customer portal** (the emails that can sign in, and
+      **View as customer**), **Other contacts**, **Prepayments**, **Credits**, cancellations, and photos and
+      documents.
+  - **Their own invoice defaults** (Edit → "Their invoices and estimates"): **Discount %**, **Days to pay** and
+    **Notes on their invoices**. New invoices use their days to pay and notes. Invoices made from work orders also
+    get their discount. The invoice and estimate forms start with their discount filled in.
 - **Properties** (Operations → Properties): search by address, ZIP, label or customer; filter by **Map Code
   starts with** (e.g. 80 for 800–809; type **none** for properties without one), status, property tags, and the
   bill-to customer's tags (e.g. properties whose customer is tagged Commercial).
@@ -271,8 +299,8 @@ billing; admins change prices).
   **Void** keeps a sent invoice on record with a reason and stops it counting as owed; void its payments first.
 - **Statuses:** Draft, Unpaid, Overdue (past the due date), Partly paid, Paid, Void. The tabs (Open, Overdue, Drafts,
   To mail, Paid, Void, All) and search (invoice number, customer, address, PO) find them; the total due shows at the top.
-- **Customer page:** the **Billing** box shows past due, outstanding, paid this year and drafts, with the customer's
-  invoices listed below.
+- **Customer page:** the account box (top right) shows past due, outstanding, paid this year, credit and prepaid;
+  the **Invoices** and **Payments** boxes list theirs.
 - **Bigcapital (your books):** when Bigcapital is connected (Settings → Integrations), Crewdesk sends billing to it as it
   happens: the customer the first time one of their invoices is sent (and any later changes to their name, email, phone
   or address); each sent invoice with the same number, each line in its service's income account; edits to an unpaid

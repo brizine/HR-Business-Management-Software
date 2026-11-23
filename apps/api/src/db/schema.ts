@@ -1209,6 +1209,14 @@ export const customers = pgTable(
     emailOptOutAt: timestamp("email_opt_out_at", { withTimezone: true }),
     /** Charge their default card or bank account on file when an invoice is sent. */
     autopay: boolean("autopay").notNull().default(false),
+    /** Mr., Mrs., Dr. ... (shown with their name on letters). */
+    title: text("title"),
+    county: text("county"),
+    /** Defaults for their new invoices and estimates (like Homeworks' Discount % and Defaults box). */
+    discountPercent: doublePrecision("discount_percent").notNull().default(0),
+    invoiceNotes: text("invoice_notes"),
+    /** Days to pay (blank: the company's usual terms). */
+    termsDays: integer("terms_days"),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     /** Custom field values (custom_fields), by field id. */
@@ -1356,6 +1364,42 @@ export const customerPaymentMethods = pgTable(
     uniqueIndex("customer_payment_methods_stripe_idx").on(t.stripePaymentMethodId),
     index("customer_payment_methods_customer_idx").on(t.customerId),
   ],
+);
+
+/** Notes on a customer (like Homeworks' Call Notes): a call or a note, who wrote it, who was told, and any follow-up to-do. */
+export const customerNotes = pgTable(
+  "customer_notes",
+  {
+    id: id(),
+    companyId: companyId(),
+    customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+    /** "call" or "note". */
+    kind: text("kind").notNull().default("call"),
+    body: text("body").notNull(),
+    notifiedIds: uuid("notified_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
+    todoId: uuid("todo_id").references(() => todos.id, { onDelete: "set null" }),
+    byId: uuid("by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("customer_notes_customer_idx").on(t.customerId, t.createdAt)],
+);
+
+/** Photos and documents on a customer (like Homeworks' Photos / Documents). */
+export const customerFiles = pgTable(
+  "customer_files",
+  {
+    id: id(),
+    companyId: companyId(),
+    customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    storageKey: text("storage_key").notNull(),
+    caption: text("caption"),
+    uploadedById: uuid("uploaded_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("customer_files_customer_idx").on(t.customerId)],
 );
 
 /** An estimate (quote) for a customer, like Homeworks': numbered from 1000, sent with a link to accept online. */
