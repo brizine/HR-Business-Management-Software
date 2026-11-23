@@ -6,6 +6,7 @@ import {
   invoiceBalance, sendInvoiceSchema, termsLabel, voidSchema, type InvoiceInput,
 } from "@crewdesk/shared";
 import { db } from "../db";
+import { newRecordCustom, updatedCustom } from "../lib/customFields";
 import { companies, creditApplications, customerContacts, customerCredits, customers, invoiceLines, invoicePayments, invoices, paymentRefunds, prepayments, properties, serviceTypes } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
@@ -172,11 +173,13 @@ const routes: FastifyPluginAsync = async (app) => {
     const { companyId, sub } = req.user;
     const today = await companyToday(companyId);
     const settings = await billingSettings(companyId);
+    const [payer] = await db.select({ custom: customers.custom }).from(customers).where(and(eq(customers.id, body.customerId), eq(customers.companyId, companyId)));
+    const custom = await newRecordCustom(companyId, "invoice", (req.body as { custom?: unknown })?.custom, [{ target: "customer", values: payer?.custom }]);
     return db.transaction(async (tx) => {
       const { totals } = await prepare(tx, companyId, body);
       const issueDate = body.issueDate ?? today;
       const [inv] = await tx.insert(invoices).values({
-        companyId, customerId: body.customerId, propertyId: body.propertyId ?? null, issueDate, dueDate: body.dueDate ?? addDays(issueDate, settings.termsDays),
+        custom, companyId, customerId: body.customerId, propertyId: body.propertyId ?? null, issueDate, dueDate: body.dueDate ?? addDays(issueDate, settings.termsDays),
         poNumber: body.poNumber ?? null, notes: body.notes ?? null, discountKind: body.discountKind, discountValue: body.discountValue, ...totals, createdById: sub,
       }).returning();
       await tx.insert(invoiceLines).values(body.lines.map((l, i) => ({ ...l, serviceTypeId: l.serviceTypeId ?? null, invoiceId: inv.id, amountCents: lineAmount(l), sortOrder: i })));
@@ -256,8 +259,9 @@ const routes: FastifyPluginAsync = async (app) => {
       if (inv.creditedCents > 0) throw new HttpError(400, "This invoice has credit on it. Take the credit off first (it goes back on the customer's account), then edit it");
       if (body.customerId !== inv.customerId && inv.number != null) throw new HttpError(400, "A sent invoice can't move to another customer; void it and make a new one");
       const { totals } = await prepare(tx, companyId, body);
+      const custom = await updatedCustom(companyId, "invoice", (req.body as { custom?: unknown })?.custom, inv.custom);
       const [u] = await tx.update(invoices).set({
-        customerId: body.customerId, propertyId: body.propertyId ?? null, issueDate: body.issueDate ?? inv.issueDate, dueDate: body.dueDate ?? inv.dueDate,
+        ...(custom ? { custom } : {}), customerId: body.customerId, propertyId: body.propertyId ?? null, issueDate: body.issueDate ?? inv.issueDate, dueDate: body.dueDate ?? inv.dueDate,
         poNumber: body.poNumber ?? null, notes: body.notes ?? null, discountKind: body.discountKind, discountValue: body.discountValue, ...totals, updatedAt: new Date(),
       }).where(eq(invoices.id, inv.id)).returning();
       await tx.delete(invoiceLines).where(eq(invoiceLines.invoiceId, inv.id));

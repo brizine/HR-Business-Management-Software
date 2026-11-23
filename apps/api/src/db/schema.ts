@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { TodoRule, BillingSettings, Bracket, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
+import type { CustomValues, TodoRule, BillingSettings, Bracket, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -400,6 +400,8 @@ export const assets = pgTable(
     purchaseHours: doublePrecision("purchase_hours"),
     /** Printed on the asset's QR label. Regenerating it retires old labels. */
     qrCode: text("qr_code").unique().$defaultFn(newAssetCode),
+    /** Custom field values (custom_fields), by field id. */
+    custom: jsonb("custom").$type<CustomValues>().notNull().default({}),
     createdAt: createdAt(),
   },
   (t) => [index("assets_company_idx").on(t.companyId)],
@@ -1201,6 +1203,8 @@ export const customers = pgTable(
     bigcapitalCustomerId: integer("bigcapital_customer_id"),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Custom field values (custom_fields), by field id. */
+    custom: jsonb("custom").$type<CustomValues>().notNull().default({}),
     createdAt: createdAt(),
   },
   (t) => [
@@ -1257,6 +1261,8 @@ export const properties = pgTable(
     sample: boolean("sample").notNull().default(false),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Custom field values (custom_fields), by field id. */
+    custom: jsonb("custom").$type<CustomValues>().notNull().default({}),
     createdAt: createdAt(),
   },
   (t) => [
@@ -1390,6 +1396,8 @@ export const invoices = pgTable(
     bigcapitalInvoiceId: text("bigcapital_invoice_id"),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Custom field values (custom_fields), by field id. */
+    custom: jsonb("custom").$type<CustomValues>().notNull().default({}),
     createdAt: createdAt(),
   },
   (t) => [
@@ -1638,6 +1646,31 @@ export const portalCodes = pgTable(
   (t) => [index("portal_codes_email_idx").on(t.companyId, t.email), uniqueIndex("portal_codes_link_idx").on(t.linkHash)],
 );
 
+/**
+ * Custom fields (like Homeworks'): the company's own fields on customers, properties, work orders,
+ * to-dos, invoices or equipment. Values live on each record (its "custom" column), by field id.
+ */
+export const customFields = pgTable(
+  "custom_fields",
+  {
+    id: id(),
+    companyId: companyId(),
+    /** customer | property | workorder | todo | invoice | asset */
+    appliesTo: text("applies_to").notNull(),
+    name: text("name").notNull(),
+    /** text | checkbox | date | decimal | integer | select */
+    type: text("type").notNull(),
+    /** The choices of a dropdown. */
+    options: text("options").array().notNull().default(sql`'{}'::text[]`),
+    defaultValue: text("default_value"),
+    /** Copies the value from the same-named field on the record it's made for. */
+    transferable: boolean("transferable").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("custom_fields_company_idx").on(t.companyId, t.appliesTo)],
+);
+
 /** To-do categories (Homeworks' "To-do Category", with "Add New Category"). */
 export const todoCategories = pgTable(
   "todo_categories",
@@ -1725,6 +1758,8 @@ export const todos = pgTable(
     doneById: uuid("done_by_id").references(() => employees.id, { onDelete: "set null" }),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Custom field values (custom_fields), by field id. */
+    custom: jsonb("custom").$type<CustomValues>().notNull().default({}),
     createdAt: createdAt(),
   },
   (t) => [
@@ -1822,6 +1857,8 @@ export const visits = pgTable(
     invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Custom field values (custom_fields), by field id. */
+    custom: jsonb("custom").$type<CustomValues>().notNull().default({}),
     createdAt: createdAt(),
   },
   (t) => [

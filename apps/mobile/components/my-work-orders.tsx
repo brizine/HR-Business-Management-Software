@@ -4,6 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import { formatTodoTime } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
+import { CustomLines, useCustomFieldDefs } from "./custom-values";
 import { Badge, Button, Card, Divider, Input, Row, Txt, useTheme } from "./ui";
 
 const day = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
@@ -20,6 +21,7 @@ function openMap(address: string, lat?: number | null, lng?: number | null) {
  */
 export function MyWorkOrdersCard({ refreshKey }: { refreshKey?: number }) {
   const t = useTheme();
+  const fieldDefs = useCustomFieldDefs();
   const list = useApi<{ today: string; items: any[] }>(`/visits?mine=true&status=active&to=${plusDays(new Date().toISOString().slice(0, 10), 8)}&r=${refreshKey ?? 0}`);
   const [busy, setBusy] = useState<string | null>(null);
   const [writing, setWriting] = useState<{ id: string; kind: "complete" | "skip"; text: string } | null>(null);
@@ -86,6 +88,8 @@ export function MyWorkOrdersCard({ refreshKey }: { refreshKey?: number }) {
                 </Pressable>
               ) : null}
               {p?.gateCode ? <Txt muted>Gate code {p.gateCode}</Txt> : null}
+              <CustomLines defs={fieldDefs.data} target="property" values={p?.custom} />
+              <CustomLines defs={fieldDefs.data} target="workorder" values={v.custom} />
               {p?.pets ? <Txt muted>Pets: {p.pets}</Txt> : null}
               {p?.accessNotes ? <Txt muted>{p.accessNotes}</Txt> : null}
               {v.lines.length ? <Txt muted>{v.lines.map((l: any) => `${l.description}${l.quantity !== 1 ? ` × ${l.quantity}` : ""}`).join(" · ")}</Txt> : null}

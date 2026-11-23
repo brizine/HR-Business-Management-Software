@@ -47,6 +47,7 @@ import crmSettingsRoutes from "./routes/crmSettings";
 import searchRoutes from "./routes/search";
 import todoRoutes from "./routes/todos";
 import offSeasonRoutes from "./routes/offSeasons";
+import customFieldRoutes from "./routes/customFields";
 import eventRoutes from "./routes/events";
 import visitRoutes from "./routes/visits";
 import crewRoutes from "./routes/crews";
@@ -150,6 +151,7 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(searchRoutes, { prefix: "/search" });
   await app.register(todoRoutes, { prefix: "/todos" });
   await app.register(offSeasonRoutes, { prefix: "/off-seasons" });
+  await app.register(customFieldRoutes, { prefix: "/custom-fields" });
   await app.register(eventRoutes, { prefix: "/events" });
   await app.register(visitRoutes, { prefix: "/visits" });
   await app.register(crewRoutes, { prefix: "/crews" });

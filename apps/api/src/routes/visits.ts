@@ -14,6 +14,7 @@ import { crews, crmTags, customers, employees, invoiceLines, invoices, propertie
 import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { addDays, billingSettings } from "../lib/invoices";
+import { jobSources, newRecordCustom, updatedCustom } from "../lib/customFields";
 import { companyToday } from "../lib/payRates";
 import { except, notify } from "../lib/notify";
 
@@ -47,7 +48,7 @@ export async function presentVisits(req: FastifyRequest, rows: Visit[]) {
   const people = [...new Set(rows.flatMap((v) => [v.finishedById, v.createdById]).filter((x): x is string => !!x))];
   const cs = await db.select({ id: customers.id, kind: customers.kind, firstName: customers.firstName, lastName: customers.lastName, companyName: customers.companyName, phone: customers.phone, tagIds: customers.tagIds })
     .from(customers).where(inArray(customers.id, custIds));
-  const ps = propIds.length ? await db.select({ id: properties.id, name: properties.name, street: properties.street, city: properties.city, state: properties.state, zip: properties.zip, gateCode: properties.gateCode, pets: properties.pets, accessNotes: properties.accessNotes, lawnSqFt: properties.lawnSqFt, lat: properties.lat, lng: properties.lng })
+  const ps = propIds.length ? await db.select({ id: properties.id, name: properties.name, street: properties.street, city: properties.city, state: properties.state, zip: properties.zip, gateCode: properties.gateCode, pets: properties.pets, accessNotes: properties.accessNotes, lawnSqFt: properties.lawnSqFt, lat: properties.lat, lng: properties.lng, custom: properties.custom })
     .from(properties).where(inArray(properties.id, propIds)) : [];
   const inv = invIds.length ? await db.select({ id: invoices.id, number: invoices.number, status: invoices.status }).from(invoices).where(inArray(invoices.id, invIds)) : [];
   const es = people.length ? await db.select({ id: employees.id, firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(inArray(employees.id, people)) : [];
@@ -67,7 +68,7 @@ export async function presentVisits(req: FastifyRequest, rows: Visit[]) {
       lines: lines.filter((l) => l.visitId === v.id).map((l) => ({ ...l, unitPriceCents: showPrices ? l.unitPriceCents : null, amountCents: showPrices ? l.amountCents : null })),
       assignees: crew.filter((x) => x.visitId === v.id).map(({ id, firstName, lastName }) => ({ id, firstName, lastName })),
       customer: { id: c.id, name: customerName(c), phone: c.phone, tagIds: c.tagIds },
-      property: p ? { id: p.id, name: p.name, address: formatAddress(p), gateCode: p.gateCode, pets: p.pets, accessNotes: p.accessNotes, lawnSqFt: p.lawnSqFt, lat: p.lat, lng: p.lng } : null,
+      property: p ? { id: p.id, name: p.name, address: formatAddress(p), gateCode: p.gateCode, pets: p.pets, accessNotes: p.accessNotes, lawnSqFt: p.lawnSqFt, lat: p.lat, lng: p.lng, custom: p.custom } : null,
       invoice: i ? { id: i.id, number: i.number, status: i.status } : null,
       crew: cr.find((x) => x.id === v.crewId) ?? null,
       fileCount: fileCounts.find((x) => x.visitId === v.id)?.n ?? 0,
@@ -173,8 +174,10 @@ async function invoiceVisits(req: FastifyRequest, ids: string[]) {
         quantity: l.quantity, unitPriceCents: l.unitPriceCents, incomeAccountCode: account ?? "4000",
       })));
       const totals = invoiceTotals(items, "none", 0);
+      const [payer] = await tx.select({ custom: customers.custom }).from(customers).where(eq(customers.id, group[0].customerId));
+      const custom = await newRecordCustom(companyId, "invoice", undefined, [{ target: "workorder", values: group[0].custom }, { target: "customer", values: payer?.custom }]);
       const [inv] = await tx.insert(invoices).values({
-        companyId, customerId: group[0].customerId, propertyId: group[0].propertyId, issueDate: today, dueDate: addDays(today, settings.termsDays),
+        custom, companyId, customerId: group[0].customerId, propertyId: group[0].propertyId, issueDate: today, dueDate: addDays(today, settings.termsDays),
         notes: `Work order${several ? "s" : ""} ${group.map((v) => visitNumber(v.number)).join(", ")}`, discountKind: "none", discountValue: 0, ...totals, createdById: sub,
       }).returning();
       await tx.insert(invoiceLines).values(items.map((l, i) => ({ ...l, invoiceId: inv.id, amountCents: lineAmount(l), sortOrder: i })));
@@ -238,12 +241,13 @@ const routes: FastifyPluginAsync = async (app) => {
       : body.scheduling === "repeat" ? visitDates(body.date!, body.repeatUnit, body.repeatEvery, body.repeatUntil, body.offMonths) : [body.date!];
     if (!dates.length) throw new HttpError(400, "Every date in that series falls in the off-season");
     const series = dates.length > 1;
+    const custom = await newRecordCustom(companyId, "workorder", (req.body as { custom?: unknown })?.custom, await jobSources(companyId, body.propertyId, body.customerId));
     const created = await db.transaction(async (tx) => {
       let number = await nextVisitNumber(tx, companyId);
       const rows: Visit[] = [];
       for (const date of dates) {
         const [v] = await tx.insert(visits).values({
-          ...fields(body), companyId, number: number++, date, endDate: !series && body.endDate && body.endDate !== body.date ? body.endDate : null,
+          ...fields(body), custom, companyId, number: number++, date, endDate: !series && body.endDate && body.endDate !== body.date ? body.endDate : null,
           repeatLabel: series ? describeRepeat(body.repeatUnit, body.repeatEvery, body.offMonths) : null, createdById: me,
         }).returning();
         rows.push(v);
@@ -277,6 +281,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const crew = await checkInput(companyId, body);
     const before = new Set((await db.select({ id: visitAssignees.employeeId }).from(visitAssignees).where(eq(visitAssignees.visitId, v.id))).map((r) => r.id));
     const shift = v.date && body.date ? Math.round((Date.parse(body.date) - Date.parse(v.date)) / 86_400_000) : 0;
+    const custom = await updatedCustom(companyId, "workorder", (req.body as { custom?: unknown })?.custom, v.custom);
     const targets = req.query.applyTo === "following" && v.seriesId && v.date
       ? await db.select().from(visits).where(and(eq(visits.seriesId, v.seriesId), eq(visits.companyId, companyId), gte(visits.date, v.date), or(inArray(visits.status, ["open", "on_site"]), eq(visits.id, v.id))))
       : [v];
@@ -284,7 +289,7 @@ const routes: FastifyPluginAsync = async (app) => {
       for (const row of targets) {
         const date = row.id === v.id ? body.date ?? null : row.date ? addDays(row.date, shift) : null;
         const endDate = row.id === v.id ? (body.endDate && body.endDate !== body.date ? body.endDate : null) : row.endDate;
-        await tx.update(visits).set({ ...fields(body), date, endDate, updatedAt: new Date() }).where(eq(visits.id, row.id));
+        await tx.update(visits).set({ ...fields(body), ...(custom ? { custom } : {}), date, endDate, updatedAt: new Date() }).where(eq(visits.id, row.id));
         await tx.delete(visitLines).where(eq(visitLines.visitId, row.id));
         const ls = lineRows(row.id, body);
         if (ls.length) await tx.insert(visitLines).values(ls);

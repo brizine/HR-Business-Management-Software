@@ -9,6 +9,7 @@ import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead } from "@/components/ui";
 import { DispatcherNotes, TodoForm, WorkTracking, todoPeople, todoWhen, todosChanged, type Todo } from "@/components/todos";
 import { VisitFiles } from "@/components/visit-files";
+import { CustomFieldsCard, CustomRows } from "@/components/custom-fields";
 
 type Detail = Todo & { seriesLeft: number; seriesEnd: string | null; today: string };
 
@@ -83,6 +84,8 @@ export default function TodoSheet({ params }: { params: Promise<{ id: string }> 
                 {t.crew && <tr><th scope="row">Crew</th><td><span className="visit-dot" style={{ background: t.crew.color }} aria-hidden="true" />{t.crew.name}</td></tr>}
                 <tr><th scope="row">Employees</th><td>{t.assignees.length ? todoPeople(t) : "Nobody in particular"}</td></tr>
                 <tr><th scope="row">Property notes</th><td>{propertyNotes}</td></tr>
+                <CustomRows target="property" values={t.property?.custom} />
+                <CustomRows target="todo" values={t.custom} />
                 <tr><th scope="row">Visit notes</th><td>{t.notes ?? ""}</td></tr>
                 <tr><th scope="row">Notes for dispatcher</th><td>{t.noteCount ? `${t.noteCount} note${t.noteCount === 1 ? "" : "s"} (below)` : ""}</td></tr>
                 <tr><th scope="row">Budgeted hours</th><td>{t.budgetedHours != null ? t.budgetedHours.toFixed(2) : ""}</td></tr>
@@ -95,6 +98,7 @@ export default function TodoSheet({ params }: { params: Promise<{ id: string }> 
           </div>
           <div className="jobsheet-side">
             <WorkTracking t={t} onChange={update} canWork={canWork} />
+            <CustomFieldsCard target="todo" id={t.id} canEdit={canWork} values={t.custom ?? {}} onSaved={(custom) => update({ ...t, custom })} />
             <VisitFiles base={`/todos/${t.id}`} canAdd={canWork} canManage={manager} meId={me?.user.id} />
           </div>
         </div>

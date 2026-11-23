@@ -3,11 +3,12 @@ import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   CUSTOMER_KIND_LABELS, CUSTOMER_KINDS, DELIVERY_LABELS, DELIVERY_METHODS, LEAD_SOURCES, TAG_COLORS, formatPhoneTyping, lawnTotal,
-  type CustomerContactInput,
+  type CustomerContactInput, type CustomValues,
 } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { ErrorBox } from "@/components/ui";
+import { CustomFieldInputs } from "./custom-fields";
 
 export interface Tag { id: string; name: string; color: string; description?: string | null; archived: boolean; customers?: number; properties?: number }
 
@@ -88,6 +89,7 @@ export interface CustomerFormValue {
   kind: string; firstName: string; lastName: string; companyName: string; email: string; phone: string; altPhone: string;
   billingStreet: string; billingCity: string; billingState: string; billingZip: string; delivery: string[]; source: string;
   poRequired: boolean; notes: string; status: string; tagIds: string[]; contacts: CustomerContactInput[];
+  custom: CustomValues; newRecord: boolean;
 }
 
 export function customerFormValue(c?: any): CustomerFormValue {
@@ -97,6 +99,7 @@ export function customerFormValue(c?: any): CustomerFormValue {
     billingCity: blank(c?.billingCity), billingState: c?.billingState ?? "OK", billingZip: blank(c?.billingZip), delivery: c?.delivery ?? ["email"],
     source: blank(c?.source), poRequired: !!c?.poRequired, notes: blank(c?.notes), status: c?.status === "lead" ? "lead" : "active",
     tagIds: c?.tagIds ?? [], contacts: (c?.contacts ?? []).map((k: any) => ({ name: k.name, relation: k.relation ?? "", email: k.email ?? "", phone: k.phone ?? "", getsInvoices: !!k.getsInvoices })),
+    custom: c?.custom ?? {}, newRecord: !c,
   };
 }
 
@@ -174,6 +177,7 @@ export function CustomerFields({ value, onChange, tags, showStatus }: { value: C
         ))}
         <button type="button" className="btn" onClick={() => set({ contacts: [...value.contacts, { name: "", relation: "", email: "", phone: "", getsInvoices: false }] })}>Add a contact</button>
       </fieldset>
+      <CustomFieldInputs target="customer" values={value.custom} onChange={(custom) => set({ custom })} fresh={value.newRecord} />
     </div>
   );
 }
@@ -181,13 +185,13 @@ export function CustomerFields({ value, onChange, tags, showStatus }: { value: C
 /** The form value as the API wants it (blank strings left out). */
 export function customerBody(v: CustomerFormValue) {
   const strip = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, x]) => x !== ""));
-  return { ...strip({ ...v, contacts: undefined }), contacts: v.contacts.map((k) => strip(k as Record<string, unknown>)) };
+  return { ...strip({ ...v, contacts: undefined, newRecord: undefined }), contacts: v.contacts.map((k) => strip(k as Record<string, unknown>)) };
 }
 
 export interface PropertyFormValue {
   name: string; street: string; city: string; state: string; zip: string; mapCode: string; frontSqFt: string; backSqFt: string; lawnSqFt: string;
   measurementId: string | null; measurementName: string; gateCode: string; pets: string; accessNotes: string; notes: string; tagIds: string[];
-  lat: number | null; lng: number | null;
+  lat: number | null; lng: number | null; custom: CustomValues; newRecord: boolean;
 }
 
 export function propertyFormValue(p?: any): PropertyFormValue {
@@ -197,6 +201,7 @@ export function propertyFormValue(p?: any): PropertyFormValue {
     lawnSqFt: blank(p?.lawnSqFt != null && p?.frontSqFt == null && p?.backSqFt == null ? Math.round(p.lawnSqFt) : ""),
     measurementId: p?.measurementId ?? null, measurementName: p?.measurement?.name ?? "", gateCode: blank(p?.gateCode), pets: blank(p?.pets),
     accessNotes: blank(p?.accessNotes), notes: blank(p?.notes), tagIds: p?.tagIds ?? [], lat: p?.lat ?? null, lng: p?.lng ?? null,
+    custom: p?.custom ?? {}, newRecord: !p,
   };
 }
 
@@ -204,7 +209,7 @@ export function propertyBody(v: PropertyFormValue) {
   const front = num(v.frontSqFt), back = num(v.backSqFt), total = num(v.lawnSqFt);
   const out: Record<string, unknown> = {
     street: v.street, state: v.state || "OK", tagIds: v.tagIds, frontSqFt: front, backSqFt: back, lawnSqFt: front == null && back == null ? total : null,
-    measurementId: v.measurementId, lat: v.lat, lng: v.lng,
+    measurementId: v.measurementId, lat: v.lat, lng: v.lng, custom: v.custom,
   };
   for (const k of ["name", "city", "zip", "mapCode", "gateCode", "pets", "accessNotes", "notes"] as const) if (v[k].trim()) out[k] = v[k];
   return out;
@@ -246,7 +251,8 @@ export function PropertyFields({ value, onChange, tags }: { value: PropertyFormV
       </div>
       <label>Access notes<textarea rows={2} value={value.accessNotes} onChange={(e) => set({ accessNotes: e.target.value })} /></label>
       <TagPicker value={value.tagIds} onChange={(tagIds) => set({ tagIds })} tags={tags} label="Property tags" />
-      <label>Notes<textarea rows={2} value={value.notes} onChange={(e) => set({ notes: e.target.value })} /></label>
+      <CustomFieldInputs target="property" values={value.custom} onChange={(custom) => set({ custom })} fresh={value.newRecord} />
+      <label>Notes (for internal use)<textarea rows={2} value={value.notes} onChange={(e) => set({ notes: e.target.value })} /></label>
     </div>
   );
 }

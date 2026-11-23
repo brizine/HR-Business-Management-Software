@@ -3,6 +3,7 @@ import { aliasedTable, and, arrayContains, arrayOverlaps, asc, desc, eq, ilike, 
 import { assignmentSchema, cancelSchema, customerName, endAssignmentSchema, lawnTotal, propertyCreateSchema, propertySchema } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
+import { newRecordCustom, updatedCustom } from "../lib/customFields";
 import { cancellationReasons, cancellations, customers, measurements, properties, propertyAssignments } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
@@ -82,12 +83,15 @@ const routes: FastifyPluginAsync = async (app) => {
     const { billToCustomerId, residentIds, tagIds: tags, ...body } = parse(propertyCreateSchema, req.body);
     const { companyId, sub } = req.user;
     const today = await companyToday(companyId);
+    // The bill-to customer's same-named fields can transfer onto the property.
+    const [payer] = billToCustomerId ? await db.select({ custom: customers.custom }).from(customers).where(and(eq(customers.id, billToCustomerId), eq(customers.companyId, companyId))) : [];
+    const custom = await newRecordCustom(companyId, "property", (req.body as { custom?: unknown })?.custom, [{ target: "customer", values: payer?.custom }]);
     return db.transaction(async (tx) => {
       const tagIds = await checkTags(tx, companyId, tags);
       const sizes = body.measurementId ? await measurementSizes(tx, companyId, body.measurementId) : null;
       const values = { ...body, ...(sizes && body.frontSqFt == null && body.backSqFt == null ? { frontSqFt: sizes.frontSqFt, backSqFt: sizes.backSqFt, lawnSqFt: sizes.lawnSqFt } : {}) };
       if (sizes && values.lat == null) Object.assign(values, { lat: sizes.lat, lng: sizes.lng });
-      const [p] = await tx.insert(properties).values({ ...values, lawnSqFt: lawnTotal(values), tagIds, companyId, createdById: sub }).returning();
+      const [p] = await tx.insert(properties).values({ ...values, custom, lawnSqFt: lawnTotal(values), tagIds, companyId, createdById: sub }).returning();
       await recordTagChanges(tx, { companyId, before: [], after: tagIds, propertyId: p.id, source: "hand", byId: sub });
       if (billToCustomerId) {
         await customerInCompany(tx, companyId, billToCustomerId);
@@ -134,8 +138,9 @@ const routes: FastifyPluginAsync = async (app) => {
       const tagIds = await checkTags(tx, companyId, body.tagIds, p.tagIds);
       if (body.measurementId && body.measurementId !== p.measurementId) await measurementSizes(tx, companyId, body.measurementId);
       const mapCodeManual = body.mapCode !== (p.mapCode ?? undefined) ? !!body.mapCode : p.mapCodeManual;
+      const custom = await updatedCustom(companyId, "property", (req.body as { custom?: unknown })?.custom, p.custom);
       const [u] = await tx.update(properties).set({
-        ...body, mapCode: body.mapCode ?? null, mapCodeManual, lawnSqFt: lawnTotal(body), tagIds, updatedAt: new Date(),
+        ...body, ...(custom ? { custom } : {}), mapCode: body.mapCode ?? null, mapCodeManual, lawnSqFt: lawnTotal(body), tagIds, updatedAt: new Date(),
       }).where(eq(properties.id, p.id)).returning();
       await recordTagChanges(tx, { companyId, before: p.tagIds, after: tagIds, propertyId: p.id, source: "hand", byId: sub });
       return u;

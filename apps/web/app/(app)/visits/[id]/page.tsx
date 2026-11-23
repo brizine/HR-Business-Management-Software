@@ -9,6 +9,7 @@ import { ErrorBox, PageHead } from "@/components/ui";
 import { CrewButtons, VisitForm, VisitStatus, VisitTags, crewNames, trackedLabel, visitWhen, type Visit } from "@/components/visits";
 import { VisitFiles } from "@/components/visit-files";
 import { useAuth } from "@/lib/auth";
+import { CustomFacts, CustomFieldsCard } from "@/components/custom-fields";
 
 type Detail = Visit & { seriesLeft: number; today: string; canManage: boolean; isCrew: boolean };
 
@@ -51,6 +52,7 @@ export default function WorkOrder({ params }: { params: Promise<{ id: string }> 
               {v.property?.pets && <><dt>Pets</dt><dd>{v.property.pets}</dd></>}
               {v.property?.accessNotes && <><dt>Access</dt><dd>{v.property.accessNotes}</dd></>}
               {v.property?.lawnSqFt && <><dt>Lawn</dt><dd>{Math.round(v.property.lawnSqFt).toLocaleString()} sq ft</dd></>}
+              <CustomFacts target="property" values={v.property?.custom} />
               {v.location && <><dt>Location</dt><dd>{v.location}</dd></>}
               <dt>When</dt><dd>{visitWhen(v)}</dd>
               <dt>Crew</dt><dd>{v.crew && <span className="visit-dot" style={{ background: v.crew.color }} />}{crewNames(v) || "No crew yet"}</dd>
@@ -91,6 +93,7 @@ export default function WorkOrder({ params }: { params: Promise<{ id: string }> 
           </div>
         </div>
       )}
+      {!editing && <div style={{ marginTop: 16 }}><CustomFieldsCard target="workorder" id={v.id} canEdit={v.canManage || v.isCrew} values={v.custom ?? {}} onSaved={(custom) => update({ ...v, custom })} /></div>}
       {!editing && <div style={{ marginTop: 16 }}><VisitFiles visitId={v.id} canAdd={v.canManage || v.isCrew} canManage={v.canManage} meId={me?.user.id} /></div>}
     </>
   );

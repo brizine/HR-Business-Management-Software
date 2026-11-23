@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { assetSchema, fleetSettingsSchema, isInactive, maintenanceScheduleSchema, maintenanceScheduleUpdateSchema, meterReadingSchema } from "@crewdesk/shared";
 import { db } from "../db";
+import { newRecordCustom, updatedCustom } from "../lib/customFields";
 import { assets, companies, employees, fuelEntries, inspections, maintenanceSchedules, meterReadings, newAssetCode, workOrders } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
@@ -175,18 +176,22 @@ const routes: FastifyPluginAsync = async (app) => {
 
   app.post("/", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const body = parse(assetSchema, req.body);
+    const custom = await newRecordCustom(req.user.companyId, "asset", (req.body as { custom?: unknown })?.custom);
     const [row] = await db
       .insert(assets)
-      .values({ ...body, companyId: req.user.companyId })
+      .values({ ...body, custom, companyId: req.user.companyId })
       .returning();
     return row;
   });
 
   app.patch<{ Params: { id: string } }>("/:id", { preHandler: requireRole("manager", AREA) }, async (req) => {
     const body = parse(assetSchema.partial(), req.body);
+    const sent = (req.body as { custom?: unknown })?.custom;
+    const [before] = sent !== undefined ? await db.select({ custom: assets.custom }).from(assets).where(and(eq(assets.id, req.params.id), eq(assets.companyId, req.user.companyId))) : [];
+    const custom = before ? await updatedCustom(req.user.companyId, "asset", sent, before.custom) : undefined;
     const [row] = await db
       .update(assets)
-      .set(body)
+      .set({ ...body, ...(custom ? { custom } : {}) })
       .where(and(eq(assets.id, req.params.id), eq(assets.companyId, req.user.companyId)))
       .returning();
     if (!row) notFound("Asset");

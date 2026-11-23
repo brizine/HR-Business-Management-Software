@@ -4,6 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import { formatMinutes, formatTodoTime, todoState } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
+import { CustomLines, useCustomFieldDefs } from "./custom-values";
 import { Badge, Button, Card, Divider, Input, Row, Txt, useTheme } from "./ui";
 
 const day = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
@@ -23,6 +24,7 @@ function openMap(address: string) {
  */
 export function MyTodosCard({ refreshKey }: { refreshKey?: number }) {
   const t = useTheme();
+  const fieldDefs = useCustomFieldDefs();
   const list = useApi<{ today: string; items: any[] }>(`/todos?mine=true&to=${plusDays(new Date().toISOString().slice(0, 10), 8)}&r=${refreshKey ?? 0}`);
   const [busy, setBusy] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -101,6 +103,8 @@ export function MyTodosCard({ refreshKey }: { refreshKey?: number }) {
                 </Pressable>
               ) : null}
               {x.property?.gateCode ? <Txt muted>Gate code {x.property.gateCode}</Txt> : null}
+              <CustomLines defs={fieldDefs.data} target="property" values={x.property?.custom} />
+              <CustomLines defs={fieldDefs.data} target="todo" values={x.custom} />
               {x.property?.accessNotes ? <Txt muted numberOfLines={3}>{x.property.accessNotes}</Txt> : null}
               {x.notes ? <Txt muted numberOfLines={3}>{x.notes}</Txt> : null}
               {x.crew ? <Txt muted>Crew: {x.crew.name}</Txt> : null}

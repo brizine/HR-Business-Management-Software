@@ -12,6 +12,7 @@ import { DocumentList } from "@/components/documents";
 import { QrCode, assetQrUrl, qrSvg } from "@/components/qr";
 import { MaintenanceHistory } from "@/components/maintenance-history";
 import { RenewalBadge, ScheduleNoteEditor, ScheduleReminderEditor, describeLead } from "@/components/maintenance-reminders";
+import { CustomFieldsCard } from "@/components/custom-fields";
 
 export default function AssetDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -159,6 +160,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
       <MaintenanceHistory asset={a} onChange={asset.reload} />
       <FuelLog asset={a} onChange={asset.reload} />
       <TotalCostOfOwnership asset={a} />
+      <CustomFieldsCard target="asset" id={a.id} canEdit={can("manager", "fleet")} values={a.custom ?? {}} onSaved={() => asset.reload()} />
       <div className="grid cols-2">
         <div className="card">
           <h2>Repair Orders</h2>

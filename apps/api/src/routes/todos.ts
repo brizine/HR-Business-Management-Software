@@ -13,6 +13,7 @@ import {
   companies, crewMembers, crews, customers, employees, offSeasons, properties, propertyAssignments, todoAssignees, todoCategories, todoFiles, todoNotes, todoSeries, todos,
 } from "../db/schema";
 import { fileView, sendStored, storeUpload } from "../lib/attachments";
+import { jobSources, newRecordCustom, updatedCustom } from "../lib/customFields";
 import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
@@ -55,7 +56,7 @@ export async function present(rows: Todo[]) {
   const crewIds = uniq(rows.map((t) => t.crewId));
   const seriesIds = uniq(rows.map((t) => t.seriesId));
   const cs = customerIds.length ? await db.select({ id: customers.id, kind: customers.kind, firstName: customers.firstName, lastName: customers.lastName, companyName: customers.companyName }).from(customers).where(inArray(customers.id, customerIds)) : [];
-  const ps = propertyIds.length ? await db.select({ id: properties.id, name: properties.name, street: properties.street, city: properties.city, state: properties.state, zip: properties.zip, gateCode: properties.gateCode, accessNotes: properties.accessNotes, notes: properties.notes }).from(properties).where(inArray(properties.id, propertyIds)) : [];
+  const ps = propertyIds.length ? await db.select({ id: properties.id, name: properties.name, street: properties.street, city: properties.city, state: properties.state, zip: properties.zip, gateCode: properties.gateCode, accessNotes: properties.accessNotes, notes: properties.notes, custom: properties.custom }).from(properties).where(inArray(properties.id, propertyIds)) : [];
   const es = personIds.length ? await db.select({ id: employees.id, firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(inArray(employees.id, personIds)) : [];
   const cats = categoryIds.length ? await db.select({ id: todoCategories.id, name: todoCategories.name }).from(todoCategories).where(inArray(todoCategories.id, categoryIds)) : [];
   const crewRows = crewIds.length ? await db.select({ id: crews.id, name: crews.name, color: crews.color }).from(crews).where(inArray(crews.id, crewIds)) : [];
@@ -71,7 +72,7 @@ export async function present(rows: Todo[]) {
     return {
       ...t,
       customer: c ? { id: c.id, name: customerName(c) } : null,
-      property: p ? { id: p.id, name: p.name, address: formatAddress(p), gateCode: p.gateCode, accessNotes: p.accessNotes, notes: p.notes } : null,
+      property: p ? { id: p.id, name: p.name, address: formatAddress(p), gateCode: p.gateCode, accessNotes: p.accessNotes, notes: p.notes, custom: p.custom } : null,
       category: cats.find((x) => x.id === t.categoryId) ?? null,
       crew: crewRows.find((x) => x.id === t.crewId) ?? null,
       assignees: people.filter((x) => x.todoId === t.id).map(({ id, firstName, lastName }) => ({ id, firstName, lastName })),
@@ -373,6 +374,7 @@ const routes: FastifyPluginAsync = async (app) => {
     if (!dates.length) throw new HttpError(400, "These settings don't make any to-dos. Check the dates and the off-season.");
     const seriesId = rule ? randomUUID() : null;
     const label = rule ? describeSeries(body.date, rule, season?.name) : null;
+    const custom = await newRecordCustom(companyId, "todo", (req.body as { custom?: unknown })?.custom, await jobSources(companyId, body.propertyId, body.customerId));
     const created = await db.transaction(async (tx) => {
       if (rule) {
         await tx.insert(todoSeries).values({
@@ -383,7 +385,7 @@ const routes: FastifyPluginAsync = async (app) => {
         });
       }
       return insertCopies(tx, {
-        ...fields(body), companyId, endDate: rule || !body.endDate || body.endDate === body.date ? null : body.endDate,
+        ...fields(body), custom, companyId, endDate: rule || !body.endDate || body.endDate === body.date ? null : body.endDate,
         seriesId, repeat: rule ? rule.freq : "none", createdById: me,
       }, dates, people);
     });
@@ -407,6 +409,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const people = await checkInput(req, body, t);
     const before = new Set(await assigneesOf(t.id));
     const shift = Math.round((Date.parse(`${body.date}T00:00:00Z`) - Date.parse(`${t.date}T00:00:00Z`)) / dayMs);
+    const custom = await updatedCustom(companyId, "todo", (req.body as { custom?: unknown })?.custom, t.custom);
     const following = req.query.applyTo === "following" && !!t.seriesId;
     const targets = following
       ? await db.select().from(todos).where(and(eq(todos.seriesId, t.seriesId!), eq(todos.companyId, companyId), gte(todos.date, t.date), or(isNull(todos.doneAt), eq(todos.id, t.id))))
@@ -415,7 +418,7 @@ const routes: FastifyPluginAsync = async (app) => {
       for (const row of targets) {
         const date = row.id === t.id ? body.date : plusDays(row.date, shift);
         const endDate = row.id === t.id ? (body.endDate && body.endDate !== body.date ? body.endDate : null) : row.endDate;
-        await tx.update(todos).set({ ...fields(body), date, endDate, updatedAt: new Date() }).where(eq(todos.id, row.id));
+        await tx.update(todos).set({ ...fields(body), ...(custom ? { custom } : {}), date, endDate, updatedAt: new Date() }).where(eq(todos.id, row.id));
         await tx.delete(todoAssignees).where(eq(todoAssignees.todoId, row.id));
         if (people.length) await tx.insert(todoAssignees).values(people.map((employeeId) => ({ todoId: row.id, employeeId })));
       }

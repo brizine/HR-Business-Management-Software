@@ -436,6 +436,47 @@ calendar: **Work orders**, **To-dos**, **Repair orders** (by due date), **Time o
   schedule managers everyone's), the published shifts (schedule managers drafts too) and the holidays.
 - Your choices (view, sort, types, colors, card details) are kept for you in that browser.
 
+## Custom fields
+
+Your own fields, like Homeworks' Custom Fields: "Gallons used" on work orders, "Grass type" on properties,
+"Referred by" on customers, "Tag number" on equipment. Open **Customers → Custom fields** in the Operations menu
+(or **Settings → Custom fields**). Owners and admins add and change them; everyone else sees and fills them in.
+
+- **New field** (Homeworks' "Add New Field"):
+  - **Applies to:** Customers, Properties, Work orders, To-dos, Invoices or Equipment.
+  - **Field name / label.**
+  - **Field type:** Text, Checkbox, Date, Decimal or Integer, as in Homeworks, plus **Dropdown** (a list of
+    choices you type, one per line).
+  - **Transferable field:** a new record copies this value from a field with the same name on the record it's
+    made for:
+    - a work order or to-do copies from its property, then its customer;
+    - an invoice made from a work order copies from the work order, then the customer;
+    - a property copies from its bill-to customer.
+    For example, Front Yard Sq Ft on a property fills Front Yard Sq Ft on each of its work orders. Fields on work
+    orders and to-dos named Front Yard Sq Ft, Back Yard Sq Ft, Total Sq Ft or Lawn Sq Ft also fill from the
+    property's measured lawn, because Crewdesk keeps those sizes built in.
+  - **Default value:** what a new record starts with. A value typed in, or a transferred one, comes first.
+- **The list** shows each field's type, what it applies to, its default and Transferable, with **Applies to** and
+  **Search** filters.
+  - Click a name to rename it, or to change a dropdown's choices.
+  - Type a default and click **✓** to save it, and tick **Transferable** on or off.
+  - **↑ / ↓** change the order fields show in on forms and pages.
+  - **Delete** removes one field, or tick several and **Delete selected**. Deleted fields' values stop showing
+    everywhere.
+- **Filling them in:** the customer, property, work order and to-do forms have a **Custom fields** box.
+  - Each field has an input.
+  - **Reset to defaults** puts the defaults back, and **Clear** empties them all.
+  - Owners and admins also see **Add custom field**, which adds one without leaving the form.
+  - On a new record the defaults are filled in. A transferable field left blank says where it will be filled from.
+- **On each page:** customers, properties, work orders, to-dos, invoices and equipment have a **Custom fields**
+  card. Click **Edit**, change the values, then **Save custom fields**.
+  - Customers, properties and invoices: Customers & billing managers can change them.
+  - Work orders: managers, or the crew on the work order.
+  - To-dos: managers, whoever made it, or the people it's for.
+  - Equipment: Fleet managers.
+- **For the crew:** a work order's page and a to-do's job sheet list the property's custom fields (yard sizes and
+  so on) beside the gate code and access notes. The phone shows them on each work order and to-do in the Tasks tab.
+
 ## To-dos
 
 To-dos are jobs for the office or the crew, like Homeworks' to-dos: "call the HOA about the gate code", "fix

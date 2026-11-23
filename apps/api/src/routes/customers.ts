@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { and, arrayContains, arrayOverlaps, asc, desc, eq, ilike, inArray, isNull, not, or, sql, type SQL } from "drizzle-orm";
 import { cancelSchema, customerName, customerSchema, customerUpdateSchema, lawnTotal } from "@crewdesk/shared";
 import { db } from "../db";
+import { newRecordCustom, updatedCustom } from "../lib/customFields";
 import { cancellationReasons, cancellations, customerContacts, customerCredits, customers, invoices, prepayments, properties, propertyAssignments, visits } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
@@ -78,16 +79,19 @@ const routes: FastifyPluginAsync = async (app) => {
     const { property, contacts, ...body } = parse(customerSchema, req.body);
     const { companyId, sub } = req.user;
     const today = await companyToday(companyId);
+    const raw = req.body as { custom?: unknown; property?: { custom?: unknown } };
+    const custom = await newRecordCustom(companyId, "customer", raw?.custom);
+    const propCustom = property ? await newRecordCustom(companyId, "property", raw?.property?.custom, [{ target: "customer", values: custom }]) : {};
     const created = await db.transaction(async (tx) => {
       const tagIds = await checkTags(tx, companyId, body.tagIds);
       const number = await nextCustomerNumber(tx, companyId);
-      const [c] = await tx.insert(customers).values({ ...body, tagIds, companyId, number, createdById: sub }).returning();
+      const [c] = await tx.insert(customers).values({ ...body, custom, tagIds, companyId, number, createdById: sub }).returning();
       if (contacts.length) await tx.insert(customerContacts).values(contacts.map((k, i) => ({ ...k, companyId, customerId: c.id, sortOrder: i })));
       await recordTagChanges(tx, { companyId, before: [], after: tagIds, customerId: c.id, source: "hand", byId: sub });
       if (property) {
         const { tagIds: propTags, ...p } = property;
         const ptags = await checkTags(tx, companyId, propTags);
-        const [prop] = await tx.insert(properties).values({ ...p, tagIds: ptags, lawnSqFt: lawnTotal(p), companyId, createdById: sub }).returning();
+        const [prop] = await tx.insert(properties).values({ ...p, custom: propCustom, tagIds: ptags, lawnSqFt: lawnTotal(p), companyId, createdById: sub }).returning();
         await recordTagChanges(tx, { companyId, before: [], after: ptags, propertyId: prop.id, source: "hand", byId: sub });
         await assignCustomer(tx, { companyId, propertyId: prop.id, customerId: c.id, role: "bill_to", startDate: today });
       }
@@ -122,7 +126,8 @@ const routes: FastifyPluginAsync = async (app) => {
       const tagIds = await checkTags(tx, companyId, body.tagIds, c.tagIds);
       // Cancelling and reactivating have their own steps (with a reason); a lead can become active here.
       const nextStatus = c.status === "cancelled" ? "cancelled" : status;
-      const [u] = await tx.update(customers).set({ ...body, status: nextStatus, tagIds, updatedAt: new Date() }).where(eq(customers.id, c.id)).returning();
+      const custom = await updatedCustom(companyId, "customer", (req.body as { custom?: unknown })?.custom, c.custom);
+      const [u] = await tx.update(customers).set({ ...body, ...(custom ? { custom } : {}), status: nextStatus, tagIds, updatedAt: new Date() }).where(eq(customers.id, c.id)).returning();
       await tx.delete(customerContacts).where(eq(customerContacts.customerId, c.id));
       if (contacts.length) await tx.insert(customerContacts).values(contacts.map((k, i) => ({ ...k, companyId, customerId: c.id, sortOrder: i })));
       await recordTagChanges(tx, { companyId, before: c.tagIds, after: tagIds, customerId: c.id, source: "hand", byId: sub });

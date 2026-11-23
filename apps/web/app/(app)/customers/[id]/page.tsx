@@ -13,6 +13,7 @@ import { CustomerBilling } from "@/components/invoices";
 import { CustomerCredits } from "@/components/credits";
 import { CustomerPrepayments } from "@/components/prepayments";
 import { CancelForm, CustomerFields, PropertyFields, TagChips, customerBody, customerFormValue, propertyBody, propertyFormValue, useTags } from "@/components/customers";
+import { CustomFieldsCard } from "@/components/custom-fields";
 
 export default function CustomerDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -114,6 +115,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
         properties={current.filter((p: any) => p.status !== "cancelled").map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", "), lawnSqFt: p.lawnSqFt }))} />
       <CustomerCredits customerId={id} onChange={() => setCreditVersion((v) => v + 1)}
         properties={current.filter((p: any) => p.status !== "cancelled").map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", ") }))} />
+      <CustomFieldsCard target="customer" id={id} canEdit values={c.custom ?? {}} onSaved={() => customer.reload()} />
       <LinkedVisits customerId={id} />
       <LinkedTodos customerId={id} customer={{ id, name: customerName(c) }} />
 

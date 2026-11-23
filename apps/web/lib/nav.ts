@@ -18,6 +18,7 @@ export const NAV: Record<Side, NavGroup[]> = {
       items: [
         { href: "/customers", label: "Customers", min: "manager", area: "customers" },
         { href: "/properties", label: "Properties", min: "manager", area: "customers" },
+        { href: "/custom-fields", label: "Custom fields", min: "admin" },
       ],
     },
     {

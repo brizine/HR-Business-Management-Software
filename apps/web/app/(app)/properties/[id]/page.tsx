@@ -11,6 +11,7 @@ import { LinkedVisits } from "@/components/visits";
 import { Badge, ErrorBox, PageHead } from "@/components/ui";
 import { CancelForm, CustomerPicker, PropertyFields, TagChips, propertyBody, propertyFormValue, useTags } from "@/components/customers";
 import { CreditForm } from "@/components/credits";
+import { CustomFieldsCard } from "@/components/custom-fields";
 
 export default function PropertyDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -112,6 +113,7 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
         </div>
       )}
       <div style={{ marginTop: 16 }}>
+        <CustomFieldsCard target="property" id={id} canEdit values={p.custom ?? {}} onSaved={() => property.reload()} />
         <LinkedVisits propertyId={id} />
         <LinkedTodos propertyId={id} customer={(billTo ?? current[0]) ? { id: (billTo ?? current[0]).customerId, name: (billTo ?? current[0]).name } : null} />
       </div>

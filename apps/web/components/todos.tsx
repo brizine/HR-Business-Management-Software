@@ -4,13 +4,14 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   DEFAULT_TODO_COLOR, MONTH_NAMES, NTH_OPTIONS, TODO_COLORS, TODO_FREQS, TODO_FREQ_LABELS, VISIT_FILE_MAX_BYTES, WEEKDAY_NAMES, WEEKDAY_ORDER,
   formatAddress, formatMinutes, formatMonthDay, formatTodoTime, isInactive, previewSeries, ruleDates, todoState, trackedMinutes,
-  type TodoEnd, type TodoFreq,
+  type CustomValues, type TodoEnd, type TodoFreq,
 } from "@crewdesk/shared";
 import { api, fmtDateTime } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { CustomerPicker } from "./customers";
 import { Icon } from "./icons";
+import { CustomFieldInputs } from "./custom-fields";
 import { ErrorBox } from "./ui";
 
 export interface Todo {
@@ -18,9 +19,9 @@ export interface Todo {
   date: string; endDate: string | null; startTime: string | null; endTime: string | null; budgetedHours: number | null;
   customerId: string | null; propertyId: string | null; location: string | null; categoryId: string | null; crewId: string | null;
   seriesId: string | null; repeat: string; repeatLabel: string | null; doneAt: string | null; createdById: string | null;
-  startedAt: string | null; trackedSeconds: number; trackedMinutes: number; fileCount: number; noteCount: number;
+  startedAt: string | null; trackedSeconds: number; trackedMinutes: number; fileCount: number; noteCount: number; custom: CustomValues;
   customer: { id: string; name: string } | null;
-  property: { id: string; name: string | null; address: string; gateCode: string | null; accessNotes?: string | null; notes?: string | null } | null;
+  property: { id: string; name: string | null; address: string; gateCode: string | null; accessNotes?: string | null; notes?: string | null; custom?: CustomValues } | null;
   category: { id: string; name: string } | null;
   crew: { id: string; name: string; color: string } | null;
   assignees: { id: string; firstName: string; lastName: string }[];
@@ -332,6 +333,7 @@ export function TodoForm({ todo, preset, today, onSaved, onCancel }: {
   const [crewId, setCrewId] = useState(todo?.crewId ?? "");
   const [assignees, setAssignees] = useState<string[]>(todo ? todo.assignees.map((a) => a.id) : manager || !me ? [] : [me.user.id]);
   const [applyTo, setApplyTo] = useState<"one" | "following">("one");
+  const [custom, setCustom] = useState<CustomValues>(todo?.custom ?? {});
   const [pending, setPending] = useState<File[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
   const save = useAction();
@@ -385,7 +387,7 @@ export function TodoForm({ todo, preset, today, onSaved, onCancel }: {
         endDate: multi && !repeating ? endDate : null,
         startTime: timed ? startTime : null, endTime: timed ? endTime || null : null,
         budgetedHours: hours.trim() === "" ? null : Number(hours),
-        assigneeIds: assignees,
+        assigneeIds: assignees, custom,
         ...(todo ? {} : { rule }),
       };
       const r = todo
@@ -530,6 +532,7 @@ export function TodoForm({ todo, preset, today, onSaved, onCancel }: {
 
       <CategoryPicker value={categoryId} setValue={setCategoryId} />
       <label>Description / notes<textarea maxLength={5000} value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
+      <CustomFieldInputs target="todo" values={custom} onChange={setCustom} fresh={!todo} />
 
       <h3 className="todo-section">Employees</h3>
       {manager ? (

@@ -1336,3 +1336,21 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .viewer-side { padding: 14px; overflow-y: auto; align-content: start; }
 @media (max-width: 800px) { .viewer { grid-template-columns: 1fr; overflow-y: auto; } .viewer-media { min-height: 200px; } }
 
+
+/* Custom fields (like Homeworks'): the box on forms, the list page, the Add New Field pop-up. */
+.cf-box { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: grid; gap: 10px; min-width: 0; }
+.cf-box legend { font-weight: 600; font-size: 14px; padding: 0 6px; }
+.cf-grid { display: grid; gap: 8px; }
+.cf-row { display: grid; grid-template-columns: minmax(140px, 220px) minmax(0, 1fr); gap: 12px; align-items: center; }
+.cf-row .cf-label { font-size: 14px; color: var(--text); }
+.cf-row input:not([type="checkbox"]), .cf-row select { max-width: 480px; }
+@media (max-width: 600px) { .cf-row { grid-template-columns: 1fr; gap: 4px; } }
+.cf-actions { gap: 8px; }
+.cf-table td { vertical-align: middle; }
+.cf-table .cf-default { max-width: 260px; }
+.cf-table .cf-default select { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.cf-table .cf-default .btn { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.cf-row-actions { white-space: nowrap; text-align: right; }
+.cf-row-actions .btn { padding: 4px 9px; }
+.cf-name { font-weight: 600; text-decoration: underline dotted; text-underline-offset: 3px; }
+.cf-modal { width: min(560px, 100%); }

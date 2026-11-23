@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { CreditForm, InvoiceCredits } from "@/components/credits";
 import { ErrorBox, PageHead } from "@/components/ui";
 import { InvoiceFields, InvoiceStatus, PaymentForm, SendPanel, invoiceBody, invoiceFormValue } from "@/components/invoices";
+import { CustomFieldsCard } from "@/components/custom-fields";
 
 export default function InvoiceDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -140,6 +141,7 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
               </ul>
             ) : <p className="muted" style={{ margin: 0 }}>No payments yet.</p>}
           </div>
+          <CustomFieldsCard target="invoice" id={inv.id} canEdit={inv.status !== "void"} values={inv.custom ?? {}} onSaved={() => invoice.reload()} />
         </>
       )}
     </>

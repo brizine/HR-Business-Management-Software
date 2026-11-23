@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import {
   DEFAULT_TODO_COLOR, MONTH_SHORT, REPEAT_UNITS, TODO_COLORS, VISIT_BILLING, VISIT_BILLING_LABELS, VISIT_SCHEDULING, VISIT_SCHEDULING_LABELS,
   describePricing, formatMoney, formatTodoTime, isInactive, lineAmount, packageToLines, priceFor, visitDates, visitLineHours, visitNumber,
-  type RepeatUnit, type VisitBilling, type VisitScheduling,
+  type CustomValues, type RepeatUnit, type VisitBilling, type VisitScheduling,
 } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { CustomerPicker, TagChip, TagPicker, useTags } from "./customers";
 import { Icon } from "./icons";
+import { CustomFieldInputs } from "./custom-fields";
 import { ErrorBox } from "./ui";
 
 export interface VisitLine { id?: string; serviceTypeId: string | null; description: string; quantity: number; budgetedHours: number | null; unitPriceCents: number | null; amountCents: number | null }
@@ -21,9 +22,9 @@ export interface Visit {
   skipReason: string | null; notes: string | null; completionNotes: string | null; seriesId: string | null; repeatLabel: string | null;
   customerId: string; propertyId: string | null; invoiceId: string | null; invoiced: boolean | null; trackedMinutes: number | null;
   crewId: string | null; crew: { id: string; name: string; color: string } | null;
-  tagIds: string[]; tags: { id: string; name: string; color: string }[]; fileCount: number;
+  tagIds: string[]; tags: { id: string; name: string; color: string }[]; fileCount: number; custom: CustomValues;
   customer: { id: string; name: string; phone: string | null };
-  property: { id: string; name: string | null; address: string; gateCode: string | null; pets: string | null; accessNotes: string | null; lawnSqFt: number | null; lat: number | null; lng: number | null } | null;
+  property: { id: string; name: string | null; address: string; gateCode: string | null; pets: string | null; accessNotes: string | null; lawnSqFt: number | null; lat: number | null; lng: number | null; custom?: CustomValues } | null;
   invoice: { id: string; number: number | null; status: string } | null;
   lines: VisitLine[]; assignees: { id: string; firstName: string; lastName: string }[];
   finishedBy: string | null; createdBy: string | null;
@@ -113,6 +114,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
   const [tagIds, setTagIds] = useState<string[]>(visit?.tagIds ?? []);
   const { tags } = useTags();
   const [notes, setNotes] = useState(visit?.notes ?? "");
+  const [custom, setCustom] = useState<CustomValues>(visit?.custom ?? {});
   const [applyTo, setApplyTo] = useState<"one" | "following">("one");
   const save = useAction();
   const services = useApi<any[]>("/service-types");
@@ -155,7 +157,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
         title, customerId: customer?.id, propertyId, color, location, billing, lines: parsed, notes,
         date: scheduling === "waitlist" ? null : date, endDate: multi && scheduling === "single" ? endDate : null,
         startTime: timed && scheduling !== "waitlist" ? startTime : null, endTime: timed && scheduling !== "waitlist" ? endTime || null : null,
-        budgetedHours: hours.trim() === "" ? null : Number(hours), assigneeIds: crew, crewId: crewId || null, tagIds,
+        budgetedHours: hours.trim() === "" ? null : Number(hours), assigneeIds: crew, crewId: crewId || null, tagIds, custom,
         ...(visit ? {} : { scheduling, repeatEvery: Number(every) || 1, repeatUnit: unit, repeatUntil: scheduling === "repeat" ? until : null, offMonths }),
       };
       const r = visit
@@ -325,6 +327,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
       </div>
       <TagPicker value={tagIds} onChange={setTagIds} tags={tags} label="Tags (the company's tag list: Settings → Customers)" />
       <label>Notes for the crew (optional)<textarea maxLength={5000} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Gate code, where to start, what to watch for" /></label>
+      <CustomFieldInputs target="workorder" values={custom} onChange={setCustom} fresh={!visit} />
       {visit?.seriesId && (
         <div className="row" style={{ gap: 16 }}>
           <label className="check"><input type="radio" checked={applyTo === "one"} onChange={() => setApplyTo("one")} /> Change just this one</label>
