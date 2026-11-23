@@ -77,7 +77,7 @@ describe("calendar events", () => {
       "timeoff:tech Person off", "todo:Spring cleanup", "todo:Walk the Elm St job",
     ].sort());
     const ev = (t: string) => r.body.events.find((e: any) => e.title === t);
-    expect(ev("Walk the Elm St job")).toMatchObject({ type: "todo", date: today, startTime: "09:00", endTime: "10:00", color: "#16a34a", hours: 1, people: [{ id: ID.tech, name: "tech Person" }], canMove: true, canComplete: true, href: `/todos?open=${ID.todo}` });
+    expect(ev("Walk the Elm St job")).toMatchObject({ type: "todo", date: today, startTime: "09:00", endTime: "10:00", color: "#16a34a", hours: 1, people: [{ id: ID.tech, name: "tech Person" }], canMove: true, canComplete: true, href: `/todos/${ID.todo}` });
     expect(ev("Spring cleanup")).toMatchObject({ date: plus(today, 1), endDate: plus(today, 3) });
     expect(ev(BRAKE)).toMatchObject({ type: "repair", date: plus(today, 2), location: "Truck 2", statusLabel: "Open", people: [{ name: "tech Person" }], canMove: true });
     expect(ev("tech Person off")).toMatchObject({ type: "timeoff", date: plus(today, 4), endDate: plus(today, 5), hours: 16, statusLabel: "Approved" });

@@ -154,7 +154,7 @@ function TodosButton() {
                 {list.items.map((t) => (
                   <li key={t.id} style={{ borderLeftColor: t.color }}>
                     <DoneBox t={t} onChange={(u) => setList((l) => (l ? { ...l, items: l.items.map((x) => (x.id === u.id ? u : x)) } : l))} />
-                    <button type="button" onClick={() => { setOpen(false); router.push(`/todos?open=${t.id}`); }}>
+                    <button type="button" onClick={() => { setOpen(false); router.push(`/todos/${t.id}`); }}>
                       <strong className={t.doneAt ? "todo-struck" : undefined}>{t.title}</strong>
                       <span className="muted">{[(t.endDate ?? t.date) < list.today ? `Overdue · ${dayLabel(t.date)}` : formatTodoTime(t.startTime, t.endTime), t.property?.address ?? t.location].filter(Boolean).join(" · ") || "Today"}</span>
                     </button>

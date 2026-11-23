@@ -1,12 +1,12 @@
 "use client";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { customerName, isInactive, todoState } from "@crewdesk/shared";
+import { customerName, formatMonthDay, isInactive, todoState } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useApi, useNewForm } from "@/lib/hooks";
+import { useAction, useApi, useNewForm } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
-import { TodoDetails, TodoForm, TodoItem, dayLabel, type Todo } from "@/components/todos";
+import { TodoDetails, TodoForm, TodoItem, dayLabel, type Category, type Season, type Todo } from "@/components/todos";
 
 const RANGES = [["14", "Next 2 weeks"], ["31", "Next month"], ["92", "Next 3 months"], ["all", "Everything"]] as const;
 const plusDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
@@ -41,6 +41,7 @@ function Todos() {
   const [status, setStatus] = useState<"open" | "done">("open");
   const [who, setWho] = useState(manager ? "all" : "mine");
   const [range, setRange] = useState<string>("31");
+  const [category, setCategory] = useState("");
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
   useEffect(() => { const t = setTimeout(() => setQuery(q), 250); return () => clearTimeout(t); }, [q]);
@@ -70,8 +71,10 @@ function Todos() {
     if (who === "mine") p.set("mine", "true");
     else if (who !== "all") p.set("assigneeId", who);
     if (query.trim()) p.set("q", query.trim());
+    if (category) p.set("categoryId", category);
     return `/todos?${p}`;
-  }, [today, status, range, who, query]);
+  }, [today, status, range, who, query, category]);
+  const categories = useApi<Category[]>("/todos/categories");
   const list = useApi<{ today: string; items: Todo[]; more: boolean }>(path);
   const staff = useApi<any[]>(manager ? "/employees" : null);
   useEffect(() => {
@@ -137,6 +140,15 @@ function Todos() {
             </select>
           </label>
         )}
+        {(categories.data?.length ?? 0) > 0 && (
+          <label>Category
+            <select value={category} onChange={(e) => setCategory(e.target.value)}>
+              <option value="">All</option>
+              <option value="none">No category</option>
+              {(categories.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </label>
+        )}
         <label>Search<input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Title, notes, location" /></label>
       </div>
       <ErrorBox error={list.error} />
@@ -157,7 +169,54 @@ function Todos() {
         </div>
       ))}
       {list.data?.more && <p className="muted">Showing the first {items.length}. Narrow it down with the filters.</p>}
+      {manager && <TodoLists categories={categories} />}
     </>
+  );
+}
+
+/** Managers: the to-do categories and the off-seasons repeating series pause in (rename or remove). */
+function TodoLists({ categories }: { categories: ReturnType<typeof useApi<Category[]>> }) {
+  const seasons = useApi<Season[]>("/off-seasons");
+  const act = useAction();
+  const rename = (c: Category) => {
+    const name = prompt("Rename the category", c.name)?.trim();
+    if (name && name !== c.name) act.run(async () => { await api(`/todos/categories/${c.id}`, { method: "PUT", body: { name } }); await categories.reload(); });
+  };
+  const removeCat = (c: Category) => confirm(`Remove "${c.name}"? Its to-dos stay, with no category.`) && act.run(async () => { await api(`/todos/categories/${c.id}`, { method: "DELETE" }); await categories.reload(); });
+  const removeSeason = (s: Season) => confirm(`Remove the "${s.name}" off-season? Series already made keep their dates; ones still being topped up stop pausing.`) && act.run(async () => { await api(`/off-seasons/${s.id}`, { method: "DELETE" }); await seasons.reload(); });
+  return (
+    <details className="card todo-lists">
+      <summary><strong>Categories and off-seasons</strong> <span className="muted">· add new ones from the to-do form</span></summary>
+      <div className="grid cols-2" style={{ marginTop: 12 }}>
+        <div className="stack">
+          <h3 style={{ margin: 0 }}>To-do categories</h3>
+          {categories.data?.length ? (
+            <ul className="plain-list">
+              {categories.data.map((c) => (
+                <li key={c.id} className="row" style={{ justifyContent: "space-between" }}>
+                  <span>{c.name} <span className="muted">· {c.todoCount ?? 0} to-do{c.todoCount === 1 ? "" : "s"}</span></span>
+                  <span className="row" style={{ gap: 8 }}><button type="button" className="linkbtn" onClick={() => rename(c)}>Rename</button><button type="button" className="linkbtn" onClick={() => removeCat(c)}>Remove</button></span>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="muted" style={{ margin: 0 }}>None yet.</p>}
+        </div>
+        <div className="stack">
+          <h3 style={{ margin: 0 }}>Off-seasons</h3>
+          {seasons.data?.length ? (
+            <ul className="plain-list">
+              {seasons.data.map((s) => (
+                <li key={s.id} className="row" style={{ justifyContent: "space-between" }}>
+                  <span>{s.name} <span className="muted">· {formatMonthDay(s.start)} – {formatMonthDay(s.end)}</span></span>
+                  <button type="button" className="linkbtn" onClick={() => removeSeason(s)}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="muted" style={{ margin: 0 }}>None yet.</p>}
+        </div>
+      </div>
+      <ErrorBox error={act.error} />
+    </details>
   );
 }
 

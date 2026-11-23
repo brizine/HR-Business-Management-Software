@@ -439,36 +439,77 @@ calendar: **Work orders**, **To-dos**, **Repair orders** (by due date), **Time o
 ## To-dos
 
 To-dos are jobs for the office or the crew, like Homeworks' to-dos: "call the HOA about the gate code", "fix
-the sprinkler head at Jane's", "fuel up the trucks every Monday". Open them from **Schedule → To-dos** in the Operations menu,
-the to-do button in the top bar, **+ New → To-do**, or the **To-dos** box on a customer's or property's page.
+the sprinkler head at Jane's", "clean the sprayers every other Monday". Open them from **Schedule → To-dos** in the
+Operations menu, the to-do button in the top bar, **+ New → To-do**, or the **To-dos** box on a customer's or property's page.
 
 - **Adding one** (**Add to-do**), laid out like Homeworks:
   - **To-do title or description** (required).
   - **Customer:** pick a customer and one of their properties (people with Customers & billing access), and/or
-    type a **Location** (the shop, a supplier, any address). Pick a **Color** to tell kinds of to-dos apart.
-  - **Scheduling:** **Repeats** (single to-do, every day, every weekday, every week, every 2 weeks or every
-    month), the **Date** (or first date and **Repeat until**, up to a year ahead), **More than one day** (a last
-    day), **Set a time** (start and optional end), and **Budgeted hours**.
-  - **For:** tick the people it's for (managers). Nobody ticked means it's for nobody in particular; managers see
-    it on the To-dos page. Without To-dos manager access you make to-dos for yourself.
-  - **Notes** (optional).
+    type a **Location** (the shop, a supplier, any address). Pick one of Homeworks' 15 **Colors** (Default, Boston
+    Blue, Green, Bold blue, Blue, Turquoise, Light green, Bold green, Yellow, Orange, Red, Bold red, Purple, Gray,
+    Dark Gray) to tell kinds of to-dos apart on the calendar.
+  - **Scheduling:** **Single to-do** or **Recurring series of to-dos**.
+    - A single to-do has a **Date**, **Multi-day?** (an end date), **Time** (start and optional end) and **Budgeted hours**.
+    - A recurring series asks **How often will these to-dos be?**
+      - **Daily:** every weekday (Monday to Friday) or every N days.
+      - **Weekly:** every N weeks on the days you tick. It starts on the first ticked day on or after the
+        starting date.
+      - **Monthly:** on day D (shorter months use their last day), or on the first, second, third, fourth or
+        last weekday you pick, every N months.
+      - **Yearly:** on a month and day, or on the Nth weekday of a month.
+    - Then how it ends:
+      - **The last date you'll make a to-do** (up to 5 years ahead).
+      - **Total number of to-dos** (up to 500).
+      - **No end date**: they carry on. Crewdesk keeps to-dos made a year ahead and tops them up as time passes.
+    - **Pause during off-season** skips the dates in a saved off-season, like Winter from December 1 to February
+      28. **Add season** saves a new one (managers of to-dos or of customers).
+    - The blue box says when the first to-do will be and when the last one will be.
+  - The chart beside the date shows the **budgeted hours already booked** each week for the next five weeks
+    (to-dos and work orders) for the people picked. The lighter part of a bar is the to-do you're adding, so you
+    can spot a light week.
+  - **To-do category:** pick one, or **Add new category** (managers). Categories also filter the To-dos page.
+  - **Description / notes**.
+  - **Employees:** pick a **Crew** (managers) to tick its people, then change them if needed; or tick people
+    yourself. Nobody ticked means it's for nobody in particular; managers see it on the To-dos page. Without
+    To-dos manager access you make to-dos for yourself.
+  - **Photos / documents:** drop or pick photos, PDFs or short videos (MP4, MOV), up to 25 MB each. For a
+    series they go on the first to-do.
 - **Who sees what:** you see the to-dos that are for you and the ones you made. Managers (the **To-dos** area on
-  the Permissions page) see everyone's and can give to-dos to anyone. People a to-do is for get a notification
-  when it's given to them, and a reminder the morning it starts (turn these off under Notification settings →
-  To-dos).
+  the Permissions page) see everyone's and can give to-dos to anyone or a crew. People a to-do is for get a
+  notification when it's given to them, and a reminder the morning it starts (turn these off under Notification
+  settings → To-dos).
 - **The To-dos page** lists them under **Overdue**, **Today**, **Tomorrow** and each later day, with how many
-  and the budgeted hours for each day. Filters: **Show** (To do or Done), **For** (managers: everyone, me,
-  nobody assigned, or one person), **Through** (the next 2 weeks, month, 3 months or everything) and **Search**.
+  and the budgeted hours for each day. Each one shows its category, ↻ for a series, **working** while someone's
+  timer runs, and 📎 / 💬 counts of photos and notes. Filters: **Show** (To do or Done), **For** (managers:
+  everyone, me, nobody assigned, or one person), **Through** (the next 2 weeks, month, 3 months or everything),
+  **Category** and **Search**. Managers can rename or remove categories and off-seasons under **Categories and
+  off-seasons** at the bottom. Removing a category keeps its to-dos.
 - **Ticking off:** tick the box by a to-do (here, in the top bar's list, or on the phone). Untick it to undo.
   Done ones move to **Show: Done**, with who did it and when.
-- **Opening one** shows the notes, the property's gate code, who it's for, who made it and when it was done.
-  Whoever made it, or a manager, can **Edit** or **Delete** it. For a repeating to-do you choose **just this one**
-  or **this one and the later ones** that aren't done (moving the date moves the later ones by the same number of
-  days).
-- **Repeating to-dos** are made up front, one per date (↻ marks them). A customer's or property's page and search
-  show each series once, with how many more are coming.
+- **The job sheet** (Homeworks' "Work Order" view of a to-do): **Open job sheet** on a to-do, or click one in
+  search, the calendar, a notification or the top bar.
+  - A printable table: **Status**, when, **Type** (Single, or Recurring and how), category, customer, property,
+    location, crew, employees, **Property notes** (gate code and access notes), **Visit notes**, **Notes for
+    dispatcher**, **Budgeted hours**, tracked time, and who made it. Buttons: **Print**, **Directions**,
+    **Edit to-do** and **Return**.
+  - **Work tracking:** **Start work** starts a timer and **Stop work** keeps the time; start again to add more.
+    **Done** (or **Mark done**) finishes the to-do and stops the timer. The calendar shows a to-do being worked
+    on as on site, with its tracked time.
+  - **Notes for the dispatcher:** **Add new note** leaves a note for the office: a cracked lid, a locked gate,
+    parts to order. Whoever made the to-do and the people it's for get a notification. Whoever wrote a note, or
+    a manager, can remove it.
+  - **Photos & documents:** add more, open one to view, caption, download or remove it.
+- **Editing:** **Edit to-do** on the job sheet (whoever made it, or a manager). Like Homeworks, **Delete** and
+  **Complete** sit at the top while you edit. For a repeating to-do you choose **just this one** or **this one and
+  the later ones** that aren't done. Moving the date moves the later ones by the same number of days.
+  **Delete this and later** stops the series.
+- **Repeating to-dos** are made one per date (↻ marks them). A customer's or property's page and search show
+  each series once, with how many more are coming.
 - **Your page:** the **My Tasks** box lists your to-dos for the next week, along with repair orders and
   onboarding steps.
+- **On the phone** (Tasks tab): your to-dos for the week, with the category and repeat, the address (tap for
+  directions), gate code and notes. Buttons: **Start work** / **Stop work**, **Done**, **Add photo** and **Note
+  for office**.
 
 ## Spray Mix Calculator
 
@@ -833,5 +874,6 @@ inspections, issue reports, repair orders, work orders, to-dos, training, onboar
 - **Work orders** (Tasks tab): yours for the next week with the customer, the address (tap it for directions), gate
   code, pets, the services, tags and notes, **Add photo** (take one or choose several), and **Arrived**, **Completed**
   (with notes) and **Skip** (with a reason).
-- **To-dos** (Tasks tab): yours for the next week with **Done**, the customer, the address (tap it for
-  directions), gate code and notes. **Quick add** makes one for yourself for today or tomorrow.
+- **To-dos** (Tasks tab): yours for the next week with the category and repeat, the customer, the address (tap
+  it for directions), gate code and notes; **Start work** / **Stop work** (time tracking), **Done**, **Add photo**
+  and **Note for office** (a note for the dispatcher). **Quick add** makes one for yourself for today or tomorrow.

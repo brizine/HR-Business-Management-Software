@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { BillingSettings, Bracket, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
+import type { TodoRule, BillingSettings, Bracket, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -1638,11 +1638,62 @@ export const portalCodes = pgTable(
   (t) => [index("portal_codes_email_idx").on(t.companyId, t.email), uniqueIndex("portal_codes_link_idx").on(t.linkHash)],
 );
 
+/** To-do categories (Homeworks' "To-do Category", with "Add New Category"). */
+export const todoCategories = pgTable(
+  "todo_categories",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("todo_categories_company_name_idx").on(t.companyId, t.name)],
+);
+
+/** Off-seasons (Homeworks' "Available Seasons"): a named stretch of the year that repeating series pause in. */
+export const offSeasons = pgTable(
+  "off_seasons",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    /** "MM-DD"; a start after the end runs over New Year. */
+    startMd: text("start_md").notNull(),
+    endMd: text("end_md").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("off_seasons_company_name_idx").on(t.companyId, t.name)],
+);
+
+/**
+ * A repeating to-do series: its rule and how far ahead its to-dos have been made. Its id is the
+ * to-dos' seriesId. Series ending on a date or never are made a year ahead and topped up by the
+ * scheduler (lib/jobs); shiftDays is how far "this and later" edits moved the dates.
+ */
+export const todoSeries = pgTable(
+  "todo_series",
+  {
+    id: uuid("id").primaryKey(),
+    companyId: companyId(),
+    rule: jsonb("rule").$type<TodoRule>().notNull(),
+    startDate: date("start_date").notNull(),
+    shiftDays: integer("shift_days").notNull().default(0),
+    offSeasonId: uuid("off_season_id").references(() => offSeasons.id, { onDelete: "set null" }),
+    /** The rule's dates are made through this day (before any shift). */
+    generatedThrough: date("generated_through").notNull(),
+    /** "Delete this and later" (or nothing left to copy) stops it: nothing more is made. */
+    stoppedAt: timestamp("stopped_at", { withTimezone: true }),
+    label: text("label").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("todo_series_company_idx").on(t.companyId)],
+);
+
 /**
  * To-dos (like Homeworks'): one-off or repeating jobs for the office or the crew. Each is for a day
  * (or several), optionally at a time, optionally tied to a customer and property or a free-text
- * location, with budgeted hours, for one or more people (todo_assignees). A repeat makes one row
- * per date up front, sharing a seriesId.
+ * location, with a category, budgeted hours, a crew and people (todo_assignees), and tracked work
+ * time. A repeat makes one row per date, sharing a seriesId (todo_series).
  */
 export const todos = pgTable(
   "todos",
@@ -1662,9 +1713,14 @@ export const todos = pgTable(
     startTime: text("start_time"),
     endTime: text("end_time"),
     budgetedHours: doublePrecision("budgeted_hours"),
+    categoryId: uuid("category_id").references(() => todoCategories.id, { onDelete: "set null" }),
+    crewId: uuid("crew_id").references(() => crews.id, { onDelete: "set null" }),
     seriesId: uuid("series_id"),
-    /** How the series repeats ("none" for a single to-do). */
+    /** How the series repeats ("none" for a single to-do; the rule's frequency for newer series). */
     repeat: text("repeat").notNull().default("none"),
+    /** Work tracking: a running timer's start, and the time already tracked. */
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    trackedSeconds: integer("tracked_seconds").notNull().default(0),
     doneAt: timestamp("done_at", { withTimezone: true }),
     doneById: uuid("done_by_id").references(() => employees.id, { onDelete: "set null" }),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
@@ -1686,6 +1742,38 @@ export const todoAssignees = pgTable(
     employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
   },
   (t) => [primaryKey({ columns: [t.todoId, t.employeeId] }), index("todo_assignees_employee_idx").on(t.employeeId)],
+);
+
+/** Notes for the dispatcher on a to-do (Homeworks' "Notes for the Dispatcher"), newest last. */
+export const todoNotes = pgTable(
+  "todo_notes",
+  {
+    id: id(),
+    companyId: companyId(),
+    todoId: uuid("todo_id").notNull().references(() => todos.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    authorId: uuid("author_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("todo_notes_todo_idx").on(t.todoId)],
+);
+
+/** Photos and documents on a to-do; the bytes are in encrypted file storage (lib/storage). */
+export const todoFiles = pgTable(
+  "todo_files",
+  {
+    id: id(),
+    companyId: companyId(),
+    todoId: uuid("todo_id").notNull().references(() => todos.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    storageKey: text("storage_key").notNull(),
+    caption: text("caption"),
+    uploadedById: uuid("uploaded_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("todo_files_todo_idx").on(t.todoId)],
 );
 
 /**

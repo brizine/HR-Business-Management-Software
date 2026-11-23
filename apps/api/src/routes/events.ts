@@ -89,7 +89,8 @@ const routes: FastifyPluginAsync = async (app) => {
         status: t.doneAt ? "done" : "open", statusLabel: t.doneAt ? "Done" : "Open", recurring: !!t.seriesId,
         customer: t.customer, property: t.property ? { id: t.property.id, address: t.property.address } : null, location: t.location,
         people: t.assignees.map((a) => ({ id: a.id, name: `${a.firstName} ${a.lastName}` })), hours: t.budgetedHours, notes: t.notes,
-        tagIds: tags.find((c) => c.id === t.customerId)?.tagIds ?? [], href: `/todos?open=${t.id}`,
+        tagIds: tags.find((c) => c.id === t.customerId)?.tagIds ?? [], href: `/todos/${t.id}`,
+        trackedMinutes: t.trackedMinutes || null, onSite: !!t.startedAt && !t.doneAt, crew: t.crew, mediaCount: t.fileCount,
         canMove: todoManager || t.createdById === me, canComplete: true,
       }));
     }

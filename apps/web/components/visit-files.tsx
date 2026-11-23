@@ -31,11 +31,13 @@ async function shrink(file: File): Promise<File> {
 }
 
 /**
- * Photos and documents on a work order (like Homeworks' Photos / Documents): drop files or click to
+ * Photos and documents on a work order or to-do (like Homeworks' Photos / Documents): drop files or click to
  * add them (the crew and managers), see them in a grid, open one to view, caption, download or remove.
  */
-export function VisitFiles({ visitId, canAdd, canManage, meId, onCount }: { visitId: string; canAdd: boolean; canManage: boolean; meId?: string; onCount?: (n: number) => void }) {
-  const list = useApi<VisitFile[]>(`/visits/${visitId}/files`);
+export function VisitFiles({ visitId, base, canAdd, canManage, meId, onCount }: { visitId?: string; base?: string; canAdd: boolean; canManage: boolean; meId?: string; onCount?: (n: number) => void }) {
+  // Work orders by default; `base` points it at another record (a to-do: "/todos/<id>").
+  const path = base ?? `/visits/${visitId}`;
+  const list = useApi<VisitFile[]>(`${path}/files`);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [over, setOver] = useState(false);
@@ -43,7 +45,7 @@ export function VisitFiles({ visitId, canAdd, canManage, meId, onCount }: { visi
   const input = useRef<HTMLInputElement>(null);
   const files = list.data ?? [];
   useEffect(() => { if (list.data) onCount?.(list.data.length); }, [list.data]); // eslint-disable-line react-hooks/exhaustive-deps
-  const url = (f: VisitFile, download = false) => `${API_URL}/visits/${visitId}/files/${f.id}${download ? "?download=1" : ""}`;
+  const url = (f: VisitFile, download = false) => `${API_URL}${path}/files/${f.id}${download ? "?download=1" : ""}`;
 
   const add = async (picked: FileList | File[]) => {
     const all = [...picked];
@@ -56,7 +58,7 @@ export function VisitFiles({ visitId, canAdd, canManage, meId, onCount }: { visi
         if (f.size > VISIT_FILE_MAX_BYTES) throw new Error(`${raw.name} is over 25 MB`);
         const fd = new FormData();
         fd.append("file", f, f.name);
-        await api(`/visits/${visitId}/files`, { method: "POST", body: fd });
+        await api(`${path}/files`, { method: "POST", body: fd });
       } catch (e) {
         setError((e as Error).message);
         break;
@@ -95,15 +97,15 @@ export function VisitFiles({ visitId, canAdd, canManage, meId, onCount }: { visi
         </div>
       ) : list.data && !canAdd ? <p className="muted" style={{ margin: 0 }}>No photos or documents.</p> : null}
       {open != null && files[open] && (
-        <Viewer files={files} index={open} setIndex={setOpen} url={url} visitId={visitId}
+        <Viewer files={files} index={open} setIndex={setOpen} url={url} path={path}
           canEdit={canAdd} canDelete={(f) => canManage || f.uploadedById === meId} onChanged={() => list.reload()} />
       )}
     </div>
   );
 }
 
-function Viewer({ files, index, setIndex, url, visitId, canEdit, canDelete, onChanged }: {
-  files: VisitFile[]; index: number; setIndex: (i: number | null) => void; url: (f: VisitFile, d?: boolean) => string; visitId: string;
+function Viewer({ files, index, setIndex, url, path, canEdit, canDelete, onChanged }: {
+  files: VisitFile[]; index: number; setIndex: (i: number | null) => void; url: (f: VisitFile, d?: boolean) => string; path: string;
   canEdit: boolean; canDelete: (f: VisitFile) => boolean; onChanged: () => void;
 }) {
   const f = files[index];
@@ -121,10 +123,10 @@ function Viewer({ files, index, setIndex, url, visitId, canEdit, canDelete, onCh
     document.addEventListener("keydown", key);
     return () => document.removeEventListener("keydown", key);
   }, [index, files.length, close, setIndex]);
-  const save = async () => { try { await api(`/visits/${visitId}/files/${f.id}`, { method: "PATCH", body: { caption: caption.trim() || null } }); onChanged(); } catch (e) { setErr((e as Error).message); } };
+  const save = async () => { try { await api(`${path}/files/${f.id}`, { method: "PATCH", body: { caption: caption.trim() || null } }); onChanged(); } catch (e) { setErr((e as Error).message); } };
   const remove = async () => {
     if (!confirm(`Remove ${f.fileName}?`)) return;
-    try { await api(`/visits/${visitId}/files/${f.id}`, { method: "DELETE" }); onChanged(); close(); } catch (e) { setErr((e as Error).message); }
+    try { await api(`${path}/files/${f.id}`, { method: "DELETE" }); onChanged(); close(); } catch (e) { setErr((e as Error).message); }
   };
   return (
     <div className="viewer-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }} role="dialog" aria-label={f.fileName}>

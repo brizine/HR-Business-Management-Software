@@ -129,7 +129,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
     for (const t of tds) {
       if (t.seriesId && (seenSeries.has(t.seriesId) || !seenSeries.add(t.seriesId))) continue;
-      out.push({ kind: "todo", id: t.id, title: t.title, sub: [day(t.date), t.seriesId ? "repeats" : null, t.location, t.doneAt ? "done" : null].filter(Boolean).join(" · "), href: `/todos?open=${t.id}` });
+      out.push({ kind: "todo", id: t.id, title: t.title, sub: [day(t.date), t.seriesId ? "repeats" : null, t.location, t.doneAt ? "done" : null].filter(Boolean).join(" · "), href: `/todos/${t.id}` });
       if (out.filter((h) => h.kind === "todo").length >= 5) break;
     }
 

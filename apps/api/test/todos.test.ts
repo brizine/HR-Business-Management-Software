@@ -4,6 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";
 import { pool } from "../src/db";
 import { todoReminders } from "../src/lib/jobs";
+import { extendTodoSeries } from "../src/routes/todos";
 import { flushNotifications, setPushTransport } from "../src/lib/notify";
 
 let app: FastifyInstance;
@@ -146,8 +147,155 @@ describe("to-dos", () => {
 
   it("search finds the to-dos you can see", async () => {
     const hit = (who: string) => call("GET", "/search?q=sprinkler", who).then((r) => r.body.results.filter((h: any) => h.kind === "todo"));
-    expect(await hit("owner")).toEqual([expect.objectContaining({ title: "Fix the broken sprinkler head", href: `/todos?open=${ID.fix}` })]);
+    expect(await hit("owner")).toEqual([expect.objectContaining({ title: "Fix the broken sprinkler head", href: `/todos/${ID.fix}` })]);
     expect(await hit("tech")).toHaveLength(1);
     expect(await hit("other")).toEqual([]);
+  });
+});
+
+const png = Buffer.from("89504e470d0a1a0a0000000d494844520000000100000001", "hex");
+const boundary = "----todo";
+const upload = (who: string, todoId: string, caption?: string) => app.inject({
+  method: "POST", url: `/todos/${todoId}/files`,
+  payload: Buffer.concat([
+    ...(caption ? [Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${caption}\r\n`)] : []),
+    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="shop-door.png"\r\nContent-Type: image/png\r\n\r\n`), png, Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]),
+  headers: { authorization: `Bearer ${T[who]}`, "content-type": `multipart/form-data; boundary=${boundary}` },
+});
+
+describe("to-dos like Homeworks'", () => {
+  it("categories: everyone picks, managers keep the list", async () => {
+    expect((await call("POST", "/todos/categories", "tech", { name: "Shop" })).status).toBe(403);
+    const shop = await call("POST", "/todos/categories", "office", { name: "Shop" });
+    expect(shop.body).toMatchObject({ name: "Shop", todoCount: 0 });
+    ID.shop = shop.body.id;
+    expect((await call("POST", "/todos/categories", "office", { name: "shop" })).body.error).toMatch(/already a category/);
+    ID.office = (await call("POST", "/todos/categories", "office", { name: "Office" })).body.id;
+    expect((await call("GET", "/todos/categories", "tech")).body.map((c: any) => c.name)).toEqual(["Office", "Shop"]);
+    const t = await call("POST", "/todos", "tech", { title: "Sweep the shop", date: today, categoryId: ID.shop });
+    expect(t.body.category).toEqual({ id: ID.shop, name: "Shop" });
+    expect((await call("GET", `/todos?categoryId=${ID.shop}`, "office")).body.items.map((x: any) => x.title)).toEqual(["Sweep the shop"]);
+    expect((await call("GET", "/todos/categories", "office")).body.find((c: any) => c.id === ID.shop).todoCount).toBe(1);
+    // Removing a category keeps its to-dos.
+    await call("DELETE", `/todos/categories/${ID.office}`, "office");
+    expect((await call("POST", "/todos", "office", { title: "x", date: today, categoryId: ID.office })).body.error).toMatch(/category isn't set up/);
+  });
+
+  it("repeats like Homeworks': every 2 weeks on Mon and Wed, 4 times", async () => {
+    const r = await call("POST", "/todos", "office", {
+      title: "Calibrate the sprayers", date: "2027-03-01", assigneeIds: [ID.tech],
+      rule: { freq: "weekly", every: 2, weekdays: [1, 3], end: "count", count: 4 },
+    });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ created: 4, repeat: "weekly", repeatLabel: "Every 2 weeks on Mon, Wed, 4 times" });
+    const all = (await call("GET", "/todos?q=calibrate", "office")).body.items;
+    expect(all.map((t: any) => t.date)).toEqual(["2027-03-01", "2027-03-03", "2027-03-15", "2027-03-17"]);
+    expect((await inbox("tech")).find((n) => n.title === "New to-do: Calibrate the sprayers")?.body).toContain("every 2 weeks on Mon, Wed, 4 times");
+    // The last Friday of every month.
+    const m = await call("POST", "/todos", "office", { title: "Month-end inventory", date: "2027-01-01", rule: { freq: "monthly", by: "nth", nth: -1, weekday: 5, end: "count", count: 3 } });
+    expect((await call("GET", "/todos?q=month-end", "office")).body.items.map((t: any) => t.date)).toEqual(["2027-01-29", "2027-02-26", "2027-03-26"]);
+    expect(m.body.repeatLabel).toBe("The last Friday of every month, 3 times");
+  });
+
+  it("off-seasons: saved once, then series pause in them", async () => {
+    expect((await call("POST", "/off-seasons", "tech", { name: "Winter", start: "12-01", end: "02-28" })).status).toBe(403);
+    expect((await call("POST", "/off-seasons", "office", { name: "Winter", start: "12-01", end: "02-30" })).status).toBe(400);
+    const w = await call("POST", "/off-seasons", "office", { name: "Winter", start: "12-01", end: "02-28" });
+    expect(w.body).toMatchObject({ name: "Winter", start: "12-01", end: "02-28" });
+    expect((await call("GET", "/off-seasons", "tech")).body.map((s: any) => s.name)).toEqual(["Winter"]);
+    const r = await call("POST", "/todos", "office", {
+      title: "Check the irrigation backflow", date: "2027-11-22", rule: { freq: "weekly", end: "date", until: "2028-03-13", offSeasonId: w.body.id },
+    });
+    expect(r.body.repeatLabel).toBe("Every week on Mon until Mar 13, 2028 · not during Winter");
+    expect((await call("GET", "/todos?q=backflow", "office")).body.items.map((t: any) => t.date)).toEqual(["2027-11-22", "2027-11-29", "2028-03-06", "2028-03-13"]);
+    expect((await call("POST", "/todos", "office", { title: "x", date: "2027-12-06", rule: { freq: "weekly", end: "date", until: "2028-01-31", offSeasonId: w.body.id } })).body.error).toMatch(/don't make any to-dos/);
+  });
+
+  it("open-ended series are made a year ahead and topped up; deleting this and later stops them", async () => {
+    const r = await call("POST", "/todos", "office", {
+      title: "Lock the yard gate", date: today, categoryId: ID.shop, assigneeIds: [ID.other], rule: { freq: "daily", end: "never" },
+    });
+    expect(r.body.created).toBe(367);
+    expect(r.body.repeatLabel).toBe("Every day, no end date");
+    // 40 days on, the next 40 days are added, copying the latest one.
+    expect(await extendTodoSeries(new Date(Date.parse(`${plus(today, 40)}T18:00:00Z`)))).toBeGreaterThanOrEqual(40);
+    const later = (await call("GET", `/todos?q=yard%20gate&from=${plus(today, 400)}&limit=500`, "office")).body.items;
+    expect(later[0]).toMatchObject({ date: plus(today, 400), category: { name: "Shop" }, assignees: [{ id: ID.other }], seriesId: r.body.seriesId });
+    expect(later.at(-1).date).toBe(plus(today, 406));
+    // Running it again the same day adds nothing.
+    await extendTodoSeries(new Date(Date.parse(`${plus(today, 40)}T19:00:00Z`)));
+    expect((await call("GET", `/todos?q=yard%20gate&from=${plus(today, 400)}&limit=500`, "office")).body.items).toHaveLength(7);
+    // Stop it from day 10 on: nothing more is made.
+    const day10 = (await call("GET", `/todos?q=yard%20gate&from=${plus(today, 10)}&to=${plus(today, 10)}`, "office")).body.items[0];
+    expect((await call("GET", `/todos/${day10.id}`, "office")).body.seriesEnd).toBe("never");
+    expect((await call("DELETE", `/todos/${day10.id}?scope=following`, "office")).body.deleted).toBe(397);
+    await extendTodoSeries(new Date(Date.parse(`${plus(today, 80)}T18:00:00Z`)));
+    expect((await call("GET", "/todos?q=yard%20gate&limit=500", "office")).body.items).toHaveLength(10);
+  });
+
+  it("a crew: picking it gives the to-do to its people; only managers can", async () => {
+    const crew = await call("POST", "/crews", "office", { name: "Shop crew", color: "#0d9488", leadId: ID.tech, memberIds: [ID.other] });
+    expect(crew.status).toBe(200);
+    expect((await call("POST", "/todos", "tech", { title: "x", date: today, crewId: crew.body.id })).status).toBe(403);
+    const t = await call("POST", "/todos", "office", { title: "Clean out the spray tanks", date: today, crewId: crew.body.id });
+    expect(t.body.crew).toMatchObject({ id: crew.body.id, name: "Shop crew" });
+    expect(t.body.assignees.map((a: any) => a.id).sort()).toEqual([ID.tech, ID.other].sort());
+    expect((await call("GET", `/todos?crewId=${crew.body.id}`, "office")).body.items.map((x: any) => x.id)).toEqual([t.body.id]);
+    ID.tanks = t.body.id;
+  });
+
+  it("notes for the dispatcher: the crew and office write them; whoever made it is told", async () => {
+    const n = await call("POST", `/todos/${ID.tanks}/notes`, "tech", { body: "Tank 2 has a cracked lid, need a new one" });
+    expect(n.body).toMatchObject({ author: "tech Person", body: "Tank 2 has a cracked lid, need a new one" });
+    expect((await inbox("office")).find((x) => x.title === `Note on "Clean out the spray tanks" from tech Person`)).toMatchObject({ link: { screen: "todos", id: ID.tanks } });
+    const o = await call("POST", `/todos/${ID.tanks}/notes`, "office", { body: "Ordered, it comes Thursday" });
+    expect((await call("GET", `/todos/${ID.tanks}/notes`, "other")).body.map((x: any) => x.body)).toEqual(["Tank 2 has a cracked lid, need a new one", "Ordered, it comes Thursday"]);
+    expect((await call("POST", `/todos/${ID.tanks}/notes`, "tech", { body: " " })).status).toBe(400);
+    expect((await call("DELETE", `/todos/${ID.tanks}/notes/${o.body.id}`, "tech")).status).toBe(403);
+    expect((await call("DELETE", `/todos/${ID.tanks}/notes/${n.body.id}`, "tech")).body.ok).toBe(true);
+    expect((await call("GET", `/todos/${ID.tanks}`, "office")).body.noteCount).toBe(1);
+  });
+
+  it("work tracking: start, stop, and done stops the timer", async () => {
+    const started = await call("POST", `/todos/${ID.tanks}/start`, "tech");
+    expect(started.body.startedAt).toBeTruthy();
+    // Pretend it started 30 minutes ago.
+    await pool.query("update todos set started_at = now() - interval '30 minutes' where id = $1", [ID.tanks]);
+    const cal = (await call("GET", `/events?from=${today}&to=${today}`, "office")).body.events.find((e: any) => e.id === ID.tanks);
+    expect(cal).toMatchObject({ onSite: true, trackedMinutes: 30, href: `/todos/${ID.tanks}`, crew: { name: "Shop crew" } });
+    const stopped = await call("POST", `/todos/${ID.tanks}/stop`, "other");
+    expect(stopped.body).toMatchObject({ startedAt: null, trackedMinutes: 30 });
+    await call("POST", `/todos/${ID.tanks}/start`, "tech");
+    await pool.query("update todos set started_at = now() - interval '15 minutes' where id = $1", [ID.tanks]);
+    const done = await call("POST", `/todos/${ID.tanks}/done`, "tech");
+    expect(done.body).toMatchObject({ startedAt: null, trackedMinutes: 45, doneBy: "tech Person" });
+    expect((await call("POST", `/todos/${ID.tanks}/start`, "tech")).body.error).toMatch(/done/);
+    // Someone it isn't for can't.
+    expect((await call("POST", `/todos/${ID.flags}/start`, "other")).status).toBe(404);
+  });
+
+  it("photos and documents on a to-do", async () => {
+    const up = await upload("other", ID.tanks, "Cracked lid");
+    expect(up.statusCode).toBe(200);
+    expect(up.json()).toMatchObject({ fileName: "shop-door.png", caption: "Cracked lid", contentType: "image/png" });
+    const files = (await call("GET", `/todos/${ID.tanks}/files`, "tech")).body;
+    expect(files.map((f: any) => f.uploadedBy)).toEqual(["other Person"]);
+    const got = await app.inject({ method: "GET", url: `/todos/${ID.tanks}/files/${files[0].id}`, headers: { authorization: `Bearer ${T.tech}` } });
+    expect(got.rawPayload.equals(png)).toBe(true);
+    expect((await call("GET", `/todos/${ID.tanks}`, "office")).body.fileCount).toBe(1);
+    expect((await call("DELETE", `/todos/${ID.tanks}/files/${files[0].id}`, "tech")).status).toBe(403);
+    expect((await call("DELETE", `/todos/${ID.tanks}/files/${files[0].id}`, "office")).body.ok).toBe(true);
+    // Someone it isn't for can't add one.
+    expect((await upload("other", ID.flags)).statusCode).toBe(404);
+  });
+
+  it("weekly booked hours for the chart beside the date", async () => {
+    const weeks = (await call("GET", `/todos/workload?from=${today}&weeks=5&ids=${ID.tech}`, "office")).body;
+    expect(weeks).toHaveLength(5);
+    expect(weeks[0]).toMatchObject({ start: today, end: plus(today, 6) });
+    // The sprinkler fix (1.5 h) is the tech's this week.
+    expect(weeks[0].hours).toBeGreaterThanOrEqual(1.5);
+    expect((await call("GET", `/todos/workload?from=${today}&weeks=5&ids=${ID.other}`, "office")).body[0].hours).toBe(0);
   });
 });

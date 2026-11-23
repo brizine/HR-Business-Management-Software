@@ -40,7 +40,7 @@ export function TasksBox({ employeeId, firstName, isSelf }: { employeeId: string
     ...(todos.data?.items ?? []).map((t) => {
       const state = todoState(t, todos.data!.today);
       return {
-        key: `todo-${t.id}`, href: `/todos?open=${t.id}`, title: t.title,
+        key: `todo-${t.id}`, href: `/todos/${t.id}`, title: t.title,
         detail: ["To-do", new Date(`${t.date}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }), formatTodoTime(t.startTime, t.endTime), t.property?.address ?? t.location].filter(Boolean).join(" · "),
         badge: state === "overdue" ? "overdue" : state === "today" ? "today" : undefined,
       };

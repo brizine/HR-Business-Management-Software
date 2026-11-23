@@ -117,7 +117,7 @@ export function Input({ label, ...props }: TextInputProps & { label: string }) {
 }
 
 const TONES: Record<string, "ok" | "warn" | "bad"> = {
-  approved: "ok", completed: "ok", ok: "ok", active: "ok", passed: "ok",
+  approved: "ok", completed: "ok", ok: "ok", active: "ok", passed: "ok", working: "ok",
   pending: "warn", today: "warn", due_soon: "warn", in_progress: "warn", in_shop: "warn", waiting_parts: "warn", medium: "warn", open: "warn",
   denied: "bad", overdue: "bad", out_of_service: "bad", critical: "bad", high: "bad", failed: "bad", cancelled: "bad",
 };

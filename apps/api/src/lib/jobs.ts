@@ -10,6 +10,7 @@ import { assets, attendanceOverrides, locationPings, companies, courseEnrollment
 import { attendanceRulesFor, computeAttendance } from "./attendance";
 import { assignCourse, autoAssignees, companyToday, describeEnrollments, latestEnrollments } from "./training";
 import { taskOwners } from "../routes/onboarding";
+import { extendTodoSeries } from "../routes/todos";
 import { fmtTime, localParts } from "./tz";
 import { notify, staffWithRole } from "./notify";
 import { reviewSchedule } from "./reviewProgram";
@@ -103,6 +104,9 @@ export async function runScheduledChecks(now = new Date()) {
   // To-dos and work orders: a reminder to each person the morning one starts.
   sent += await todoReminders(now);
   sent += await workOrderReminders(now);
+  // Repeating to-dos are made a year ahead; this tops them up.
+  // (On the real clock: it tops up to a year from today, whatever date the checks run for.)
+  await extendTodoSeries().catch((e) => console.error("to-do series top-up failed", e));
 
   // Forgotten clock-outs: remind the employee and let their manager know.
   const stale = await db

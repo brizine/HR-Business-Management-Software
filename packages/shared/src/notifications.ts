@@ -84,7 +84,7 @@ export function webPathFor(link: NotificationLink | null | undefined): string | 
     case "review-due": return `/reviews?new=review&employee=${link.employeeId}&type=${link.reviewType}`;
     case "attendance": return `/attendance?employee=${link.employeeId}`;
     case "training": return `/training/${link.courseId}`;
-    case "todos": return link.id ? `/todos?open=${link.id}` : "/todos";
+    case "todos": return link.id ? `/todos/${link.id}` : "/todos";
     case "workorder": return `/visits/${link.id}`;
     default: return null;
   }

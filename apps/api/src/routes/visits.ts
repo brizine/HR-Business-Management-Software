@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { storage } from "../lib/storage";
+import { fileView, sendStored, storeUpload } from "../lib/attachments";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { and, asc, desc, eq, exists, gte, ilike, inArray, isNull, lte, max, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import {
-  INACTIVE_STATUSES, VISIT_FILES_MAX, VISIT_FILE_MAX_BYTES, VISIT_FILE_TYPES, VISIT_STATUS_LABELS, customerName, describeRepeat, formatAddress, formatMoney, formatTodoTime, invoiceTotals, lineAmount,
+  INACTIVE_STATUSES, VISIT_FILES_MAX, VISIT_STATUS_LABELS, customerName, describeRepeat, formatAddress, formatMoney, formatTodoTime, invoiceTotals, lineAmount,
   visitCompleteSchema, visitDates, visitLineHours, visitNumber, visitSchema, visitSkipSchema, visitTotal, visitUpdateSchema,
   type VisitStatus, type VisitUpdate,
 } from "@crewdesk/shared";
@@ -360,10 +360,6 @@ const routes: FastifyPluginAsync = async (app) => {
     if (!f) notFound("File");
     return f;
   };
-  const fileView = (f: typeof visitFiles.$inferSelect, by?: string | null) => ({
-    id: f.id, fileName: f.fileName, contentType: f.contentType, sizeBytes: f.sizeBytes, caption: f.caption, uploadedById: f.uploadedById, uploadedBy: by ?? null, createdAt: f.createdAt,
-  });
-
   app.get<{ Params: { id: string } }>("/:id/files", async (req) => {
     const v = await findVisit(req, req.params.id);
     const rows = await db.select({ f: visitFiles, first: employees.firstName, last: employees.lastName }).from(visitFiles)
@@ -376,29 +372,14 @@ const routes: FastifyPluginAsync = async (app) => {
     const v = await crewAction(req, req.params.id);
     const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(visitFiles).where(eq(visitFiles.visitId, v.id));
     if (n >= VISIT_FILES_MAX) throw new HttpError(400, `A work order can have up to ${VISIT_FILES_MAX} photos and documents`);
-    const file = await req.file();
-    if (!file) throw new HttpError(400, "No file uploaded");
-    if (!(VISIT_FILE_TYPES as readonly string[]).includes(file.mimetype)) throw new HttpError(400, "Upload a photo (JPG, PNG, HEIC, WebP, GIF), a PDF, or a video (MP4 or MOV)");
-    let buf: Buffer;
-    try { buf = await file.toBuffer(); } catch { throw new HttpError(400, "That file is over 25 MB"); }
-    if (buf.length > VISIT_FILE_MAX_BYTES || file.file.truncated) throw new HttpError(400, "That file is over 25 MB");
-    const captionField = file.fields?.caption as { value?: unknown } | undefined;
-    const caption = typeof captionField?.value === "string" ? captionField.value.trim().slice(0, 300) || null : null;
-    const name = (file.filename || "file").replace(/[^\w.\- ]/g, "_").slice(0, 120);
-    const key = `${req.user.companyId}/visits/${v.id}/${randomUUID()}-${name.replace(/\s+/g, "_")}`;
-    await storage.put(key, buf);
-    const [row] = await db.insert(visitFiles).values({ companyId: req.user.companyId, visitId: v.id, fileName: name, contentType: file.mimetype, sizeBytes: buf.length, storageKey: key, caption, uploadedById: req.user.sub }).returning();
+    const stored = await storeUpload(req, "visits", v.id);
+    const [row] = await db.insert(visitFiles).values({ companyId: req.user.companyId, visitId: v.id, ...stored, uploadedById: req.user.sub }).returning();
     return fileView(row);
   });
 
   app.get<{ Params: { id: string; fileId: string }; Querystring: { download?: string } }>("/:id/files/:fileId", async (req, reply) => {
     const v = await findVisit(req, req.params.id);
-    const f = await loadFile(v.id, req.params.fileId);
-    reply.header("Content-Type", f.contentType);
-    reply.header("Content-Disposition", `${req.query.download ? "attachment" : "inline"}; filename="${f.fileName.replace(/"/g, "")}"`);
-    reply.header("Cache-Control", "private, max-age=3600");
-    reply.header("X-Content-Type-Options", "nosniff");
-    return reply.send(await storage.get(f.storageKey));
+    return sendStored(reply, await loadFile(v.id, req.params.fileId), !!req.query.download);
   });
 
   app.patch<{ Params: { id: string; fileId: string } }>("/:id/files/:fileId", async (req) => {
