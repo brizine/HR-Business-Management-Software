@@ -25,6 +25,9 @@ export function listColumns(today: string, yearStart: string) {
     revenue: sql<number>`(select coalesce(sum(i.total_cents), 0)::int from invoices i where i.customer_id = ${C} and i.status <> 'void' and i.number is not null and i.issue_date >= ${yearStart}::date)`,
     lastService: sql<string | null>`(select max(v.date)::text from visits v where v.customer_id = ${C} and v.status = 'completed')`,
     nextService: sql<string | null>`(select min(v.date)::text from visits v where v.customer_id = ${C} and v.status in ('open', 'on_site') and v.date >= ${today}::date)`,
+    /** The default card or bank account on file, e.g. "visa 4242" / "ach Arvest Bank 6789" (labelled in the browser). */
+    onFile: sql<string | null>`(select m.type || '|' || coalesce(m.brand, '') || '|' || coalesce(m.bank_name, '') || '|' || coalesce(m.account_type, '') || '|' || coalesce(m.last4, '')
+      from customer_payment_methods m where m.customer_id = ${C} order by m.is_default desc, m.created_at limit 1)`,
   };
 }
 export type ListColumns = ReturnType<typeof listColumns>;
@@ -126,6 +129,18 @@ export function filterSql(r: CustomerFilter, cols: ListColumns, custom: { id: st
       const x = sql.raw(`"customers"."${r.f}"`);
       return r.op === "isnot" ? sql`(${x} is null or not ${inList(x, vals)})` : inList(x, vals);
     }
+    case "paymentOnFile": {
+      if (!vals.length) return null;
+      const kinds = vals.filter((v) => v === "card" || v === "ach");
+      const parts = [
+        ...(kinds.length ? [sql`exists (select 1 from customer_payment_methods m where m.customer_id = ${C} and m.type in (${sql.join(kinds.map((k) => sql`${k}`), sql`, `)}))`] : []),
+        ...(vals.includes("none") ? [sql`not exists (select 1 from customer_payment_methods m where m.customer_id = ${C})`] : []),
+      ];
+      if (!parts.length) return null;
+      const has = sql`(${sql.join(parts, sql` or `)})`;
+      return r.op === "isnot" ? sql`not ${has}` : has;
+    }
+    case "autopay": return r.op === "yes" ? sql`"customers"."autopay"` : sql`not "customers"."autopay"`;
     case "delivery": {
       if (!vals.length) return null;
       const has = sql`"customers"."delivery" && array[${sql.join(vals.map((v) => sql`${v}`), sql`, `)}]::text[]`;

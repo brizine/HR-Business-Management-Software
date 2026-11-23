@@ -4,12 +4,13 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { formatMoney } from "@crewdesk/shared";
 import { ApiError, api } from "@/lib/api";
+import { PortalPaymentMethods, type SavedMethod } from "@/components/payment-methods";
 import { PortalFrame, SignOut, StaffBanner, StatusPill, StripePay, longDate, methodText, portalApi, type PortalCompany, type PortalPayment, type PortalPayments } from "@/components/portal";
 
 type Me = {
   company: PortalCompany; payments: { enabled: boolean; testMode?: boolean };
   viewer: { email: string; staff: boolean };
-  customers: { id: string; number: number; name: string; email: string | null; phone: string | null; billing: { street: string | null; city: string | null; state: string | null; zip: string | null }; balanceCents: number; overdueCents: number; creditCents: number; prepaidCents: number; properties: { id: string; address: string }[] }[];
+  customers: { id: string; number: number; name: string; email: string | null; phone: string | null; billing: { street: string | null; city: string | null; state: string | null; zip: string | null }; balanceCents: number; overdueCents: number; creditCents: number; prepaidCents: number; properties: { id: string; address: string }[]; autopay: boolean; paymentMethods: SavedMethod[] }[];
   invoices: { id: string; number: number; customerId: string; status: string; issueDate: string; dueDate: string; totalCents: number; paidCents: number; balanceCents: number; pendingCents: number; overdue: boolean; serviceAddress: string | null }[];
   paymentHistory: PortalPayment[];
   prepayments: { id: string; number: number; description: string; amountCents: number; discountCents: number; status: string; receivedOn: string | null; methodDetail: string | null; cashLeftCents: number; customer: { id: string } }[];
@@ -122,6 +123,7 @@ function Home({ me, reload }: { me: Me; reload: () => void }) {
               </>
             )}
             <Prepayments me={me} customerId={cust.id} staff={staff} onPaid={reload} />
+            {me.payments.enabled && <PortalPaymentMethods customerId={cust.id} methods={cust.paymentMethods} autopay={cust.autopay} staff={staff} testMode={me.payments.testMode} onChange={reload} />}
             <Details cust={cust} staff={staff} onSaved={reload} />
           </section>
         );

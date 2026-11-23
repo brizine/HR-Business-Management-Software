@@ -24,7 +24,7 @@ export default function PortalInvoicePage({ params }: { params: Promise<{ id: st
       <InvoiceView inv={data.invoice} pdfHref={`${API_URL}/portal/invoices/${id}/pdf`}
         pay={staff ? null : (
           <PayBox inv={data.invoice} payments={data.payments}
-            start={() => api(`/portal/invoices/${id}/pay`, { method: "POST" })}
+            start={(o) => api(`/portal/invoices/${id}/pay`, { body: { save: o.save } })}
             confirm={(paymentIntentId) => api(`/portal/invoices/${id}/pay/confirm`, { body: { paymentIntentId } })}
             onPaid={(invoice) => setData({ ...data, invoice })} />
         )} />

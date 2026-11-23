@@ -23,9 +23,10 @@ const PURPOSE = "stripe-secret";
 export const WEBHOOK_EVENTS = [
   "payment_intent.succeeded", "payment_intent.processing", "payment_intent.payment_failed", "payment_intent.canceled",
   "charge.refunded", "refund.created", "refund.updated", "refund.failed",
+  "setup_intent.succeeded", "payment_method.detached",
 ] as const;
 /** Bumped when WEBHOOK_EVENTS changes; older webhooks are updated by updateWebhookEvents(). */
-export const WEBHOOK_EVENTS_VERSION = 2;
+export const WEBHOOK_EVENTS_VERSION = 3;
 
 /** Tests point the SDK at a pretend Stripe (STRIPE_API_HOST/PORT/PROTOCOL). */
 function client(secret: string) {
@@ -100,15 +101,18 @@ export async function disconnectStripe(companyId: string) {
 }
 
 /** The customer's Stripe customer id, creating it the first time they pay. */
-async function stripeCustomerId(stripe: Stripe, c: typeof customers.$inferSelect) {
+export async function stripeCustomerId(stripe: Stripe, c: typeof customers.$inferSelect) {
   if (c.stripeCustomerId) return c.stripeCustomerId;
   const made = await stripe.customers.create({ name: customerName(c), email: c.email ?? undefined, phone: c.phone ?? undefined, metadata: { crewdeskCustomerId: c.id, customerNumber: String(c.number) } });
   await db.update(customers).set({ stripeCustomerId: made.id }).where(eq(customers.id, c.id));
   return made.id;
 }
 
-/** Starts paying an invoice's balance: a PaymentIntent for card or bank account. */
-export async function startInvoicePayment(companyId: string, invoiceId: string) {
+/**
+ * Starts paying an invoice's balance: a PaymentIntent for card or bank account. With `save`, the
+ * card or bank account is kept on file for next time (and autopay).
+ */
+export async function startInvoicePayment(companyId: string, invoiceId: string, o: { save?: boolean } = {}) {
   const { cfg, stripe } = await stripeFor(companyId);
   const [row] = await db.select({ inv: invoices, cust: customers }).from(invoices).innerJoin(customers, eq(customers.id, invoices.customerId))
     .where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)));
@@ -127,7 +131,8 @@ export async function startInvoicePayment(companyId: string, invoiceId: string) 
     // The statement shows the account's descriptor (e.g. PROSPRAY LAWN). Crewdesk emails its own receipt, so Stripe's isn't asked for.
     description: `Invoice ${inv.number} from ${cfg.companyName}`,
     metadata: { crewdeskCompanyId: companyId, crewdeskInvoiceId: inv.id, invoiceNumber: String(inv.number) },
-  }, { idempotencyKey: `inv-${inv.id}-${due}-${inv.updatedAt.getTime()}-${pending.length}` });
+    ...(o.save ? { setup_future_usage: "off_session" as const } : {}),
+  }, { idempotencyKey: `inv-${inv.id}-${due}-${inv.updatedAt.getTime()}-${pending.length}${o.save ? "-save" : ""}` });
   return { clientSecret: pi.client_secret, publishableKey: cfg.publishableKey, amountCents: due, paymentIntentId: pi.id };
 }
 
@@ -178,6 +183,11 @@ export async function applyPaymentIntent(companyId: string, pi: Stripe.PaymentIn
     paymentId = p.id;
   }
   const updated = await refreshInvoice(db, inv.id);
+  // "Save for next time": keep the card or bank account on file.
+  if (pi.setup_future_usage === "off_session" && pi.payment_method && typeof pi.payment_method === "object" && status !== "failed") {
+    const { saveMethod } = await import("./paymentMethods");
+    await saveMethod(companyId, inv.customerId, pi.payment_method as Stripe.PaymentMethod, "customer").catch((e) => console.error("Saving the payment method failed:", (e as Error).message));
+  }
   if (status === "completed") {
     queueBillingSync(() => syncPayment(companyId, paymentId));
     await sendReceipt(companyId, inv.id, amount, detail, updated ? updated.totalCents - updated.paidCents - updated.creditedCents : 0).catch((e) => console.error("Receipt email failed:", (e as Error).message));

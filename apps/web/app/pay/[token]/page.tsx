@@ -28,7 +28,7 @@ export default function PayLinkPage({ params }: { params: Promise<{ token: strin
     <PortalFrame company={data.company} right={<Link href={`/portal?c=${data.company.id}`} className="pt-link">My invoices</Link>}>
       <InvoiceView inv={data.invoice} pdfHref={`${API_URL}/pay/${token}/pdf`}
         pay={<PayBox inv={data.invoice} payments={data.payments}
-          start={() => api(`/pay/${token}/pay`, { method: "POST" })}
+          start={(o) => api(`/pay/${token}/pay`, { body: { save: o.save } })}
           confirm={(paymentIntentId) => api(`/pay/${token}/confirm`, { body: { paymentIntentId } })}
           onPaid={(invoice) => setData({ ...data, invoice })} />} />
     </PortalFrame>

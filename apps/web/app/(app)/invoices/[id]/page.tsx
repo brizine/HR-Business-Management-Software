@@ -8,6 +8,7 @@ import { useAction, useApi } from "@/lib/hooks";
 import { useAuth } from "@/lib/auth";
 import { CreditForm, InvoiceCredits } from "@/components/credits";
 import { ErrorBox, PageHead } from "@/components/ui";
+import { ChargeOnFile } from "@/components/payment-methods";
 import { InvoiceFields, InvoiceStatus, PaymentForm, SendPanel, invoiceBody, invoiceFormValue, useBillingSettings } from "@/components/invoices";
 import { CustomFieldsCard } from "@/components/custom-fields";
 
@@ -16,6 +17,7 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
   const router = useRouter();
   const invoice = useApi<any>(`/invoices/${id}`);
   const [panel, setPanel] = useState<"send" | "pay" | "edit" | "void" | null>(null);
+  const [charged, setCharged] = useState<string | null>(null);
   const [refunding, setRefunding] = useState<string | null>(null);
   const [addingCredit, setAddingCredit] = useState(false);
   const { can } = useAuth();
@@ -49,6 +51,8 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
       {panel === "send" && <SendPanel invoice={inv} onDone={done} onClose={() => setPanel(null)} />}
       {panel === "pay" && <PaymentForm invoice={inv} onDone={done} onClose={() => setPanel(null)} />}
       {panel === "void" && <VoidForm id={id} onDone={done} onClose={() => setPanel(null)} />}
+      {charged && <div className="notice" role="status">{charged} <button type="button" className="linkbtn" onClick={() => setCharged(null)}>OK</button></div>}
+      {!panel && <ChargeOnFile key={`${inv.paidCents}-${inv.status}`} invoice={{ ...inv, customerId: inv.customer.id }} onDone={(msg) => { setCharged(msg); invoice.reload(); }} />}
       {panel === "edit" ? <EditInvoice invoice={inv} onDone={done} /> : (
         <>
           <div className="card">

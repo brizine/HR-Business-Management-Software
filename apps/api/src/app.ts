@@ -43,6 +43,7 @@ import sprayMixRoutes from "./routes/sprayMix";
 import measurementRoutes from "./routes/measurements";
 import customerRoutes from "./routes/customers";
 import customerMessageRoutes from "./routes/customerMessages";
+import paymentMethodRoutes from "./routes/paymentMethods";
 import propertyRoutes from "./routes/properties";
 import crmSettingsRoutes from "./routes/crmSettings";
 import searchRoutes from "./routes/search";
@@ -148,6 +149,7 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(measurementRoutes, { prefix: "/measurements" });
   await app.register(customerRoutes, { prefix: "/customers" });
   await app.register(customerMessageRoutes, { prefix: "/customer-messages" });
+  await app.register(paymentMethodRoutes, { prefix: "/customers" });
   await app.register(propertyRoutes, { prefix: "/properties" });
   await app.register(crmSettingsRoutes, { prefix: "/crm" });
   await app.register(searchRoutes, { prefix: "/search" });

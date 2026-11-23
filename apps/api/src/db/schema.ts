@@ -1207,6 +1207,8 @@ export const customers = pgTable(
     bigcapitalCustomerId: integer("bigcapital_customer_id"),
     /** When they used the unsubscribe link in an email sent to many customers (invoices and receipts still go). */
     emailOptOutAt: timestamp("email_opt_out_at", { withTimezone: true }),
+    /** Charge their default card or bank account on file when an invoice is sent. */
+    autopay: boolean("autopay").notNull().default(false),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     /** Custom field values (custom_fields), by field id. */
@@ -1324,6 +1326,36 @@ export const cancellations = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("cancellations_company_idx").on(t.companyId, t.effectiveDate)],
+);
+
+/**
+ * A card or bank account a customer saved with Stripe for later payments (the details stay at
+ * Stripe; this keeps Stripe's id and what to show, e.g. "Visa ·· 4242, expires 04/28").
+ */
+export const customerPaymentMethods = pgTable(
+  "customer_payment_methods",
+  {
+    id: id(),
+    companyId: companyId(),
+    customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+    stripePaymentMethodId: text("stripe_payment_method_id").notNull(),
+    /** "card" or "ach". */
+    type: text("type").notNull(),
+    brand: text("brand"),
+    last4: text("last4"),
+    expMonth: integer("exp_month"),
+    expYear: integer("exp_year"),
+    bankName: text("bank_name"),
+    accountType: text("account_type"),
+    isDefault: boolean("is_default").notNull().default(false),
+    /** "customer" (portal) or "office". */
+    addedBy: text("added_by").notNull().default("customer"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("customer_payment_methods_stripe_idx").on(t.stripePaymentMethodId),
+    index("customer_payment_methods_customer_idx").on(t.customerId),
+  ],
 );
 
 /** An email sent to many customers at once (the Customers list's Send menu). */
@@ -1444,6 +1476,9 @@ export const invoices = pgTable(
     needsMailing: boolean("needs_mailing").notNull().default(false),
     emailedAt: timestamp("emailed_at", { withTimezone: true }),
     emailedTo: text("emailed_to"),
+    /** Autopay tried the card or bank account on file and it didn't go through (why, and when). */
+    autopayError: text("autopay_error"),
+    autopayFailedAt: timestamp("autopay_failed_at", { withTimezone: true }),
     mailedAt: timestamp("mailed_at", { withTimezone: true }),
     /** For the online pay link (Phase 1 portal). */
     payToken: text("pay_token"),

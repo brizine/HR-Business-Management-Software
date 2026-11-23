@@ -388,6 +388,22 @@ form and go straight to Stripe; Crewdesk never sees or keeps them.
   returns it, it shows **failed** and the invoice still owes the amount. Stripe reports each payment to Crewdesk, and
   Crewdesk also checks clearing bank payments with Stripe every hour in case a report goes missing. Online payments go
   to Bigcapital like any other payment (to 1030 Card Processor Clearing).
+- **Cards and bank accounts on file:** customers can keep a card or bank account with Stripe for later:
+  - In the portal, **Payment methods → Add a card or bank account**, or tick **Save this card or bank account for
+    next time** when paying an invoice. They can pick the default and remove one there.
+  - On the customer's page, **Cards & bank accounts on file → Add a card** saves a card they read out to you over
+    the phone. Bank accounts need the customer's own authorization, so they add those in the portal.
+  - The details stay at Stripe; Crewdesk shows only the kind, last 4 digits and expiry (e.g. Visa ·· 4242,
+    expires 04/28). Removing one removes it from Stripe too.
+  - **Charge** on an invoice page charges what's still owed to a saved card or bank account (the default, or pick
+    another). A card is paid at once; a bank payment clears in about 4 business days. A decline says why (e.g. not
+    enough funds, or the card's bank wants the customer to approve it, in which case send them the invoice).
+  - **Autopay** (the tick box on the customer's page, or **Pay automatically** in the portal): when an invoice is
+    sent, its balance is charged to the default card or bank account right after, and the customer gets the
+    invoice and a receipt. If it doesn't go through, the invoice says why and stays owed (charge it again once
+    fixed). Autopay turns off by itself if the last saved method is removed.
+  - On the Customers list, the **Payment method on file** filter (card, bank account or none) and **Autopay**
+    filter, and the **Card / bank on file** and **Autopay** columns.
 - **Refunds:** on the invoice page, **Refund** (admins in Customers & billing) next to a card or bank payment sends
   all or part of it back through Stripe; choose the amount and reason and add a note for your records. Refunds made
   in Stripe's own dashboard come into Crewdesk too, usually within seconds (and an hourly check catches any that

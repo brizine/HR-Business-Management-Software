@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   CUSTOMER_COLUMNS, CUSTOMER_FILTER_FIELDS, CUSTOMER_KIND_LABELS, DEFAULT_CUSTOMER_COLUMNS, DELIVERY_LABELS, FILTER_OPS,
-  describeFilter, filterField, filterReady, formatCustomValue, formatMoney, formatPhone,
+  describeFilter, filterField, filterReady, formatCustomValue, formatMoney, formatPhone, paymentMethodLabel,
   type CustomFieldDef, type CustomerColumn, type CustomerFilter, type CustomerKind, type DeliveryMethod, type FilterField,
 } from "@crewdesk/shared";
 import { Badge } from "./ui";
@@ -200,6 +200,12 @@ export function cellText(col: Col, c: any, tags: Tag[]): string {
     case "prepaid": return money(c.prepaidCents);
     case "revenue": return money(c.revenueCents);
     case "taxExempt": return c.taxExempt ? "Yes" : "";
+    case "autopay": return c.autopay ? "On" : "";
+    case "onFile": {
+      if (!c.onFile) return "";
+      const [type, brand, bankName, accountType, last4] = String(c.onFile).split("|");
+      return paymentMethodLabel({ type, brand: brand || null, bankName: bankName || null, accountType: accountType || null, last4: last4 || null });
+    }
     case "emailOptOut": return c.emailOptOutAt ? `Since ${new Date(c.emailOptOutAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : "";
     case "po": return c.poRequired ? "Yes" : "";
     case "lastService": return shortDate(c.lastService);

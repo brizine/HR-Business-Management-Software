@@ -13,6 +13,7 @@ import { HttpError, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
 import { customerInCompany, type Tx } from "../lib/crm";
 import { addDays, billingSettings, PAY_LINK_DAYS, payLinkFor, portalUrl, refreshInvoice, takeInvoiceNumber } from "../lib/invoices";
+import { autopayInvoice, chargeInvoice } from "../lib/paymentMethods";
 import { REFUND_REASONS, refundPayment, stripeConfig } from "../lib/stripe";
 import { batchPdf, billToLines, invoicePdf, type PdfCompany, type PdfInvoice } from "../lib/invoicePdf";
 import { emailTransport } from "../lib/channels";
@@ -400,8 +401,19 @@ ${payUrl ? `<p><a href="${esc(payUrl)}" style="display:inline-block;background:#
     queueBillingSync(() => syncInvoice(companyId, inv.id, req.user.sub));
     for (const paymentId of prepaid.paymentIds) queueBillingSync(() => syncPayment(companyId, paymentId, req.user.sub));
     for (const creditId of creditsUsed) queueBillingSync(() => syncCredit(companyId, creditId, req.user.sub));
+    // Autopay: charge the card or bank account on file (after the invoice went out).
+    const autopay = await autopayInvoice(companyId, inv.id);
     const [out] = await db.select().from(invoices).where(eq(invoices.id, inv.id));
-    return { ...out, status: fresh?.status ?? out.status };
+    const now = autopay?.ok ? await refreshInvoice(db, inv.id) : fresh;
+    return { ...out, status: now?.status ?? out.status, autopay };
+  });
+
+  /** Charges what's owed to a card or bank account on file (the default one unless another is picked). */
+  app.post<{ Params: { id: string } }>("/:id/charge", async (req) => {
+    const body = parse(z.object({ methodId: z.string().uuid().optional() }), req.body ?? {});
+    const result = await chargeInvoice(req.user.companyId, req.params.id, { methodId: body.methodId });
+    const [inv] = await db.select().from(invoices).where(eq(invoices.id, req.params.id));
+    return { ...result, invoice: inv };
   });
 
   /** Records a cash, check or other payment (card and bank payments come through the portal). */

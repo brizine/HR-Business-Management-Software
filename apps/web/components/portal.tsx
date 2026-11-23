@@ -127,18 +127,21 @@ const RESULT: Record<string, string> = {
  */
 export function PayBox({ inv, payments, start, confirm, onPaid }: {
   inv: PortalInvoice; payments: PortalPayments;
-  start: () => Promise<Started>; confirm: (paymentIntentId: string) => Promise<Confirmed>; onPaid: (inv: PortalInvoice) => void;
+  start: (o: { save: boolean }) => Promise<Started>; confirm: (paymentIntentId: string) => Promise<Confirmed>; onPaid: (inv: PortalInvoice) => void;
 }) {
   const due = inv.balanceCents - inv.pendingCents;
-  return <StripePay payable={payments.enabled && inv.status !== "paid" && inv.status !== "void" && due > 0} dueCents={due} payments={payments}
+  return <StripePay payable={payments.enabled && inv.status !== "paid" && inv.status !== "void" && due > 0} dueCents={due} payments={payments} canSave
     start={start} confirm={confirm} onConfirmed={(r) => r?.invoice && onPaid(r.invoice)} />;
 }
 
 /** Stripe's card / bank form for any amount: `start` makes the payment, `confirm` tells Crewdesk how it went. */
-export function StripePay({ payable, dueCents, payments, start, confirm, onConfirmed }: {
+export function StripePay({ payable, dueCents, payments, start, confirm, onConfirmed, canSave }: {
   payable: boolean; dueCents: number; payments: PortalPayments;
-  start: () => Promise<Started>; confirm: (paymentIntentId: string) => Promise<any>; onConfirmed: (result: any) => void;
+  start: (o: { save: boolean }) => Promise<Started>; confirm: (paymentIntentId: string) => Promise<any>; onConfirmed: (result: any) => void;
+  /** Offer "save this card or bank account for next time". */
+  canSave?: boolean;
 }) {
+  const [save, setSave] = useState(false);
   const [phase, setPhase] = useState<"idle" | "loading" | "form" | "paying" | "done">("idle");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -172,7 +175,7 @@ export function StripePay({ payable, dueCents, payments, start, confirm, onConfi
   const begin = async () => {
     setError(null); setPhase("loading");
     try {
-      const r = await start();
+      const r = await start({ save: !!canSave && save });
       setAmount(r.amountCents);
       const stripe = await loadStripe(r.publishableKey);
       if (!stripe) throw new Error("Couldn't load the payment form. Check your connection and try again.");
@@ -210,7 +213,15 @@ export function StripePay({ payable, dueCents, payments, start, confirm, onConfi
       {phase === "done" ? <p className="pt-note ok" role="status">{message}</p> : (
         <>
           {phase === "idle" || phase === "loading" ? (
-            <button className="pt-btn primary big" disabled={phase === "loading"} onClick={begin}>{phase === "loading" ? "Loading…" : `Pay ${formatMoney(dueCents)}`}</button>
+            <>
+              <button className="pt-btn primary big" disabled={phase === "loading"} onClick={begin}>{phase === "loading" ? "Loading…" : `Pay ${formatMoney(dueCents)}`}</button>
+              {canSave && (
+                <label className="pt-check">
+                  <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
+                  <span>Save this card or bank account for next time</span>
+                </label>
+              )}
+            </>
           ) : (
             <>
               <h2 className="pt-h2">Pay {formatMoney(amount)}</h2>

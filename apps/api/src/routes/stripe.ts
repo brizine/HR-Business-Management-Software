@@ -4,6 +4,7 @@ import { authenticate, requireRole } from "../lib/auth";
 import { parse } from "../lib/errors";
 import { WEB_URL } from "../lib/channels";
 import { connectStripe, disconnectStripe, recordPaymentIntent, stripeConfig, syncRefunds, verifyWebhook } from "../lib/stripe";
+import { finishSetup, methodDetached } from "../lib/paymentMethods";
 
 const AREA = "customers" as const;
 /** Where Stripe can reach this API (for the webhook); set PUBLIC_API_URL if it isn't WEB_URL + /api. */
@@ -48,6 +49,12 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
       const obj = event.data.object as { payment_intent?: string | { id: string } | null };
       const pi = typeof obj.payment_intent === "string" ? obj.payment_intent : obj.payment_intent?.id;
       if (pi) await syncRefunds(req.params.companyId, pi);
+    } else if (event.type === "setup_intent.succeeded") {
+      // A card or bank account saved in the portal (in case the browser didn't get back to say so).
+      const si = event.data.object as { id: string; metadata?: Record<string, string> };
+      if (si.metadata?.crewdeskCustomerId) await finishSetup(req.params.companyId, si.id).catch(() => undefined);
+    } else if (event.type === "payment_method.detached") {
+      await methodDetached(req.params.companyId, (event.data.object as { id: string }).id);
     }
     return { received: true };
   });

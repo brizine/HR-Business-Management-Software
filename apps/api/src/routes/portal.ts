@@ -5,7 +5,8 @@ import { z } from "zod";
 import { customerName, formatAddress, invoiceBalance, isInactive, isOverdue } from "@crewdesk/shared";
 import { db } from "../db";
 import { billingSettings } from "../lib/invoices";
-import { companies, creditApplications, customerContacts, customerCredits, customers, employees, invoiceLines, invoicePayments, invoices, paymentRefunds, portalCodes, prepayments, properties, propertyAssignments } from "../db/schema";
+import { companies, creditApplications, customerContacts, customerCredits, customerPaymentMethods, customers, employees, invoiceLines, invoicePayments, invoices, paymentRefunds, portalCodes, prepayments, properties, propertyAssignments } from "../db/schema";
+import { finishSetup, makeDefault, methodView, removeMethod, setAutopay, startSetup } from "../lib/paymentMethods";
 import { authenticate, requireRole, WEB_CLIENT_HEADER, type AuthUser } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { WEB_URL, sendSystemEmail } from "../lib/channels";
@@ -248,6 +249,8 @@ const portalRoutes: FastifyPluginAsync = async (app) => {
       .where(and(inArray(customerCredits.customerId, v.customerIds), eq(customerCredits.status, "open"), isNull(customerCredits.prepaymentId)));
     const pps = await db.select().from(prepayments).where(and(inArray(prepayments.customerId, v.customerIds), inArray(prepayments.status, ["requested", "pending", "open", "closed"])))
       .orderBy(desc(prepayments.createdAt)).limit(50);
+    const savedMethods = await db.select().from(customerPaymentMethods).where(inArray(customerPaymentMethods.customerId, v.customerIds))
+      .orderBy(desc(customerPaymentMethods.isDefault), asc(customerPaymentMethods.createdAt));
     const pend = invs.length ? await db.select({ invoiceId: invoicePayments.invoiceId, cents: sql<number>`sum(${invoicePayments.amountCents})::int` }).from(invoicePayments)
       .where(and(inArray(invoicePayments.invoiceId, invs.map((i) => i.id)), eq(invoicePayments.status, "pending"))).groupBy(invoicePayments.invoiceId) : [];
     const pendingBy = new Map(pend.map((p) => [p.invoiceId, Number(p.cents)]));
@@ -275,6 +278,8 @@ const portalRoutes: FastifyPluginAsync = async (app) => {
           creditCents: openCredit.filter((x) => x.customerId === c.id).reduce((s, x) => s + x.amountCents - x.appliedCents, 0),
           prepaidCents: pps.filter((x) => x.customerId === c.id).reduce((s, x) => s + cashLeft(x), 0),
           properties: props.filter((p) => p.customerId === c.id).map((p) => ({ id: p.id, address: formatAddress(p) })),
+          autopay: c.autopay,
+          paymentMethods: savedMethods.filter((m) => m.customerId === c.id).map((m) => methodView(m, today)),
         };
       }),
       invoices: list,
@@ -301,7 +306,7 @@ const portalRoutes: FastifyPluginAsync = async (app) => {
     const v = await viewer(app, req);
     noStaff(v, "pay");
     const inv = await viewerInvoice(v, req.params.id);
-    return startInvoicePayment(v.companyId, inv.id);
+    return startInvoicePayment(v.companyId, inv.id, { save: !!(req.body as { save?: unknown } | null)?.save });
   });
 
   /** After Stripe's form: record what happened (the webhook does this too). */
@@ -359,6 +364,35 @@ const portalRoutes: FastifyPluginAsync = async (app) => {
     if (u.bigcapitalCustomerId) queueBillingSync(() => syncCustomer(v.companyId, u.id));
     return { ok: true };
   });
+
+  /* Cards and bank accounts on file, and autopay (for each customer account the person can see). */
+  const ownCustomer = async (req: FastifyRequest, customerId: string, what?: string) => {
+    const v = await viewer(app, req);
+    if (what) noStaff(v, what);
+    if (!v.customerIds.includes(customerId)) throw new HttpError(404, "Not found");
+    return v;
+  };
+  app.post<{ Params: { customerId: string } }>("/customers/:customerId/payment-methods/setup", async (req) => {
+    const v = await ownCustomer(req, req.params.customerId, "save a card or bank account");
+    return startSetup(v.companyId, req.params.customerId, "customer");
+  });
+  app.post<{ Params: { customerId: string } }>("/customers/:customerId/payment-methods/finish", async (req) => {
+    const v = await ownCustomer(req, req.params.customerId);
+    const { setupIntentId } = parse(z.object({ setupIntentId: z.string().regex(/^seti_[A-Za-z0-9]+$/) }), req.body);
+    return finishSetup(v.companyId, setupIntentId, req.params.customerId);
+  });
+  app.post<{ Params: { customerId: string; pm: string } }>("/customers/:customerId/payment-methods/:pm/default", async (req) => {
+    const v = await ownCustomer(req, req.params.customerId, "change payment methods");
+    return makeDefault(v.companyId, req.params.customerId, req.params.pm);
+  });
+  app.delete<{ Params: { customerId: string; pm: string } }>("/customers/:customerId/payment-methods/:pm", async (req) => {
+    const v = await ownCustomer(req, req.params.customerId, "remove a payment method");
+    return removeMethod(v.companyId, req.params.customerId, req.params.pm);
+  });
+  app.put<{ Params: { customerId: string } }>("/customers/:customerId/autopay", async (req) => {
+    const v = await ownCustomer(req, req.params.customerId, "change autopay");
+    return setAutopay(v.companyId, req.params.customerId, parse(z.object({ on: z.boolean() }), req.body).on);
+  });
 };
 
 /** The pay link from an invoice email: /pay/<token>. Works for 30 days after the invoice was last sent. */
@@ -385,7 +419,7 @@ const payLinkRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Params: { token: string } }>("/:token/pay", limited, async (req) => {
     const inv = await byToken(req.params.token);
-    return startInvoicePayment(inv.companyId, inv.id);
+    return startInvoicePayment(inv.companyId, inv.id, { save: !!(req.body as { save?: unknown } | null)?.save });
   });
 
   app.post<{ Params: { token: string } }>("/:token/confirm", limited, async (req) => {

@@ -955,6 +955,8 @@ dl.facts.totals dd { min-width: 90px; font-variant-numeric: tabular-nums; }
 .pt-label { color: var(--muted); font-size: 14px; }
 .pt-amount { font-size: 34px; font-weight: 750; letter-spacing: -0.5px; margin: 2px 0; font-variant-numeric: tabular-nums; }
 .pt-sub { font-size: 14px; }
+.pt-check { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; font-size: 14px; line-height: 1.4; cursor: pointer; }
+.pt-check input { margin-top: 2px; width: 18px; height: 18px; flex: none; accent-color: #1f7a3a; }
 .pt-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 650; white-space: nowrap; vertical-align: 1px; }
 .pt-pill.ok { background: var(--ok-bg); color: var(--ok); }
 .pt-pill.warn { background: var(--warn-bg); color: var(--warn); }

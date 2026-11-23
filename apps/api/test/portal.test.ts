@@ -7,7 +7,7 @@ import { eq, sql } from "drizzle-orm";
 import { buildApp } from "../src/app";
 import { db, pool } from "../src/db";
 import { companies, invoicePayments, invoices, paymentRefunds } from "../src/db/schema";
-import { checkPendingStripePayments, checkRecentRefunds, updateWebhookEvents } from "../src/lib/stripe";
+import { WEBHOOK_EVENTS_VERSION, checkPendingStripePayments, checkRecentRefunds, updateWebhookEvents } from "../src/lib/stripe";
 import { setEmailTransport, type EmailMessage } from "../src/lib/channels";
 import { flushBillingSync } from "../src/lib/billingSync";
 import { flushNotifications, setPushTransport } from "../src/lib/notify";
@@ -511,15 +511,16 @@ describe("Refunds", () => {
     expect((await call("POST", refundUrl(id2, pay.id), "owner", {})).body.error).toMatch(/hasn't cleared yet/);
   });
 
-  it("webhooks made before refunds were handled get the refund events added", async () => {
+  it("webhooks made before newer events were handled get them added", async () => {
     const [c] = await db.select({ stripe: companies.stripe }).from(companies).where(eq(companies.id, companyId));
     await db.update(companies).set({ stripe: { ...c.stripe!, webhookEvents: 1 } }).where(eq(companies.id, companyId));
     expect(await updateWebhookEvents()).toBeGreaterThanOrEqual(1);
     const upd = [...calls].reverse().find((x) => x.method === "POST" && x.path === `/v1/webhook_endpoints/${c.stripe!.webhookEndpointId}`)!;
     expect(upd.form.getAll("enabled_events[]").length || [...upd.form.keys()].filter((k) => k.startsWith("enabled_events")).length).toBeGreaterThanOrEqual(8);
     expect([...upd.form.values()]).toContain("refund.created");
+    expect([...upd.form.values()]).toContain("setup_intent.succeeded");
     const [after] = await db.select({ stripe: companies.stripe }).from(companies).where(eq(companies.id, companyId));
-    expect(after.stripe!.webhookEvents).toBe(2);
+    expect(after.stripe!.webhookEvents).toBe(WEBHOOK_EVENTS_VERSION);
   });
 });
 

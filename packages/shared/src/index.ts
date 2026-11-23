@@ -36,3 +36,4 @@ export * from "./customFields";
 export * from "./tax";
 export * from "./customerList";
 export * from "./customerMessages";
+export * from "./paymentMethods";
