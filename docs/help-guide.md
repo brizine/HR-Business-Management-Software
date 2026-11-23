@@ -360,14 +360,23 @@ are numbered **WO-1001**, **WO-1002** and so on. Open them from **Schedule → W
   - **Line items** can also come from a **package** (**Add package…** next to **Add line**).
   - **Crew:** pick a **crew** to fill in its people, then tick or untick anyone (or skip the crew and just tick
     people). They get a notification, and a reminder the morning it's scheduled.
+  - **Tags:** from the company's tag list (the same tags as customers and properties, kept in Settings →
+    Customers), such as Callback, Warranty or Estimate.
   - **Notes for the crew:** gate, where to start, what to watch for.
 - **Who sees what:** Customers & billing managers see, schedule and invoice every work order. Everyone else sees
   the ones they're on, without prices.
 - **The crew's steps** (website or phone): **Arrived (on site)**, then **Completed** (with optional notes), or
   **Skip** with a reason. The time from arriving to finishing is kept as **time on site**. **Undo** reopens it
   (not once it's on an invoice).
+- **Photos & documents** (like Homeworks'): on a work order, drop files on the box or **Add** them: photos (JPG,
+  PNG, HEIC, WebP, GIF), PDFs and short videos (MP4, MOV), up to 25 MB each and 40 per work order. Big photos are
+  shrunk before they're sent. Click one to see it full size (← → to page through), add a **caption** (Before,
+  After, problem spot…), **Download** or **Remove** it. The crew adds them from the phone (**Add photo**: take one or
+  choose several). The crew on the work order and managers add them; whoever added one, or a manager, removes it.
+  Everyone who can see the work order sees them. They're stored encrypted like other uploads.
 - **The Work orders page:** **Show** Coming up, Waitlist, **Ready to invoice**, Completed, Skipped or All;
-  filter by **Person**, **Crew** and **Search** (WO number, title or notes). Overdue open ones are marked.
+  filter by **Person**, **Crew**, **Tag** and **Search** (WO number, title or notes). Overdue open ones are marked;
+  📎 shows how many photos and documents one has, and its tags show under the title.
 - **Invoicing:** on a work order, **Create invoice** makes a draft invoice with its line items. Or choose
   **Show → Ready to invoice**, pick several and **Create invoices**: one draft per customer and property, each line
   dated. Review and send them from Invoices as usual. Deleting a draft (or voiding an invoice) puts the work
@@ -410,10 +419,10 @@ calendar: **Work orders**, **To-dos**, **Repair orders** (by due date), **Time o
   turn it off to see each to-do in its own color. **Group by event type** (layers) puts each day's events under
   their type. Hide the panel with the button at its bottom (the toolbar's panel button brings it back).
 - **Filter:** **+ Filter** adds a filter you can remove: **Status** (open or done), **Repeats** (repeating or
-  one-time), **Person**, **Customer** or **Tag** (the customer's tags). **Search events** finds a title, customer,
+  one-time), **Person**, **Customer** or **Tag** (the customer's tags, and a work order's own tags). **Search events** finds a title, customer,
   address, note or person.
 - **Toolbar buttons:** the hourglass opens the **Waitlist** (work orders with no date and repair orders with no due date); the sliders choose
-  what each card shows (time, address, customer, people, hours, type, status, notes); the clock shows **budgeted
+  what each card shows (time, address, customer, people, price, hours, photos, type, status, notes); the clock shows **budgeted
   hours by person** under each day; **…** has Add a to-do, Print, Export and Reset calendar settings.
 - **Each day** shows how many events and the budgeted hours (to-dos and repair orders). The bottom shows the total
   for the range, **Print** and **Export** (a spreadsheet of the events shown).
@@ -822,6 +831,7 @@ Location is required to use the app (it's recorded at clock in/out and every 5 m
 clocked in with the app open). Clock in and out, schedule and open shifts, time off, assigned vehicles, meter readings, fuel (with receipt photos),
 inspections, issue reports, repair orders, work orders, to-dos, training, onboarding tasks and signing documents.
 - **Work orders** (Tasks tab): yours for the next week with the customer, the address (tap it for directions), gate
-  code, pets, the services and notes, and **Arrived**, **Completed** (with notes) and **Skip** (with a reason).
+  code, pets, the services, tags and notes, **Add photo** (take one or choose several), and **Arrived**, **Completed**
+  (with notes) and **Skip** (with a reason).
 - **To-dos** (Tasks tab): yours for the next week with **Done**, the customer, the address (tap it for
   directions), gate code and notes. **Quick add** makes one for yourself for today or tomorrow.

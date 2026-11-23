@@ -9,7 +9,7 @@ import {
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
-import { CustomerPicker } from "./customers";
+import { CustomerPicker, TagChip, TagPicker, useTags } from "./customers";
 import { Icon } from "./icons";
 import { ErrorBox } from "./ui";
 
@@ -21,6 +21,7 @@ export interface Visit {
   skipReason: string | null; notes: string | null; completionNotes: string | null; seriesId: string | null; repeatLabel: string | null;
   customerId: string; propertyId: string | null; invoiceId: string | null; invoiced: boolean | null; trackedMinutes: number | null;
   crewId: string | null; crew: { id: string; name: string; color: string } | null;
+  tagIds: string[]; tags: { id: string; name: string; color: string }[]; fileCount: number;
   customer: { id: string; name: string; phone: string | null };
   property: { id: string; name: string | null; address: string; gateCode: string | null; pets: string | null; accessNotes: string | null; lawnSqFt: number | null; lat: number | null; lng: number | null } | null;
   invoice: { id: string; number: number | null; status: string } | null;
@@ -109,6 +110,8 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
   const [offMonths, setOffMonths] = useState<number[]>([]);
   const [crew, setCrew] = useState<string[]>(visit?.assignees.map((a) => a.id) ?? []);
   const [crewId, setCrewId] = useState(visit?.crewId ?? "");
+  const [tagIds, setTagIds] = useState<string[]>(visit?.tagIds ?? []);
+  const { tags } = useTags();
   const [notes, setNotes] = useState(visit?.notes ?? "");
   const [applyTo, setApplyTo] = useState<"one" | "following">("one");
   const save = useAction();
@@ -152,7 +155,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
         title, customerId: customer?.id, propertyId, color, location, billing, lines: parsed, notes,
         date: scheduling === "waitlist" ? null : date, endDate: multi && scheduling === "single" ? endDate : null,
         startTime: timed && scheduling !== "waitlist" ? startTime : null, endTime: timed && scheduling !== "waitlist" ? endTime || null : null,
-        budgetedHours: hours.trim() === "" ? null : Number(hours), assigneeIds: crew, crewId: crewId || null,
+        budgetedHours: hours.trim() === "" ? null : Number(hours), assigneeIds: crew, crewId: crewId || null, tagIds,
         ...(visit ? {} : { scheduling, repeatEvery: Number(every) || 1, repeatUnit: unit, repeatUntil: scheduling === "repeat" ? until : null, offMonths }),
       };
       const r = visit
@@ -320,6 +323,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
           <label key={e.id} className="check"><input type="checkbox" checked={crew.includes(e.id)} onChange={() => setCrew((c) => (c.includes(e.id) ? c.filter((x) => x !== e.id) : [...c, e.id]))} /> {e.firstName} {e.lastName}{e.title ? <span className="muted"> · {e.title}</span> : null}</label>
         ))}
       </div>
+      <TagPicker value={tagIds} onChange={setTagIds} tags={tags} label="Tags (the company's tag list: Settings → Customers)" />
       <label>Notes for the crew (optional)<textarea maxLength={5000} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Gate code, where to start, what to watch for" /></label>
       {visit?.seriesId && (
         <div className="row" style={{ gap: 16 }}>
@@ -371,3 +375,10 @@ export function LinkedVisits({ customerId, propertyId }: { customerId?: string; 
     </div>
   );
 }
+
+/** A work order's tags as colored chips. */
+export function VisitTags({ v }: { v: Pick<Visit, "tags"> }) {
+  if (!v.tags?.length) return null;
+  return <span className="tag-list">{v.tags.map((t) => <TagChip key={t.id} tag={t as any} />)}</span>;
+}
+

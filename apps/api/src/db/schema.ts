@@ -1725,6 +1725,8 @@ export const visits = pgTable(
     /** What the crew wrote when they finished. */
     completionNotes: text("completion_notes"),
     seriesId: uuid("series_id"),
+    /** From crm_tags (the company's one tag list). */
+    tagIds: uuid("tag_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
     /** The crew it went to (its members were copied to visit_assignees). */
     crewId: uuid("crew_id").references((): AnyPgColumn => crews.id, { onDelete: "set null" }),
     /** "Every 6 weeks (not Dec, Jan, Feb)" for a series. */
@@ -1824,5 +1826,23 @@ export const packageLines = pgTable(
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (t) => [index("package_lines_package_idx").on(t.packageId)],
+);
+
+/** Photos and documents on a work order; the bytes are in encrypted file storage (lib/storage). */
+export const visitFiles = pgTable(
+  "visit_files",
+  {
+    id: id(),
+    companyId: companyId(),
+    visitId: uuid("visit_id").notNull().references(() => visits.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    storageKey: text("storage_key").notNull(),
+    caption: text("caption"),
+    uploadedById: uuid("uploaded_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("visit_files_visit_idx").on(t.visitId)],
 );
 

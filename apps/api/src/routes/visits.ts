@@ -1,15 +1,16 @@
 import { randomUUID } from "node:crypto";
+import { storage } from "../lib/storage";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { and, asc, desc, eq, exists, gte, ilike, inArray, isNull, lte, max, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import {
-  INACTIVE_STATUSES, VISIT_STATUS_LABELS, customerName, describeRepeat, formatAddress, formatMoney, formatTodoTime, invoiceTotals, lineAmount,
+  INACTIVE_STATUSES, VISIT_FILES_MAX, VISIT_FILE_MAX_BYTES, VISIT_FILE_TYPES, VISIT_STATUS_LABELS, customerName, describeRepeat, formatAddress, formatMoney, formatTodoTime, invoiceTotals, lineAmount,
   visitCompleteSchema, visitDates, visitLineHours, visitNumber, visitSchema, visitSkipSchema, visitTotal, visitUpdateSchema,
   type VisitStatus, type VisitUpdate,
 } from "@crewdesk/shared";
 import { db } from "../db";
 import type { Tx } from "../lib/crm";
-import { crews, customers, employees, invoiceLines, invoices, properties, propertyAssignments, serviceTypes, visitAssignees, visitLines, visits } from "../db/schema";
+import { crews, crmTags, customers, employees, invoiceLines, invoices, properties, propertyAssignments, serviceTypes, visitAssignees, visitFiles, visitLines, visits } from "../db/schema";
 import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { addDays, billingSettings } from "../lib/invoices";
@@ -50,6 +51,9 @@ export async function presentVisits(req: FastifyRequest, rows: Visit[]) {
     .from(properties).where(inArray(properties.id, propIds)) : [];
   const inv = invIds.length ? await db.select({ id: invoices.id, number: invoices.number, status: invoices.status }).from(invoices).where(inArray(invoices.id, invIds)) : [];
   const es = people.length ? await db.select({ id: employees.id, firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(inArray(employees.id, people)) : [];
+  const tagIdsAll = [...new Set(rows.flatMap((v) => v.tagIds ?? []))];
+  const tagRows = tagIdsAll.length ? await db.select({ id: crmTags.id, name: crmTags.name, color: crmTags.color }).from(crmTags).where(inArray(crmTags.id, tagIdsAll)) : [];
+  const fileCounts = await db.select({ visitId: visitFiles.visitId, n: sql<number>`count(*)::int` }).from(visitFiles).where(inArray(visitFiles.visitId, ids)).groupBy(visitFiles.visitId);
   const crewIds = [...new Set(rows.map((v) => v.crewId).filter((x): x is string => !!x))];
   const cr = crewIds.length ? await db.select({ id: crews.id, name: crews.name, color: crews.color }).from(crews).where(inArray(crews.id, crewIds)) : [];
   const name = (id: string | null) => { const e = es.find((x) => x.id === id); return e ? `${e.firstName} ${e.lastName}` : null; };
@@ -66,6 +70,8 @@ export async function presentVisits(req: FastifyRequest, rows: Visit[]) {
       property: p ? { id: p.id, name: p.name, address: formatAddress(p), gateCode: p.gateCode, pets: p.pets, accessNotes: p.accessNotes, lawnSqFt: p.lawnSqFt, lat: p.lat, lng: p.lng } : null,
       invoice: i ? { id: i.id, number: i.number, status: i.status } : null,
       crew: cr.find((x) => x.id === v.crewId) ?? null,
+      fileCount: fileCounts.find((x) => x.visitId === v.id)?.n ?? 0,
+      tags: (v.tagIds ?? []).map((id) => tagRows.find((t) => t.id === id)).filter((t): t is { id: string; name: string; color: string } => !!t),
       invoiced: v.billing === "invoice" ? !!i && i.status !== "void" : null,
       trackedMinutes: minutesBetween(v.startedAt, v.completedAt),
       finishedBy: name(v.finishedById),
@@ -98,6 +104,11 @@ async function checkInput(companyId: string, body: VisitUpdate) {
     const found = await db.select({ id: serviceTypes.id }).from(serviceTypes).where(and(eq(serviceTypes.companyId, companyId), inArray(serviceTypes.id, svc)));
     if (found.length !== svc.length) throw new HttpError(400, "One of those services isn't on the price list");
   }
+  const tags = [...new Set(body.tagIds)];
+  if (tags.length) {
+    const found = await db.select({ id: crmTags.id }).from(crmTags).where(and(eq(crmTags.companyId, companyId), inArray(crmTags.id, tags)));
+    if (found.length !== tags.length) throw new HttpError(400, "One of those tags doesn't exist");
+  }
   if (body.crewId) {
     const [c] = await db.select({ id: crews.id }).from(crews).where(and(eq(crews.id, body.crewId), eq(crews.companyId, companyId)));
     if (!c) throw new HttpError(400, "That crew doesn't exist");
@@ -112,6 +123,7 @@ async function checkInput(companyId: string, body: VisitUpdate) {
 
 const fields = (b: VisitUpdate) => ({
   title: b.title, customerId: b.customerId, propertyId: b.propertyId, color: b.color, location: b.location ?? null, billing: b.billing, crewId: b.crewId ?? null,
+  tagIds: [...new Set(b.tagIds)],
   startTime: b.startTime ?? null, endTime: b.startTime ? b.endTime ?? null : null, notes: b.notes ?? null,
   budgetedHours: b.budgetedHours ?? (b.lines.length ? visitLineHours(b.lines) || null : null),
   totalCents: visitTotal(b.lines),
@@ -188,6 +200,7 @@ const routes: FastifyPluginAsync = async (app) => {
     if (q.status === "active") where.push(inArray(visits.status, ["open", "on_site"]));
     if (q.customerId) where.push(eq(visits.customerId, q.customerId));
     if (q.crewId) where.push(q.crewId === "none" ? isNull(visits.crewId) : eq(visits.crewId, q.crewId));
+    if (q.tagId && /^[0-9a-f-]{36}$/i.test(q.tagId)) where.push(sql`${q.tagId}::uuid = any(${visits.tagIds})`);
     if (q.propertyId) where.push(eq(visits.propertyId, q.propertyId));
     const who = q.mine === "true" ? me : q.assigneeId;
     if (who === "none") where.push(sql`not exists (select 1 from visit_assignees va where va.visit_id = ${visits.id})`);
@@ -338,6 +351,71 @@ const routes: FastifyPluginAsync = async (app) => {
     const { ids } = parse(z.object({ ids: z.array(z.string().uuid()).min(1, "Pick the work orders to invoice").max(200) }), req.body);
     const made = await invoiceVisits(req, [...new Set(ids)]);
     return { invoices: made, totalCents: made.reduce((s, i) => s + i.totalCents, 0), summary: `${made.length} draft invoice${made.length === 1 ? "" : "s"} for ${formatMoney(made.reduce((s, i) => s + i.totalCents, 0))}` };
+  });
+
+  // ---- Photos and documents (like Homeworks'): the crew on it and managers add them; everyone who sees it sees them.
+
+  const loadFile = async (visitId: string, fileId: string) => {
+    const [f] = await db.select().from(visitFiles).where(and(eq(visitFiles.id, fileId), eq(visitFiles.visitId, visitId)));
+    if (!f) notFound("File");
+    return f;
+  };
+  const fileView = (f: typeof visitFiles.$inferSelect, by?: string | null) => ({
+    id: f.id, fileName: f.fileName, contentType: f.contentType, sizeBytes: f.sizeBytes, caption: f.caption, uploadedById: f.uploadedById, uploadedBy: by ?? null, createdAt: f.createdAt,
+  });
+
+  app.get<{ Params: { id: string } }>("/:id/files", async (req) => {
+    const v = await findVisit(req, req.params.id);
+    const rows = await db.select({ f: visitFiles, first: employees.firstName, last: employees.lastName }).from(visitFiles)
+      .leftJoin(employees, eq(employees.id, visitFiles.uploadedById)).where(eq(visitFiles.visitId, v.id)).orderBy(asc(visitFiles.createdAt));
+    return rows.map((r) => fileView(r.f, r.first ? `${r.first} ${r.last}` : null));
+  });
+
+  /** multipart/form-data: "file" (a photo, PDF or short video, up to 25 MB) and an optional "caption". */
+  app.post<{ Params: { id: string } }>("/:id/files", async (req) => {
+    const v = await crewAction(req, req.params.id);
+    const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(visitFiles).where(eq(visitFiles.visitId, v.id));
+    if (n >= VISIT_FILES_MAX) throw new HttpError(400, `A work order can have up to ${VISIT_FILES_MAX} photos and documents`);
+    const file = await req.file();
+    if (!file) throw new HttpError(400, "No file uploaded");
+    if (!(VISIT_FILE_TYPES as readonly string[]).includes(file.mimetype)) throw new HttpError(400, "Upload a photo (JPG, PNG, HEIC, WebP, GIF), a PDF, or a video (MP4 or MOV)");
+    let buf: Buffer;
+    try { buf = await file.toBuffer(); } catch { throw new HttpError(400, "That file is over 25 MB"); }
+    if (buf.length > VISIT_FILE_MAX_BYTES || file.file.truncated) throw new HttpError(400, "That file is over 25 MB");
+    const captionField = file.fields?.caption as { value?: unknown } | undefined;
+    const caption = typeof captionField?.value === "string" ? captionField.value.trim().slice(0, 300) || null : null;
+    const name = (file.filename || "file").replace(/[^\w.\- ]/g, "_").slice(0, 120);
+    const key = `${req.user.companyId}/visits/${v.id}/${randomUUID()}-${name.replace(/\s+/g, "_")}`;
+    await storage.put(key, buf);
+    const [row] = await db.insert(visitFiles).values({ companyId: req.user.companyId, visitId: v.id, fileName: name, contentType: file.mimetype, sizeBytes: buf.length, storageKey: key, caption, uploadedById: req.user.sub }).returning();
+    return fileView(row);
+  });
+
+  app.get<{ Params: { id: string; fileId: string }; Querystring: { download?: string } }>("/:id/files/:fileId", async (req, reply) => {
+    const v = await findVisit(req, req.params.id);
+    const f = await loadFile(v.id, req.params.fileId);
+    reply.header("Content-Type", f.contentType);
+    reply.header("Content-Disposition", `${req.query.download ? "attachment" : "inline"}; filename="${f.fileName.replace(/"/g, "")}"`);
+    reply.header("Cache-Control", "private, max-age=3600");
+    reply.header("X-Content-Type-Options", "nosniff");
+    return reply.send(await storage.get(f.storageKey));
+  });
+
+  app.patch<{ Params: { id: string; fileId: string } }>("/:id/files/:fileId", async (req) => {
+    const v = await crewAction(req, req.params.id);
+    const f = await loadFile(v.id, req.params.fileId);
+    const { caption } = parse(z.object({ caption: z.string().trim().max(300).nullable() }), req.body);
+    const [row] = await db.update(visitFiles).set({ caption: caption || null }).where(eq(visitFiles.id, f.id)).returning();
+    return fileView(row);
+  });
+
+  /** Whoever added it, or a manager. */
+  app.delete<{ Params: { id: string; fileId: string } }>("/:id/files/:fileId", async (req) => {
+    const v = await findVisit(req, req.params.id);
+    const f = await loadFile(v.id, req.params.fileId);
+    if (!canManageVisits(req) && f.uploadedById !== req.user.sub) throw new HttpError(403, "Only whoever added it or a manager can remove it");
+    await db.delete(visitFiles).where(eq(visitFiles.id, f.id));
+    return { ok: true };
   });
 
   /** Delete one, or (scope=following) this and the later open ones in its series. Invoiced ones stay. */

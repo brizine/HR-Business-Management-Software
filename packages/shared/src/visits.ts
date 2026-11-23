@@ -63,6 +63,8 @@ const visitFields = z.object({
   /** Left empty, it's the line items' budgeted hours added up. */
   budgetedHours: z.preprocess(blankToNull, z.coerce.number().min(0).max(999).nullable()).optional(),
   assigneeIds: z.array(z.string().uuid()).max(50).default([]),
+  /** From the company's tag list (the same tags as customers and properties). */
+  tagIds: z.array(z.string().uuid()).max(30).default([]),
   /** The crew it's for (its members are usually the people above). */
   crewId: z.preprocess(blankToNull, z.string().uuid().nullable()).optional(),
   /** For the crew (gate, where to start, what to watch for). */
@@ -145,3 +147,13 @@ export function describeRepeat(unit: RepeatUnit, every: number, offMonths: numbe
   if (!offMonths.length) return base;
   return `${base} (not ${[...offMonths].sort((a, b) => a - b).map((n) => MONTH_SHORT[n - 1]).join(", ")})`;
 }
+
+/** Photos and documents on a work order (like Homeworks' Photos / Documents). */
+export const VISIT_FILE_TYPES = [
+  "image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif", "application/pdf", "video/mp4", "video/quicktime",
+] as const;
+export const VISIT_FILE_MAX_BYTES = 25 * 1024 * 1024;
+export const VISIT_FILES_MAX = 40;
+export const isImageType = (t: string | null | undefined) => !!t && t.startsWith("image/");
+export const isVideoType = (t: string | null | undefined) => !!t && t.startsWith("video/");
+

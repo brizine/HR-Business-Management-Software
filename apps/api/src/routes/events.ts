@@ -24,7 +24,7 @@ const name = (e: { firstName: string | null; lastName: string | null } | null) =
 const base = (over: Partial<CalendarEvent> & Pick<CalendarEvent, "type" | "id" | "title" | "date">): CalendarEvent => ({
   key: `${over.type}:${over.id}`, endDate: null, startTime: null, endTime: null, color: null, status: "open", statusLabel: "Open",
   recurring: false, customer: null, property: null, location: null, people: [], hours: null, notes: null, tagIds: [], href: null,
-  amountCents: null, invoiced: null, onSite: false, trackedMinutes: null, serviceIds: [], crew: null,
+  amountCents: null, invoiced: null, onSite: false, trackedMinutes: null, serviceIds: [], crew: null, mediaCount: 0,
   canMove: false, canComplete: false, ...over,
 });
 
@@ -38,9 +38,9 @@ async function visitEvents(req: Req, rows: ShownVisit[]): Promise<CalendarEvent[
       type: "visit", id: v.id, title: v.title, date: v.date ?? "", endDate: v.endDate, startTime: v.startTime, endTime: v.endTime, color: v.color,
       status: done ? "done" : "open", statusLabel: `WO-${v.number} · ${v.statusLabel}`, recurring: !!v.seriesId,
       customer: { id: v.customer.id, name: v.customer.name }, property: v.property ? { id: v.property.id, address: v.property.address } : null, location: v.location,
-      people: v.assignees.map((a) => ({ id: a.id, name: `${a.firstName} ${a.lastName}` })), hours: v.budgetedHours, notes: v.notes, tagIds: v.customer.tagIds ?? [],
+      people: v.assignees.map((a) => ({ id: a.id, name: `${a.firstName} ${a.lastName}` })), hours: v.budgetedHours, notes: v.notes, tagIds: [...new Set([...(v.customer.tagIds ?? []), ...(v.tagIds ?? [])])],
       href: `/visits/${v.id}`, amountCents: v.billing === "invoice" ? v.totalCents : null, invoiced: v.invoiced, onSite: v.status === "on_site",
-      trackedMinutes: v.trackedMinutes, serviceIds: v.lines.map((l) => l.serviceTypeId).filter((x): x is string => !!x), crew: v.crew,
+      trackedMinutes: v.trackedMinutes, serviceIds: v.lines.map((l) => l.serviceTypeId).filter((x): x is string => !!x), crew: v.crew, mediaCount: v.fileCount,
       canMove: manage && !done, canComplete: !done && (manage || crew),
     });
   });

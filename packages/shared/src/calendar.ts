@@ -58,6 +58,8 @@ export interface CalendarEvent {
   serviceIds: string[];
   /** Work orders: the crew it's for. */
   crew: { id: string; name: string; color: string } | null;
+  /** Work orders: how many photos and documents it has. */
+  mediaCount: number;
   href: string | null;
   /** Whether you can drag it to another day. */
   canMove: boolean;

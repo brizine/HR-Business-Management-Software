@@ -1261,3 +1261,21 @@ a.pt-row:hover { background: var(--bg); }
 .package-lines { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
 .pkg-select { width: auto; min-width: 170px; }
 
+/* Work order photos and documents */
+.file-drop { border: 2px dashed var(--border); border-radius: 10px; padding: 18px; text-align: center; color: var(--muted); cursor: pointer; }
+.file-drop:hover, .file-drop.over { border-color: var(--primary); background: var(--info-bg); color: var(--text); }
+.file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.file-tile { display: grid; gap: 4px; padding: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--bg); color: var(--text); font: inherit; cursor: pointer; text-align: left; }
+.file-tile:hover { box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+.file-tile img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: var(--border); }
+.file-icon { display: grid; place-items: center; gap: 2px; aspect-ratio: 4 / 3; color: var(--muted); font-size: 12px; font-weight: 600; }
+.file-cap { padding: 0 8px 6px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewer-backdrop { position: fixed; inset: 0; z-index: 140; background: rgba(0,0,0,.8); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.viewer { display: grid; grid-template-columns: minmax(0, 1fr) 280px; width: min(1200px, 100%); max-height: calc(100vh - 32px); background: var(--surface); border-radius: 12px; overflow: hidden; }
+.viewer-media { position: relative; display: flex; align-items: center; justify-content: center; background: #000; min-height: 300px; }
+.viewer-media img, .viewer-media video { max-width: 100%; max-height: calc(100vh - 32px); object-fit: contain; }
+.viewer-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 42px; height: 42px; border-radius: 50%; border: 0; background: rgba(255,255,255,.85); color: #111; cursor: pointer; display: grid; place-items: center; }
+.viewer-nav.prev { left: 10px; } .viewer-nav.next { right: 10px; }
+.viewer-side { padding: 14px; overflow-y: auto; align-content: start; }
+@media (max-width: 800px) { .viewer { grid-template-columns: 1fr; overflow-y: auto; } .viewer-media { min-height: 200px; } }
+

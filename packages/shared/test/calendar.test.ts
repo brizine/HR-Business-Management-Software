@@ -4,7 +4,7 @@ import { eventOnDay, eventsCsv, sortEvents, type CalendarEvent } from "../src";
 const ev = (over: Partial<CalendarEvent>): CalendarEvent => ({
   key: `todo:${over.id ?? "x"}`, type: "todo", id: "x", title: "A", date: "2026-11-23", endDate: null, startTime: null, endTime: null, color: null,
   status: "open", statusLabel: "Open", recurring: false, customer: null, property: null, location: null, people: [], hours: null, notes: null,
-  tagIds: [], amountCents: null, invoiced: null, onSite: false, trackedMinutes: null, serviceIds: [], crew: null, href: null, canMove: false, canComplete: false, ...over,
+  tagIds: [], amountCents: null, invoiced: null, onSite: false, trackedMinutes: null, serviceIds: [], crew: null, mediaCount: 0, href: null, canMove: false, canComplete: false, ...over,
 });
 
 describe("calendar", () => {

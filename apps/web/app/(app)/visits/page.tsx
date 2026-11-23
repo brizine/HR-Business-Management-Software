@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
-import { VisitStatus, crewNames, visitWhen, type Visit } from "@/components/visits";
+import { VisitStatus, VisitTags, crewNames, visitWhen, type Visit } from "@/components/visits";
 
 const VIEWS = [
   ["upcoming", "Coming up (open)"], ["waitlist", "Waitlist (no date)"], ["invoice", "Ready to invoice"],
@@ -21,6 +21,9 @@ function WorkOrders() {
   const [view, setView] = useState<View>("upcoming");
   const [who, setWho] = useState(manager ? "all" : "mine");
   const [crewF, setCrewF] = useState("");
+  const [tagF, setTagF] = useState("");
+  const tagList = useApi<{ id: string; name: string; archived: boolean }[]>(manager ? "/crm/tags" : null);
+  const tags = tagList.data ?? [];
   // From a crew's card on the Crews page (?crew=…).
   useEffect(() => { const c = new URL(window.location.href).searchParams.get("crew"); if (c) setCrewF(c); }, []);
   const crews = useApi<{ id: string; name: string }[]>("/crews?all=1");
@@ -39,9 +42,10 @@ function WorkOrders() {
     if (view === "all") p.set("order", "recent");
     if (who === "mine") p.set("mine", "true"); else if (who !== "all") p.set("assigneeId", who);
     if (crewF) p.set("crewId", crewF);
+    if (tagF) p.set("tagId", tagF);
     if (query.trim()) p.set("q", query.trim());
     return `/visits?${p}`;
-  }, [view, who, query, crewF]);
+  }, [view, who, query, crewF, tagF]);
   const list = useApi<{ today: string; items: Visit[]; more: boolean }>(path);
   const staff = useApi<any[]>(manager ? "/employees" : null);
   useEffect(() => { setPicked([]); }, [path]);
@@ -79,6 +83,14 @@ function WorkOrders() {
             </select>
           </label>
         )}
+        {manager && tags.length > 0 && (
+          <label>Tag
+            <select value={tagF} onChange={(e) => setTagF(e.target.value)}>
+              <option value="">Any tag</option>
+              {tags.filter((t) => !t.archived).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </label>
+        )}
         <label>Search<input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="WO number, title, notes" /></label>
       </div>
       <ErrorBox error={list.error || invoice.error} />
@@ -106,7 +118,7 @@ function WorkOrders() {
                   <td><span className="visit-dot" style={{ background: v.color }} /><Link href={`/visits/${v.id}`}>{visitNumber(v.number)}</Link></td>
                   <td>{visitWhen(v)}{overdue(v) && <div><span className="badge bad">overdue</span></div>}</td>
                   <td>{v.customer.name}<div className="muted" style={{ fontSize: 13 }}>{v.property?.address ?? v.location ?? ""}</div></td>
-                  <td><Link href={`/visits/${v.id}`}>{v.title}</Link>{v.seriesId && <span className="todo-repeat" title={v.repeatLabel ?? "Repeats"}> ↻</span>}</td>
+                  <td><Link href={`/visits/${v.id}`}>{v.title}</Link>{v.seriesId && <span className="todo-repeat" title={v.repeatLabel ?? "Repeats"}> ↻</span>}{v.fileCount > 0 && <span className="muted" title={`${v.fileCount} photos and documents`}> · 📎 {v.fileCount}</span>}<div><VisitTags v={v} /></div></td>
                   <td>{v.crew && <span className="visit-dot" style={{ background: v.crew.color }} />}{crewNames(v) || <span className="muted">No crew</span>}</td>
                   {manager && <td style={{ textAlign: "right" }}>{v.billing === "invoice" ? formatMoney(v.totalCents) : <span className="muted">No charge</span>}</td>}
                   <td><VisitStatus v={v} />{v.invoiced && <div><Link className="muted" style={{ fontSize: 12 }} href={`/invoices/${v.invoice!.id}`}>{v.invoice!.number ? `Invoice ${v.invoice!.number}` : "Draft invoice"}</Link></div>}</td>

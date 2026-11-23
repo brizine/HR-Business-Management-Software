@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Alert, Linking, Platform, Pressable, View } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { formatTodoTime } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
@@ -24,6 +25,34 @@ export function MyWorkOrdersCard({ refreshKey }: { refreshKey?: number }) {
   const [writing, setWriting] = useState<{ id: string; kind: "complete" | "skip"; text: string } | null>(null);
   const today = list.data?.today ?? "";
   const items = (list.data?.items ?? []).filter((v) => !v.date || !today || v.date <= plusDays(today, 7));
+
+  /** Take or choose a photo and add it to the work order (compressed to JPEG by the picker). */
+  const addPhoto = (id: string) => {
+    const pick = async (source: "camera" | "photos") => {
+      if (source === "camera" && !(await ImagePicker.requestCameraPermissionsAsync()).granted) {
+        Alert.alert("Camera access needed", "Allow camera access in Settings, or choose a photo instead.");
+        return;
+      }
+      const opts: ImagePicker.ImagePickerOptions = { mediaTypes: ["images"], quality: 0.6, allowsMultipleSelection: source === "photos", selectionLimit: 10 };
+      const res = source === "camera" ? await ImagePicker.launchCameraAsync(opts) : await ImagePicker.launchImageLibraryAsync(opts);
+      if (res.canceled) return;
+      setBusy(id);
+      try {
+        for (const [i, a] of res.assets.entries()) {
+          const fd = new FormData();
+          fd.append("file", { uri: a.uri, name: `photo-${Date.now()}-${i + 1}.jpg`, type: "image/jpeg" } as unknown as Blob);
+          await api(`/visits/${id}/files`, { method: "POST", body: fd });
+        }
+        await list.reload();
+      } catch (e) { Alert.alert("Couldn't add the photo", (e as Error).message); }
+      setBusy(null);
+    };
+    Alert.alert("Add a photo", undefined, [
+      { text: "Take photo", onPress: () => pick("camera") },
+      { text: "Choose photos", onPress: () => pick("photos") },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
 
   const post = async (id: string, path: string, body: object = {}) => {
     setBusy(id);
@@ -50,6 +79,7 @@ export function MyWorkOrdersCard({ refreshKey }: { refreshKey?: number }) {
               <Txt muted>{[v.date ? day(v.date) : "Waitlist", formatTodoTime(v.startTime, v.endTime)].filter(Boolean).join(" · ")}</Txt>
               <Txt>{v.customer.name}{v.customer.phone ? ` · ${v.customer.phone}` : ""}</Txt>
               {v.crew ? <Txt muted>Crew: {v.crew.name}</Txt> : null}
+              {v.tags?.length ? <Txt muted>Tags: {v.tags.map((t: any) => t.name).join(", ")}</Txt> : null}
               {p ? (
                 <Pressable onPress={() => openMap(p.address, p.lat, p.lng)} accessibilityRole="link" accessibilityLabel={`Directions to ${p.address}`}>
                   <Txt style={{ color: t.primary }}>{p.address}</Txt>
@@ -61,7 +91,9 @@ export function MyWorkOrdersCard({ refreshKey }: { refreshKey?: number }) {
               {v.lines.length ? <Txt muted>{v.lines.map((l: any) => `${l.description}${l.quantity !== 1 ? ` × ${l.quantity}` : ""}`).join(" · ")}</Txt> : null}
               {v.notes ? <Txt muted numberOfLines={4}>{v.notes}</Txt> : null}
               {v.budgetedHours ? <Txt muted>{v.budgetedHours} h budgeted</Txt> : null}
+              {v.fileCount ? <Txt muted>📎 {v.fileCount} photo{v.fileCount === 1 ? "" : "s"} or document{v.fileCount === 1 ? "" : "s"}</Txt> : null}
             </View>
+            <Button title={busy === v.id ? "Adding…" : "Add photo"} kind="secondary" busy={busy === v.id} onPress={() => addPhoto(v.id)} />
             {w ? (
               <View style={{ gap: 6 }}>
                 <Input label={w.kind === "complete" ? "Notes about the work (optional)" : "Why was it skipped?"} value={w.text} multiline

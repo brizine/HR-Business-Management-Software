@@ -6,7 +6,9 @@ import { VISIT_BILLING_LABELS, formatMoney, visitNumber } from "@crewdesk/shared
 import { api, fmtDateTime } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead } from "@/components/ui";
-import { CrewButtons, VisitForm, VisitStatus, crewNames, trackedLabel, visitWhen, type Visit } from "@/components/visits";
+import { CrewButtons, VisitForm, VisitStatus, VisitTags, crewNames, trackedLabel, visitWhen, type Visit } from "@/components/visits";
+import { VisitFiles } from "@/components/visit-files";
+import { useAuth } from "@/lib/auth";
 
 type Detail = Visit & { seriesLeft: number; today: string; canManage: boolean; isCrew: boolean };
 
@@ -16,6 +18,7 @@ export default function WorkOrder({ params }: { params: Promise<{ id: string }> 
   const data = useApi<Detail>(`/visits/${id}`);
   const [editing, setEditing] = useState(false);
   const act = useAction();
+  const { me } = useAuth();
   const v = data.data;
   if (data.error) return <><PageHead title="Work order" /><ErrorBox error={data.error} /></>;
   if (!v) return <PageHead title="Work order" sub="Loading…" />;
@@ -27,7 +30,7 @@ export default function WorkOrder({ params }: { params: Promise<{ id: string }> 
   return (
     <>
       <PageHead title={`${visitNumber(v.number)} ${v.title}`} before={<Link className="btn" href="/visits" aria-label="Back to work orders">←</Link>}
-        sub={<><VisitStatus v={v} /> · {visitWhen(v)}{v.seriesId ? ` · ${v.repeatLabel ?? "repeats"}` : ""}</>}>
+        sub={<><VisitStatus v={v} /> · {visitWhen(v)}{v.seriesId ? ` · ${v.repeatLabel ?? "repeats"}` : ""}{v.tags?.length ? <> · <VisitTags v={v} /></> : null}</>}>
         {mapUrl && <a className="btn" href={mapUrl} target="_blank" rel="noopener noreferrer">Directions</a>}
         {v.canManage && !editing && <button className="btn" onClick={() => setEditing(true)}>Edit</button>}
         {canInvoice && (
@@ -88,6 +91,7 @@ export default function WorkOrder({ params }: { params: Promise<{ id: string }> 
           </div>
         </div>
       )}
+      {!editing && <div style={{ marginTop: 16 }}><VisitFiles visitId={v.id} canAdd={v.canManage || v.isCrew} canManage={v.canManage} meId={me?.user.id} /></div>}
     </>
   );
 }

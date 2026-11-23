@@ -38,7 +38,7 @@ export function rangeLabel(view: CalView, anchor: string) {
 
 /* ───────── Settings (kept per person in this browser) ───────── */
 export const DETAILS = {
-  time: "Time", location: "Address or location", customer: "Customer", people: "Who it's for", amount: "Price (work orders)", hours: "Hours", type: "Event type", status: "Status", notes: "Notes",
+  time: "Time", location: "Address or location", customer: "Customer", people: "Who it's for", amount: "Price (work orders)", hours: "Hours", media: "Photos (work orders)", type: "Event type", status: "Status", notes: "Notes",
 } as const;
 export type DetailKey = keyof typeof DETAILS;
 export interface CalSettings {
@@ -52,7 +52,7 @@ export const DEFAULT_SETTINGS: CalSettings = {
   types: Object.fromEntries(CALENDAR_TYPES.map((t) => [t, CALENDAR_TYPE_INFO[t].defaultOn])) as Record<CalendarType, boolean>,
   colors: Object.fromEntries(CALENDAR_TYPES.map((t) => [t, CALENDAR_TYPE_INFO[t].color])) as Record<CalendarType, string>,
   colorByType: true, groupByType: false, highContrast: false,
-  details: { time: true, location: true, customer: true, people: true, amount: true, hours: false, type: false, status: false, notes: false },
+  details: { time: true, location: true, customer: true, people: true, amount: true, hours: false, media: true, type: false, status: false, notes: false },
   rollup: false, sidebar: true, unscheduled: false,
 };
 export function useCalSettings(userId: string | undefined) {
@@ -159,6 +159,7 @@ export function EventCard({ e, s, onOpen, compact }: { e: CalendarEvent; s: CalS
     s.details.people && [e.crew?.name, e.people.map((p) => p.name).join(", ")].filter(Boolean).join(" · "),
     s.details.amount && e.amountCents != null ? formatMoney(e.amountCents) : null,
     s.details.hours && e.hours ? `${e.hours} h` : null,
+    s.details.media && e.mediaCount ? `📎 ${e.mediaCount} photo${e.mediaCount === 1 ? "" : "s"}` : null,
     s.details.type && CALENDAR_TYPE_INFO[e.type].label,
     s.details.status && e.statusLabel,
     s.details.notes && e.notes,
