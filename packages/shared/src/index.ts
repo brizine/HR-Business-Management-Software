@@ -33,3 +33,4 @@ export * from "./calendar";
 export * from "./visits";
 export * from "./crews";
 export * from "./customFields";
+export * from "./tax";

@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  INCOME_ACCOUNTS, INVOICE_STATUS_LABELS, describePricing, formatMoney, invoiceTotals, lineAmount, priceFor, type InvoiceStatus,
+  INCOME_ACCOUNTS, INVOICE_STATUS_LABELS, describePricing, formatMoney, invoiceTotals, lineAmount, lineTaxRate, priceFor, taxRateFor, type InvoiceStatus,
 } from "@crewdesk/shared";
 import Link from "next/link";
 import { api, fmtDate, today } from "@/lib/api";
@@ -9,7 +9,7 @@ import { useApi } from "@/lib/hooks";
 import { ErrorBox } from "@/components/ui";
 import { CustomerPicker } from "@/components/customers";
 
-export interface ServiceType { id: string; name: string; description: string | null; pricing: string; priceCents: number; minimumCents: number; brackets: { upToSqFt: number | null; priceCents: number }[]; incomeAccountCode: string; active: boolean }
+export interface ServiceType { id: string; name: string; description: string | null; pricing: string; priceCents: number; minimumCents: number; brackets: { upToSqFt: number | null; priceCents: number }[]; incomeAccountCode: string; active: boolean; taxable?: boolean }
 
 /** Unpaid, Overdue, Partly paid, Paid, Draft or Void, colored. */
 export function InvoiceStatus({ status, overdue }: { status: string; overdue?: boolean }) {
@@ -25,8 +25,14 @@ export const toCents = (s: string) => {
 };
 export const dollars = (c: number) => (c / 100).toFixed(2);
 
-type Line = { serviceTypeId: string | null; description: string; quantity: string; price: string; incomeAccountCode: string };
-const blankLine = (): Line => ({ serviceTypeId: null, description: "", quantity: "1", price: "", incomeAccountCode: "4000" });
+type Line = { serviceTypeId: string | null; description: string; quantity: string; price: string; incomeAccountCode: string; tax: string };
+const blankLine = (): Line => ({ serviceTypeId: null, description: "", quantity: "1", price: "", incomeAccountCode: "4000", tax: "" });
+const taxText = (r: number | null | undefined) => (r ? String(Number(r.toFixed(3))) : "");
+
+/** The company's billing settings (sales tax on or off, its name and default rate). */
+export function useBillingSettings() {
+  return useApi<{ taxEnabled: boolean; taxName: string; defaultTaxRate: number }>("/invoices/settings");
+}
 
 export interface InvoiceFormValue {
   customer: { id: string; name: string } | null; propertyId: string; issueDate: string; dueDate: string; poNumber: string; notes: string;
@@ -39,7 +45,7 @@ export function invoiceFormValue(inv?: any, customer?: { id: string; name: strin
     customer: { id: inv.customer.id, name: inv.customer.name }, propertyId: inv.propertyId ?? "", issueDate: inv.issueDate, dueDate: inv.dueDate,
     poNumber: inv.poNumber ?? "", notes: inv.notes ?? "", discountKind: inv.discountKind,
     discount: inv.discountKind === "amount" ? dollars(inv.discountValue) : inv.discountKind === "percent" ? String(inv.discountValue) : "",
-    lines: inv.lines.map((l: any) => ({ serviceTypeId: l.serviceTypeId, description: l.description, quantity: String(l.quantity), price: dollars(l.unitPriceCents), incomeAccountCode: l.incomeAccountCode })),
+    lines: inv.lines.map((l: any) => ({ serviceTypeId: l.serviceTypeId, description: l.description, quantity: String(l.quantity), price: dollars(l.unitPriceCents), incomeAccountCode: l.incomeAccountCode, tax: taxText(l.taxRate) })),
   };
 }
 
@@ -53,7 +59,9 @@ export function invoiceBody(v: InvoiceFormValue): { body?: Record<string, unknow
     if (!l.description.trim()) return { error: `Line ${i + 1} needs a description` };
     if (!(quantity > 0)) return { error: `Line ${i + 1}: enter a quantity` };
     if (!Number.isFinite(unitPriceCents)) return { error: `Line ${i + 1}: enter a price` };
-    lines.push({ serviceTypeId: l.serviceTypeId, description: l.description.trim(), quantity: Math.round(quantity * 100) / 100, unitPriceCents, incomeAccountCode: l.incomeAccountCode });
+    const taxRate = l.tax.trim() ? Number(l.tax) : 0;
+    if (!(taxRate >= 0 && taxRate <= 30)) return { error: `Line ${i + 1}: the tax rate must be 0 to 30%` };
+    lines.push({ serviceTypeId: l.serviceTypeId, description: l.description.trim(), quantity: Math.round(quantity * 100) / 100, unitPriceCents, incomeAccountCode: l.incomeAccountCode, taxRate });
   }
   if (!lines.length) return { error: "Add at least one line" };
   const discountValue = v.discountKind === "amount" ? toCents(v.discount || "0") : v.discountKind === "percent" ? Number(v.discount || 0) : 0;
@@ -78,14 +86,28 @@ export function InvoiceFields({ value, onChange, lockCustomer }: { value: Invoic
     if (customer.data && !value.propertyId && properties.length === 1) set({ propertyId: properties[0].id });
   }, [customer.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const setLine = (i: number, patch: Partial<Line>) => set({ lines: value.lines.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
+  // Sales tax: the rate for this customer and property (property, then customer, then the default; exempt: none).
+  const billing = useBillingSettings();
+  const settings = billing.data ?? { taxEnabled: false, taxName: "Sales tax", defaultTaxRate: 0 };
+  const rate = taxRateFor({ settings, customer: customer.data, property });
+  const showTax = settings.taxEnabled || value.lines.some((l) => Number(l.tax) > 0);
+  // A different customer or property: taxable lines take its rate.
+  const lastRate = useRef<number | null>(null);
+  useEffect(() => {
+    if (!billing.data || !customer.data) return;
+    if (lastRate.current !== null && lastRate.current !== rate) {
+      set({ lines: value.lines.map((l) => (services.data?.find((x) => x.id === l.serviceTypeId)?.taxable ? { ...l, tax: taxText(rate) } : l)) });
+    }
+    lastRate.current = rate;
+  }, [rate, billing.data, customer.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const pickService = (i: number, id: string) => {
     if (!id) return setLine(i, { serviceTypeId: null });
     const s = services.data?.find((x) => x.id === id);
     if (!s) return;
     const price = priceFor(s, property?.lawnSqFt ?? null);
-    setLine(i, { serviceTypeId: s.id, description: value.lines[i].description || s.name, price: price != null ? dollars(price) : value.lines[i].price, incomeAccountCode: s.incomeAccountCode });
+    setLine(i, { serviceTypeId: s.id, description: value.lines[i].description || s.name, price: price != null ? dollars(price) : value.lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)) });
   };
-  const parsed = value.lines.map((l) => ({ quantity: Number(l.quantity) || 0, unitPriceCents: toCents(l.price) || 0 }));
+  const parsed = value.lines.map((l) => ({ quantity: Number(l.quantity) || 0, unitPriceCents: toCents(l.price) || 0, taxRate: Number(l.tax) || 0 }));
   const totals = invoiceTotals(parsed, value.discountKind, value.discountKind === "amount" ? toCents(value.discount || "0") || 0 : Number(value.discount) || 0);
   const needsPo = !!customer.data?.poRequired;
 
@@ -112,7 +134,7 @@ export function InvoiceFields({ value, onChange, lockCustomer }: { value: Invoic
 
       <div className="tablewrap">
         <table className="invoice-lines">
-          <thead><tr><th style={{ width: "26%" }}>Service</th><th>Description</th><th style={{ width: 80 }}>Qty</th><th style={{ width: 110 }}>Price</th><th style={{ width: 110, textAlign: "right" }}>Amount</th><th style={{ width: 40 }} /></tr></thead>
+          <thead><tr><th style={{ width: "26%" }}>Service</th><th>Description</th><th style={{ width: 80 }}>Qty</th><th style={{ width: 110 }}>Price</th>{showTax && <th style={{ width: 90 }}>Tax %</th>}<th style={{ width: 110, textAlign: "right" }}>Amount</th><th style={{ width: 40 }} /></tr></thead>
           <tbody>{value.lines.map((l, i) => {
             const s = services.data?.find((x) => x.id === l.serviceTypeId);
             const unpriced = s && priceFor(s, property?.lawnSqFt ?? null) == null;
@@ -133,6 +155,7 @@ export function InvoiceFields({ value, onChange, lockCustomer }: { value: Invoic
                 <td><input aria-label={`Line ${i + 1} description`} value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} /></td>
                 <td><input aria-label={`Line ${i + 1} quantity`} inputMode="decimal" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></td>
                 <td><input aria-label={`Line ${i + 1} price`} inputMode="decimal" placeholder="0.00" value={l.price} onChange={(e) => setLine(i, { price: e.target.value })} /></td>
+                {showTax && <td><input aria-label={`Line ${i + 1} tax rate`} inputMode="decimal" placeholder="0" value={l.tax} onChange={(e) => setLine(i, { tax: e.target.value })} /></td>}
                 <td style={{ textAlign: "right" }}>{formatMoney(lineAmount(parsed[i]))}</td>
                 <td>{value.lines.length > 1 && <button type="button" className="btn" aria-label={`Remove line ${i + 1}`} onClick={() => set({ lines: value.lines.filter((_, j) => j !== i) })}>✕</button>}</td>
               </tr>
@@ -156,6 +179,7 @@ export function InvoiceFields({ value, onChange, lockCustomer }: { value: Invoic
           <dl className="facts totals">
             <dt>Subtotal</dt><dd>{formatMoney(totals.subtotalCents)}</dd>
             {totals.discountCents > 0 && <><dt>Discount</dt><dd>-{formatMoney(totals.discountCents)}</dd></>}
+            {(showTax || totals.taxCents > 0) && <><dt>{settings.taxName || "Sales tax"}</dt><dd>{formatMoney(totals.taxCents)}</dd></>}
             <dt><strong>Total</strong></dt><dd><strong>{formatMoney(totals.totalCents)}</strong></dd>
           </dl>
         </div>

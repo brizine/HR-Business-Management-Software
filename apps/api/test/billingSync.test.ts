@@ -14,6 +14,8 @@ import { flushNotifications, setPushTransport } from "../src/lib/notify";
 type Call = { method: string; path: string; body: any };
 const calls: Call[] = [];
 let failInvoices = false;
+let taxFeatureOff = true;
+const taxRates: { id: number; name: string; code: string; rate: number }[] = [];
 let nextId = 500;
 const items: { id: number; name: string }[] = [{ id: 99, name: "Core aeration" }];
 const ACCOUNTS = [["1020", 1002], ["1030", 1034], ["4000", 1026], ["4100", 1047], ["4200", 1048], ["4950", 1028]].map(([code, id]) => ({ id, code, name: `Acct ${code}`, account_type: "income", active: true }));
@@ -36,6 +38,12 @@ function fake() {
         if (items.some((i) => i.name.toLowerCase() === body.name.toLowerCase())) return send(400, { errors: [{ type: "ITEM_NAME_EXISTS", code: 100 }] });
         const id = nextId++; items.push({ id, name: body.name });
         return send(200, { id, message: "The item has been successfully created." });
+      }
+      if (path.startsWith("/tax-rates")) {
+        if (taxFeatureOff) return send(400, { errors: [{ type: "SALES_TAX_FEATURE_NOT_ENABLED", message: "The sales tax feature is not enabled.", code: 400 }] });
+        if (req.method === "GET") return send(200, { data: taxRates });
+        const id = nextId++; taxRates.push({ id, name: body.name, code: body.code, rate: body.rate });
+        return send(200, { id, message: "The tax rate has been created successfully." });
       }
       if (req.method === "POST" && path === "/customers") return send(201, { id: nextId++, displayName: body.displayName });
       if (req.method === "PUT" && path.startsWith("/customers/")) return send(200, { id: Number(path.split("/")[2]) });
@@ -229,5 +237,36 @@ describe("Bigcapital billing sync", () => {
     await call("POST", `/invoices/${id}/payments`, "owner", { amountCents: 4000, method: "cash" });
     await flushBillingSync();
     expect(calls.slice(before).filter((c) => c.method !== "GET")).toEqual([]);
+  });
+
+  it("sales tax: each taxed line carries a Bigcapital tax rate (made once per rate); a discount's tax difference goes on as an adjustment", async () => {
+    await call("PUT", "/invoices/settings", "owner", { nextInvoiceNumber: 1, termsDays: 15, taxEnabled: true, taxName: "Sales tax", defaultTaxRate: 8.625 });
+    // Sales tax off in Bigcapital: a clear message, and the invoice waits to be posted again.
+    const off = await sentInvoice(ID.rita, [{ description: "Mulch", quantity: 2, unitPriceCents: 650, incomeAccountCode: "4950", taxRate: 8.625 }]);
+    const [o] = await db.select().from(invoices).where(eq(invoices.id, off));
+    expect(o.taxCents).toBe(112);
+    expect((await call("GET", `/invoices/${off}`, "owner")).body.sync.invoice.error).toMatch(/Sales tax isn.t turned on in Bigcapital/);
+    taxFeatureOff = false;
+    const before = calls.length;
+    const id = await sentInvoice(ID.rita, [
+      { description: "Mulch", quantity: 2, unitPriceCents: 650, incomeAccountCode: "4950", taxRate: 8.625 },
+      { serviceTypeId: ID.aer, description: "Core aeration", quantity: 1, unitPriceCents: 9500, incomeAccountCode: "4200" },
+    ], { discountKind: "amount", discountValue: 1080 });
+    const made = calls.slice(before).filter((c) => c.method === "POST" && c.path === "/tax-rates");
+    expect(made.map((c) => c.body)).toEqual([expect.objectContaining({ name: "Sales tax 8.625%", code: "CD8.625", rate: 8.625 })]);
+    const body = last("POST", "/sale-invoices")!.body;
+    expect(body.isInclusiveTax).toBe(false);
+    expect(body.entries[0].taxRateId).toBe(taxRates[0].id);
+    expect(body.entries[1].taxRateId).toBeUndefined();
+    // Crewdesk: the $13 of mulch takes $1.30 of the $10.80 discount, so tax is 8.625% of $11.70 = $1.01.
+    // Bigcapital taxes the full $13 ($1.12), so a -$0.11 adjustment makes the totals match.
+    const [inv] = await db.select().from(invoices).where(eq(invoices.id, id));
+    expect(inv.taxCents).toBe(101);
+    expect(body.adjustment).toBe(-0.11);
+    // Another invoice at the same rate reuses the Bigcapital tax rate.
+    const n = calls.length;
+    await sentInvoice(ID.rita, [{ description: "Mulch", quantity: 1, unitPriceCents: 650, incomeAccountCode: "4950", taxRate: 8.625 }]);
+    expect(calls.slice(n).filter((c) => c.path.startsWith("/tax-rates"))).toEqual([]);
+    expect(last("POST", "/sale-invoices")!.body).not.toHaveProperty("adjustment");
   });
 });

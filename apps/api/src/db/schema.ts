@@ -1193,6 +1193,10 @@ export const customers = pgTable(
     delivery: text("delivery").array().notNull().default(sql`ARRAY['email']::text[]`),
     source: text("source"),
     poRequired: boolean("po_required").notNull().default(false),
+    /** Sales tax: exempt customers pay none (with their exemption certificate number); or their own rate. */
+    taxExempt: boolean("tax_exempt").notNull().default(false),
+    taxExemptNumber: text("tax_exempt_number"),
+    taxRate: doublePrecision("tax_rate"),
     notes: text("notes"),
     /** "lead", "active" or "cancelled". */
     status: text("status").notNull().default("active"),
@@ -1252,6 +1256,8 @@ export const properties = pgTable(
     /** The saved Property Measure the lawn size came from. */
     measurementId: uuid("measurement_id").references(() => measurements.id, { onDelete: "set null" }),
     gateCode: text("gate_code"),
+    /** Sales tax rate where the property is (null: the customer's, else the company default). */
+    taxRate: doublePrecision("tax_rate"),
     pets: text("pets"),
     accessNotes: text("access_notes"),
     notes: text("notes"),
@@ -1352,6 +1358,8 @@ export const serviceTypes = pgTable(
     brackets: jsonb("brackets").$type<Bracket[]>().notNull().default([]),
     /** The income account's code in the books (4000, 4100, 4200…), so it works in real and test books alike. */
     incomeAccountCode: text("income_account_code").notNull().default("4000"),
+    /** Homeworks' "This is Taxable": its lines get the sales tax rate once sales tax is on. */
+    taxable: boolean("taxable").notNull().default(false),
     active: boolean("active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: createdAt(),
@@ -1378,6 +1386,8 @@ export const invoices = pgTable(
     discountValue: doublePrecision("discount_value").notNull().default(0),
     subtotalCents: integer("subtotal_cents").notNull().default(0),
     discountCents: integer("discount_cents").notNull().default(0),
+    /** Sales tax: the lines' tax added up (after the discount), rounded once. */
+    taxCents: integer("tax_cents").notNull().default(0),
     totalCents: integer("total_cents").notNull().default(0),
     paidCents: integer("paid_cents").notNull().default(0),
     /** Customer credit used on it; what's owed is total − paid − credited. */
@@ -1419,6 +1429,8 @@ export const invoiceLines = pgTable(
     unitPriceCents: integer("unit_price_cents").notNull(),
     amountCents: integer("amount_cents").notNull(),
     incomeAccountCode: text("income_account_code").notNull().default("4000"),
+    /** Sales tax on the line, in percent (0 = not taxed). */
+    taxRate: doublePrecision("tax_rate").notNull().default(0),
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (t) => [index("invoice_lines_invoice_idx").on(t.invoiceId)],
@@ -1882,6 +1894,8 @@ export const visitLines = pgTable(
     budgetedHours: doublePrecision("budgeted_hours"),
     unitPriceCents: integer("unit_price_cents").notNull().default(0),
     amountCents: integer("amount_cents").notNull().default(0),
+    /** Sales tax on the line, in percent (0 = not taxed). */
+    taxRate: doublePrecision("tax_rate").notNull().default(0),
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (t) => [index("visit_lines_visit_idx").on(t.visitId)],

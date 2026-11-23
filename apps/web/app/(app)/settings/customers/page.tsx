@@ -162,16 +162,21 @@ function ReasonForm({ reason, onDone }: { reason: any | null; onDone: () => void
 
 /** Invoice numbering, terms, the "payable to" name and the printed footer. */
 function BillingCard() {
-  const saved = useApi<{ nextInvoiceNumber: number; termsDays: number; footer: string; payableTo: string; autoApplyCredits: boolean }>("/invoices/settings");
+  const saved = useApi<{ nextInvoiceNumber: number; termsDays: number; footer: string; payableTo: string; autoApplyCredits: boolean; taxEnabled: boolean; taxName: string; defaultTaxRate: number }>("/invoices/settings");
   const { busy, error, run } = useAction();
   const [done, setDone] = useState(false);
+  const [taxOn, setTaxOn] = useState<boolean | null>(null);
   if (!saved.data) return null;
   const s = saved.data;
+  const tax = taxOn ?? s.taxEnabled;
   return (
     <form className="card stack" onChange={() => setDone(false)} onSubmit={(e) => {
       e.preventDefault();
       const f = new FormData(e.currentTarget);
-      const body = { nextInvoiceNumber: Number(f.get("next")), termsDays: Number(f.get("terms")), footer: String(f.get("footer") ?? ""), payableTo: String(f.get("payable") ?? ""), autoApplyCredits: f.get("autoCredits") === "on" };
+      const body = {
+        nextInvoiceNumber: Number(f.get("next")), termsDays: Number(f.get("terms")), footer: String(f.get("footer") ?? ""), payableTo: String(f.get("payable") ?? ""), autoApplyCredits: f.get("autoCredits") === "on",
+        taxEnabled: f.get("taxOn") === "on", taxName: String(f.get("taxName") ?? "").trim() || "Sales tax", defaultTaxRate: Number(f.get("taxRate") ?? 0) || 0,
+      };
       run(async () => { saved.setData(await api("/invoices/settings", { method: "PUT", body })); setDone(true); });
     }}>
       <h2 style={{ fontSize: 16, margin: 0 }}>Invoices</h2>
@@ -186,6 +191,28 @@ function BillingCard() {
       </div>
       <label>Footer on every invoice<textarea name="footer" rows={2} defaultValue={s.footer} placeholder="Thank you! All program applications are guaranteed…" /></label>
       <label className="check"><input type="checkbox" name="autoCredits" defaultChecked={s.autoApplyCredits !== false} /> Use a customer&apos;s credit on their invoices automatically when the invoices are sent</label>
+      <fieldset className="cf-box">
+        <legend>Sales tax</legend>
+        <label className="check"><input type="checkbox" name="taxOn" checked={tax} onChange={(e) => setTaxOn(e.target.checked)} /> Charge sales tax</label>
+        {tax ? (
+          <>
+            <div className="formgrid">
+              <label>Call it<input name="taxName" maxLength={40} defaultValue={s.taxName || "Sales tax"} placeholder="Sales tax" /></label>
+              <label>Default tax rate (%)<input name="taxRate" inputMode="decimal" defaultValue={s.defaultTaxRate || ""} placeholder="8.625" /></label>
+            </div>
+            <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+              Lines for items marked <strong>This is taxable</strong> on the price list get this rate, unless the property or the customer has its own rate.
+              Tax-exempt customers pay none. Each line&apos;s rate can be changed on the work order or invoice. For Bigcapital, turn on Sales Tax there too.
+            </p>
+          </>
+        ) : (
+          <>
+            <input type="hidden" name="taxName" value={s.taxName || "Sales tax"} />
+            <input type="hidden" name="taxRate" value={s.defaultTaxRate || 0} />
+            <p className="muted" style={{ margin: 0, fontSize: 13 }}>Off: no tax on any work order or invoice. You can still mark price-list items taxable and customers exempt, ready for when it&apos;s on.</p>
+          </>
+        )}
+      </fieldset>
       <ErrorBox error={error} />
       <div className="row"><button className="btn primary" disabled={busy}>Save</button>{done && <span className="muted">Saved.</span>}</div>
     </form>

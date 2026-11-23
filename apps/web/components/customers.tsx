@@ -90,6 +90,7 @@ export interface CustomerFormValue {
   billingStreet: string; billingCity: string; billingState: string; billingZip: string; delivery: string[]; source: string;
   poRequired: boolean; notes: string; status: string; tagIds: string[]; contacts: CustomerContactInput[];
   custom: CustomValues; newRecord: boolean;
+  taxExempt: boolean; taxExemptNumber: string; taxRate: string;
 }
 
 export function customerFormValue(c?: any): CustomerFormValue {
@@ -100,6 +101,7 @@ export function customerFormValue(c?: any): CustomerFormValue {
     source: blank(c?.source), poRequired: !!c?.poRequired, notes: blank(c?.notes), status: c?.status === "lead" ? "lead" : "active",
     tagIds: c?.tagIds ?? [], contacts: (c?.contacts ?? []).map((k: any) => ({ name: k.name, relation: k.relation ?? "", email: k.email ?? "", phone: k.phone ?? "", getsInvoices: !!k.getsInvoices })),
     custom: c?.custom ?? {}, newRecord: !c,
+    taxExempt: !!c?.taxExempt, taxExemptNumber: blank(c?.taxExemptNumber), taxRate: c?.taxRate != null ? String(c.taxRate) : "",
   };
 }
 
@@ -161,6 +163,15 @@ export function CustomerFields({ value, onChange, tags, showStatus }: { value: C
           <label className="check"><input type="checkbox" checked={value.poRequired} onChange={(e) => set({ poRequired: e.target.checked })} /> Needs a PO number on invoices</label>
         )}
       </fieldset>
+      <fieldset className="contacts">
+        <legend>Sales tax</legend>
+        <label className="check"><input type="checkbox" checked={value.taxExempt} onChange={(e) => set({ taxExempt: e.target.checked })} /> Tax exempt <span className="muted">(an HOA, church, school or reseller: no sales tax on their invoices)</span></label>
+        <div className="formgrid">
+          {value.taxExempt
+            ? <label>Exemption certificate number<input maxLength={60} value={value.taxExemptNumber} onChange={(e) => set({ taxExemptNumber: e.target.value })} placeholder="Optional" /></label>
+            : <label>Their own tax rate (%)<input inputMode="decimal" value={value.taxRate} onChange={(e) => set({ taxRate: e.target.value })} placeholder="Blank: the property's, else the company's" /></label>}
+        </div>
+      </fieldset>
       <TagPicker value={value.tagIds} onChange={(tagIds) => set({ tagIds })} tags={tags} />
       <label>Notes<textarea rows={2} value={value.notes} onChange={(e) => set({ notes: e.target.value })} /></label>
       <fieldset className="contacts">
@@ -185,13 +196,17 @@ export function CustomerFields({ value, onChange, tags, showStatus }: { value: C
 /** The form value as the API wants it (blank strings left out). */
 export function customerBody(v: CustomerFormValue) {
   const strip = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, x]) => x !== ""));
-  return { ...strip({ ...v, contacts: undefined, newRecord: undefined }), contacts: v.contacts.map((k) => strip(k as Record<string, unknown>)) };
+  return {
+    ...strip({ ...v, contacts: undefined, newRecord: undefined, taxRate: undefined, taxExemptNumber: undefined }), contacts: v.contacts.map((k) => strip(k as Record<string, unknown>)),
+    // Blank clears these.
+    taxRate: v.taxRate.trim() === "" ? null : Number(v.taxRate), taxExemptNumber: v.taxExempt && v.taxExemptNumber.trim() ? v.taxExemptNumber.trim() : null,
+  };
 }
 
 export interface PropertyFormValue {
   name: string; street: string; city: string; state: string; zip: string; mapCode: string; frontSqFt: string; backSqFt: string; lawnSqFt: string;
   measurementId: string | null; measurementName: string; gateCode: string; pets: string; accessNotes: string; notes: string; tagIds: string[];
-  lat: number | null; lng: number | null; custom: CustomValues; newRecord: boolean;
+  lat: number | null; lng: number | null; custom: CustomValues; newRecord: boolean; taxRate: string;
 }
 
 export function propertyFormValue(p?: any): PropertyFormValue {
@@ -201,7 +216,7 @@ export function propertyFormValue(p?: any): PropertyFormValue {
     lawnSqFt: blank(p?.lawnSqFt != null && p?.frontSqFt == null && p?.backSqFt == null ? Math.round(p.lawnSqFt) : ""),
     measurementId: p?.measurementId ?? null, measurementName: p?.measurement?.name ?? "", gateCode: blank(p?.gateCode), pets: blank(p?.pets),
     accessNotes: blank(p?.accessNotes), notes: blank(p?.notes), tagIds: p?.tagIds ?? [], lat: p?.lat ?? null, lng: p?.lng ?? null,
-    custom: p?.custom ?? {}, newRecord: !p,
+    custom: p?.custom ?? {}, newRecord: !p, taxRate: p?.taxRate != null ? String(p.taxRate) : "",
   };
 }
 
@@ -209,7 +224,7 @@ export function propertyBody(v: PropertyFormValue) {
   const front = num(v.frontSqFt), back = num(v.backSqFt), total = num(v.lawnSqFt);
   const out: Record<string, unknown> = {
     street: v.street, state: v.state || "OK", tagIds: v.tagIds, frontSqFt: front, backSqFt: back, lawnSqFt: front == null && back == null ? total : null,
-    measurementId: v.measurementId, lat: v.lat, lng: v.lng, custom: v.custom,
+    measurementId: v.measurementId, lat: v.lat, lng: v.lng, custom: v.custom, taxRate: v.taxRate.trim() === "" ? null : Number(v.taxRate),
   };
   for (const k of ["name", "city", "zip", "mapCode", "gateCode", "pets", "accessNotes", "notes"] as const) if (v[k].trim()) out[k] = v[k];
   return out;
@@ -248,6 +263,7 @@ export function PropertyFields({ value, onChange, tags }: { value: PropertyFormV
       <div className="formgrid">
         {text("gateCode", "Gate code")}
         {text("pets", "Pets", { placeholder: "Dog in back yard" })}
+        {text("taxRate", "Sales tax rate here (%)", { inputMode: "decimal", placeholder: "Blank: the customer's, else the company's" })}
       </div>
       <label>Access notes<textarea rows={2} value={value.accessNotes} onChange={(e) => set({ accessNotes: e.target.value })} /></label>
       <TagPicker value={value.tagIds} onChange={(tagIds) => set({ tagIds })} tags={tags} label="Property tags" />

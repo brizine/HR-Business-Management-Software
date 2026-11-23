@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { optionalTaxRateSchema } from "./tax";
 import { normalizePhone } from "./phone";
 
 /**
@@ -83,6 +84,10 @@ const customerFields = z.object({
   source: optText(100),
   /** Commercial accounts that need a PO number on every invoice. */
   poRequired: z.boolean().default(false),
+  /** Sales tax: an exempt customer (an HOA, a church, a school) pays none; or their own rate. */
+  taxExempt: z.boolean().default(false),
+  taxExemptNumber: z.preprocess((v) => (typeof v === "string" && !v.trim() ? null : v), z.string().trim().max(60).nullable()).optional(),
+  taxRate: optionalTaxRateSchema,
   notes: optText(5000),
   status: z.enum(["lead", "active"]).default("active"),
   tagIds: z.array(z.string().uuid()).max(50).default([]),
@@ -118,6 +123,8 @@ const propertyFields = z.object({
   accessNotes: optText(2000),
   notes: optText(5000),
   tagIds: z.array(z.string().uuid()).max(50).default([]),
+  /** Sales tax rate where the property is (blank: the customer's, else the company default). */
+  taxRate: optionalTaxRateSchema,
 });
 
 export const propertySchema = propertyFields;

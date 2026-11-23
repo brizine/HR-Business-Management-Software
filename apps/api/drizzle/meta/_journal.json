@@ -505,6 +505,13 @@
       "when": 1795399872936,
       "tag": "0071_custom_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1795401774392,
+      "tag": "0072_sales_tax",
+      "breakpoints": true
     }
   ]
 }

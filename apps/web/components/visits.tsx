@@ -1,9 +1,9 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DEFAULT_TODO_COLOR, MONTH_SHORT, REPEAT_UNITS, TODO_COLORS, VISIT_BILLING, VISIT_BILLING_LABELS, VISIT_SCHEDULING, VISIT_SCHEDULING_LABELS,
-  describePricing, formatMoney, formatTodoTime, isInactive, lineAmount, packageToLines, priceFor, visitDates, visitLineHours, visitNumber,
+  describePricing, formatMoney, formatTodoTime, isInactive, lineAmount, lineTaxRate, packageToLines, priceFor, taxFor as taxForLines, taxRateFor, visitDates, visitLineHours, visitNumber,
   type CustomValues, type RepeatUnit, type VisitBilling, type VisitScheduling,
 } from "@crewdesk/shared";
 import { api } from "@/lib/api";
@@ -11,10 +11,11 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { CustomerPicker, TagChip, TagPicker, useTags } from "./customers";
 import { Icon } from "./icons";
+import { useBillingSettings } from "./invoices";
 import { CustomFieldInputs } from "./custom-fields";
 import { ErrorBox } from "./ui";
 
-export interface VisitLine { id?: string; serviceTypeId: string | null; description: string; quantity: number; budgetedHours: number | null; unitPriceCents: number | null; amountCents: number | null }
+export interface VisitLine { id?: string; serviceTypeId: string | null; description: string; quantity: number; budgetedHours: number | null; unitPriceCents: number | null; amountCents: number | null; taxRate?: number }
 export interface Visit {
   id: string; number: number; title: string; color: string; location: string | null; billing: VisitBilling;
   date: string | null; endDate: string | null; startTime: string | null; endTime: string | null; budgetedHours: number | null; totalCents: number | null;
@@ -78,8 +79,9 @@ export function CrewButtons({ v, onChange, compact }: { v: Visit; onChange: (v: 
   );
 }
 
-type LineDraft = { serviceTypeId: string | null; description: string; quantity: string; hours: string; price: string };
-const draftLine = (l?: VisitLine): LineDraft => ({ serviceTypeId: l?.serviceTypeId ?? null, description: l?.description ?? "", quantity: l ? String(l.quantity) : "1", hours: l?.budgetedHours != null ? String(l.budgetedHours) : "", price: dollars(l?.unitPriceCents) });
+type LineDraft = { serviceTypeId: string | null; description: string; quantity: string; hours: string; price: string; tax: string };
+const taxText = (r: number | null | undefined) => (r ? String(Number(r.toFixed(3))) : "");
+const draftLine = (l?: VisitLine): LineDraft => ({ serviceTypeId: l?.serviceTypeId ?? null, description: l?.description ?? "", quantity: l ? String(l.quantity) : "1", hours: l?.budgetedHours != null ? String(l.budgetedHours) : "", price: dollars(l?.unitPriceCents), tax: taxText(l?.taxRate) });
 
 /**
  * New or changed work order, laid out like Homeworks' visit form: title; customer, property, color and
@@ -127,13 +129,26 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
   useEffect(() => { if (detail.data && !propertyId && properties.length === 1) setPropertyId(properties[0].id); }, [detail.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setLine = (i: number, patch: Partial<LineDraft>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  // Sales tax: the rate for this customer and property; taxable items get it.
+  const billingSet = useBillingSettings();
+  const taxSettings = billingSet.data ?? { taxEnabled: false, taxName: "Sales tax", defaultTaxRate: 0 };
+  const rate = taxRateFor({ settings: taxSettings, customer: detail.data, property });
+  const showTax = taxSettings.taxEnabled || lines.some((l) => Number(l.tax) > 0);
+  const taxFor = (serviceTypeId: string | null) => taxText(lineTaxRate(services.data?.find((x) => x.id === serviceTypeId)?.taxable, rate));
   const pickService = (i: number, id: string) => {
     if (!id) return setLine(i, { serviceTypeId: null });
     const s = services.data?.find((x) => x.id === id);
     if (!s) return;
     const price = priceFor(s, property?.lawnSqFt ?? null);
-    setLine(i, { serviceTypeId: s.id, description: lines[i].description && lines[i].serviceTypeId === null ? lines[i].description : s.name, price: price != null ? dollars(price) : lines[i].price });
+    setLine(i, { serviceTypeId: s.id, description: lines[i].description && lines[i].serviceTypeId === null ? lines[i].description : s.name, price: price != null ? dollars(price) : lines[i].price, tax: taxFor(s.id) });
   };
+  // A different customer or property: taxable lines take its rate.
+  const lastRate = useRef<number | null>(null);
+  useEffect(() => {
+    if (!billingSet.data || !services.data || (customer && !detail.data)) return;
+    if (lastRate.current !== null && lastRate.current !== rate) setLines((ls) => ls.map((l) => (services.data!.find((x) => x.id === l.serviceTypeId)?.taxable ? { ...l, tax: taxText(rate) } : l)));
+    lastRate.current = rate;
+  }, [rate, billingSet.data, services.data, detail.data]); // eslint-disable-line react-hooks/exhaustive-deps
   // Changing the property re-prices the lawn-size services.
   useEffect(() => {
     if (!property || !services.data) return;
@@ -143,8 +158,9 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
       return s && s.pricing !== "flat" && p != null ? { ...l, price: dollars(p) } : l;
     }));
   }, [propertyId, services.data]); // eslint-disable-line react-hooks/exhaustive-deps
-  const parsed = lines.filter((l) => l.description.trim()).map((l) => ({ serviceTypeId: l.serviceTypeId, description: l.description.trim(), quantity: Number(l.quantity) || 0, budgetedHours: l.hours.trim() === "" ? null : Number(l.hours), unitPriceCents: toCents(l.price || "0") }));
+  const parsed = lines.filter((l) => l.description.trim()).map((l) => ({ serviceTypeId: l.serviceTypeId, description: l.description.trim(), quantity: Number(l.quantity) || 0, budgetedHours: l.hours.trim() === "" ? null : Number(l.hours), unitPriceCents: toCents(l.price || "0"), taxRate: Number(l.tax) || 0 }));
   const total = parsed.reduce((s, l) => s + (Number.isFinite(l.unitPriceCents) ? lineAmount(l) : 0), 0);
+  const tax = taxForLines(parsed.filter((l) => Number.isFinite(l.unitPriceCents)));
   const lineHours = visitLineHours(parsed);
   const count = scheduling === "repeat" && date && until ? visitDates(date, unit, Number(every) || 1, until, offMonths).length : 1;
   const team = (staff.data ?? []).filter((e) => !isInactive(e.status) || crew.includes(e.id));
@@ -205,7 +221,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
       </label>
       <div className="tablewrap">
         <table className="invoice-lines visit-lines">
-          <thead><tr><th style={{ width: "34%" }}>Item / service</th><th style={{ width: 80 }}>Qty</th><th style={{ width: 100 }}>Budgeted hours</th><th style={{ width: 110 }}>Rate</th><th style={{ width: 100, textAlign: "right" }}>Total</th><th style={{ width: 40 }} /></tr></thead>
+          <thead><tr><th style={{ width: "34%" }}>Item / service</th><th style={{ width: 80 }}>Qty</th><th style={{ width: 100 }}>Budgeted hours</th><th style={{ width: 110 }}>Rate</th>{showTax && <th style={{ width: 90 }}>Tax %</th>}<th style={{ width: 100, textAlign: "right" }}>Total</th><th style={{ width: 40 }} /></tr></thead>
           <tbody>{lines.map((l, i) => {
             const s = services.data?.find((x) => x.id === l.serviceTypeId);
             const unpriced = s && priceFor(s, property?.lawnSqFt ?? null) == null;
@@ -223,6 +239,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
                 <td><input aria-label={`Line ${i + 1} quantity`} inputMode="decimal" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></td>
                 <td><input aria-label={`Line ${i + 1} budgeted hours`} inputMode="decimal" placeholder="0" value={l.hours} onChange={(e) => setLine(i, { hours: e.target.value })} /></td>
                 <td><input aria-label={`Line ${i + 1} rate`} inputMode="decimal" placeholder="0.00" value={l.price} onChange={(e) => setLine(i, { price: e.target.value })} /></td>
+                {showTax && <td><input aria-label={`Line ${i + 1} tax rate`} inputMode="decimal" placeholder="0" value={l.tax} onChange={(e) => setLine(i, { tax: e.target.value })} /></td>}
                 <td style={{ textAlign: "right" }}>{Number.isFinite(amount.unitPriceCents) ? formatMoney(lineAmount(amount)) : "—"}</td>
                 <td><button type="button" className="btn" aria-label={`Remove line ${i + 1}`} onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((_, j) => j !== i) : [draftLine()]))}>✕</button></td>
               </tr>
@@ -236,7 +253,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
                   const pkg = pkgs.data?.find((p) => p.id === e.target.value);
                   if (!pkg) return;
                   const added = packageToLines(pkg.lines, services.data ?? [], property?.lawnSqFt ?? null).map((l) => ({
-                    serviceTypeId: l.serviceTypeId, description: l.description, quantity: String(l.quantity), hours: l.budgetedHours != null ? String(l.budgetedHours) : "", price: dollars(l.unitPriceCents),
+                    serviceTypeId: l.serviceTypeId, description: l.description, quantity: String(l.quantity), hours: l.budgetedHours != null ? String(l.budgetedHours) : "", price: dollars(l.unitPriceCents), tax: taxFor(l.serviceTypeId),
                   }));
                   // An untouched empty first line is replaced.
                   setLines((ls) => [...ls.filter((l) => l.description.trim() || l.price.trim()), ...added]);
@@ -247,7 +264,9 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
               )}
             </div>
           </td>
-            <td className="muted">{lineHours ? `${lineHours} h` : ""}</td><td style={{ textAlign: "right" }}><strong>Total</strong></td><td style={{ textAlign: "right" }}><strong>{formatMoney(total)}</strong></td><td /></tr></tfoot>
+            <td className="muted">{lineHours ? `${lineHours} h` : ""}</td><td style={{ textAlign: "right" }}><strong>Total</strong></td>
+            {showTax && <td className="muted" style={{ fontSize: 12 }}>{tax ? `+${formatMoney(tax)} ${taxSettings.taxName.toLowerCase()}` : ""}</td>}
+            <td style={{ textAlign: "right" }}><strong>{formatMoney(total + tax)}</strong></td><td /></tr></tfoot>
         </table>
       </div>
 

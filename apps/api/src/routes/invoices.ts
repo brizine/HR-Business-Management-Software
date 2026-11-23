@@ -2,7 +2,7 @@ import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import {
-  billingSettingsSchema, customerName, formatAddress, formatMoney, invoiceSchema, invoiceTotals, isOverdue, lineAmount, paymentSchema,
+  billingSettingsSchema, customerName, formatAddress, formatMoney, invoiceSchema, invoiceTotals, isOverdue, lineAmount, paymentSchema, taxBreakdown,
   invoiceBalance, sendInvoiceSchema, termsLabel, voidSchema, type InvoiceInput,
 } from "@crewdesk/shared";
 import { db } from "../db";
@@ -50,11 +50,11 @@ export async function pdfInvoice(companyId: string, invoiceId: string, opts: { c
   const termsDays = Math.max(0, Math.round((Date.parse(inv.dueDate) - Date.parse(inv.issueDate)) / 86_400_000));
   return {
     number: inv.number, status: inv.status, issueDate: inv.issueDate, dueDate: inv.dueDate, poNumber: inv.poNumber, notes: inv.notes,
-    subtotalCents: inv.subtotalCents, discountCents: inv.discountCents, totalCents: inv.totalCents, paidCents: inv.paidCents, termsDays,
+    subtotalCents: inv.subtotalCents, discountCents: inv.discountCents, taxCents: inv.taxCents, taxName: settings.taxName, totalCents: inv.totalCents, paidCents: inv.paidCents, termsDays,
     creditedCents: inv.creditedCents, credits: credits.map((c) => ({ number: c.number, amountCents: c.amountCents })),
     customerName: customerName(cust), customerNumber: cust.number, billTo: billToLines(cust, prop),
     serviceAddress: prop ? formatAddress(prop) : null,
-    lines: lines.map((l) => ({ description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, amountCents: l.amountCents })),
+    lines: lines.map((l) => ({ description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, amountCents: l.amountCents, taxRate: l.taxRate })),
     footer: settings.footer, payableTo: settings.payableTo, copy: opts.copy,
     payOnline: (await stripeConfig(companyId)) ? portalUrl(companyId).replace(/^https?:\/\//, "").replace(/\?.*$/, "") : null,
     zip: cust.billingStreet ? cust.billingZip ?? "" : prop?.zip ?? "",
@@ -185,6 +185,51 @@ const routes: FastifyPluginAsync = async (app) => {
       await tx.insert(invoiceLines).values(body.lines.map((l, i) => ({ ...l, serviceTypeId: l.serviceTypeId ?? null, invoiceId: inv.id, amountCents: lineAmount(l), sortOrder: i })));
       return inv;
     });
+  });
+
+  /**
+   * The sales tax report, for filing: invoices dated in the range (sent, not void), by month or
+   * quarter: sales after discounts, the taxable and untaxed parts (and how much of that was to
+   * tax-exempt customers), the tax by rate, and the tax charged.
+   */
+  app.get<{ Querystring: { from?: string; to?: string; by?: string } }>("/tax-report", async (req) => {
+    const { companyId } = req.user;
+    const today = await companyToday(companyId);
+    const iso = /^\d{4}-\d{2}-\d{2}$/;
+    const to = req.query.to && iso.test(req.query.to) ? req.query.to : today;
+    const from = req.query.from && iso.test(req.query.from) ? req.query.from : `${to.slice(0, 4)}-01-01`;
+    if (from > to) throw new HttpError(400, "The start is after the end");
+    const by = req.query.by === "quarter" ? "quarter" : "month";
+    const rows = await db.select({ inv: invoices, exempt: customers.taxExempt }).from(invoices).innerJoin(customers, eq(customers.id, invoices.customerId))
+      .where(and(eq(invoices.companyId, companyId), isNotNull(invoices.number), ne(invoices.status, "void"), sql`${invoices.issueDate} between ${from} and ${to}`))
+      .orderBy(asc(invoices.issueDate));
+    const lines = rows.length ? await db.select().from(invoiceLines).where(inArray(invoiceLines.invoiceId, rows.map((r) => r.inv.id))) : [];
+    type Bucket = { period: string; invoices: number; salesCents: number; taxableCents: number; untaxedCents: number; exemptCents: number; taxCents: number; rates: Map<number, { taxableCents: number; taxCents: number }> };
+    const empty = (period: string): Bucket => ({ period, invoices: 0, salesCents: 0, taxableCents: 0, untaxedCents: 0, exemptCents: 0, taxCents: 0, rates: new Map() });
+    const buckets = new Map<string, Bucket>();
+    const total = empty("Total");
+    const periodOf = (d: string) => (by === "quarter" ? `${d.slice(0, 4)} Q${Math.floor((Number(d.slice(5, 7)) - 1) / 3) + 1}` : d.slice(0, 7));
+    for (const { inv, exempt } of rows) {
+      const b = buckets.get(periodOf(inv.issueDate)) ?? empty(periodOf(inv.issueDate));
+      buckets.set(b.period, b);
+      const parts = taxBreakdown(lines.filter((l) => l.invoiceId === inv.id), inv.discountCents);
+      for (const x of [b, total]) {
+        x.invoices++;
+        x.salesCents += inv.subtotalCents - inv.discountCents;
+        x.untaxedCents += parts.untaxedCents;
+        if (exempt) x.exemptCents += parts.untaxedCents;
+        x.taxCents += inv.taxCents;
+        for (const r of parts.rates) {
+          x.taxableCents += r.taxableCents;
+          const g = x.rates.get(r.rate) ?? { taxableCents: 0, taxCents: 0 };
+          g.taxableCents += r.taxableCents; g.taxCents += r.taxCents;
+          x.rates.set(r.rate, g);
+        }
+      }
+    }
+    const view = (b: Bucket) => ({ ...b, rates: [...b.rates.entries()].sort((a, c) => a[0] - c[0]).map(([rate, g]) => ({ rate, ...g })) });
+    const settings = await billingSettings(companyId);
+    return { from, to, by, taxEnabled: settings.taxEnabled, taxName: settings.taxName, periods: [...buckets.values()].map(view), total: view(total) };
   });
 
   /** Waiting to be printed and mailed, sorted by ZIP. */

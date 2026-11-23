@@ -34,6 +34,7 @@ export const NAV: Record<Side, NavGroup[]> = {
       items: [
         { href: "/invoices", label: "Invoices", min: "manager", area: "customers" },
         { href: "/price-list", label: "Price list", min: "manager", area: "customers" },
+        { href: "/sales-tax", label: "Sales tax report", min: "manager", area: "customers" },
       ],
     },
     {

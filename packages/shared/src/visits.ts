@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { taxRateSchema } from "./tax";
 import { lineAmount } from "./billing";
 import { DEFAULT_TODO_COLOR } from "./todos";
 
@@ -44,6 +45,8 @@ export const visitLineSchema = z.object({
   quantity: z.coerce.number().positive("The quantity must be more than 0").max(100_000).multipleOf(0.01),
   budgetedHours: z.preprocess(blankToNull, z.coerce.number().min(0).max(999).nullable()).optional(),
   unitPriceCents: z.coerce.number().int().min(0, "Prices can't be negative").max(100_000_000),
+  /** Sales tax on this line, in percent (0 = not taxed); invoices made from the work order keep it. */
+  taxRate: taxRateSchema.default(0),
 });
 export type VisitLineInput = z.infer<typeof visitLineSchema>;
 

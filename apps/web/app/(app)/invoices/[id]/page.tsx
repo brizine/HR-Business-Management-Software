@@ -2,13 +2,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
-import { PAYMENT_METHOD_LABELS, formatMoney, type PaymentMethod } from "@crewdesk/shared";
+import { PAYMENT_METHOD_LABELS, formatMoney, formatTaxRate, type PaymentMethod } from "@crewdesk/shared";
 import { API_URL, api, fmtDate, fmtDateTime } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { useAuth } from "@/lib/auth";
 import { CreditForm, InvoiceCredits } from "@/components/credits";
 import { ErrorBox, PageHead } from "@/components/ui";
-import { InvoiceFields, InvoiceStatus, PaymentForm, SendPanel, invoiceBody, invoiceFormValue } from "@/components/invoices";
+import { InvoiceFields, InvoiceStatus, PaymentForm, SendPanel, invoiceBody, invoiceFormValue, useBillingSettings } from "@/components/invoices";
 import { CustomFieldsCard } from "@/components/custom-fields";
 
 export default function InvoiceDetail({ params }: { params: Promise<{ id: string }> }) {
@@ -19,6 +19,7 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
   const [refunding, setRefunding] = useState<string | null>(null);
   const [addingCredit, setAddingCredit] = useState(false);
   const { can } = useAuth();
+  const taxSettings = useBillingSettings();
   const action = useAction();
   // "Save and send" on the new-invoice page lands here with the send panel open.
   useEffect(() => {
@@ -91,10 +92,11 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
               <thead><tr><th>Description</th><th style={{ textAlign: "right" }}>Qty</th><th style={{ textAlign: "right" }}>Price</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
               <tbody>
                 {inv.lines.map((l: any) => (
-                  <tr key={l.id}><td>{l.description}<div className="muted" style={{ fontSize: 12 }}>Income {l.incomeAccountCode}</div></td><td style={{ textAlign: "right" }}>{l.quantity}</td><td style={{ textAlign: "right" }}>{formatMoney(l.unitPriceCents)}</td><td style={{ textAlign: "right" }}>{formatMoney(l.amountCents)}</td></tr>
+                  <tr key={l.id}><td>{l.description}<div className="muted" style={{ fontSize: 12 }}>Income {l.incomeAccountCode}{l.taxRate > 0 ? ` · taxed ${formatTaxRate(l.taxRate)}` : ""}</div></td><td style={{ textAlign: "right" }}>{l.quantity}</td><td style={{ textAlign: "right" }}>{formatMoney(l.unitPriceCents)}</td><td style={{ textAlign: "right" }}>{formatMoney(l.amountCents)}</td></tr>
                 ))}
                 <tr><td colSpan={3} style={{ textAlign: "right" }}>Subtotal</td><td style={{ textAlign: "right" }}>{formatMoney(inv.subtotalCents)}</td></tr>
                 {inv.discountCents > 0 && <tr><td colSpan={3} style={{ textAlign: "right" }}>Discount</td><td style={{ textAlign: "right" }}>-{formatMoney(inv.discountCents)}</td></tr>}
+                {inv.taxCents > 0 && <tr><td colSpan={3} style={{ textAlign: "right" }}>{taxSettings.data?.taxName || "Sales tax"}</td><td style={{ textAlign: "right" }}>{formatMoney(inv.taxCents)}</td></tr>}
                 <tr><td colSpan={3} style={{ textAlign: "right" }}><strong>Total</strong></td><td style={{ textAlign: "right" }}><strong>{formatMoney(inv.totalCents)}</strong></td></tr>
               </tbody>
             </table>

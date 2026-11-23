@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
-import { VISIT_BILLING_LABELS, formatMoney, visitNumber } from "@crewdesk/shared";
+import { VISIT_BILLING_LABELS, formatMoney, formatTaxRate, taxFor, visitNumber } from "@crewdesk/shared";
 import { api, fmtDateTime } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead } from "@/components/ui";
@@ -65,10 +65,18 @@ export default function WorkOrder({ params }: { params: Promise<{ id: string }> 
             <h2 style={{ margin: 0 }}>Work and billing</h2>
             <table className="pt-lines">
               <tbody>{v.lines.map((l) => (
-                <tr key={l.id}><td>{l.description}{l.quantity !== 1 ? ` × ${l.quantity}` : ""}{l.budgetedHours ? <span className="muted"> · {l.budgetedHours} h</span> : null}</td>
+                <tr key={l.id}><td>{l.description}{l.quantity !== 1 ? ` × ${l.quantity}` : ""}{l.budgetedHours ? <span className="muted"> · {l.budgetedHours} h</span> : null}{v.canManage && l.taxRate ? <span className="muted"> · taxed {formatTaxRate(l.taxRate)}</span> : null}</td>
                   {v.canManage && <td className="num">{formatMoney(l.amountCents)}</td>}</tr>
               ))}</tbody>
-              {v.canManage && <tfoot><tr className="total"><td>Total</td><td className="num">{formatMoney(v.totalCents)}</td></tr></tfoot>}
+              {v.canManage && (() => {
+                const tax = taxFor(v.lines.map((l) => ({ quantity: l.quantity, unitPriceCents: l.unitPriceCents ?? 0, taxRate: l.taxRate ?? 0 })));
+                return (
+                  <tfoot>
+                    {tax > 0 && <tr><td>Sales tax</td><td className="num">{formatMoney(tax)}</td></tr>}
+                    <tr className="total"><td>Total</td><td className="num">{formatMoney((v.totalCents ?? 0) + tax)}</td></tr>
+                  </tfoot>
+                );
+              })()}
             </table>
             {!v.lines.length && <p className="muted" style={{ margin: 0 }}>No line items.</p>}
             <dl className="facts">

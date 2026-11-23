@@ -13,7 +13,7 @@ export type PortalPayments = { enabled: false } | { enabled: true; publishableKe
 export type PortalPayment = { id: string; amountCents: number; refundedCents?: number; method: string; methodDetail: string | null; receivedOn: string; status: string; invoiceId?: string; invoiceNumber?: number | null };
 export type PortalInvoice = {
   id: string; number: number; status: string; issueDate: string; dueDate: string; poNumber: string | null; notes: string | null;
-  subtotalCents: number; discountCents: number; totalCents: number; paidCents: number; balanceCents: number; pendingCents: number; overdue: boolean;
+  subtotalCents: number; discountCents: number; taxCents?: number; taxName?: string; totalCents: number; paidCents: number; balanceCents: number; pendingCents: number; overdue: boolean;
   customer: { id: string; number: number; name: string }; serviceAddress: string | null;
   lines: { description: string; quantity: number; unitPriceCents: number; amountCents: number }[];
   payments: PortalPayment[];
@@ -90,7 +90,9 @@ export function InvoiceView({ inv, pdfHref, pay }: { inv: PortalInvoice; pdfHref
             ))}
           </tbody>
           <tfoot>
-            {inv.discountCents > 0 && <><tr><td>Subtotal</td><td className="num">{formatMoney(inv.subtotalCents)}</td></tr><tr><td>Discount</td><td className="num">−{formatMoney(inv.discountCents)}</td></tr></>}
+            {(inv.discountCents > 0 || (inv.taxCents ?? 0) > 0) && <tr><td>Subtotal</td><td className="num">{formatMoney(inv.subtotalCents)}</td></tr>}
+            {inv.discountCents > 0 && <tr><td>Discount</td><td className="num">−{formatMoney(inv.discountCents)}</td></tr>}
+            {(inv.taxCents ?? 0) > 0 && <tr><td>{inv.taxName || "Sales tax"}</td><td className="num">{formatMoney(inv.taxCents!)}</td></tr>}
             <tr className="total"><td>Total</td><td className="num">{formatMoney(inv.totalCents)}</td></tr>
             {(inv.credits ?? []).map((c) => <tr key={c.id}><td>Credit: {c.description}</td><td className="num">−{formatMoney(c.amountCents)}</td></tr>)}
             {inv.payments.filter((p) => p.status === "completed").map((p) => (

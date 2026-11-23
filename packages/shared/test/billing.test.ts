@@ -25,8 +25,8 @@ describe("price list", () => {
 describe("invoices", () => {
   it("adds up lines and caps the discount at the subtotal", () => {
     const lines = [{ quantity: 1, unitPriceCents: 4675 }, { quantity: 1.5, unitPriceCents: 3333 }];
-    expect(invoiceTotals(lines, "none", 0)).toEqual({ subtotalCents: 9675, discountCents: 0, totalCents: 9675 });
-    expect(invoiceTotals(lines, "percent", 10)).toEqual({ subtotalCents: 9675, discountCents: 968, totalCents: 8707 });
+    expect(invoiceTotals(lines, "none", 0)).toEqual({ subtotalCents: 9675, discountCents: 0, taxCents: 0, totalCents: 9675 });
+    expect(invoiceTotals(lines, "percent", 10)).toEqual({ subtotalCents: 9675, discountCents: 968, taxCents: 0, totalCents: 8707 });
     expect(invoiceTotals(lines, "amount", 50000).totalCents).toBe(0);
     expect(formatMoney(123456)).toBe("$1,234.56");
   });

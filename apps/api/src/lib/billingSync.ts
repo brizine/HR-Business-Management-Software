@@ -1,9 +1,10 @@
 import { and, asc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
-import { customerName, splitIncome, type PostingKind } from "@crewdesk/shared";
+import { customerName, formatTaxRate, splitIncome, type PostingKind } from "@crewdesk/shared";
 import { db } from "../db";
 import { accountingPostings, bigcapitalLinks, companies, creditApplications, customerCredits, customers, invoiceLines, invoicePayments, invoices, prepayments, serviceTypes } from "../db/schema";
 import { accountingConfig } from "./accounting";
 import { companyToday } from "./payRates";
+import { billingSettings } from "./invoices";
 import { bigcapital, BigcapitalError, type BigcapitalInvoice } from "./bigcapital";
 
 /**
@@ -142,6 +143,28 @@ async function ensureItem(conn: Conn, companyId: string, serviceTypeId: string |
   return Number(id);
 }
 
+/* ── Sales tax rates (one Bigcapital tax rate per rate used, e.g. "Sales tax 8.625%") ── */
+
+async function ensureTaxRate(conn: Conn, companyId: string, rate: number): Promise<number> {
+  const key = rate.toFixed(3);
+  const [link] = await db.select().from(bigcapitalLinks).where(and(eq(bigcapitalLinks.companyId, companyId), eq(bigcapitalLinks.kind, "taxrate"), eq(bigcapitalLinks.localKey, key)));
+  if (link) return Number(link.externalId);
+  const { taxName } = await billingSettings(companyId);
+  const code = `CD${key.replace(/\.?0+$/, "")}`;
+  const notOn = (e: unknown) => e instanceof BigcapitalError && /SALES_TAX_FEATURE_NOT_ENABLED|sales tax feature/i.test(e.message);
+  let id: string | null = null;
+  try {
+    const found = (await conn.bc.taxRates()).find((t) => t.code === code || Math.abs(t.rate - rate) < 0.0005);
+    id = found ? String(found.id) : await conn.bc.createTaxRate({ name: `${taxName} ${formatTaxRate(rate)}`, code, rate, description: "Made by Crewdesk" });
+  } catch (e) {
+    if (notOn(e)) throw new BigcapitalError("Sales tax isn't turned on in Bigcapital. Turn on Sales Tax in Bigcapital's preferences, then post this invoice again.");
+    throw e;
+  }
+  if (!id) throw new BigcapitalError(`Couldn't find or create the Bigcapital tax rate ${formatTaxRate(rate)}`);
+  await db.insert(bigcapitalLinks).values({ companyId, kind: "taxrate", localKey: key, externalId: id }).onConflictDoNothing();
+  return Number(id);
+}
+
 /* ── Invoices ── */
 
 async function invoiceBody(conn: Conn, companyId: string, inv: typeof invoices.$inferSelect, customerBcId: number): Promise<BigcapitalInvoice> {
@@ -151,12 +174,20 @@ async function invoiceBody(conn: Conn, companyId: string, inv: typeof invoices.$
     entries.push({
       index: i + 1, itemId: await ensureItem(conn, companyId, l.serviceTypeId, l.incomeAccountCode), rate: dollars(l.unitPriceCents),
       quantity: l.quantity, description: l.description, sellAccountId: await conn.account(l.incomeAccountCode),
+      ...(l.taxRate > 0 ? { taxRateId: await ensureTaxRate(conn, companyId, l.taxRate) } : {}),
     });
   }
+  // Bigcapital taxes each line before the invoice discount; Crewdesk taxes what's paid after it. Any
+  // difference goes on as an adjustment, so the invoice totals match to the cent.
+  const taxed = lines.some((l) => l.taxRate > 0);
+  const bcTaxCents = Math.round(lines.reduce((s, l) => s + (l.quantity * l.unitPriceCents * l.taxRate) / 100, 0) + 1e-9);
+  const adjustCents = taxed ? inv.taxCents - bcTaxCents : 0;
   return {
     customerId: customerBcId, invoiceDate: inv.issueDate, dueDate: inv.dueDate, invoiceNo: String(inv.number), delivered: true,
     ...(inv.poNumber ? { referenceNo: inv.poNumber } : {}), ...(inv.notes ? { invoiceMessage: inv.notes } : {}),
     ...(inv.discountCents ? { discount: dollars(inv.discountCents), discountType: "amount" as const } : {}),
+    ...(taxed ? { isInclusiveTax: false } : {}),
+    ...(adjustCents ? { adjustment: dollars(adjustCents) } : {}),
     entries,
   };
 }

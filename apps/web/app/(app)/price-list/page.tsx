@@ -35,12 +35,13 @@ export default function PriceList() {
       <div className="card tablewrap">
         {list.length ? (
           <table>
-            <thead><tr><th>Service</th><th>Price</th><th>Income account</th><th>Status</th>{admin && <th />}</tr></thead>
+            <thead><tr><th>Service</th><th>Price</th><th>Income account</th><th>Taxable</th><th>Status</th>{admin && <th />}</tr></thead>
             <tbody>{list.map((s, i) => (
               <tr key={s.id} style={{ opacity: s.active ? 1 : 0.6 }}>
                 <td><strong>{s.name}</strong>{s.description && <div className="muted">{s.description}</div>}</td>
                 <td>{describePricing(s)}</td>
                 <td>{s.incomeAccountCode} {account(s.incomeAccountCode)?.name ?? ""}</td>
+                <td>{s.taxable ? "Yes" : <span className="muted">No</span>}</td>
                 <td>{s.active ? <span className="badge ok">active</span> : <span className="badge">retired</span>}</td>
                 {admin && (
                   <td className="row">
@@ -70,11 +71,12 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
   );
   const [incomeAccountCode, setIncome] = useState(service?.incomeAccountCode ?? "4000");
   const [active, setActive] = useState(service?.active ?? true);
+  const [taxable, setTaxable] = useState(service?.taxable ?? false);
   const { busy, error, run, setError } = useAction();
   return (
     <form className="card stack" onSubmit={(e) => {
       e.preventDefault();
-      const body: Record<string, unknown> = { name, description: description || undefined, pricing, incomeAccountCode, active, priceCents: 0, minimumCents: 0, brackets: [] };
+      const body: Record<string, unknown> = { name, description: description || undefined, pricing, incomeAccountCode, active, taxable, priceCents: 0, minimumCents: 0, brackets: [] };
       if (pricing !== "bracket") {
         const p = toCents(price);
         if (!Number.isFinite(p) || p < 0) return setError("Enter the price");
@@ -115,6 +117,7 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
         </fieldset>
       )}
       <label>Description (optional)<input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
+      <label className="check"><input type="checkbox" checked={taxable} onChange={(e) => setTaxable(e.target.checked)} /> This is taxable <span className="muted">(gets the sales tax rate on work orders and invoices once sales tax is on)</span></label>
       {service && <label className="check"><input type="checkbox" checked={!active} onChange={(e) => setActive(!e.target.checked)} /> Retired (kept on past invoices, not offered for new ones)</label>}
       <ErrorBox error={error} />
       <div className="row"><button className="btn primary" disabled={busy}>Save</button><button type="button" className="btn" onClick={onDone}>Cancel</button></div>

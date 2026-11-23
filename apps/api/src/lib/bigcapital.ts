@@ -21,7 +21,9 @@ export interface BigcapitalCustomer {
 export interface BigcapitalInvoice {
   customerId: number; invoiceDate: string; dueDate: string; invoiceNo: string; referenceNo?: string; delivered: boolean; invoiceMessage?: string;
   discount?: number; discountType?: "amount" | "percentage";
-  entries: { index: number; itemId: number; rate: number; quantity: number; description?: string; sellAccountId?: number }[];
+  /** Prices don't include tax (Crewdesk adds it on top); an adjustment squares any rounding difference. */
+  isInclusiveTax?: boolean; adjustment?: number;
+  entries: { index: number; itemId: number; rate: number; quantity: number; description?: string; sellAccountId?: number; taxRateId?: number }[];
 }
 export interface BigcapitalAccount { id: number; name: string; code: string | null; type: string; active: boolean }
 
@@ -98,6 +100,15 @@ export function bigcapital(baseUrl: string, apiKey: string, timeoutMs = 15_000) 
       const list: any[] = Array.isArray(data) ? data : data?.items ?? [];
       const hit = list.find((i) => String(i.name).trim().toLowerCase() === name.trim().toLowerCase());
       return hit ? String(hit.id) : null;
+    },
+    /** Sales tax rates (Bigcapital's own: tax on them posts to its Tax Payable account). */
+    async taxRates(): Promise<{ id: number; name: string; code: string; rate: number }[]> {
+      const data = await call("GET", "/tax-rates");
+      const list: any[] = Array.isArray(data) ? data : data?.data ?? data?.taxRates ?? data?.tax_rates ?? [];
+      return list.map((t) => ({ id: Number(t.id), name: String(t.name ?? ""), code: String(t.code ?? ""), rate: Number(t.rate) }));
+    },
+    async createTaxRate(body: { name: string; code: string; rate: number; description?: string }): Promise<string | null> {
+      return idOf(await call("POST", "/tax-rates", { active: true, isCompound: false, isNonRecoverable: false, ...body }));
     },
     async createServiceItem(body: { name: string; sellAccountId: number; sellPrice?: number; sellDescription?: string }): Promise<string | null> {
       return idOf(await call("POST", "/items", { type: "service", sellable: true, purchasable: false, active: true, ...body }));

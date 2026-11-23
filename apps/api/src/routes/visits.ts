@@ -131,7 +131,7 @@ const fields = (b: VisitUpdate) => ({
 });
 const lineRows = (visitId: string, b: VisitUpdate) => b.lines.map((l, i) => ({
   visitId, serviceTypeId: l.serviceTypeId ?? null, description: l.description, quantity: l.quantity, budgetedHours: l.budgetedHours ?? null,
-  unitPriceCents: l.unitPriceCents, amountCents: lineAmount(l), sortOrder: i,
+  unitPriceCents: l.unitPriceCents, amountCents: lineAmount(l), taxRate: l.taxRate ?? 0, sortOrder: i,
 }));
 
 const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
@@ -171,7 +171,7 @@ async function invoiceVisits(req: FastifyRequest, ids: string[]) {
       const several = group.length > 1;
       const items = group.flatMap((v) => lines.filter((x) => x.l.visitId === v.id).map(({ l, account }) => ({
         serviceTypeId: l.serviceTypeId, description: several && v.date ? `${fmtDay(v.date)}: ${l.description}` : l.description,
-        quantity: l.quantity, unitPriceCents: l.unitPriceCents, incomeAccountCode: account ?? "4000",
+        quantity: l.quantity, unitPriceCents: l.unitPriceCents, incomeAccountCode: account ?? "4000", taxRate: l.taxRate,
       })));
       const totals = invoiceTotals(items, "none", 0);
       const [payer] = await tx.select({ custom: customers.custom }).from(customers).where(eq(customers.id, group[0].customerId));

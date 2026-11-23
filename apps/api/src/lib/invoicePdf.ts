@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
-import { formatAddress, formatMoney, termsLabel } from "@crewdesk/shared";
+import { formatAddress, formatMoney, formatTaxRate, termsLabel } from "@crewdesk/shared";
 
 /**
  * Invoice PDFs, laid out for a standard #10 double-window envelope: the company's return address
@@ -21,8 +21,10 @@ export interface PdfCompany {
 export interface PdfInvoice {
   number: number | null; status: string; issueDate: string; dueDate: string; poNumber: string | null; notes: string | null;
   subtotalCents: number; discountCents: number; totalCents: number; paidCents: number; termsDays: number;
+  /** Sales tax, and what the company calls it. */
+  taxCents?: number; taxName?: string;
   customerName: string; billTo: string[]; serviceAddress: string | null; customerNumber: number;
-  lines: { description: string; quantity: number; unitPriceCents: number; amountCents: number }[];
+  lines: { description: string; quantity: number; unitPriceCents: number; amountCents: number; taxRate?: number }[];
   footer: string; payableTo: string; copy?: boolean;
   /** Customer credit used on this invoice. */
   creditedCents?: number; credits?: { number: number; amountCents: number }[];
@@ -114,11 +116,14 @@ export async function addInvoicePages(doc: PDFDocument, c: PdfCompany, inv: PdfI
   // Lines.
   let ty = 3.45 * IN;
   if (inv.serviceAddress) { pen.text(`Service address: ${inv.serviceAddress}`, L, ty, { size: 9, color: MUTED }); ty += 16; }
-  const COL = { qty: R - 170, price: R - 85, amount: R };
+  // A Tax column only when a line is taxed.
+  const taxed = inv.lines.some((l) => (l.taxRate ?? 0) > 0);
+  const COL = taxed ? { qty: R - 215, price: R - 135, tax: R - 78, amount: R } : { qty: R - 170, price: R - 85, tax: 0, amount: R };
   const header = () => {
     pen.text("Description", L, ty, { size: 8.5, bold: true, color: MUTED });
     pen.text("Qty", COL.qty, ty, { size: 8.5, bold: true, color: MUTED, right: true });
     pen.text("Price", COL.price, ty, { size: 8.5, bold: true, color: MUTED, right: true });
+    if (taxed) pen.text("Tax", COL.tax, ty, { size: 8.5, bold: true, color: MUTED, right: true });
     pen.text("Amount", COL.amount, ty, { size: 8.5, bold: true, color: MUTED, right: true });
     ty += 13; pen.line(L, ty - 2, R); ty += 4;
   };
@@ -135,16 +140,21 @@ export async function addInvoicePages(doc: PDFDocument, c: PdfCompany, inv: PdfI
     rows.forEach((r, i) => pen.text(r, L, ty + i * 12, { size: 9.5 }));
     pen.text(qty(l.quantity), COL.qty, ty, { size: 9.5, right: true });
     pen.text(formatMoney(l.unitPriceCents), COL.price, ty, { size: 9.5, right: true });
+    if (taxed) pen.text(l.taxRate ? formatTaxRate(l.taxRate) : "-", COL.tax, ty, { size: 9.5, right: true });
     pen.text(formatMoney(l.amountCents), COL.amount, ty, { size: 9.5, right: true });
     ty += rows.length * 12 + 4;
   }
   const totals: [string, string, boolean][] = [["Subtotal", formatMoney(inv.subtotalCents), false]];
   if (inv.discountCents) totals.push(["Discount", `-${formatMoney(inv.discountCents)}`, false]);
+  if (inv.taxCents) {
+    const rates = [...new Set(inv.lines.map((l) => l.taxRate ?? 0).filter((r) => r > 0))];
+    totals.push([`${inv.taxName || "Sales tax"}${rates.length === 1 ? ` (${formatTaxRate(rates[0])})` : ""}`, formatMoney(inv.taxCents), false]);
+  }
   totals.push(["Total", formatMoney(inv.totalCents), true]);
   for (const cr of inv.credits ?? []) totals.push([`Credit CR-${cr.number}`, `-${formatMoney(cr.amountCents)}`, false]);
   if (inv.paidCents) totals.push(["Paid", `-${formatMoney(inv.paidCents)}`, false]);
   if (inv.paidCents || inv.credits?.length) totals.push(["Amount due", formatMoney(due), true]);
-  const notes = inv.notes ? wrap(inv.notes, reg, 9, R - L - 200) : [];
+  const notes = inv.notes ? wrap(inv.notes, reg, 9, COL.price - 115 - L) : [];
   if (ty + totals.length * 13 + 10 > limit) { page = doc.addPage([W, H]); pen = new Pen(page, reg, bold); ty = 0.6 * IN; limit = H - 0.8 * IN; }
   pen.line(COL.price - 60, ty, R); ty += 6;
   const totalsTop = ty;

@@ -278,6 +278,41 @@ Operations → **Billing** has **Invoices** and the **Price list** (managers in 
   **footer** printed on every invoice, and whether a customer's credit is **used automatically** on their invoices
   when they're sent (on by default).
 
+### Sales tax
+
+Sales tax is **off** until you turn it on, so nothing is taxed today. It's built in so you're ready to sell
+products or taxable services later.
+
+- **Turn it on** in **Settings → Customers & billing → Sales tax**: tick **Charge sales tax**, name it ("Sales tax"),
+  and set the **Default tax rate** (up to 3 decimals, like 8.625%).
+- **What gets taxed:** on the **Price list**, tick **This is taxable** on items like bags of mulch, seed or products
+  left with the customer. Lines for those items get the rate; other lines get none.
+- **Which rate** (like Homeworks):
+  - The **property's** rate (property form: "Sales tax rate here").
+  - Then the **customer's** own rate.
+  - Then the company default.
+  - A **Tax exempt** customer (an HOA, church, school or reseller, with their exemption certificate number) pays
+    none.
+- **Work orders and invoices** show a **Tax %** on each line while sales tax is on (or when a line already has tax).
+  - The rate fills in when you pick a taxable item and follows the customer or property you choose. You can change
+    any line's rate by hand.
+  - Invoices made from a work order keep each line's rate.
+  - The invoice adds up every line's tax and rounds once, then shows it as its own row before the total. The PDF
+    shows a Tax column, and the customer portal shows the tax too.
+  - With a discount, tax is charged on what the customer actually pays: the discount is spread across the lines in
+    proportion.
+- **Bigcapital:** turn on **Sales Tax** in Bigcapital's preferences as well. Crewdesk makes a Bigcapital tax rate for
+  each rate it uses (e.g. "Sales tax 8.625%") and puts it on each taxed line, so the tax posts to Bigcapital's Tax
+  Payable account.
+  - Bigcapital taxes lines before an invoice discount, so if a taxed invoice has a discount, a small adjustment keeps
+    both totals the same to the cent.
+  - If Sales Tax isn't on in Bigcapital, the invoice's books status says so; post it again once it's on.
+- **Sales tax report** (**Billing → Sales tax report**): invoices sent in the dates you pick, by month or quarter.
+  - Columns: invoices, sales after discounts, taxable, untaxed, untaxed sales to tax-exempt customers, and the tax,
+    with the tax by rate under each period.
+  - Drafts and void invoices stay out.
+  - **Print** it or **Export CSV** for your filing.
+
 ### Online payments and the customer portal
 
 Customers pay invoices by **card or US bank account** through Stripe. Card and bank details are typed into Stripe's own

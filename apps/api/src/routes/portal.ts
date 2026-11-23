@@ -4,6 +4,7 @@ import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { customerName, formatAddress, invoiceBalance, isInactive, isOverdue } from "@crewdesk/shared";
 import { db } from "../db";
+import { billingSettings } from "../lib/invoices";
 import { companies, creditApplications, customerContacts, customerCredits, customers, employees, invoiceLines, invoicePayments, invoices, paymentRefunds, portalCodes, prepayments, properties, propertyAssignments } from "../db/schema";
 import { authenticate, requireRole, WEB_CLIENT_HEADER, type AuthUser } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
@@ -137,12 +138,12 @@ async function invoiceDetail(companyId: string, inv: typeof invoices.$inferSelec
   const today = await companyToday(companyId);
   return {
     id: inv.id, number: inv.number, status: inv.status, issueDate: inv.issueDate, dueDate: inv.dueDate, poNumber: inv.poNumber, notes: inv.notes,
-    subtotalCents: inv.subtotalCents, discountCents: inv.discountCents, totalCents: inv.totalCents, paidCents: inv.paidCents,
-    creditedCents: inv.creditedCents, balanceCents: inv.status === "void" ? 0 : invoiceBalance(inv), pendingCents, overdue: isOverdue(inv, today),
+    subtotalCents: inv.subtotalCents, discountCents: inv.discountCents, taxCents: inv.taxCents, taxName: (await billingSettings(companyId)).taxName,
+    totalCents: inv.totalCents, paidCents: inv.paidCents, creditedCents: inv.creditedCents, balanceCents: inv.status === "void" ? 0 : invoiceBalance(inv), pendingCents, overdue: isOverdue(inv, today),
     credits: credits.map((c) => ({ id: c.id, number: c.number, description: c.description, amountCents: c.amountCents })),
     customer: { id: cust.id, number: cust.number, name: customerName(cust) },
     serviceAddress: prop ? formatAddress(prop) : null,
-    lines: lines.map((l) => ({ description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, amountCents: l.amountCents })),
+    lines: lines.map((l) => ({ description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, amountCents: l.amountCents, taxRate: l.taxRate })),
     payments: pays.map((p) => ({ id: p.id, amountCents: p.amountCents, refundedCents: p.refundedCents, method: p.method, methodDetail: p.methodDetail, receivedOn: p.receivedOn, status: p.status })),
     refunds: refunds.map((r) => ({ id: r.id, paymentId: r.paymentId, amountCents: r.amountCents, refundedOn: r.refundedOn, status: r.status })),
   };

@@ -108,7 +108,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .select({
         assignmentId: propertyAssignments.id, role: propertyAssignments.role, startDate: propertyAssignments.startDate, endDate: propertyAssignments.endDate,
         id: properties.id, name: properties.name, street: properties.street, city: properties.city, state: properties.state, zip: properties.zip,
-        mapCode: properties.mapCode, lawnSqFt: properties.lawnSqFt, status: properties.status, tagIds: properties.tagIds,
+        mapCode: properties.mapCode, lawnSqFt: properties.lawnSqFt, status: properties.status, tagIds: properties.tagIds, taxRate: properties.taxRate,
       })
       .from(propertyAssignments)
       .innerJoin(properties, eq(properties.id, propertyAssignments.propertyId))
