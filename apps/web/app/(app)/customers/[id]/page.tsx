@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { CUSTOMER_KIND_LABELS, customerName, PROPERTY_ROLE_LABELS, formatAddress, formatPhone, type CustomerKind, type PropertyRole } from "@crewdesk/shared";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -19,6 +19,8 @@ import { PaymentMethodsCard } from "@/components/payment-methods";
 import { LinkedEstimates } from "@/components/estimates";
 import { Popover } from "@/components/customer-list";
 import { VisitFiles } from "@/components/visit-files";
+import { CustomerTexts } from "@/components/texting";
+import { RunHistory } from "@/components/automations";
 import { AccountBox, CallNotes, CustomerNotesBox, DeliveryBox, InvoiceDefaultsBox, JobsBox, PayPicker, PaymentsBox, PortalBox, StatsBox, Timeline } from "@/components/customer-page";
 
 /**
@@ -39,8 +41,15 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
   const [addingProperty, setAddingProperty] = useState(false);
   const [showPast, setShowPast] = useState(false);
   const [creditVersion, setCreditVersion] = useState(0);
-  const [tab, setTab] = useState<"details" | "communication" | "files">("details");
+  const [tab, setTab] = useState<"details" | "communication" | "files" | "automations">("details");
   const [panel, setPanel] = useState<null | "email" | "text" | "pay">(null);
+  const texting = useApi<{ connected: boolean }>("/texting/settings");
+  const [textFocus, setTextFocus] = useState(0);
+  // From the Texts page: open Communication at the texts.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("tab") === "communication") { setTab("communication"); if (url.searchParams.get("texts")) setTextFocus((n) => n + 1); window.history.replaceState(window.history.state, "", url.pathname); }
+  }, []);
   const [open, setOpen] = useState<string | null>(null);
   const [more, setMore] = useState(false);
   const [version, setVersion] = useState(0);
@@ -72,7 +81,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
         <Popover label={<>Send ▾</>} open={open === "send"} setOpen={toggle("send")} align="right" buttonClass="btn no-print">
           <div className="cl-menu">
             <button type="button" disabled={!c.email} onClick={() => { setPanel("email"); setOpen(null); }}>Email{!c.email ? " (no email on file)" : "…"}</button>
-            <button type="button" onClick={() => { setPanel("text"); setOpen(null); }}>Text…</button>
+            <button type="button" onClick={() => { setOpen(null); if (texting.data?.connected) { setTab("communication"); setTextFocus((n) => n + 1); } else setPanel("text"); }}>Text…</button>
           </div>
         </Popover>
         <Popover label={<>Create ▾</>} open={open === "create"} setOpen={toggle("create")} align="right" buttonClass="btn primary no-print">
@@ -116,14 +125,21 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
       )}
 
       <nav className="cal-seg cp-tabs no-print" aria-label="Customer sections">
-        {([["details", "Customer details"], ["communication", "Communication"], ["files", "Photos & documents"]] as const).map(([k, l]) => (
+        {([["details", "Customer details"], ["communication", "Communication"], ["files", "Photos & documents"], ["automations", "Automations"]] as const).map(([k, l]) => (
           <button key={k} type="button" aria-pressed={tab === k} onClick={() => setTab(k)}>{l}</button>
         ))}
       </nav>
 
+      {tab === "automations" && (
+        <div className="stack">
+          <p className="muted" style={{ margin: 0 }}>Automations that have run, or are running, for {c.name}. Stop one to end it for them. <a href="/automations">Set up automations</a></p>
+          <RunHistory customerId={id} />
+        </div>
+      )}
       {tab === "communication" && (
         <div className="cp-grid">
           <div className="cp-col">
+            <CustomerTexts key={textFocus} customerId={id} focus={textFocus > 0} />
             <CallNotes customerId={id} customerName={c.name} onSaved={() => setVersion((v) => v + 1)} />
             <CustomerEmails customerId={id} />
           </div>

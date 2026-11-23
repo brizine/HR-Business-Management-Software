@@ -4,8 +4,9 @@ import { PageHead } from "@/components/ui";
 import { SettingsTabs } from "@/components/settings-tabs";
 import { AccountingCard } from "@/components/accounting";
 import { StripeCard } from "@/components/stripe-settings";
+import { TextingCard } from "@/components/texting";
 
-/** Integrations: connections to other systems: Bigcapital (accounting) and Stripe (online payments). */
+/** Integrations: connections to other systems: Bigcapital (accounting), Stripe (online payments) and Talkroute (texting). */
 export default function Integrations() {
   const { can } = useAuth();
   return (
@@ -17,6 +18,8 @@ export default function Integrations() {
       {can("admin", "payroll") ? <AccountingCard /> : <p className="muted">Only payroll admins can see accounting.</p>}
       <h2 style={{ fontSize: 16, margin: "20px 0 8px" }}>Online payments (Stripe)</h2>
       {can("admin", "customers") ? <StripeCard /> : <p className="muted">Only Customers &amp; billing admins can see payment settings.</p>}
+      <h2 style={{ fontSize: 16, margin: "20px 0 8px" }}>Texting (Talkroute)</h2>
+      {can("manager", "customers") ? <TextingCard /> : <p className="muted">Only Customers &amp; billing managers can see texting.</p>}
     </>
   );
 }

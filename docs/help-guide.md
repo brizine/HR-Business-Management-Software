@@ -482,6 +482,50 @@ Deposits are **off** until an admin sets them in **Settings → Customers & bill
 - **No online payments set up:** customers can still accept. Their notification tells you to collect the deposit
   yourself (add a check or cash prepayment on their page).
 
+### Texting customers
+
+Texts go from your **Talkroute number**, so customers keep texting the number they know.
+
+- **Connecting:** **Settings → Integrations → Texting (Talkroute)**. The owner pastes the API key from Talkroute and your
+  number. Until Talkroute's API connection is finished in Crewdesk, the card says **Not available yet**.
+- **On a customer's page:** **Communication** shows their texts as a conversation with a box to write one. It counts
+  characters and says when a long text goes as more than one. **Send ▾ → Text…** jumps there once texting is
+  connected; before that it shows their number to copy into Talkroute.
+- **Who can be texted:** their phone (or other phone) on file. A customer who replies **STOP** isn't texted again
+  until they reply **START**; their page says so.
+- **Replies** are filed under the customer with that number (or a contact's) and come to managers as notifications.
+  **Customers → Texts** lists every conversation, newest first, with unread ones marked. A reply from a number that
+  isn't on file can be filed under a customer from there.
+
+### Automations
+
+**Customers → Automations** runs emails, texts, tags and to-dos on their own when something happens, like Homeworks'
+automations and sequences.
+
+- **When:** an estimate is sent, accepted, declined or changes are asked for; an invoice is sent, becomes past due
+  or is paid in full; a payment is made; a work order is added, completed or skipped, or a set number of days
+  before it (at 8 AM); a new customer is added; a tag is added to or taken off a customer.
+- **Who:** optionally only customers with certain tags, and never customers with others. Cancelled customers are
+  skipped, and sample customers are only used in the test company.
+- **Steps:** each step waits (instantly, or minutes, hours or days after the step before), then emails or texts the
+  customer from a template, emails or notifies people in the office, adds or takes off a tag, or makes a to-do due
+  8 AM the next day. Texts only go out 9 AM to 6 PM; outside that they wait for 9 AM.
+- **Stop when:** e.g. the estimate is answered, the invoice is paid, the work order is done, the tag comes off, or the
+  customer is cancelled. The rest of the steps are skipped.
+- **Once each:** an automation runs once per estimate, invoice, payment, work order, new customer or tag change, and
+  only for things that happen after it's turned on. Turning it off stops its running ones.
+- **Review first:** with this ticked, customer emails and texts wait in **Review**, showing exactly what will be
+  sent. **Send**, **Skip this step**, or **Stop for this customer**.
+- **Templates:** email and text templates with fill-ins (click one to add it), such as {first_name},
+  {estimate_link}, {invoice_balance}, {pay_link} and {visit_date}. The preview uses sample values. A template in use
+  can't be deleted.
+- **Starter automations:** **Add the starter automations** adds five, all off: a 7-day estimate follow-up, an
+  overdue invoice follow-up, a "your job is on the schedule" text the day before, a "your property has been
+  serviced" email, and a card-on-file request for new customers. Read them, adjust the templates, then turn on the
+  ones you want.
+- **History** shows every run and what each step did; a customer's page has an **Automations** tab with theirs.
+- Automations check every few minutes, so "instantly" means within about five minutes.
+
 ### Online payments and the customer portal
 
 Customers pay invoices by **card or US bank account** through Stripe. Card and bank details are typed into Stripe's own

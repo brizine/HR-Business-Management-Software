@@ -24,7 +24,9 @@ export type NotificationLink =
   | { screen: "workorder"; id: string }
   | { screen: "estimate"; id: string }
   | { screen: "customer"; id: string }
-  | { screen: "invoices" };
+  | { screen: "invoices" }
+  | { screen: "texts" }
+  | { screen: "automations" };
 
 export const NOTIFICATION_CATEGORIES = ["pto", "time", "schedule", "fleet", "documents", "onboarding", "hiring", "payroll", "wiki", "reviews", "training", "todos", "workorders", "estimates", "customers", "billing"] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
@@ -95,6 +97,8 @@ export function webPathFor(link: NotificationLink | null | undefined): string | 
     case "estimate": return `/estimates/${link.id}`;
     case "customer": return `/customers/${link.id}`;
     case "invoices": return "/invoices";
+    case "texts": return "/texts";
+    case "automations": return "/automations";
     default: return null;
   }
 }

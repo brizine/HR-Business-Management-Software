@@ -18,6 +18,8 @@ export const NAV: Record<Side, NavGroup[]> = {
       items: [
         { href: "/customers", label: "Customers", min: "manager", area: "customers" },
         { href: "/properties", label: "Properties", min: "manager", area: "customers" },
+        { href: "/texts", label: "Texts", min: "manager", area: "customers" },
+        { href: "/automations", label: "Automations", min: "manager", area: "customers" },
       ],
     },
     {

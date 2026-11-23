@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
+import type { AutomationStep, CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -57,6 +57,9 @@ export const companies = pgTable("companies", {
   /** Bigcapital connection (see accounting.ts in @crewdesk/shared); the API key is kept encrypted, apart. */
   accounting: jsonb("accounting").$type<AccountingSettings>(),
   accountingKey: text("accounting_key"),
+  /** Texting customers from the company's own number (Talkroute); the API key is encrypted in textingKey. */
+  texting: jsonb("texting").$type<{ provider: "talkroute"; fromNumber: string; connectedAt: string; accountName?: string | null; inboundSince?: string | null }>(),
+  textingKey: text("texting_key"),
   /** Grace periods, alerts and points for attendance (see attendance.ts in @crewdesk/shared). */
   attendanceRules: jsonb("attendance_rules").$type<AttendanceRules>(),
   /** The company's own edited copy of the user manual (Markdown); null = the standard docs/help-guide.md. */
@@ -1185,6 +1188,8 @@ export const customers = pgTable(
     email: text("email"),
     phone: text("phone"),
     altPhone: text("alt_phone"),
+    /** They replied STOP: no texts until they reply START. */
+    textOptOutAt: timestamp("text_opt_out_at", { withTimezone: true }),
     billingStreet: text("billing_street"),
     billingCity: text("billing_city"),
     billingState: text("billing_state").notNull().default("OK"),
@@ -2229,3 +2234,107 @@ export const visitFiles = pgTable(
   (t) => [index("visit_files_visit_idx").on(t.visitId)],
 );
 
+
+/** Texts with customers: sent from the office or automations, and their replies. */
+export const customerTexts = pgTable(
+  "customer_texts",
+  {
+    id: id(),
+    companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+    /** Null for a reply from a number that isn't a customer's. */
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    /** "out" or "in". */
+    direction: text("direction").notNull(),
+    /** The customer's number (+1…). */
+    phone: text("phone").notNull(),
+    body: text("body").notNull(),
+    /** Out: "sending", "sent", "delivered" or "failed". In: "received". */
+    status: text("status").notNull(),
+    error: text("error"),
+    providerId: text("provider_id"),
+    /** "office", "automation" or "test". */
+    source: text("source").notNull().default("office"),
+    sentById: uuid("sent_by_id").references(() => employees.id, { onDelete: "set null" }),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("customer_texts_customer_idx").on(t.customerId, t.createdAt),
+    index("customer_texts_company_idx").on(t.companyId, t.createdAt),
+    index("customer_texts_phone_idx").on(t.companyId, t.phone),
+    uniqueIndex("customer_texts_provider_idx").on(t.companyId, t.providerId),
+  ],
+);
+
+/** Email and text templates for automations (with {fill-ins}). */
+export const messageTemplates = pgTable(
+  "message_templates",
+  {
+    id: id(),
+    companyId: companyId(),
+    /** "email" or "text". */
+    kind: text("kind").notNull(),
+    name: text("name").notNull(),
+    subject: text("subject"),
+    body: text("body").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("message_templates_company_idx").on(t.companyId, t.kind)],
+);
+
+/** When something happens, run these steps (Automations). */
+export const automations = pgTable(
+  "automations",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    description: text("description"),
+    enabled: boolean("enabled").notNull().default(false),
+    /** When it was last turned on: only things that happen after this start it. */
+    enabledAt: timestamp("enabled_at", { withTimezone: true }),
+    trigger: text("trigger").notNull(),
+    daysBefore: integer("days_before"),
+    tagId: uuid("tag_id").references(() => crmTags.id, { onDelete: "set null" }),
+    onlyTagIds: uuid("only_tag_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
+    exceptTagIds: uuid("except_tag_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
+    stopWhen: text("stop_when").array().notNull().default(sql`ARRAY[]::text[]`),
+    review: boolean("review").notNull().default(false),
+    steps: jsonb("steps").$type<AutomationStep[]>().notNull(),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("automations_company_idx").on(t.companyId, t.trigger)],
+);
+
+/** One automation running for one customer (and the estimate, invoice or work order it's about). */
+export const automationRuns = pgTable(
+  "automation_runs",
+  {
+    id: id(),
+    companyId: companyId(),
+    automationId: uuid("automation_id").notNull().references(() => automations.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "cascade" }),
+    /** "estimate", "invoice", "payment", "visit" or "customer", and its id. */
+    subjectType: text("subject_type").notNull(),
+    subjectId: uuid("subject_id"),
+    /** One run per automation per thing that started it. */
+    dedupeKey: text("dedupe_key").notNull(),
+    /** "running", "review" (waiting for approval), "done", "stopped" or "failed". */
+    status: text("status").notNull().default("running"),
+    stepIndex: integer("step_index").notNull().default(0),
+    nextAt: timestamp("next_at", { withTimezone: true }),
+    /** What each step did: { step, action, status ("done", "skipped" or "failed"), detail, at }. */
+    log: jsonb("log").$type<{ step: number; action: string; status: string; detail: string; at: string }[]>().notNull().default([]),
+    stoppedReason: text("stopped_reason"),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("automation_runs_dedupe_idx").on(t.automationId, t.dedupeKey),
+    index("automation_runs_due_idx").on(t.status, t.nextAt),
+    index("automation_runs_customer_idx").on(t.customerId, t.createdAt),
+  ],
+);

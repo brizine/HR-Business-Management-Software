@@ -40,3 +40,5 @@ export * from "./paymentMethods";
 export * from "./estimates";
 export * from "./billingRules";
 export * from "./deposits";
+export * from "./texting";
+export * from "./automations";
