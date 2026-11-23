@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { formatMoney } from "./billing";
+import { formatMoney } from "./money";
+import { ESTIMATE_DEPOSIT_MODES, checkEstimateDeposit } from "./deposits";
 import { taxFor, taxRateSchema } from "./tax";
 
 /**
@@ -64,8 +65,13 @@ export const estimateSchema = z.object({
   customerNotes: optText(5000),
   /** Only the office sees these. */
   internalNotes: optText(5000),
+  /** A deposit to accept it: the company's rule, none, or its own ($ in cents, or %). */
+  depositMode: z.enum(ESTIMATE_DEPOSIT_MODES).default("default"),
+  depositKind: z.enum(["amount", "percent"]).nullable().optional(),
+  depositValue: z.coerce.number().min(0).max(100_000_000).nullable().optional(),
 }).superRefine((v, ctx) => {
   if (v.issueDate && v.validUntil && v.validUntil < v.issueDate) ctx.addIssue({ code: "custom", path: ["validUntil"], message: "It can't end before its date" });
+  checkEstimateDeposit(v, (path, message) => ctx.addIssue({ code: "custom", path: [path], message }));
 });
 export type EstimateInput = z.infer<typeof estimateSchema>;
 

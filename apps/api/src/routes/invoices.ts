@@ -2,7 +2,7 @@ import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import {
-  DEFAULT_BILLING_SETTINGS, autoSendSettingsSchema, billingSettingsSchema, customerName, effectiveLateFeeRules, lateFeeSettingsSchema, formatAddress, formatMoney, invoiceSchema, invoiceTotals, isOverdue, lineAmount, paymentSchema, taxBreakdown,
+  DEFAULT_BILLING_SETTINGS, autoSendSettingsSchema, billingSettingsSchema, customerName, effectiveLateFeeRules, lateFeeSettingsSchema, estimateDepositSettingsSchema, formatAddress, formatMoney, invoiceSchema, invoiceTotals, isOverdue, lineAmount, paymentSchema, taxBreakdown,
   invoiceBalance, sendInvoiceSchema, termsLabel, voidSchema, type InvoiceInput,
 } from "@crewdesk/shared";
 import { db } from "../db";
@@ -245,7 +245,7 @@ const routes: FastifyPluginAsync = async (app) => {
     if (max != null && body.nextInvoiceNumber <= max) throw new HttpError(400, `Invoice ${max} has already been used; the next number must be higher`);
     // Late fees and auto-sending are saved from their own cards; keep them.
     const current = await billingSettings(req.user.companyId);
-    const next = { ...body, lateFees: body.lateFees ?? current.lateFees, autoSend: body.autoSend ?? current.autoSend };
+    const next = { ...body, lateFees: body.lateFees ?? current.lateFees, autoSend: body.autoSend ?? current.autoSend, estimateDeposit: body.estimateDeposit ?? current.estimateDeposit };
     await db.update(companies).set({ billing: next }).where(eq(companies.id, req.user.companyId));
     return next;
   });
@@ -265,6 +265,14 @@ const routes: FastifyPluginAsync = async (app) => {
     const current = await billingSettings(req.user.companyId);
     await db.update(companies).set({ billing: { ...current, autoSend } }).where(eq(companies.id, req.user.companyId));
     return autoSend;
+  });
+
+  /** Who needs a deposit to accept an estimate, from what total, and how much. */
+  app.put("/settings/estimate-deposit", { preHandler: requireRole("admin", AREA) }, async (req) => {
+    const estimateDeposit = parse(estimateDepositSettingsSchema, req.body);
+    const current = await billingSettings(req.user.companyId);
+    await db.update(companies).set({ billing: { ...current, estimateDeposit } }).where(eq(companies.id, req.user.companyId));
+    return estimateDeposit;
   });
 
   /** A new draft. Its due date follows the company's terms unless given. */

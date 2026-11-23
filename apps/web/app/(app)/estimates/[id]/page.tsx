@@ -107,6 +107,7 @@ export default function EstimateDetail({ params }: { params: Promise<{ id: strin
             <div className="card"><h2 style={{ fontSize: 16, marginTop: 0 }}>Terms</h2><p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{e.terms || <span className="muted">None</span>}</p></div>
             <div className="card"><h2 style={{ fontSize: 16, marginTop: 0 }}>Notes for the customer</h2><p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{e.customerNotes || <span className="muted">None</span>}</p></div>
           </div>
+          {e.deposit && <DepositBox e={e} onChange={(msg) => done(msg)} />}
           <div className="card">
             <h2 style={{ fontSize: 16, marginTop: 0 }}>For the office</h2>
             <dl className="facts">
@@ -120,6 +121,40 @@ export default function EstimateDetail({ params }: { params: Promise<{ id: strin
         </>
       )}
     </>
+  );
+}
+
+/** The deposit to accept: what it is, and whether it's paid (a prepayment), asked for, or still due. */
+function DepositBox({ e, onChange }: { e: any; onChange: (msg: string) => void }) {
+  const d = e.deposit;
+  const { busy, error, run } = useAction();
+  const pp = d.prepayment;
+  return (
+    <div className="card">
+      <h2 style={{ fontSize: 16, marginTop: 0 }}>Deposit</h2>
+      <dl className="facts">
+        {d.words && <><dt>Rule</dt><dd>{d.words}{e.depositMode === "custom" ? " (this estimate's own)" : " (company default)"}</dd></>}
+        <dt>Amount</dt><dd>{d.cents > 0 ? formatMoney(d.cents) : "None at this total"}</dd>
+        <dt>Status</dt>
+        <dd>
+          {d.status === "paid" && <span className="ok-text">Paid{pp?.receivedOn ? ` ${fmtDate(pp.receivedOn)}` : ""}{pp?.methodDetail ? ` (${pp.methodDetail})` : ""}</span>}
+          {d.status === "clearing" && <span>Bank payment clearing</span>}
+          {d.status === "requested" && <span>Asked for, not paid yet</span>}
+          {d.status === "due" && <span>{e.status === "accepted" ? "Due" : "Paid online as they accept"}{!d.online ? " (online payments aren't set up, so collect it yourself)" : ""}</span>}
+          {d.status === "none" && <span className="muted">Nothing due</span>}
+          {pp && <> · <Link href={`/customers/${e.customer.id}#prepayments`}>PP-{pp.number}</Link></>}
+        </dd>
+      </dl>
+      {(d.status === "paid" || d.status === "clearing") && <p className="muted" style={{ margin: "6px 0 0", fontSize: 13 }}>It&apos;s a prepayment on the customer&apos;s account, used on their invoices as they&apos;re sent.</p>}
+      {e.status === "accepted" && (d.status === "due" || d.status === "requested") && d.online && (
+        <div className="row" style={{ marginTop: 8 }}>
+          <button className="btn" disabled={busy} onClick={() => run(async () => { const r = await api<{ emailedTo: string }>(`/estimates/${e.id}/deposit-link`, { body: {} }); onChange(`Deposit link emailed to ${r.emailedTo}.`); })}>
+            {d.status === "requested" ? "Email the deposit link again" : "Email a deposit link"}
+          </button>
+        </div>
+      )}
+      <ErrorBox error={error} />
+    </div>
   );
 }
 

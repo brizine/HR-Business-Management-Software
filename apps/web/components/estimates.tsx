@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
-  ESTIMATE_STATUS_LABELS, INCOME_ACCOUNTS, describePricing, estimateLineAmount, estimateTotals, formatMoney, lineTaxRate, priceFor, taxRateFor, type EstimateStatus as Status,
+  ESTIMATE_STATUS_LABELS, INCOME_ACCOUNTS, depositCents, describeDepositRule, describePricing, estimateLineAmount, estimateTotals, formatMoney, lineTaxRate, priceFor, taxRateFor, type EstimateStatus as Status,
 } from "@crewdesk/shared";
 import { api, fmtDate, today } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
@@ -30,6 +30,17 @@ const fromLine = (l: any): Line => ({
 });
 
 /** New or changed estimate, laid out like Homeworks': details, lines (with visits, optional and recommended lines, cost and hours), totals with profit, terms and notes. */
+/** The company's deposit rule in words, for the form's "Company default (…)". */
+function companyDeposit(settings: any) {
+  const d = settings?.estimateDeposit;
+  if (!d || d.requireFor === "none") return "none";
+  return `${describeDepositRule(d)}${d.requireFor === "new" ? ", new customers" : ""}`;
+}
+function companyRule(settings: any) {
+  const d = settings?.estimateDeposit;
+  return d && d.requireFor !== "none" && d.value > 0 ? { kind: d.kind, value: d.value, minTotalCents: d.minTotalCents } : null;
+}
+
 export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate?: any; preset?: { customer?: { id: string; name: string } }; onSaved: (e: any) => void; onCancel: () => void }) {
   const [customer, setCustomer] = useState<{ id: string; name: string } | null>(estimate ? { id: estimate.customer.id, name: estimate.customer.name } : preset?.customer ?? null);
   const [propertyId, setPropertyId] = useState<string>(estimate?.propertyId ?? "");
@@ -43,6 +54,9 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
   const [terms, setTerms] = useState(estimate?.terms ?? "");
   const [customerNotes, setCustomerNotes] = useState(estimate?.customerNotes ?? "");
   const [internalNotes, setInternalNotes] = useState(estimate?.internalNotes ?? "");
+  const [depositMode, setDepositMode] = useState<string>(estimate?.depositMode ?? "default");
+  const [depositKind, setDepositKind] = useState<"amount" | "percent">(estimate?.depositKind ?? "percent");
+  const [depositValue, setDepositValue] = useState<string>(estimate?.depositValue != null ? (estimate.depositKind === "amount" ? (estimate.depositValue / 100).toFixed(2) : String(estimate.depositValue)) : "");
   const save = useAction();
   const services = useApi<ServiceType[]>("/service-types");
   const pkgs = useApi<{ id: string; name: string; active: boolean; lines: any[] }[]>("/packages");
@@ -107,6 +121,8 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
       const body = {
         customerId: customer.id, propertyId: propertyId || null, title, issueDate, validUntil: validUntil || null, poNumber, discountPercent: Number(discount) || 0,
         requestedAt: requested ? new Date(requested).toISOString() : null, lines: out, terms, customerNotes, internalNotes,
+        depositMode, depositKind: depositMode === "custom" ? depositKind : null,
+        depositValue: depositMode === "custom" ? (depositKind === "amount" ? toCents(depositValue || "0") : Number(depositValue) || 0) : null,
       };
       onSaved(estimate ? await api(`/estimates/${estimate.id}`, { method: "PUT", body }) : await api("/estimates", { body }));
     });
@@ -219,6 +235,27 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
       <div className="grid cols-2">
         <label>Terms<textarea rows={4} value={terms} onChange={(e) => setTerms(e.target.value)} placeholder="Good for 30 days. Price includes all materials." /></label>
         <label>Notes for the customer<textarea rows={4} value={customerNotes} onChange={(e) => setCustomerNotes(e.target.value)} /></label>
+      </div>
+      <div className="row est-deposit" style={{ alignItems: "flex-end" }}>
+        <label>Deposit to accept
+          <select value={depositMode} onChange={(e) => setDepositMode(e.target.value)} style={{ width: "auto" }}>
+            <option value="default">Company default ({companyDeposit(billing.data)})</option>
+            <option value="none">No deposit</option>
+            <option value="custom">Its own deposit</option>
+          </select>
+        </label>
+        {depositMode === "custom" && (
+          <>
+            <label>Type<select value={depositKind} onChange={(e) => setDepositKind(e.target.value as "amount" | "percent")} style={{ width: "auto" }}><option value="percent">% of the accepted total</option><option value="amount">$ amount</option></select></label>
+            <label>{depositKind === "amount" ? "Amount ($)" : "Percent"}<input inputMode="decimal" value={depositValue} onChange={(e) => setDepositValue(e.target.value)} style={{ width: 110 }} aria-label="Deposit" /></label>
+          </>
+        )}
+        {(() => {
+          const rule = depositMode === "custom" ? (Number(depositValue) > 0 ? { kind: depositKind, value: depositKind === "amount" ? toCents(depositValue) : Number(depositValue), minTotalCents: 0 } : null)
+            : depositMode === "none" ? null : companyRule(billing.data);
+          const cents = depositCents(rule, totals.totalCents);
+          return cents > 0 ? <span className="muted" style={{ paddingBottom: 8 }}>{formatMoney(cents)} at this total{depositMode === "default" && billing.data?.estimateDeposit?.requireFor === "new" ? " (if they're a new customer)" : ""}</span> : null;
+        })()}
       </div>
       <label>Internal notes (only the office sees these)<textarea rows={3} value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} /></label>
       <ErrorBox error={save.error} />

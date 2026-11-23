@@ -7,7 +7,7 @@ import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
 import { SettingsTabs } from "@/components/settings-tabs";
 import { TagChip, useTags, type Tag } from "@/components/customers";
-import { AutoSendCard, LateFeesCard } from "@/components/billing-rules";
+import { AutoSendCard, EstimateDepositCard, LateFeesCard } from "@/components/billing-rules";
 
 /** Customer settings (admins in Customers & billing): the tag list and the cancellation reasons. */
 export default function CustomerSettings() {
@@ -15,8 +15,8 @@ export default function CustomerSettings() {
   return (
     <>
       <SettingsTabs />
-      <PageHead title="Customers & billing" sub="Invoice numbering and terms, late fees, auto-sending, tags and cancellation reasons." />
-      {can("admin", "customers") ? <><BillingCard /><LateFeesCard /><AutoSendCard /><TagsCard /><ReasonsCard /></> : <p className="muted">Only admins in Customers &amp; billing can change these.</p>}
+      <PageHead title="Customers & billing" sub="Invoice numbering and terms, late fees, auto-sending, estimate deposits, tags and cancellation reasons." />
+      {can("admin", "customers") ? <><BillingCard /><LateFeesCard /><AutoSendCard /><EstimateDepositCard /><TagsCard /><ReasonsCard /></> : <p className="muted">Only admins in Customers &amp; billing can change these.</p>}
     </>
   );
 }

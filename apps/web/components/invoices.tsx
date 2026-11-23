@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  INCOME_ACCOUNTS, INVOICE_STATUS_LABELS, describePricing, formatMoney, invoiceTotals, lineAmount, lineTaxRate, priceFor, taxRateFor, type InvoiceStatus,
+  INCOME_ACCOUNTS, INVOICE_STATUS_LABELS, describePricing, formatMoney, invoiceTotals, lineAmount, lineTaxRate, priceFor, taxRateFor, type EstimateDepositSettings, type InvoiceStatus,
 } from "@crewdesk/shared";
 import Link from "next/link";
 import { api, fmtDate, today } from "@/lib/api";
@@ -31,7 +31,7 @@ const taxText = (r: number | null | undefined) => (r ? String(Number(r.toFixed(3
 
 /** The company's billing settings (sales tax on or off, its name and default rate). */
 export function useBillingSettings() {
-  return useApi<{ taxEnabled: boolean; taxName: string; defaultTaxRate: number }>("/invoices/settings");
+  return useApi<{ taxEnabled: boolean; taxName: string; defaultTaxRate: number; estimateDeposit?: EstimateDepositSettings }>("/invoices/settings");
 }
 
 export interface InvoiceFormValue {

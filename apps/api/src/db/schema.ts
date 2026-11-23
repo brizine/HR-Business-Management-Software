@@ -1468,6 +1468,12 @@ export const estimates = pgTable(
     invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
     custom: jsonb("custom").$type<CustomValues>().notNull().default({}),
+    /** Deposit to accept: "default" (the company's rule), "none", or "custom" (depositKind/depositValue: cents or %). */
+    depositMode: text("deposit_mode").notNull().default("default"),
+    depositKind: text("deposit_kind"),
+    depositValue: doublePrecision("deposit_value"),
+    /** What the customer chose while paying the deposit; it's accepted with this once the deposit is paid. */
+    pendingResponse: jsonb("pending_response").$type<{ selectedLineIds: string[]; name: string; comment: string | null }>(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: createdAt(),
   },
@@ -1763,6 +1769,8 @@ export const prepayments = pgTable(
     note: text("note"),
     /** Pay its customer's open invoices too as soon as it's paid. */
     useNow: boolean("use_now").notNull().default(false),
+    /** A deposit to accept this estimate (paying it accepts the estimate). */
+    estimateId: uuid("estimate_id").references((): AnyPgColumn => estimates.id, { onDelete: "set null" }),
     /** Cash used on invoices, discount given on them, and refunded (kept up to date from what they come from). */
     appliedCents: integer("applied_cents").notNull().default(0),
     appliedDiscountCents: integer("applied_discount_cents").notNull().default(0),

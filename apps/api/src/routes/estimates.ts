@@ -18,6 +18,9 @@ import { addDays, billingSettings } from "../lib/invoices";
 import { notify, staffWithRole } from "../lib/notify";
 import { companyToday } from "../lib/payRates";
 import { companyForPdf, sendPdf } from "./invoices";
+import { acceptAfterDeposit, chosenSet, depositNeeded, depositView, recordResponse, startDeposit, startDepositLink, updateTotals } from "../lib/estimateResponses";
+import { recordPaymentIntent, stripeConfig } from "../lib/stripe";
+import { sendPrepayLink, PREPAY_LINK_DAYS } from "./prepayments";
 
 const AREA = "customers" as const;
 type Estimate = typeof estimates.$inferSelect;
@@ -38,8 +41,6 @@ async function checkProperties(companyId: string, body: EstimateInput) {
   if (found.length !== ids.length) throw new HttpError(400, "Pick a service address from the list");
 }
 
-const chosenSet = (e: Pick<Estimate, "chosenLineIds" | "respondedAt" | "status">) => (e.status === "accepted" && e.chosenLineIds ? new Set(e.chosenLineIds) : null);
-
 /** Saves the lines (keeping their ids, so a customer's choices stay with the right line) and the totals. */
 async function saveLines(tx: Tx, e: Estimate, body: EstimateInput) {
   const old = await tx.select({ id: estimateLines.id }).from(estimateLines).where(eq(estimateLines.estimateId, e.id));
@@ -54,11 +55,6 @@ async function saveLines(tx: Tx, e: Estimate, body: EstimateInput) {
   const saved = rows.length ? await tx.insert(estimateLines).values(rows).returning() : [];
   await updateTotals(tx, e.id, saved, body.discountPercent, chosenSet(e));
   return saved;
-}
-
-async function updateTotals(tx: Tx, id: string, lines: Line[], discountPercent: number, chosen: Set<string> | null) {
-  const t = estimateTotals(lines, discountPercent, chosen);
-  await tx.update(estimates).set({ subtotalCents: t.subtotalCents, discountCents: t.discountCents, taxCents: t.taxCents, totalCents: t.totalCents, updatedAt: new Date() }).where(eq(estimates.id, id));
 }
 
 /** One estimate with its lines, customer, address and (for the office) costs and margin. */
@@ -80,6 +76,7 @@ async function estimateView(e: Estimate, opts: { office: boolean }) {
     terms: e.terms, customerNotes: e.customerNotes, sentAt: e.sentAt, respondedAt: e.respondedAt, responseName: e.responseName, responseComment: e.responseComment,
     respondedBy: e.respondedBy, chosenLineIds: e.chosenLineIds ?? null,
     subtotalCents: totals.subtotalCents, discountCents: totals.discountCents, taxCents: totals.taxCents, totalCents: totals.totalCents,
+    deposit: await depositView(e, totals.totalCents),
     lines: lines.map((l) => ({
       id: l.id, serviceTypeId: l.serviceTypeId, propertyId: l.propertyId, address: l.propertyId ? addr.get(l.propertyId) ?? null : null, description: l.description,
       quantity: l.quantity, unitPriceCents: l.unitPriceCents, visits: l.visits, taxRate: l.taxRate, amountCents: l.amountCents,
@@ -91,7 +88,7 @@ async function estimateView(e: Estimate, opts: { office: boolean }) {
   const [by] = e.respondedById ? await db.select({ n: sql<string>`${employees.firstName} || ' ' || ${employees.lastName}` }).from(employees).where(eq(employees.id, e.respondedById)) : [];
   return {
     ...base, requestedAt: e.requestedAt, internalNotes: e.internalNotes, emailedTo: e.emailedTo, viewedAt: e.viewedAt, respondedByName: by?.n ?? null,
-    visitId: e.visitId, invoiceId: e.invoiceId, custom: e.custom, link: e.token ? `${WEB_URL}/estimate/${e.token}` : null,
+    visitId: e.visitId, invoiceId: e.invoiceId, custom: e.custom, depositMode: e.depositMode, depositKind: e.depositKind, depositValue: e.depositValue, link: e.token ? `${WEB_URL}/estimate/${e.token}` : null,
     internal: { costCents: totals.costCents, profitCents: totals.profitCents, marginPercent: totals.marginPercent, hours: totals.hours, visitsRevenueCents: totals.visitsRevenueCents },
   };
 }
@@ -112,34 +109,10 @@ async function pdfFor(e: Estimate) {
   });
 }
 
-/**
- * Records an answer (the customer's online, or one the office took by phone): accepted (with the
- * optional lines chosen), declined, or changes requested. The office is told.
- */
-async function recordResponse(e: Estimate, r: EstimateResponse, by: { customer: true } | { employeeId: string }) {
-  const lines = await db.select().from(estimateLines).where(eq(estimateLines.estimateId, e.id));
-  const optionalIds = new Set(lines.filter((l) => l.optional).map((l) => l.id));
-  const chosen = r.action === "accept" ? r.selectedLineIds.filter((id) => optionalIds.has(id)) : null;
-  const status = r.action === "accept" ? "accepted" : r.action === "decline" ? "declined" : "changes";
-  const [u] = await db.update(estimates).set({
-    status, respondedAt: new Date(), responseName: r.name ?? null, responseComment: r.comment ?? null, chosenLineIds: chosen,
-    respondedBy: "customer" in by ? "customer" : "office", respondedById: "employeeId" in by ? by.employeeId : null, updatedAt: new Date(),
-  }).where(eq(estimates.id, e.id)).returning();
-  await updateTotals(db, u.id, lines, u.discountPercent, chosen ? new Set(chosen) : null);
-  if ("customer" in by) {
-    const [cust] = await db.select().from(customers).where(eq(customers.id, e.customerId));
-    const [fresh] = await db.select().from(estimates).where(eq(estimates.id, e.id));
-    const who = customerName(cust);
-    const words = status === "accepted" ? `accepted (${formatMoney(fresh.totalCents)})` : status === "declined" ? "declined" : "asked for changes to";
-    const managers = await staffWithRole(e.companyId, "manager", AREA);
-    notify(e.companyId, [...managers, e.createdById], {
-      category: "estimates", title: `${who} ${words} estimate ${e.number}`,
-      body: r.comment ? `"${r.comment.slice(0, 200)}"` : status === "accepted" ? "Make it a work order or an invoice from the estimate." : "Open the estimate to follow up.",
-      link: { screen: "estimate", id: e.id },
-    });
-  }
-  return u;
-}
+/** The estimate's own deposit choice, as stored (kind and value only when it has its own). */
+const depositFields = (b: EstimateInput) => ({
+  depositMode: b.depositMode, depositKind: b.depositMode === "custom" ? b.depositKind ?? null : null, depositValue: b.depositMode === "custom" ? b.depositValue ?? null : null,
+});
 
 const listQuery = z.object({
   status: z.enum([...ESTIMATE_STATUSES, "all", "open"]).default("all"),
@@ -200,6 +173,7 @@ const routes: FastifyPluginAsync = async (app) => {
         companyId, number, customerId: body.customerId, propertyId: body.propertyId ?? null, title: body.title ?? null, issueDate: body.issueDate ?? today,
         validUntil: body.validUntil ?? null, requestedAt: body.requestedAt ? new Date(body.requestedAt) : null, poNumber: body.poNumber ?? null,
         discountPercent: body.discountPercent, terms: body.terms ?? null, customerNotes: body.customerNotes ?? null, internalNotes: body.internalNotes ?? null, createdById: sub,
+        ...depositFields(body),
       }).returning();
       await saveLines(tx, row, body);
       return row;
@@ -229,6 +203,7 @@ const routes: FastifyPluginAsync = async (app) => {
         customerId: body.customerId, propertyId: body.propertyId ?? null, title: body.title ?? null, issueDate: body.issueDate ?? e.issueDate, validUntil: body.validUntil ?? null,
         requestedAt: body.requestedAt ? new Date(body.requestedAt) : null, poNumber: body.poNumber ?? null, discountPercent: body.discountPercent,
         terms: body.terms ?? null, customerNotes: body.customerNotes ?? null, internalNotes: body.internalNotes ?? null, updatedAt: new Date(),
+        ...depositFields(body),
       }).where(eq(estimates.id, e.id)).returning();
       await saveLines(tx, u, body);
     });
@@ -254,6 +229,7 @@ const routes: FastifyPluginAsync = async (app) => {
       const [row] = await tx.insert(estimates).values({
         companyId, number, customerId: e.customerId, propertyId: e.propertyId, title: e.title, issueDate: today, poNumber: e.poNumber, discountPercent: e.discountPercent,
         terms: e.terms, customerNotes: e.customerNotes, internalNotes: e.internalNotes, createdById: sub, custom: e.custom,
+        depositMode: e.depositMode, depositKind: e.depositKind, depositValue: e.depositValue,
       }).returning();
       if (lines.length) await tx.insert(estimateLines).values(lines.map(({ id: _id, estimateId: _e, ...l }) => ({ ...l, estimateId: row.id })));
       await updateTotals(tx, row.id, lines, e.discountPercent, null);
@@ -305,6 +281,27 @@ const routes: FastifyPluginAsync = async (app) => {
     if (e.visitId || e.invoiceId) throw new HttpError(400, "It's already been made into a work order or invoice");
     const u = await recordResponse(e, r, { employeeId: req.user.sub });
     return estimateView(await find(req.user.companyId, u.id), { office: true });
+  });
+
+  /**
+   * Accepted by phone and a deposit applies: a prepay link for it (emailed), like a prepayment the
+   * office asks for. Paying it doesn't change the estimate.
+   */
+  app.post<{ Params: { id: string } }>("/:id/deposit-link", async (req) => {
+    const { emailTo } = parse(z.object({ emailTo: z.string().trim().toLowerCase().email().max(254).optional().or(z.literal("").transform(() => undefined)) }), req.body ?? {});
+    const { companyId, sub } = req.user;
+    const e = await find(companyId, req.params.id);
+    if (e.status !== "accepted") throw new HttpError(400, "Record the customer's acceptance first (or send the estimate, and they pay it as they accept)");
+    if (!(await stripeConfig(companyId))) throw new HttpError(400, "Online payments aren't set up (Settings → Integrations → Stripe). Take the deposit as a check or cash prepayment instead");
+    const need = await depositNeeded(e, e.chosenLineIds ?? []);
+    if (need.paid) throw new HttpError(400, "The deposit is already paid");
+    if (need.cents <= 0) throw new HttpError(400, "No deposit applies to this estimate");
+    const [cust] = await db.select().from(customers).where(eq(customers.id, e.customerId));
+    const to = emailTo ?? cust.email;
+    if (!to) throw new HttpError(400, "This customer has no email address. Add one, or take the deposit as a check or cash prepayment");
+    const pp = await startDepositLink(e, need.cents, sub, PREPAY_LINK_DAYS);
+    await sendPrepayLink(companyId, pp, to);
+    return { ok: true, emailedTo: to, prepaymentId: pp.id };
   });
 
   /** Undoes an answer recorded by mistake: back to pending (or draft if it was never sent). */
@@ -363,7 +360,11 @@ export const publicEstimateRoutes: FastifyPluginAsync = async (app) => {
   const out = async (e: Estimate) => {
     const view = await estimateView(e, { office: false });
     const settings = await billingSettings(e.companyId);
-    return { company: await company(e.companyId), taxName: settings.taxName, estimate: view, canRespond: (e.status === "sent" || e.status === "changes") && !view.expired };
+    const s = await stripeConfig(e.companyId);
+    return {
+      company: await company(e.companyId), taxName: settings.taxName, estimate: view, canRespond: (e.status === "sent" || e.status === "changes") && !view.expired,
+      payments: s ? { enabled: true, publishableKey: s.publishableKey, testMode: s.mode === "test" } : { enabled: false as const },
+    };
   };
 
   app.get<{ Params: { token: string } }>("/:token", limited, async (req) => {
@@ -383,8 +384,35 @@ export const publicEstimateRoutes: FastifyPluginAsync = async (app) => {
     if (e.status === "accepted" || e.status === "declined") throw new HttpError(400, `This estimate was already ${e.status}. Questions? Call or email us`);
     if (e.validUntil && e.validUntil < (await companyToday(e.companyId))) throw new HttpError(400, "This estimate has expired. Call or email us for an updated one");
     if (r.action === "accept" && !r.name) throw new HttpError(400, "Type your name to accept");
-    const u = await recordResponse(e, r, { customer: true });
+    let depositDue = 0;
+    if (r.action === "accept") {
+      const need = await depositNeeded(e, r.selectedLineIds);
+      if (need.cents > 0 && (await stripeConfig(e.companyId))) throw new HttpError(400, `A ${formatMoney(need.cents)} deposit is needed to accept. Pay it below`);
+      depositDue = need.cents;
+    }
+    const u = await recordResponse(e, r, { customer: true }, { depositDue });
     return out((await db.select().from(estimates).where(eq(estimates.id, u.id)))[0]);
+  });
+
+  /** Accept and pay the deposit: starts the card or bank payment (paying it accepts the estimate). */
+  app.post<{ Params: { token: string } }>("/:token/deposit", limited, async (req) => {
+    const r = parse(estimateResponseSchema, { ...(req.body as object), action: "accept" });
+    const e = await byToken(req.params.token);
+    if (e.status === "accepted" || e.status === "declined") throw new HttpError(400, `This estimate was already ${e.status}. Questions? Call or email us`);
+    if (e.validUntil && e.validUntil < (await companyToday(e.companyId))) throw new HttpError(400, "This estimate has expired. Call or email us for an updated one");
+    if (!r.name) throw new HttpError(400, "Type your name to accept");
+    const started = await startDeposit(e, { selectedLineIds: r.selectedLineIds, name: r.name, comment: r.comment ?? null });
+    if ("accepted" in started) return { accepted: true, ...(await out((await db.select().from(estimates).where(eq(estimates.id, e.id)))[0])) };
+    return { ...started.payment, prepaymentId: started.prepaymentId };
+  });
+
+  /** After paying: how it went (the webhook records it too). */
+  app.post<{ Params: { token: string } }>("/:token/deposit/confirm", limited, async (req) => {
+    const { paymentIntentId } = parse(z.object({ paymentIntentId: z.string().regex(/^pi_[A-Za-z0-9]+$/) }), req.body);
+    const e = await byToken(req.params.token);
+    const result = await recordPaymentIntent(e.companyId, paymentIntentId) as { status?: string; prepaymentId?: string };
+    if (result.prepaymentId) await acceptAfterDeposit(result.prepaymentId);
+    return { status: result.status ?? "unknown", ...(await out((await db.select().from(estimates).where(eq(estimates.id, e.id)))[0])) };
   });
 };
 

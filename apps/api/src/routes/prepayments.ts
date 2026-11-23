@@ -42,7 +42,7 @@ export async function prepaymentsFor(companyId: string, customerId: string) {
   return { prepayments: list, prepaidCents: list.reduce((s, p) => s + p.cashLeftCents, 0) };
 }
 
-async function sendPrepayLink(companyId: string, p: Row, to: string) {
+export async function sendPrepayLink(companyId: string, p: Row, to: string) {
   const transport = emailTransport();
   if (!transport) throw new HttpError(400, "Email isn't set up on this server yet. Copy the link and send it yourself");
   const [co] = await db.select().from(companies).where(eq(companies.id, companyId));

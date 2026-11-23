@@ -462,6 +462,26 @@ Billing → **Estimates** (or **New → Estimate**, or **New estimate** on a cus
 - On the Customers list, the **Estimates** filter (pending, accepted, declined, changes requested, or none) and the
   **Open estimates** column (what pending ones come to).
 
+#### Deposits on estimates
+
+Deposits are **off** until an admin sets them in **Settings → Customers & billing → Deposits on estimates**.
+
+- **Who and how much:** require a deposit from **new customers** (no invoices sent to them yet) or **every customer**.
+  Set it as a $ amount or a % of the total they accept, and optionally only on estimates of at least a set total.
+- **Per estimate:** on the estimate form, **Deposit to accept** is the company default, **No deposit**, or **Its own
+  deposit** ($ or %). The form shows what it comes to at the current total.
+- **Paying it:** on the estimate link, the customer sees the deposit with the total; it follows the options they
+  tick. **Accept and pay deposit** asks for their name, then the card or bank form. The estimate is accepted once the
+  deposit goes through (a bank payment that's still clearing counts). You get a notification that it was accepted
+  with the deposit.
+- **Where the money goes:** the deposit becomes a **prepayment** on the customer's account (PP-…), booked as income
+  when received like any prepayment. It's used on their invoices as they're sent (only that property's invoices when
+  the estimate has a service address).
+- **The Deposit box** on the estimate shows the rule, the amount, and whether it's paid, clearing or still due.
+- **Accepted by phone?** **Email a deposit link** sends the customer a prepay link for the deposit.
+- **No online payments set up:** customers can still accept. Their notification tells you to collect the deposit
+  yourself (add a check or cash prepayment on their page).
+
 ### Online payments and the customer portal
 
 Customers pay invoices by **card or US bank account** through Stripe. Card and bank details are typed into Stripe's own

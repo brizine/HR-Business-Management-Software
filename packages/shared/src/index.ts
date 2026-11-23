@@ -39,3 +39,4 @@ export * from "./customerMessages";
 export * from "./paymentMethods";
 export * from "./estimates";
 export * from "./billingRules";
+export * from "./deposits";

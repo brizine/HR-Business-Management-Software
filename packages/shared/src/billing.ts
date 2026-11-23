@@ -2,6 +2,7 @@ import { z } from "zod";
 import { optionalTaxRateSchema, taxFor, taxRateSchema } from "./tax";
 import { DEFAULT_SEND_SCHEDULE, autoSendSettingsSchema, lateFeeSettingsSchema } from "./billingRules";
 import { formatMoney } from "./money";
+import { DEFAULT_ESTIMATE_DEPOSIT, estimateDepositSettingsSchema } from "./deposits";
 
 export { formatMoney };
 
@@ -189,12 +190,14 @@ export const billingSettingsSchema = z.object({
   /** Saved from their own cards (left out, the saved ones are kept). */
   lateFees: lateFeeSettingsSchema.optional(),
   autoSend: autoSendSettingsSchema.optional(),
+  estimateDeposit: estimateDepositSettingsSchema.optional(),
 });
 export type BillingSettings = z.infer<typeof billingSettingsSchema>;
 export const DEFAULT_BILLING_SETTINGS: BillingSettings = {
   nextInvoiceNumber: 1001, termsDays: 0, footer: "", payableTo: "", autoApplyCredits: true, taxEnabled: false, taxName: "Sales tax", defaultTaxRate: 0,
   lateFees: { enabled: false, rules: [], emailCustomer: true },
   autoSend: { enabled: false, schedule: DEFAULT_SEND_SCHEDULE, hour: 8, invoiceWorkOrders: true },
+  estimateDeposit: DEFAULT_ESTIMATE_DEPOSIT,
 };
 
 export function termsLabel(days: number) {

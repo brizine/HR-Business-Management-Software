@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import {
+  DEFAULT_ESTIMATE_DEPOSIT, DEPOSIT_FOR, DEPOSIT_FOR_LABELS, describeDepositRule, type EstimateDepositSettings,
   DEFAULT_SEND_SCHEDULE, SEND_WEEKDAYS, describeLateFeeRule, describeSchedule, effectiveLateFeeRules, effectiveSchedule,
   type AutoSendSettings, type LateFeeRule, type LateFeeSettings, type SendSchedule,
 } from "@crewdesk/shared";
@@ -91,7 +92,7 @@ export function ScheduleEditor({ value, onChange }: { value: SendSchedule; onCha
   );
 }
 
-type Billing = { lateFees: LateFeeSettings; autoSend: AutoSendSettings };
+type Billing = { lateFees: LateFeeSettings; autoSend: AutoSendSettings; estimateDeposit?: EstimateDepositSettings };
 
 /** Settings → Customers & billing: the company's late fee steps. */
 export function LateFeesCard() {
@@ -194,5 +195,45 @@ export function CustomerBillingRules({ customer, onSaved, onCancel }: { customer
         <button type="button" className="btn" onClick={onCancel}>Cancel</button>
       </div>
     </div>
+  );
+}
+
+/** Settings → Customers & billing: who needs a deposit to accept an estimate (like Homeworks' Estimate Settings). */
+export function EstimateDepositCard() {
+  const saved = useApi<Billing>("/invoices/settings");
+  const [form, setForm] = useState<{ requireFor: EstimateDepositSettings["requireFor"]; min: string; kind: "amount" | "percent"; value: string } | null>(null);
+  const { busy, error, run } = useAction();
+  const [done, setDone] = useState(false);
+  if (!saved.data) return null;
+  const d = saved.data.estimateDeposit ?? DEFAULT_ESTIMATE_DEPOSIT;
+  const f = form ?? { requireFor: d.requireFor, min: d.minTotalCents ? (d.minTotalCents / 100).toFixed(2) : "", kind: d.kind, value: d.value ? (d.kind === "amount" ? (d.value / 100).toFixed(2) : String(d.value)) : "" };
+  const set = (patch: Partial<typeof f>) => { setForm({ ...f, ...patch }); setDone(false); };
+  const cents = (x: string) => Math.round(Number(String(x).replace(/[$,]/g, "")) * 100) || 0;
+  const body = { requireFor: f.requireFor, minTotalCents: cents(f.min), kind: f.kind, value: f.kind === "amount" ? cents(f.value) : Number(f.value) || 0 };
+  return (
+    <form className="card stack" onSubmit={(e) => { e.preventDefault(); run(async () => { await api("/invoices/settings/estimate-deposit", { method: "PUT", body }); saved.reload(); setForm(null); setDone(true); }); }}>
+      <h2 style={{ fontSize: 16, margin: 0 }}>Deposits on estimates</h2>
+      <p className="muted" style={{ margin: 0 }}>The customer pays it online as they accept (card or bank account). It goes on their account as a prepayment and is used on their invoices. An estimate can need none or have its own instead.</p>
+      <label>Require a deposit to accept from
+        <select value={f.requireFor} onChange={(e) => set({ requireFor: e.target.value as typeof f.requireFor })} style={{ width: "auto" }}>
+          {DEPOSIT_FOR.map((k) => <option key={k} value={k}>{DEPOSIT_FOR_LABELS[k]}</option>)}
+        </select>
+      </label>
+      {f.requireFor !== "none" && (
+        <div className="row" style={{ alignItems: "flex-end" }}>
+          <label>On estimates of at least ($)<input inputMode="decimal" value={f.min} onChange={(e) => set({ min: e.target.value })} placeholder="0.00 (any)" style={{ width: 140 }} /></label>
+          <label>Deposit
+            <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
+              <select value={f.kind} onChange={(e) => set({ kind: e.target.value as "amount" | "percent" })} aria-label="Deposit type" style={{ width: "auto" }}><option value="percent">%</option><option value="amount">$</option></select>
+              <input inputMode="decimal" value={f.value} onChange={(e) => set({ value: e.target.value })} aria-label="Deposit amount" placeholder={f.kind === "percent" ? "25" : "100.00"} style={{ width: 110 }} />
+            </div>
+          </label>
+        </div>
+      )}
+      {f.requireFor !== "none" && body.value > 0 && <span className="muted" style={{ fontSize: 13 }}>{DEPOSIT_FOR_LABELS[f.requireFor]}: {describeDepositRule(body)}.{f.requireFor === "new" ? " New means no invoices sent to them yet." : ""}</span>}
+      <p className="muted" style={{ margin: 0, fontSize: 13 }}>Without online payments (Settings → Integrations → Stripe), customers still accept, and you&apos;re told to collect the deposit.</p>
+      <ErrorBox error={error} />
+      <div className="row"><button className="btn primary" disabled={busy}>Save deposits</button>{done && <span className="ok-text">Saved</span>}</div>
+    </form>
   );
 }

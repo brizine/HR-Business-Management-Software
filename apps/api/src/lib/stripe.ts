@@ -413,6 +413,11 @@ async function applyPrepaymentIntent(companyId: string, pi: Stripe.PaymentIntent
     status: next, method, methodDetail: detail, stripePaymentId: pi.id, feeCents: next === "open" ? bt?.fee ?? null : null, receivedOn: await companyToday(companyId),
   }).where(and(eq(prepayments.id, p.id), inArray(prepayments.status, ["requested", "pending"]))).returning();
   if (!u) return { status: "completed", prepaymentId: p.id };
+  // A deposit on an estimate: paying it (or a bank payment for it starting) accepts the estimate.
+  if (u.estimateId) {
+    const { acceptAfterDeposit } = await import("./estimateResponses");
+    await acceptAfterDeposit(u.id).catch((e) => console.error("Accepting the estimate after its deposit failed:", (e as Error).message));
+  }
   if (next === "open") {
     queueBillingSync(() => syncPrepayment(companyId, u.id));
     if (u.useNow) {
