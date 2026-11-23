@@ -1379,6 +1379,7 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .cl-menu > button, .cl-menu > a, .cl-menu-row > button:first-child { text-align: left; border: 0; background: transparent; color: var(--text); padding: 6px 8px; border-radius: 6px; cursor: pointer; text-decoration: none; font-size: 14px; }
 .cl-menu > button:hover, .cl-menu > a:hover, .cl-menu-row > button:first-child:hover { background: var(--bg); }
 .cl-menu .todo-label { padding: 6px 8px 2px; }
+.cl-menu > button.bad-text { color: var(--bad); }
 .cl-menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; width: 100%; }
 .cl-menu-row { display: flex; align-items: center; justify-content: space-between; }
 .cl-menu-row > button:first-child { flex: 1; }

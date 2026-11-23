@@ -336,7 +336,7 @@ export function CustomerPicker({ onPick, label = "Customer", exclude = [] }: { o
 }
 
 /** Cancelling asks for a reason from the list, an effective date and an optional comment. */
-export function CancelForm({ what, onSubmit, onClose }: { what: string; onSubmit: (body: { reasonId: string; effectiveDate?: string; comment?: string }) => Promise<unknown>; onClose: () => void }) {
+export function CancelForm({ what, note, onSubmit, onClose }: { what: string; note?: ReactNode; onSubmit: (body: { reasonId: string; effectiveDate?: string; comment?: string }) => Promise<unknown>; onClose: () => void }) {
   const reasons = useApi<any[]>("/crm/cancel-reasons");
   const [reasonId, setReasonId] = useState("");
   const [date, setDate] = useState("");
@@ -352,6 +352,7 @@ export function CancelForm({ what, onSubmit, onClose }: { what: string; onSubmit
       catch (err) { setError((err as Error).message); } finally { setBusy(false); }
     }}>
       <h2 style={{ fontSize: 16, margin: 0 }}>Cancel {what}</h2>
+      {note && <p className="muted" style={{ margin: 0 }}>{note}</p>}
       <div className="formgrid">
         <label>Reason
           <select required value={reasonId} onChange={(e) => setReasonId(e.target.value)}>

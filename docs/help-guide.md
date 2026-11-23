@@ -163,8 +163,14 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
     - Your choice is kept for you in this browser.
   - **Sorting:** click a column heading to sort by it, and again to reverse.
   - **Selecting:** tick customers (or the box at the top for the whole page) to **Add tag**, **Remove tag**,
-    **Change status** (active or lead; cancelling is done on the customer's page, since it asks why), **Export
-    selected** or **Print selected**.
+    **Change status**, **Export selected** or **Print selected**.
+    - When the whole page is ticked and more customers match, **Select all N matching** picks every customer the
+      tab, search and filters match (up to 5,000), not just this page. **Just this page** goes back.
+    - **Change status → Active** or **Lead**; customers already cancelled are left as they are.
+    - **Change status → Cancelled…** asks for a reason (and a comment if the reason needs one) and an optional
+      effective date, the same as cancelling one customer. Each one gets that reason, and properties they're
+      the current bill-to for are cancelled too. Anyone already cancelled is skipped. Reactivate from the
+      customer's page.
   - **Pages:** 25, 50, 100 or 250 rows a page, with Previous and Next.
   - The address in the browser keeps the tab, search, filters, sort and page, so **Back**, refreshing and sharing
     the link all bring the same list up.

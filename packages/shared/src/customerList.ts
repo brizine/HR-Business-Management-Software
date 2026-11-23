@@ -164,3 +164,19 @@ export const CUSTOMER_COLUMNS: readonly CustomerColumn[] = [
 export const DEFAULT_CUSTOMER_COLUMNS = CUSTOMER_COLUMNS.filter((c) => c.default).map((c) => c.key);
 export const CUSTOMER_SORTS = CUSTOMER_COLUMNS.filter((c) => c.sort).map((c) => c.key);
 export const CUSTOMER_PAGE_SIZES = [25, 50, 100, 250] as const;
+
+/**
+ * Which customers a bulk action is for: the ticked rows (ids), or everyone the list's tab, search
+ * and filters match ("Select all 312 matching"), worked out again on the server when it runs.
+ */
+export const customerMatchSchema = z.object({
+  status: z.enum(["active", "lead", "cancelled", "current", "all"]).default("current"),
+  q: z.string().max(100).optional(),
+  filters: customerFiltersSchema.default([]),
+});
+export type CustomerMatch = z.infer<typeof customerMatchSchema>;
+export const customerIdsSchema = z.object({ ids: z.array(z.string().uuid(), { required_error: "Pick the customers" }).min(1, "Pick the customers").max(500, "Pick up to 500, or use Select all matching") });
+export const customerSelectionSchema = z.union([customerIdsSchema, z.object({ match: customerMatchSchema })]);
+export type CustomerSelection = z.infer<typeof customerSelectionSchema>;
+/** The most customers one bulk action can touch. */
+export const BULK_MAX = 5000;

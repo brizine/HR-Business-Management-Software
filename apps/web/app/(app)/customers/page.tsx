@@ -13,7 +13,7 @@ import {
   BUILT_IN_VIEWS, Cell, ColumnPicker, CrmTabs, FilterChips, FilterEditor, Popover, allColumns, cellText, readLocal, writeLocal, type Col, type ListView,
 } from "@/components/customer-list";
 import { openTestCompany, useTestCompany } from "@/components/test-company";
-import { CustomerFields, PropertyFields, customerBody, customerFormValue, propertyBody, propertyFormValue, useTags } from "@/components/customers";
+import { CancelForm, CustomerFields, PropertyFields, customerBody, customerFormValue, propertyBody, propertyFormValue, useTags } from "@/components/customers";
 
 const TABS = [["active", "Customers"], ["lead", "Leads"], ["cancelled", "Cancelled"], ["all", "All"]] as const;
 const SIZES = CUSTOMER_PAGE_SIZES;
@@ -105,16 +105,24 @@ function Customers() {
   const [open, setOpen] = useState<string | null>(null);
   const toggle = (k: string) => (o: boolean) => setOpen(o ? k : null);
 
-  // Selection and bulk actions.
+  // Selection and bulk actions: the ticked rows, or every customer that matches ("Select all 312 matching").
   const [picked, setPicked] = useState<string[]>([]);
-  useEffect(() => { setPicked([]); }, [query]);
+  const [allMatching, setAllMatching] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  useEffect(() => { setPicked([]); setAllMatching(false); setCancelling(false); }, [query]);
   const rows = list.data?.rows ?? [];
   const allPicked = rows.length > 0 && rows.every((r) => picked.includes(r.id));
+  const matchStatus = (["active", "lead", "cancelled", "all"] as const).find((k) => k === status) ?? "all";
+  const selection = allMatching ? { match: { status: matchStatus, q: params.get("q") ?? undefined, filters } } : { ids: picked };
+  const selCount = allMatching ? list.data?.total ?? 0 : picked.length;
+  const clearSelection = () => { setPicked([]); setAllMatching(false); setCancelling(false); };
   const bulk = useAction();
   const runBulk = (body: Record<string, unknown>, done: string) => bulk.run(async () => {
-    const r = await api<{ changed: number; skipped: number }>("/customers/bulk", { body: { ids: picked, ...body } });
-    setNotice(`${done}: ${r.changed} changed${r.skipped ? `, ${r.skipped} cancelled left as they are` : ""}.`);
+    const r = await api<{ changed: number; skipped: number; propertiesCancelled: number }>("/customers/bulk", { body: { ...selection, ...body } });
+    const skippedWhy = body.cancel ? "already cancelled" : "cancelled, left as they are";
+    setNotice(`${done}: ${r.changed.toLocaleString()} changed${r.skipped ? `, ${r.skipped.toLocaleString()} ${skippedWhy}` : ""}${r.propertiesCancelled ? `; ${r.propertiesCancelled.toLocaleString()} of their properties cancelled too` : ""}.`);
     setOpen(null);
+    if (body.cancel) clearSelection();
     await list.reload();
   });
   const [notice, setNotice] = useState<string | null>(null);
@@ -223,10 +231,23 @@ function Customers() {
       </section>
 
       <ErrorBox error={list.error ?? bulk.error} />
+      {cancelling && selCount > 0 && (
+        <CancelForm what={selCount === 1 ? "1 customer" : `${selCount.toLocaleString()} customers`}
+          note="Each one gets the same reason. Properties they're the current bill-to for are cancelled too; anyone already cancelled is skipped. Reactivate customers one at a time from their page."
+          onSubmit={(cancel) => api("/customers/bulk", { body: { ...selection, cancel } }).then((r: any) => {
+            setNotice(`Cancelled ${r.changed.toLocaleString()} customer${r.changed === 1 ? "" : "s"}${r.skipped ? ` (${r.skipped.toLocaleString()} already cancelled)` : ""}${r.propertiesCancelled ? `; ${r.propertiesCancelled.toLocaleString()} of their properties cancelled too` : ""}.`);
+            clearSelection(); list.reload();
+          })}
+          onClose={() => setCancelling(false)} />
+      )}
       <div className="card tablewrap cl-table-card">
-        {picked.length > 0 && (
+        {selCount > 0 && (
           <div className="cl-bulk no-print" role="toolbar" aria-label="With the selected customers">
-            <strong>{picked.length} selected</strong>
+            <strong>{allMatching ? `All ${selCount.toLocaleString()} matching selected` : `${selCount.toLocaleString()} selected`}</strong>
+            {!allMatching && allPicked && total > rows.length && (
+              <button type="button" className="linkbtn" onClick={() => setAllMatching(true)}>Select all {total.toLocaleString()} matching</button>
+            )}
+            {allMatching && <button type="button" className="linkbtn" onClick={() => setAllMatching(false)}>Just this page</button>}
             <Popover label="Add tag ▾" open={open === "addtag"} setOpen={toggle("addtag")}>
               <div className="cl-menu">{tags.filter((t) => !t.archived).map((t) => <button key={t.id} type="button" disabled={bulk.busy} onClick={() => runBulk({ addTagIds: [t.id] }, `Tagged ${t.name}`)}>{t.name}</button>)}{!tags.length && <span className="muted">No tags yet.</span>}</div>
             </Popover>
@@ -237,19 +258,20 @@ function Customers() {
               <div className="cl-menu">
                 <button type="button" disabled={bulk.busy} onClick={() => runBulk({ status: "active" }, "Marked active")}>Active</button>
                 <button type="button" disabled={bulk.busy} onClick={() => runBulk({ status: "lead" }, "Marked as leads")}>Lead</button>
-                <span className="muted" style={{ fontSize: 12, padding: "4px 8px" }}>Cancel a customer from their page (it asks why).</span>
+                <hr />
+                <button type="button" className="bad-text" onClick={() => { setCancelling(true); setOpen(null); }}>Cancelled… (asks why)</button>
               </div>
             </Popover>
-            <button type="button" className="btn" onClick={() => exportCsv(picked)}>Export selected</button>
-            <button type="button" className="btn" onClick={() => setPrintOnly(picked)}>Print selected</button>
-            <button type="button" className="linkbtn" onClick={() => setPicked([])}>Clear</button>
+            <button type="button" className="btn" disabled={exporting.busy} onClick={() => exportCsv(allMatching ? undefined : picked)}>Export selected</button>
+            {!allMatching && <button type="button" className="btn" onClick={() => setPrintOnly(picked)}>Print selected</button>}
+            <button type="button" className="linkbtn" onClick={clearSelection}>Clear</button>
           </div>
         )}
         {shownRows.length ? (
           <table className="cl-table">
             <thead>
               <tr>
-                <th className="no-print cl-check"><input type="checkbox" aria-label="Select all on this page" checked={allPicked} onChange={(e) => setPicked(e.target.checked ? rows.map((r) => r.id) : [])} /></th>
+                <th className="no-print cl-check"><input type="checkbox" aria-label="Select all on this page" checked={allPicked || allMatching} onChange={(e) => { setAllMatching(false); setPicked(e.target.checked ? rows.map((r) => r.id) : []); }} /></th>
                 {visible.map((c) => (
                   <th key={c.key} className={c.align === "right" ? "num" : undefined} aria-sort={sort === c.key ? (dir === "asc" ? "ascending" : "descending") : undefined}>
                     {c.sort ? <button type="button" className="cl-sort" onClick={() => sortBy(c.key)}>{c.label}{sort === c.key ? (dir === "asc" ? " ▲" : " ▼") : ""}</button> : c.label}
@@ -258,8 +280,13 @@ function Customers() {
               </tr>
             </thead>
             <tbody>{shownRows.map((r) => (
-              <tr key={r.id} className={picked.includes(r.id) ? "picked" : undefined}>
-                <td className="no-print cl-check"><input type="checkbox" aria-label={`Select ${r.name}`} checked={picked.includes(r.id)} onChange={(e) => setPicked(e.target.checked ? [...picked, r.id] : picked.filter((x) => x !== r.id))} /></td>
+              <tr key={r.id} className={allMatching || picked.includes(r.id) ? "picked" : undefined}>
+                <td className="no-print cl-check"><input type="checkbox" aria-label={`Select ${r.name}`} checked={allMatching || picked.includes(r.id)} onChange={(e) => {
+                  // Unticking one row while "all matching" is on goes back to the ticked rows on this page.
+                  const base = allMatching ? rows.map((x) => x.id) : picked;
+                  setAllMatching(false);
+                  setPicked(e.target.checked ? [...base, r.id] : base.filter((x) => x !== r.id));
+                }} /></td>
                 {visible.map((c) => <td key={c.key} className={c.align === "right" ? "num" : NO_WRAP.has(c.key) ? "nowrap" : undefined}><Cell col={c} c={r} tags={tags} /></td>)}
               </tr>
             ))}</tbody>

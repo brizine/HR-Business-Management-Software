@@ -140,4 +140,37 @@ describe("customer list", () => {
     expect(s.body).toMatchObject({ changed: 1, skipped: 1 });
     expect((await call("POST", "/customers/bulk", "office", { ids: [ID.ann], addTagIds: ["00000000-0000-4000-8000-000000000000"] })).status).toBe(400);
   });
+
+  it("bulk: all that match the list (not just the ticked rows), worked out on the server", async () => {
+    const vipTag = { addTagIds: [ID.vip] };
+    expect((await call("POST", "/customers/bulk", "office", vipTag)).status).toBe(400);
+    // Everyone in Norman who isn't cancelled (Ann; the HOA was cancelled above).
+    const r = await call("POST", "/customers/bulk", "office", { match: { status: "current", filters: [{ f: "city", op: "contains", v: "Norman" }] }, ...vipTag });
+    expect(r.body).toMatchObject({ changed: 1, missing: 0 });
+    expect(names(await list({ status: "all", filters: [{ f: "tags", op: "any", v: [ID.vip] }] }))).toEqual(["Ann Apple"]);
+    // A search narrows it too.
+    const s = await call("POST", "/customers/bulk", "office", { match: { status: "all", q: "berry" }, removeTagIds: [ID.map] });
+    expect(s.body.changed).toBe(1);
+    expect(names(await list({ status: "all", filters: [{ f: "tags", op: "any", v: [ID.map] }], sort: "name" }))).toEqual(["Ann Apple", "Cedar Park HOA"]);
+    expect((await call("POST", "/customers/bulk", "office", { match: { status: "bogus" }, ...vipTag })).status).toBe(400);
+  });
+
+  it("bulk cancel: needs a reason, cancels the bill-to properties too, skips the already cancelled", async () => {
+    const reasons = (await call("GET", "/crm/cancel-reasons", "office")).body;
+    const moved = reasons.find((r: any) => r.label === "Moved or sold the home");
+    const needsComment = reasons.find((r: any) => r.commentRequired);
+    expect((await call("POST", "/customers/bulk", "office", { ids: [ID.ann], cancel: {} })).status).toBe(400);
+    if (needsComment) expect((await call("POST", "/customers/bulk", "office", { ids: [ID.ann], cancel: { reasonId: needsComment.id } })).status).toBe(400);
+    expect((await call("POST", "/customers/bulk", "office", { ids: [ID.ann], cancel: { reasonId: moved.id }, addTagIds: [ID.vip] })).status).toBe(400);
+    const r = await call("POST", "/customers/bulk", "office", { ids: [ID.ann, ID.hoa], cancel: { reasonId: moved.id, comment: "Moved away" } });
+    expect(r.body).toMatchObject({ changed: 1, skipped: 1, propertiesCancelled: 1 });
+    const ann = (await call("GET", `/customers/${ID.ann}`, "office")).body;
+    expect(ann.status).toBe("cancelled");
+    expect(ann.cancellations[0]).toMatchObject({ reasonLabel: "Moved or sold the home", comment: "Moved away" });
+    expect((await call("GET", `/properties/${ID.annProp}`, "office")).body.status).toBe("cancelled");
+    // By match: everyone left in Moore who isn't cancelled (Bob, a lead since the test above).
+    const m = await call("POST", "/customers/bulk", "office", { match: { status: "current", filters: [{ f: "city", op: "equals", v: "Moore" }] }, cancel: { reasonId: moved.id } });
+    expect(m.body).toMatchObject({ changed: 1 });
+    expect((await list({ status: "all" })).counts).toMatchObject({ active: 1, cancelled: 3 });
+  });
 });

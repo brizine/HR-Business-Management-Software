@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { and, arrayContains, arrayOverlaps, asc, desc, eq, ilike, inArray, isNull, not, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
-import { cancelSchema, customerName, customerSchema, customerUpdateSchema, lawnTotal, parseCustomerFilters } from "@crewdesk/shared";
+import { BULK_MAX, cancelSchema, customerName, customerSchema, customerIdsSchema, customerMatchSchema, customerUpdateSchema, lawnTotal, parseCustomerFilters, type CustomerFilter, type CustomerSelection } from "@crewdesk/shared";
 import { db } from "../db";
 import { fieldsFor, newRecordCustom, updatedCustom } from "../lib/customFields";
 import { filterSql, listColumns, sortSql } from "../lib/customerList";
@@ -9,7 +9,7 @@ import { cancellationReasons, cancellations, customerContacts, customerCredits, 
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
-import { assignCustomer, checkTags, customerInCompany, nextCustomerNumber, recordTagChanges } from "../lib/crm";
+import { assignCustomer, checkTags, customerInCompany, nextCustomerNumber, recordTagChanges, type Tx } from "../lib/crm";
 import { queueBillingSync, syncCustomer } from "../lib/billingSync";
 
 const AREA = "customers" as const;
@@ -21,6 +21,78 @@ export function idList(v: unknown): string[] {
 }
 
 type ListQuery = { q?: string; status?: string; tags?: string; anyTags?: string; notTags?: string; limit?: string; offset?: string; filters?: string; sort?: string; dir?: string; export?: string };
+
+/**
+ * The list's search, old tag params and filter rules as SQL (everything but the status tab), and
+ * the status tab on its own, so the counts can leave it out.
+ */
+async function listWhere(companyId: string, query: { q?: string; tags?: string; anyTags?: string; notTags?: string; filters?: string | CustomerFilter[]; status?: string }) {
+  const today = await companyToday(companyId);
+  const cols = listColumns(today, `${today.slice(0, 4)}-01-01`);
+  const where: SQL[] = [eq(customers.companyId, companyId)];
+  const q = (query.q ?? "").trim().slice(0, 100);
+  if (q) {
+    const like = `%${q}%`;
+    const digits = q.replace(/\D/g, "");
+    const match = [
+      ilike(customers.firstName, like), ilike(customers.lastName, like), ilike(customers.companyName, like), ilike(customers.email, like),
+      sql`(coalesce(${customers.firstName}, '') || ' ' || coalesce(${customers.lastName}, '')) ilike ${like}`,
+      sql`exists (select 1 from property_assignments pa join properties p on p.id = pa.property_id where pa.customer_id = "customers"."id" and p.street ilike ${like})`,
+    ];
+    if (digits.length >= 4) match.push(sql`regexp_replace(coalesce(${customers.phone}, ''), '\\D', '', 'g') like ${`%${digits}%`}`);
+    if (/^\d+$/.test(q)) match.push(eq(customers.number, Number(q)));
+    where.push(or(...match)!);
+  }
+  // The older tag filters (still used by links from elsewhere).
+  const all = idList(query.tags), any = idList(query.anyTags), none = idList(query.notTags);
+  if (all.length) where.push(arrayContains(customers.tagIds, all));
+  if (any.length) where.push(arrayOverlaps(customers.tagIds, any));
+  if (none.length) where.push(not(arrayOverlaps(customers.tagIds, none)));
+  // Filter rules.
+  const rules = Array.isArray(query.filters) ? query.filters : parseCustomerFilters(query.filters);
+  if (rules.length) {
+    const custom = rules.some((r) => r.f.startsWith("cf:")) ? await fieldsFor(companyId, "customer") : [];
+    for (const r of rules) { const w = filterSql(r, cols, custom); if (w) where.push(w); }
+  }
+  const status = query.status ?? "current";
+  const statusWhere = status === "current" ? inArray(customers.status, ["active", "lead"])
+    : ["active", "lead", "cancelled"].includes(status) ? eq(customers.status, status) : undefined;
+  return { where, statusWhere, cols };
+}
+
+/** The customers a bulk action is for: the ticked ones, or all that match the list (up to BULK_MAX). */
+async function selectedIds(companyId: string, sel: CustomerSelection): Promise<string[]> {
+  if ("ids" in sel) return sel.ids;
+  const { where, statusWhere } = await listWhere(companyId, sel.match);
+  const rows = await db.select({ id: customers.id }).from(customers).where(and(...where, ...(statusWhere ? [statusWhere] : []))).limit(BULK_MAX + 1);
+  if (rows.length > BULK_MAX) throw new HttpError(400, `That's more than ${BULK_MAX.toLocaleString()} customers; narrow the list first`);
+  return rows.map((r) => r.id);
+}
+
+/** A cancel reason from this company's list (not retired), with its comment if it needs one. */
+async function cancelReason(tx: Tx, companyId: string, body: { reasonId: string; comment?: string | null }) {
+  const [reason] = await tx.select().from(cancellationReasons).where(and(eq(cancellationReasons.id, body.reasonId), eq(cancellationReasons.companyId, companyId)));
+  if (!reason || reason.retired) throw new HttpError(400, "Choose a reason from the list");
+  if (reason.commentRequired && !body.comment) throw new HttpError(400, `"${reason.label}" needs a comment`);
+  return reason;
+}
+
+/**
+ * Cancels one customer with a reason, and the properties they're the current bill-to for (nobody
+ * would be billed for them). Returns how many properties were cancelled.
+ */
+async function cancelCustomer(tx: Tx, o: { companyId: string; byId: string; customerId: string; reason: { id: string; label: string }; effectiveDate: string; comment: string | null }) {
+  const base = { companyId: o.companyId, reasonId: o.reason.id, reasonLabel: o.reason.label, effectiveDate: o.effectiveDate, comment: o.comment, byId: o.byId };
+  await tx.insert(cancellations).values({ ...base, customerId: o.customerId });
+  await tx.update(customers).set({ status: "cancelled", updatedAt: new Date() }).where(eq(customers.id, o.customerId));
+  const billed = await tx.select({ id: properties.id }).from(propertyAssignments).innerJoin(properties, eq(properties.id, propertyAssignments.propertyId))
+    .where(and(eq(propertyAssignments.customerId, o.customerId), eq(propertyAssignments.role, "bill_to"), isNull(propertyAssignments.endDate), eq(properties.status, "active")));
+  for (const p of billed) {
+    await tx.update(properties).set({ status: "cancelled", updatedAt: new Date() }).where(eq(properties.id, p.id));
+    await tx.insert(cancellations).values({ ...base, customerId: o.customerId, propertyId: p.id });
+  }
+  return billed.length;
+}
 
 /**
  * Customers: the people and companies ProSpray bills. Managers (in Customers & billing) see and
@@ -38,39 +110,11 @@ const routes: FastifyPluginAsync = async (app) => {
    */
   app.get<{ Querystring: ListQuery }>("/", async (req) => {
     const { companyId } = req.user;
-    const today = await companyToday(companyId);
-    const cols = listColumns(today, `${today.slice(0, 4)}-01-01`);
-    const where: SQL[] = [eq(customers.companyId, companyId)];
-    const q = (req.query.q ?? "").trim().slice(0, 100);
-    if (q) {
-      const like = `%${q}%`;
-      const digits = q.replace(/\D/g, "");
-      const match = [
-        ilike(customers.firstName, like), ilike(customers.lastName, like), ilike(customers.companyName, like), ilike(customers.email, like),
-        sql`(coalesce(${customers.firstName}, '') || ' ' || coalesce(${customers.lastName}, '')) ilike ${like}`,
-        sql`exists (select 1 from property_assignments pa join properties p on p.id = pa.property_id where pa.customer_id = "customers"."id" and p.street ilike ${like})`,
-      ];
-      if (digits.length >= 4) match.push(sql`regexp_replace(coalesce(${customers.phone}, ''), '\\D', '', 'g') like ${`%${digits}%`}`);
-      if (/^\d+$/.test(q)) match.push(eq(customers.number, Number(q)));
-      where.push(or(...match)!);
-    }
-    // The older tag filters (still used by links from elsewhere).
-    const all = idList(req.query.tags), any = idList(req.query.anyTags), none = idList(req.query.notTags);
-    if (all.length) where.push(arrayContains(customers.tagIds, all));
-    if (any.length) where.push(arrayOverlaps(customers.tagIds, any));
-    if (none.length) where.push(not(arrayOverlaps(customers.tagIds, none)));
-    // Filter rules.
-    const rules = parseCustomerFilters(req.query.filters);
-    if (rules.length) {
-      const custom = rules.some((r) => r.f.startsWith("cf:")) ? await fieldsFor(companyId, "customer") : [];
-      for (const r of rules) { const w = filterSql(r, cols, custom); if (w) where.push(w); }
-    }
+    const { where, statusWhere, cols } = await listWhere(companyId, req.query);
     // Counts by status for the tabs (everything but the status itself).
     const counts = await db.select({ status: customers.status, n: sql<number>`count(*)::int` }).from(customers).where(and(...where)).groupBy(customers.status);
     const count = (s: string) => counts.find((c) => c.status === s)?.n ?? 0;
-    const status = req.query.status ?? "current";
-    if (status === "current") where.push(inArray(customers.status, ["active", "lead"]));
-    else if (["active", "lead", "cancelled"].includes(status)) where.push(eq(customers.status, status));
+    if (statusWhere) where.push(statusWhere);
     const max = req.query.export === "1" ? 5000 : 250;
     const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), max);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
@@ -99,22 +143,39 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /**
-   * Several customers at once (the list's checkboxes): add or remove tags, or mark them active or
-   * leads. Cancelling has its own step, with a reason.
+   * Several customers at once: the ticked rows, or all that match the list. Add or remove tags,
+   * mark them active or leads, or cancel them with a reason (like cancelling one at a time:
+   * properties they're the current bill-to for are cancelled too). Already-cancelled customers are
+   * skipped for status changes and cancelling.
    */
   app.post("/bulk", async (req) => {
+    const raw = (req.body ?? {}) as Record<string, unknown>;
+    const sel: CustomerSelection = raw.match ? { match: parse(customerMatchSchema, raw.match) } : parse(customerIdsSchema, { ids: raw.ids });
     const body = parse(z.object({
-      ids: z.array(z.string().uuid()).min(1, "Pick the customers").max(500),
       addTagIds: z.array(z.string().uuid()).max(20).default([]),
       removeTagIds: z.array(z.string().uuid()).max(20).default([]),
       status: z.enum(["active", "lead"]).optional(),
-    }), req.body);
-    if (!body.addTagIds.length && !body.removeTagIds.length && !body.status) throw new HttpError(400, "Pick tags to add or remove, or a status");
+      cancel: cancelSchema.optional(),
+    }), raw);
+    if (!body.addTagIds.length && !body.removeTagIds.length && !body.status && !body.cancel) throw new HttpError(400, "Pick tags to add or remove, a status, or a cancel reason");
+    if (body.cancel && (body.status || body.addTagIds.length || body.removeTagIds.length)) throw new HttpError(400, "Cancel on its own, not with other changes");
     const { companyId, sub } = req.user;
+    const ids = await selectedIds(companyId, sel);
+    if (!ids.length) return { changed: 0, skipped: 0, missing: 0, propertiesCancelled: 0 };
+    const effectiveDate = body.cancel ? body.cancel.effectiveDate ?? (await companyToday(companyId)) : null;
     return db.transaction(async (tx) => {
+      const rows = await tx.select().from(customers).where(and(eq(customers.companyId, companyId), inArray(customers.id, ids)));
+      let changed = 0, skipped = 0, propertiesCancelled = 0;
+      if (body.cancel) {
+        const reason = await cancelReason(tx, companyId, body.cancel);
+        for (const c of rows) {
+          if (c.status === "cancelled") { skipped++; continue; }
+          propertiesCancelled += await cancelCustomer(tx, { companyId, byId: sub, customerId: c.id, reason, effectiveDate: effectiveDate!, comment: body.cancel.comment ?? null });
+          changed++;
+        }
+        return { changed, skipped, missing: ids.length - rows.length, propertiesCancelled };
+      }
       const add = await checkTags(tx, companyId, body.addTagIds);
-      const rows = await tx.select().from(customers).where(and(eq(customers.companyId, companyId), inArray(customers.id, body.ids)));
-      let changed = 0, skipped = 0;
       for (const c of rows) {
         const tagIds = [...new Set([...c.tagIds.filter((t) => !body.removeTagIds.includes(t)), ...add])];
         // Cancelled customers keep their status (reactivating has its own step).
@@ -126,7 +187,7 @@ const routes: FastifyPluginAsync = async (app) => {
         await recordTagChanges(tx, { companyId, before: c.tagIds, after: tagIds, customerId: c.id, source: "bulk", byId: sub });
         changed++;
       }
-      return { changed, skipped, missing: body.ids.length - rows.length };
+      return { changed, skipped, missing: ids.length - rows.length, propertiesCancelled: 0 };
     });
   });
 
@@ -205,19 +266,9 @@ const routes: FastifyPluginAsync = async (app) => {
     return db.transaction(async (tx) => {
       const c = await customerInCompany(tx, companyId, req.params.id);
       if (c.status === "cancelled") throw new HttpError(400, "That customer is already cancelled");
-      const [reason] = await tx.select().from(cancellationReasons).where(and(eq(cancellationReasons.id, body.reasonId), eq(cancellationReasons.companyId, companyId)));
-      if (!reason || reason.retired) throw new HttpError(400, "Choose a reason from the list");
-      if (reason.commentRequired && !body.comment) throw new HttpError(400, `"${reason.label}" needs a comment`);
-      const base = { companyId, reasonId: reason.id, reasonLabel: reason.label, effectiveDate, comment: body.comment ?? null, byId: sub };
-      await tx.insert(cancellations).values({ ...base, customerId: c.id });
-      await tx.update(customers).set({ status: "cancelled", updatedAt: new Date() }).where(eq(customers.id, c.id));
-      const billed = await tx.select({ id: properties.id }).from(propertyAssignments).innerJoin(properties, eq(properties.id, propertyAssignments.propertyId))
-        .where(and(eq(propertyAssignments.customerId, c.id), eq(propertyAssignments.role, "bill_to"), isNull(propertyAssignments.endDate), eq(properties.status, "active")));
-      for (const p of billed) {
-        await tx.update(properties).set({ status: "cancelled", updatedAt: new Date() }).where(eq(properties.id, p.id));
-        await tx.insert(cancellations).values({ ...base, customerId: c.id, propertyId: p.id });
-      }
-      return { ok: true, propertiesCancelled: billed.length };
+      const reason = await cancelReason(tx, companyId, body);
+      const propertiesCancelled = await cancelCustomer(tx, { companyId, byId: sub, customerId: c.id, reason, effectiveDate, comment: body.comment ?? null });
+      return { ok: true, propertiesCancelled };
     });
   });
 
