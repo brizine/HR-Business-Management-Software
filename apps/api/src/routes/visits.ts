@@ -9,7 +9,7 @@ import {
 } from "@crewdesk/shared";
 import { db } from "../db";
 import type { Tx } from "../lib/crm";
-import { customers, employees, invoiceLines, invoices, properties, propertyAssignments, serviceTypes, visitAssignees, visitLines, visits } from "../db/schema";
+import { crews, customers, employees, invoiceLines, invoices, properties, propertyAssignments, serviceTypes, visitAssignees, visitLines, visits } from "../db/schema";
 import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { addDays, billingSettings } from "../lib/invoices";
@@ -50,6 +50,8 @@ export async function presentVisits(req: FastifyRequest, rows: Visit[]) {
     .from(properties).where(inArray(properties.id, propIds)) : [];
   const inv = invIds.length ? await db.select({ id: invoices.id, number: invoices.number, status: invoices.status }).from(invoices).where(inArray(invoices.id, invIds)) : [];
   const es = people.length ? await db.select({ id: employees.id, firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(inArray(employees.id, people)) : [];
+  const crewIds = [...new Set(rows.map((v) => v.crewId).filter((x): x is string => !!x))];
+  const cr = crewIds.length ? await db.select({ id: crews.id, name: crews.name, color: crews.color }).from(crews).where(inArray(crews.id, crewIds)) : [];
   const name = (id: string | null) => { const e = es.find((x) => x.id === id); return e ? `${e.firstName} ${e.lastName}` : null; };
   return rows.map((v) => {
     const c = cs.find((x) => x.id === v.customerId)!;
@@ -63,6 +65,7 @@ export async function presentVisits(req: FastifyRequest, rows: Visit[]) {
       customer: { id: c.id, name: customerName(c), phone: c.phone, tagIds: c.tagIds },
       property: p ? { id: p.id, name: p.name, address: formatAddress(p), gateCode: p.gateCode, pets: p.pets, accessNotes: p.accessNotes, lawnSqFt: p.lawnSqFt, lat: p.lat, lng: p.lng } : null,
       invoice: i ? { id: i.id, number: i.number, status: i.status } : null,
+      crew: cr.find((x) => x.id === v.crewId) ?? null,
       invoiced: v.billing === "invoice" ? !!i && i.status !== "void" : null,
       trackedMinutes: minutesBetween(v.startedAt, v.completedAt),
       finishedBy: name(v.finishedById),
@@ -95,6 +98,10 @@ async function checkInput(companyId: string, body: VisitUpdate) {
     const found = await db.select({ id: serviceTypes.id }).from(serviceTypes).where(and(eq(serviceTypes.companyId, companyId), inArray(serviceTypes.id, svc)));
     if (found.length !== svc.length) throw new HttpError(400, "One of those services isn't on the price list");
   }
+  if (body.crewId) {
+    const [c] = await db.select({ id: crews.id }).from(crews).where(and(eq(crews.id, body.crewId), eq(crews.companyId, companyId)));
+    if (!c) throw new HttpError(400, "That crew doesn't exist");
+  }
   const crew = [...new Set(body.assigneeIds)];
   if (crew.length) {
     const found = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.companyId, companyId), inArray(employees.id, crew), notInArray(employees.status, INACTIVE_STATUSES)));
@@ -104,7 +111,7 @@ async function checkInput(companyId: string, body: VisitUpdate) {
 }
 
 const fields = (b: VisitUpdate) => ({
-  title: b.title, customerId: b.customerId, propertyId: b.propertyId, color: b.color, location: b.location ?? null, billing: b.billing,
+  title: b.title, customerId: b.customerId, propertyId: b.propertyId, color: b.color, location: b.location ?? null, billing: b.billing, crewId: b.crewId ?? null,
   startTime: b.startTime ?? null, endTime: b.startTime ? b.endTime ?? null : null, notes: b.notes ?? null,
   budgetedHours: b.budgetedHours ?? (b.lines.length ? visitLineHours(b.lines) || null : null),
   totalCents: visitTotal(b.lines),
@@ -180,6 +187,7 @@ const routes: FastifyPluginAsync = async (app) => {
     if (q.status && ["open", "on_site", "completed", "skipped"].includes(q.status)) where.push(eq(visits.status, q.status));
     if (q.status === "active") where.push(inArray(visits.status, ["open", "on_site"]));
     if (q.customerId) where.push(eq(visits.customerId, q.customerId));
+    if (q.crewId) where.push(q.crewId === "none" ? isNull(visits.crewId) : eq(visits.crewId, q.crewId));
     if (q.propertyId) where.push(eq(visits.propertyId, q.propertyId));
     const who = q.mine === "true" ? me : q.assigneeId;
     if (who === "none") where.push(sql`not exists (select 1 from visit_assignees va where va.visit_id = ${visits.id})`);

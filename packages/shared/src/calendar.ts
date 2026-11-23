@@ -56,6 +56,8 @@ export interface CalendarEvent {
   trackedMinutes: number | null;
   /** Work orders: the price list services on it, for the Item/Service filter. */
   serviceIds: string[];
+  /** Work orders: the crew it's for. */
+  crew: { id: string; name: string; color: string } | null;
   href: string | null;
   /** Whether you can drag it to another day. */
   canMove: boolean;

@@ -49,6 +49,7 @@ export function MyWorkOrdersCard({ refreshKey }: { refreshKey?: number }) {
               </Row>
               <Txt muted>{[v.date ? day(v.date) : "Waitlist", formatTodoTime(v.startTime, v.endTime)].filter(Boolean).join(" · ")}</Txt>
               <Txt>{v.customer.name}{v.customer.phone ? ` · ${v.customer.phone}` : ""}</Txt>
+              {v.crew ? <Txt muted>Crew: {v.crew.name}</Txt> : null}
               {p ? (
                 <Pressable onPress={() => openMap(p.address, p.lat, p.lng)} accessibilityRole="link" accessibilityLabel={`Directions to ${p.address}`}>
                   <Txt style={{ color: t.primary }}>{p.address}</Txt>

@@ -56,7 +56,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
 - **Operations:** **Customers** (Customers, Properties), **Schedule** (Calendar, Work orders, To-dos), **Billing** (Invoices, Price list), **Field**
   (Property Measure, Spray Mix Calculator), **Fleet** (Assets, Repair Orders, Inspections) and **Reports**
   (managers). Scheduling and customer messages will be added here.
-- **Team:** **Dashboard** (managers), **People** (Team, Shifts, Time Clock, Attendance, Time Off, Reviews &
+- **Team:** **Dashboard** (managers), **People** (Team, Shifts, Crews, Time Clock, Attendance, Time Off, Reviews &
   Discipline, Training, Documents, Onboarding, Hiring), **Pay** (Payroll, Accounting, Pay & Tax Forms) and
   **Reports** (managers).
 - **On a phone:** the menu button at the top left opens the menu, with the Operations | Team switch at its top
@@ -185,6 +185,12 @@ Operations → **Billing** has **Invoices** and the **Price list** (managers in 
   minimum charge), or **by lawn size** (brackets such as "up to 8,000 sq ft $75, larger $95"). Each service posts to
   an income account (4000 Lawn Treatment Programs, 4100 Pest Control, 4200 One-Time Lawn Services, 4950 Other
   Income). Use ↑ ↓ to set the order; **Retired** services stay on past invoices but aren't offered for new ones.
+- **Packages** (under the price list): saved bundles of line items, like Homeworks' packages: "Spring round" =
+  fertilizer + edging + blow-off. Admins add them with **Add package**: pick services from the price list or type
+  custom items, with quantity, budgeted hours and price. Leave a service's price blank to price it for each
+  property's lawn when the package is added (custom items need a price). On a work order, **Add package…** next to
+  **Add line** adds all its items at once; change any of them after. Retired packages aren't offered; work orders
+  already made from a package keep their items.
 - **New invoice** (Billing → Invoices, the top bar's **+ New**, or **New invoice** on a customer's page): choose the
   customer and service address, then add lines. Picking a service fills in its price from the property's lawn size;
   you can change any description, quantity or price, or add a custom line. Add a discount (amount or percent) and
@@ -351,7 +357,9 @@ are numbered **WO-1001**, **WO-1002** and so on. Open them from **Schedule → W
     date, up to three years), or **Add to the waitlist** (no date yet). A series can skip an **off-season** (tap
     the months with no work, such as Dec, Jan, Feb). The form shows how many work orders it will make and their
     total. Also **More than one day**, **Set a time** and **Budgeted hours** (blank: the line items' hours).
-  - **Crew:** tick the people doing it; they get a notification, and a reminder the morning it's scheduled.
+  - **Line items** can also come from a **package** (**Add package…** next to **Add line**).
+  - **Crew:** pick a **crew** to fill in its people, then tick or untick anyone (or skip the crew and just tick
+    people). They get a notification, and a reminder the morning it's scheduled.
   - **Notes for the crew:** gate, where to start, what to watch for.
 - **Who sees what:** Customers & billing managers see, schedule and invoice every work order. Everyone else sees
   the ones they're on, without prices.
@@ -359,7 +367,7 @@ are numbered **WO-1001**, **WO-1002** and so on. Open them from **Schedule → W
   **Skip** with a reason. The time from arriving to finishing is kept as **time on site**. **Undo** reopens it
   (not once it's on an invoice).
 - **The Work orders page:** **Show** Coming up, Waitlist, **Ready to invoice**, Completed, Skipped or All;
-  filter by **Crew** and **Search** (WO number, title or notes). Overdue open ones are marked.
+  filter by **Person**, **Crew** and **Search** (WO number, title or notes). Overdue open ones are marked.
 - **Invoicing:** on a work order, **Create invoice** makes a draft invoice with its line items. Or choose
   **Show → Ready to invoice**, pick several and **Create invoices**: one draft per customer and property, each line
   dated. Review and send them from Invoices as usual. Deleting a draft (or voiding an invoice) puts the work
@@ -368,9 +376,24 @@ are numbered **WO-1001**, **WO-1002** and so on. Open them from **Schedule → W
   that aren't done; moving the date moves them all by as many days). Put it **On the waitlist** to take its date
   off. **Delete** (one, or this and later); work orders on an invoice stay.
 - **On the calendar** they show first, with their price (managers), the day's **$ total** and the range's total.
-  The **Invoice**, **On site**, **Tracked time** and **Item/Service** filters and the **Revenue** sorts work on them.
+  The **Invoice**, **On site**, **Tracked time**, **Crew** and **Item/Service** filters and the **Revenue** sorts work on them.
   The waitlist (hourglass) lists work orders with no date: drag one onto a day. **+** on a day asks **Work order**
   or **To-do**.
+
+## Crews
+
+**Team → People → Crews** (Customers & billing managers), like Homeworks' crews: the teams you send out, such as
+"Spray crew" or "Mowing 1".
+
+- **Add crew:** a **name**, a **color** (it shows on work orders), the **crew lead**, the **members** and the
+  **truck or equipment** they take (from Fleet), plus notes.
+- **On work orders:** pick the crew on the work order form and its people are filled in. The crew shows on the
+  work order, the Work orders list (with a **Crew** filter), the calendar (a **Crew** filter, and the crew's name on
+  each card) and the crew's phones.
+- **Changing a crew's people:** when you save, **Also give this crew's open work orders (today on) the new people**
+  (ticked unless you untick it) updates those work orders; past and finished ones keep who did them.
+- **Inactive** crews aren't offered on new work orders. Deleting a crew leaves its work orders and their people as
+  they are. Each crew card has **Work orders** to see that crew's.
 
 ## Calendar
 

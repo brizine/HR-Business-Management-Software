@@ -74,10 +74,10 @@ export function useCalSettings(userId: string | undefined) {
 }
 
 /* ───────── Filters ───────── */
-export type FilterKind = "status" | "recurring" | "person" | "customer" | "tag" | "invoice" | "onsite" | "tracked" | "service";
+export type FilterKind = "status" | "recurring" | "person" | "crew" | "customer" | "tag" | "invoice" | "onsite" | "tracked" | "service";
 export type CalFilter = { kind: FilterKind; value: string; label: string };
 export const FILTER_LABELS: Record<FilterKind, string> = {
-  status: "Status", recurring: "Repeats", invoice: "Invoice", onsite: "On site", tracked: "Tracked time", person: "Person", customer: "Customer", service: "Item/Service", tag: "Tag",
+  status: "Status", recurring: "Repeats", invoice: "Invoice", onsite: "On site", tracked: "Tracked time", crew: "Crew", person: "Person", customer: "Customer", service: "Item/Service", tag: "Tag",
 };
 export function applyFilters(list: CalendarEvent[], filters: CalFilter[], search: string) {
   const q = search.trim().toLowerCase();
@@ -88,6 +88,7 @@ export function applyFilters(list: CalendarEvent[], filters: CalFilter[], search
       if (f.kind === "recurring") return f.value === "yes" ? e.recurring : !e.recurring;
       if (f.kind === "person") return f.value === "none" ? !e.people.length : e.people.some((p) => p.id === f.value);
       if (f.kind === "customer") return e.customer?.id === f.value;
+      if (f.kind === "crew") return f.value === "none" ? e.type === "visit" && !e.crew : e.crew?.id === f.value;
       if (f.kind === "tag") return e.tagIds.includes(f.value);
       // Work-order filters leave everything else out.
       if (f.kind === "invoice") return e.invoiced !== null && e.invoiced === (f.value === "yes");
@@ -155,7 +156,7 @@ export function EventCard({ e, s, onOpen, compact }: { e: CalendarEvent; s: CalS
     s.details.time && time,
     s.details.customer && e.customer?.name,
     s.details.location && (e.property?.address ?? e.location),
-    s.details.people && e.people.map((p) => p.name).join(", "),
+    s.details.people && [e.crew?.name, e.people.map((p) => p.name).join(", ")].filter(Boolean).join(" · "),
     s.details.amount && e.amountCents != null ? formatMoney(e.amountCents) : null,
     s.details.hours && e.hours ? `${e.hours} h` : null,
     s.details.type && CALENDAR_TYPE_INFO[e.type].label,
@@ -201,7 +202,8 @@ export function EventPopover({ e, s, onClose, onChanged, anchor }: { e: Calendar
         <dt>When</dt><dd>{when}</dd>
         {e.customer && <><dt>Customer</dt><dd>{e.customer.name}</dd></>}
         {(e.property || e.location) && <><dt>{e.property ? "Address" : "Where"}</dt><dd>{e.property?.address ?? e.location}</dd></>}
-        {e.people.length > 0 && <><dt>{e.type === "repair" ? "Assigned" : "For"}</dt><dd>{e.people.map((p) => p.name).join(", ")}</dd></>}
+        {e.crew && <><dt>Crew</dt><dd>{e.crew.name}</dd></>}
+        {e.people.length > 0 && <><dt>{e.type === "repair" ? "Assigned" : e.crew ? "People" : "For"}</dt><dd>{e.people.map((p) => p.name).join(", ")}</dd></>}
         {e.hours != null && <><dt>Hours</dt><dd>{e.hours}</dd></>}
         {e.amountCents != null && <><dt>Price</dt><dd>{formatMoney(e.amountCents)}{e.invoiced ? " · invoiced" : ""}</dd></>}
         {e.notes && <><dt>Notes</dt><dd className="cal-pop-notes">{e.notes}</dd></>}

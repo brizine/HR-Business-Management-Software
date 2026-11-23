@@ -59,6 +59,7 @@ export const NAV: Record<Side, NavGroup[]> = {
       items: [
         { href: "/people", label: "Team" },
         { href: "/schedule", label: "Shifts" },
+        { href: "/crews", label: "Crews", min: "manager", area: "customers" },
         { href: "/time", label: "Time Clock" },
         { href: "/attendance", label: "Attendance" },
         { href: "/time-off", label: "Time Off" },

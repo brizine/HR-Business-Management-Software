@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   DEFAULT_TODO_COLOR, MONTH_SHORT, REPEAT_UNITS, TODO_COLORS, VISIT_BILLING, VISIT_BILLING_LABELS, VISIT_SCHEDULING, VISIT_SCHEDULING_LABELS,
-  describePricing, formatMoney, formatTodoTime, isInactive, lineAmount, priceFor, visitDates, visitLineHours, visitNumber,
+  describePricing, formatMoney, formatTodoTime, isInactive, lineAmount, packageToLines, priceFor, visitDates, visitLineHours, visitNumber,
   type RepeatUnit, type VisitBilling, type VisitScheduling,
 } from "@crewdesk/shared";
 import { api } from "@/lib/api";
@@ -20,6 +20,7 @@ export interface Visit {
   status: "open" | "on_site" | "completed" | "skipped"; statusLabel: string; startedAt: string | null; completedAt: string | null; skippedAt: string | null;
   skipReason: string | null; notes: string | null; completionNotes: string | null; seriesId: string | null; repeatLabel: string | null;
   customerId: string; propertyId: string | null; invoiceId: string | null; invoiced: boolean | null; trackedMinutes: number | null;
+  crewId: string | null; crew: { id: string; name: string; color: string } | null;
   customer: { id: string; name: string; phone: string | null };
   property: { id: string; name: string | null; address: string; gateCode: string | null; pets: string | null; accessNotes: string | null; lawnSqFt: number | null; lat: number | null; lng: number | null } | null;
   invoice: { id: string; number: number | null; status: string } | null;
@@ -30,7 +31,10 @@ export interface Visit {
 export const dayLabel = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
 export const visitWhen = (v: Pick<Visit, "date" | "endDate" | "startTime" | "endTime">) =>
   !v.date ? "Waitlist (no date yet)" : [v.endDate ? `${dayLabel(v.date)} – ${dayLabel(v.endDate)}` : dayLabel(v.date), formatTodoTime(v.startTime, v.endTime)].filter(Boolean).join(" · ");
-export const crewNames = (v: Pick<Visit, "assignees">) => v.assignees.map((a) => `${a.firstName} ${a.lastName}`).join(", ");
+export const crewNames = (v: Pick<Visit, "assignees"> & { crew?: Visit["crew"] }) => {
+  const people = v.assignees.map((a) => `${a.firstName} ${a.lastName}`).join(", ");
+  return v.crew ? `${v.crew.name}${people ? ` (${people})` : ""}` : people;
+};
 const TONE: Record<string, string> = { open: "", on_site: "warn", completed: "ok", skipped: "bad" };
 export function VisitStatus({ v }: { v: Pick<Visit, "status" | "statusLabel"> }) {
   return <span className={`badge ${TONE[v.status] ?? ""}`}>{v.statusLabel}</span>;
@@ -104,12 +108,15 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
   const [until, setUntil] = useState(plusDays(date, 180));
   const [offMonths, setOffMonths] = useState<number[]>([]);
   const [crew, setCrew] = useState<string[]>(visit?.assignees.map((a) => a.id) ?? []);
+  const [crewId, setCrewId] = useState(visit?.crewId ?? "");
   const [notes, setNotes] = useState(visit?.notes ?? "");
   const [applyTo, setApplyTo] = useState<"one" | "following">("one");
   const save = useAction();
   const services = useApi<any[]>("/service-types");
   const detail = useApi<any>(customer ? `/customers/${customer.id}` : null);
   const staff = useApi<any[]>("/employees");
+  const crews = useApi<{ id: string; name: string; color: string; memberIds: string[]; active: boolean }[]>("/crews?all=1");
+  const pkgs = useApi<{ id: string; name: string; active: boolean; lines: any[] }[]>("/packages");
   const properties: any[] = (detail.data?.properties ?? []).filter((p: any) => !p.endDate);
   const property = properties.find((p) => p.id === propertyId);
   useEffect(() => { if (detail.data && !propertyId && properties.length === 1) setPropertyId(properties[0].id); }, [detail.data]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -145,7 +152,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
         title, customerId: customer?.id, propertyId, color, location, billing, lines: parsed, notes,
         date: scheduling === "waitlist" ? null : date, endDate: multi && scheduling === "single" ? endDate : null,
         startTime: timed && scheduling !== "waitlist" ? startTime : null, endTime: timed && scheduling !== "waitlist" ? endTime || null : null,
-        budgetedHours: hours.trim() === "" ? null : Number(hours), assigneeIds: crew,
+        budgetedHours: hours.trim() === "" ? null : Number(hours), assigneeIds: crew, crewId: crewId || null,
         ...(visit ? {} : { scheduling, repeatEvery: Number(every) || 1, repeatUnit: unit, repeatUntil: scheduling === "repeat" ? until : null, offMonths }),
       };
       const r = visit
@@ -216,7 +223,25 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
               </tr>
             );
           })}</tbody>
-          <tfoot><tr><td colSpan={2}><button type="button" className="btn" onClick={() => setLines((ls) => [...ls, draftLine()])}><Icon name="plus" size={14} /> Add line</button></td>
+          <tfoot><tr><td colSpan={2}>
+            <div className="row" style={{ gap: 6 }}>
+              <button type="button" className="btn" onClick={() => setLines((ls) => [...ls, draftLine()])}><Icon name="plus" size={14} /> Add line</button>
+              {!!pkgs.data?.length && (
+                <select aria-label="Add a package" value="" className="pkg-select" onChange={(e) => {
+                  const pkg = pkgs.data?.find((p) => p.id === e.target.value);
+                  if (!pkg) return;
+                  const added = packageToLines(pkg.lines, services.data ?? [], property?.lawnSqFt ?? null).map((l) => ({
+                    serviceTypeId: l.serviceTypeId, description: l.description, quantity: String(l.quantity), hours: l.budgetedHours != null ? String(l.budgetedHours) : "", price: dollars(l.unitPriceCents),
+                  }));
+                  // An untouched empty first line is replaced.
+                  setLines((ls) => [...ls.filter((l) => l.description.trim() || l.price.trim()), ...added]);
+                }}>
+                  <option value="">Add package…</option>
+                  {pkgs.data.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
+            </div>
+          </td>
             <td className="muted">{lineHours ? `${lineHours} h` : ""}</td><td style={{ textAlign: "right" }}><strong>Total</strong></td><td style={{ textAlign: "right" }}><strong>{formatMoney(total)}</strong></td><td /></tr></tfoot>
         </table>
       </div>
@@ -278,6 +303,18 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
       )}
 
       <h3 className="todo-section">Crew</h3>
+      <label style={{ maxWidth: 320 }}>Crew
+        <select value={crewId} onChange={(e) => {
+          setCrewId(e.target.value);
+          const c = crews.data?.find((x) => x.id === e.target.value);
+          if (c) setCrew(c.memberIds);
+        }}>
+          <option value="">No crew</option>
+          {(crews.data ?? []).filter((c) => c.active || c.id === crewId).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        {!crews.data?.length && <span className="muted" style={{ fontSize: 12 }}>Set up crews on Team → Crews.</span>}
+      </label>
+      <span className="todo-label">People on it{crewId ? " (the crew's members; add or take off anyone)" : ""}</span>
       <div className="todo-people" role="group" aria-label="Crew">
         {team.map((e) => (
           <label key={e.id} className="check"><input type="checkbox" checked={crew.includes(e.id)} onChange={() => setCrew((c) => (c.includes(e.id) ? c.filter((x) => x !== e.id) : [...c, e.id]))} /> {e.firstName} {e.lastName}{e.title ? <span className="muted"> · {e.title}</span> : null}</label>

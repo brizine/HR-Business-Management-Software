@@ -63,6 +63,8 @@ const visitFields = z.object({
   /** Left empty, it's the line items' budgeted hours added up. */
   budgetedHours: z.preprocess(blankToNull, z.coerce.number().min(0).max(999).nullable()).optional(),
   assigneeIds: z.array(z.string().uuid()).max(50).default([]),
+  /** The crew it's for (its members are usually the people above). */
+  crewId: z.preprocess(blankToNull, z.string().uuid().nullable()).optional(),
   /** For the crew (gate, where to start, what to watch for). */
   notes: z.preprocess(blankToNull, z.string().trim().max(5000).nullable()).optional(),
   repeatEvery: z.coerce.number().int().min(1).max(52).default(1),

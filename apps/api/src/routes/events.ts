@@ -24,7 +24,7 @@ const name = (e: { firstName: string | null; lastName: string | null } | null) =
 const base = (over: Partial<CalendarEvent> & Pick<CalendarEvent, "type" | "id" | "title" | "date">): CalendarEvent => ({
   key: `${over.type}:${over.id}`, endDate: null, startTime: null, endTime: null, color: null, status: "open", statusLabel: "Open",
   recurring: false, customer: null, property: null, location: null, people: [], hours: null, notes: null, tagIds: [], href: null,
-  amountCents: null, invoiced: null, onSite: false, trackedMinutes: null, serviceIds: [],
+  amountCents: null, invoiced: null, onSite: false, trackedMinutes: null, serviceIds: [], crew: null,
   canMove: false, canComplete: false, ...over,
 });
 
@@ -40,7 +40,7 @@ async function visitEvents(req: Req, rows: ShownVisit[]): Promise<CalendarEvent[
       customer: { id: v.customer.id, name: v.customer.name }, property: v.property ? { id: v.property.id, address: v.property.address } : null, location: v.location,
       people: v.assignees.map((a) => ({ id: a.id, name: `${a.firstName} ${a.lastName}` })), hours: v.budgetedHours, notes: v.notes, tagIds: v.customer.tagIds ?? [],
       href: `/visits/${v.id}`, amountCents: v.billing === "invoice" ? v.totalCents : null, invoiced: v.invoiced, onSite: v.status === "on_site",
-      trackedMinutes: v.trackedMinutes, serviceIds: v.lines.map((l) => l.serviceTypeId).filter((x): x is string => !!x),
+      trackedMinutes: v.trackedMinutes, serviceIds: v.lines.map((l) => l.serviceTypeId).filter((x): x is string => !!x), crew: v.crew,
       canMove: manage && !done, canComplete: !done && (manage || crew),
     });
   });

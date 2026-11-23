@@ -48,6 +48,8 @@ import searchRoutes from "./routes/search";
 import todoRoutes from "./routes/todos";
 import eventRoutes from "./routes/events";
 import visitRoutes from "./routes/visits";
+import crewRoutes from "./routes/crews";
+import packageRoutes from "./routes/packages";
 import { flushBillingSync } from "./lib/billingSync";
 import serviceTypeRoutes from "./routes/serviceTypes";
 import invoiceRoutes from "./routes/invoices";
@@ -148,6 +150,8 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(todoRoutes, { prefix: "/todos" });
   await app.register(eventRoutes, { prefix: "/events" });
   await app.register(visitRoutes, { prefix: "/visits" });
+  await app.register(crewRoutes, { prefix: "/crews" });
+  await app.register(packageRoutes, { prefix: "/packages" });
   await app.register(serviceTypeRoutes, { prefix: "/service-types" });
   await app.register(invoiceRoutes, { prefix: "/invoices" });
   await app.register(creditRoutes, { prefix: "/credits" });

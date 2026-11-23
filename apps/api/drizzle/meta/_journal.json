@@ -477,6 +477,13 @@
       "when": 1795390385240,
       "tag": "0067_work_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1795393071289,
+      "tag": "0068_crews_packages",
+      "breakpoints": true
     }
   ]
 }

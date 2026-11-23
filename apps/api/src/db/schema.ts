@@ -1725,6 +1725,8 @@ export const visits = pgTable(
     /** What the crew wrote when they finished. */
     completionNotes: text("completion_notes"),
     seriesId: uuid("series_id"),
+    /** The crew it went to (its members were copied to visit_assignees). */
+    crewId: uuid("crew_id").references((): AnyPgColumn => crews.id, { onDelete: "set null" }),
     /** "Every 6 weeks (not Dec, Jan, Feb)" for a series. */
     repeatLabel: text("repeat_label"),
     invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
@@ -1766,3 +1768,61 @@ export const visitAssignees = pgTable(
   },
   (t) => [primaryKey({ columns: [t.visitId, t.employeeId] }), index("visit_assignees_employee_idx").on(t.employeeId)],
 );
+
+/** Crews (like Homeworks'): a named team with a lead, members and the truck they take. */
+export const crews = pgTable(
+  "crews",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    color: text("color").notNull().default("#2563eb"),
+    leadId: uuid("lead_id").references(() => employees.id, { onDelete: "set null" }),
+    assetId: uuid("asset_id").references(() => assets.id, { onDelete: "set null" }),
+    notes: text("notes"),
+    active: boolean("active").notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [index("crews_company_idx").on(t.companyId)],
+);
+
+export const crewMembers = pgTable(
+  "crew_members",
+  {
+    crewId: uuid("crew_id").notNull().references(() => crews.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.crewId, t.employeeId] }), index("crew_members_employee_idx").on(t.employeeId)],
+);
+
+/** Packages: a saved bundle of line items added to a work order in one go. */
+export const packages = pgTable(
+  "packages",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    description: text("description"),
+    active: boolean("active").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("packages_company_idx").on(t.companyId)],
+);
+
+export const packageLines = pgTable(
+  "package_lines",
+  {
+    id: id(),
+    packageId: uuid("package_id").notNull().references(() => packages.id, { onDelete: "cascade" }),
+    serviceTypeId: uuid("service_type_id").references(() => serviceTypes.id, { onDelete: "set null" }),
+    description: text("description").notNull(),
+    quantity: doublePrecision("quantity").notNull().default(1),
+    budgetedHours: doublePrecision("budgeted_hours"),
+    /** Null: the service's price for the property's lawn. */
+    unitPriceCents: integer("unit_price_cents"),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("package_lines_package_idx").on(t.packageId)],
+);
+

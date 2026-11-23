@@ -1251,3 +1251,13 @@ a.pt-row:hover { background: var(--bg); }
 .cal-add-kind { margin: 0 0 8px; background: var(--surface); }
 .cal-add-kind button { width: auto; padding: 0 14px; font: inherit; font-weight: 600; }
 
+/* Crews and packages */
+.crew-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.crew-grid .card { margin: 0; }
+.crew-card { display: grid; gap: 8px; border-top: 4px solid var(--primary); }
+.crew-members li { padding: 2px 0; }
+.package-list > li { padding: 10px 0; border-top: 1px solid var(--border); }
+.package-list > li:first-child { border-top: 0; }
+.package-lines { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+.pkg-select { width: auto; min-width: 170px; }
+

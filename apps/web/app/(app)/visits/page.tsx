@@ -20,6 +20,10 @@ function WorkOrders() {
   const manager = can("manager", "customers");
   const [view, setView] = useState<View>("upcoming");
   const [who, setWho] = useState(manager ? "all" : "mine");
+  const [crewF, setCrewF] = useState("");
+  // From a crew's card on the Crews page (?crew=…).
+  useEffect(() => { const c = new URL(window.location.href).searchParams.get("crew"); if (c) setCrewF(c); }, []);
+  const crews = useApi<{ id: string; name: string }[]>("/crews?all=1");
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
   useEffect(() => { const t = setTimeout(() => setQuery(q), 250); return () => clearTimeout(t); }, [q]);
@@ -34,9 +38,10 @@ function WorkOrders() {
     if (view === "completed" || view === "skipped") { p.set("status", view); p.set("order", "recent"); }
     if (view === "all") p.set("order", "recent");
     if (who === "mine") p.set("mine", "true"); else if (who !== "all") p.set("assigneeId", who);
+    if (crewF) p.set("crewId", crewF);
     if (query.trim()) p.set("q", query.trim());
     return `/visits?${p}`;
-  }, [view, who, query]);
+  }, [view, who, query, crewF]);
   const list = useApi<{ today: string; items: Visit[]; more: boolean }>(path);
   const staff = useApi<any[]>(manager ? "/employees" : null);
   useEffect(() => { setPicked([]); }, [path]);
@@ -59,10 +64,18 @@ function WorkOrders() {
           </select>
         </label>
         {manager && (
-          <label>Crew
+          <label>Person
             <select value={who} onChange={(e) => setWho(e.target.value)}>
               <option value="all">Everyone</option><option value="mine">Me</option><option value="none">No crew yet</option>
               {(staff.data ?? []).filter((e) => !isInactive(e.status) && e.id !== me?.user.id).map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
+            </select>
+          </label>
+        )}
+        {!!crews.data?.length && (
+          <label>Crew
+            <select value={crewF} onChange={(e) => setCrewF(e.target.value)}>
+              <option value="">Any crew</option><option value="none">No crew</option>
+              {crews.data.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
         )}
@@ -94,7 +107,7 @@ function WorkOrders() {
                   <td>{visitWhen(v)}{overdue(v) && <div><span className="badge bad">overdue</span></div>}</td>
                   <td>{v.customer.name}<div className="muted" style={{ fontSize: 13 }}>{v.property?.address ?? v.location ?? ""}</div></td>
                   <td><Link href={`/visits/${v.id}`}>{v.title}</Link>{v.seriesId && <span className="todo-repeat" title={v.repeatLabel ?? "Repeats"}> ↻</span>}</td>
-                  <td>{crewNames(v) || <span className="muted">No crew</span>}</td>
+                  <td>{v.crew && <span className="visit-dot" style={{ background: v.crew.color }} />}{crewNames(v) || <span className="muted">No crew</span>}</td>
                   {manager && <td style={{ textAlign: "right" }}>{v.billing === "invoice" ? formatMoney(v.totalCents) : <span className="muted">No charge</span>}</td>}
                   <td><VisitStatus v={v} />{v.invoiced && <div><Link className="muted" style={{ fontSize: 12 }} href={`/invoices/${v.invoice!.id}`}>{v.invoice!.number ? `Invoice ${v.invoice!.number}` : "Draft invoice"}</Link></div>}</td>
                 </tr>

@@ -50,7 +50,7 @@ export default function WorkOrder({ params }: { params: Promise<{ id: string }> 
               {v.property?.lawnSqFt && <><dt>Lawn</dt><dd>{Math.round(v.property.lawnSqFt).toLocaleString()} sq ft</dd></>}
               {v.location && <><dt>Location</dt><dd>{v.location}</dd></>}
               <dt>When</dt><dd>{visitWhen(v)}</dd>
-              <dt>Crew</dt><dd>{crewNames(v) || "No crew yet"}</dd>
+              <dt>Crew</dt><dd>{v.crew && <span className="visit-dot" style={{ background: v.crew.color }} />}{crewNames(v) || "No crew yet"}</dd>
               {v.budgetedHours != null && <><dt>Budgeted</dt><dd>{v.budgetedHours} hour{v.budgetedHours === 1 ? "" : "s"}</dd></>}
               {v.notes && <><dt>Notes</dt><dd style={{ whiteSpace: "pre-wrap" }}>{v.notes}</dd></>}
             </dl>

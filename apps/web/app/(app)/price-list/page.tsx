@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useNewForm } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
 import { dollars, toCents, useServices, type ServiceType } from "@/components/invoices";
+import { PackagesCard } from "@/components/packages";
 
 /** The services price list. Everyone in Customers & billing sees it; admins change it. */
 export default function PriceList() {
@@ -53,6 +54,7 @@ export default function PriceList() {
           </table>
         ) : services.loading ? <Empty>Loading…</Empty> : <Empty>No services yet.{admin ? " Add your lawn programs, pest control and one-time services." : " An admin adds them."}</Empty>}
       </div>
+      <PackagesCard />
     </>
   );
 }

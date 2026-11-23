@@ -90,6 +90,7 @@ function Sidebar({ s, set, anchor, from, to, today, onPick, counts }: {
 function FilterBar({ filters, setFilters, events, tags, services }: { filters: CalFilter[]; setFilters: (f: CalFilter[]) => void; events: CalendarEvent[]; tags: { id: string; name: string }[]; services: { id: string; name: string }[] }) {
   const [kind, setKind] = useState<FilterKind | null>(null);
   const people = useMemo(() => { const m = new Map<string, string>(); for (const e of events) for (const p of e.people) m.set(p.id, p.name); return [...m].sort((a, b) => a[1].localeCompare(b[1])); }, [events]);
+  const crewsIn = useMemo(() => { const m = new Map<string, string>(); for (const e of events) if (e.crew) m.set(e.crew.id, e.crew.name); return [...m].sort((a, b) => a[1].localeCompare(b[1])); }, [events]);
   const customers = useMemo(() => { const m = new Map<string, string>(); for (const e of events) if (e.customer) m.set(e.customer.id, e.customer.name); return [...m].sort((a, b) => a[1].localeCompare(b[1])); }, [events]);
   const options: Record<FilterKind, [string, string][]> = {
     status: [["open", "Open"], ["done", "Done"]],
@@ -99,6 +100,7 @@ function FilterBar({ filters, setFilters, events, tags, services }: { filters: C
     tracked: [["yes", "Has time tracked"], ["no", "No time tracked"]],
     service: services.filter((x) => events.some((e) => e.serviceIds.includes(x.id))).map((x) => [x.id, x.name]),
     person: [...people, ["none", "Nobody assigned"]],
+    crew: [...crewsIn, ["none", "No crew (work orders)"]],
     customer: customers,
     tag: tags.map((t) => [t.id, t.name]),
   };
