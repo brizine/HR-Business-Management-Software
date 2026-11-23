@@ -2,8 +2,9 @@ import type { FastifyPluginAsync } from "fastify";
 import { and, eq } from "drizzle-orm";
 import { NOTIFICATION_CATEGORY_INFO, defaultPreference } from "@crewdesk/shared";
 import { db } from "../db";
-import { employees, notificationPreferences } from "../db/schema";
+import { companies, customers, employees, notificationPreferences } from "../db/schema";
 import { readUnsubscribeToken } from "../lib/channels";
+import { readCustomerUnsubscribeToken } from "../lib/customerMessages";
 import { HttpError } from "../lib/errors";
 
 /**
@@ -32,6 +33,17 @@ const routes: FastifyPluginAsync = async (app) => {
       .values(values)
       .onConflictDoUpdate({ target: [notificationPreferences.employeeId, notificationPreferences.category], set: values });
     return { ok: true, category: parsed.category, label: NOTIFICATION_CATEGORY_INFO[parsed.category].label, email: emp.email };
+  });
+
+  /** A customer unsubscribing from emails sent to many customers (invoices and receipts still go). */
+  app.post<{ Querystring: { token?: string }; Body: { token?: string } | string }>("/customer", async (req) => {
+    const token = req.query.token ?? (typeof req.body === "object" ? req.body?.token : undefined);
+    const id = token ? readCustomerUnsubscribeToken(token) : null;
+    const [c] = id ? await db.select({ id: customers.id, email: customers.email, emailOptOutAt: customers.emailOptOutAt, company: companies.name })
+      .from(customers).innerJoin(companies, eq(companies.id, customers.companyId)).where(eq(customers.id, id)) : [];
+    if (!c) throw new HttpError(400, "This unsubscribe link is invalid");
+    if (!c.emailOptOutAt) await db.update(customers).set({ emailOptOutAt: new Date() }).where(eq(customers.id, c.id));
+    return { ok: true, company: c.company, email: c.email };
   });
 };
 

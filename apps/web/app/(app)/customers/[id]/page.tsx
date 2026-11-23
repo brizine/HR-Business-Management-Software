@@ -14,6 +14,7 @@ import { CustomerCredits } from "@/components/credits";
 import { CustomerPrepayments } from "@/components/prepayments";
 import { CancelForm, CustomerFields, PropertyFields, TagChips, customerBody, customerFormValue, propertyBody, propertyFormValue, useTags } from "@/components/customers";
 import { CustomFieldsCard } from "@/components/custom-fields";
+import { CustomerEmails } from "@/components/customer-messages";
 
 export default function CustomerDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -118,6 +119,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
       <CustomFieldsCard target="customer" id={id} canEdit values={c.custom ?? {}} onSaved={() => customer.reload()} />
       <LinkedVisits customerId={id} />
       <LinkedTodos customerId={id} customer={{ id, name: customerName(c) }} />
+      <CustomerEmails customerId={id} />
 
       {c.cancellations.length > 0 && (
         <div className="card">

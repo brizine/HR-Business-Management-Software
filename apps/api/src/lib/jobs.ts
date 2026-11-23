@@ -1,3 +1,4 @@
+import { drainCustomerMessages } from "./customerMessages";
 import { refreshAddresses } from "./addresses";
 import { retryBillingSyncs } from "./billingSync";
 import { checkPendingStripePayments, checkRecentRefunds, updateWebhookEvents } from "./stripe";
@@ -35,6 +36,9 @@ async function firstTime(companyId: string, key: string) {
  */
 export async function runScheduledChecks(now = new Date()) {
   let sent = 0;
+
+  // Customer emails left unsent by a restart.
+  await drainCustomerMessages().catch((err) => console.error("customer emails failed", err));
 
   // Preventive maintenance coming due or overdue: tell fleet managers and the assigned driver.
   const scheduleRows = await db

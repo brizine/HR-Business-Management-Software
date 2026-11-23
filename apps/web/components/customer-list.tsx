@@ -200,6 +200,7 @@ export function cellText(col: Col, c: any, tags: Tag[]): string {
     case "prepaid": return money(c.prepaidCents);
     case "revenue": return money(c.revenueCents);
     case "taxExempt": return c.taxExempt ? "Yes" : "";
+    case "emailOptOut": return c.emailOptOutAt ? `Since ${new Date(c.emailOptOutAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : "";
     case "po": return c.poRequired ? "Yes" : "";
     case "lastService": return shortDate(c.lastService);
     case "nextService": return shortDate(c.nextService);
@@ -300,11 +301,13 @@ export function writeLocal(key: string, value: unknown) {
 }
 
 /** Customers and Properties (the tabs above both lists). */
-export function CrmTabs({ at }: { at: "customers" | "properties" }) {
+export function CrmTabs({ at }: { at: "customers" | "properties" | "messages" }) {
+  const tab = (k: typeof at, href: string, label: string) => <Link href={href} aria-current={at === k ? "page" : undefined} className={at === k ? "on" : ""}>{label}</Link>;
   return (
-    <nav className="cal-seg crm-tabs" aria-label="Customers or properties">
-      <Link href="/customers" aria-current={at === "customers" ? "page" : undefined} className={at === "customers" ? "on" : ""}>Customers</Link>
-      <Link href="/properties" aria-current={at === "properties" ? "page" : undefined} className={at === "properties" ? "on" : ""}>Properties</Link>
+    <nav className="cal-seg crm-tabs" aria-label="Customers, properties or messages">
+      {tab("customers", "/customers", "Customers")}
+      {tab("properties", "/properties", "Properties")}
+      {tab("messages", "/customers/messages", "Messages")}
     </nav>
   );
 }

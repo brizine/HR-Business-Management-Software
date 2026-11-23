@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { CUSTOMER_PAGE_SIZES, DEFAULT_CUSTOMER_COLUMNS, parseCustomerFilters, type CustomerFilter } from "@crewdesk/shared";
+import { CUSTOMER_PAGE_SIZES, DEFAULT_CUSTOMER_COLUMNS, describeFilter, filterField, parseCustomerFilters, type CustomerFilter } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi, useNewForm } from "@/lib/hooks";
@@ -13,6 +13,7 @@ import {
   BUILT_IN_VIEWS, Cell, ColumnPicker, CrmTabs, FilterChips, FilterEditor, Popover, allColumns, cellText, readLocal, writeLocal, type Col, type ListView,
 } from "@/components/customer-list";
 import { openTestCompany, useTestCompany } from "@/components/test-company";
+import { CopyPhones, EmailComposer } from "@/components/customer-messages";
 import { CancelForm, CustomerFields, PropertyFields, customerBody, customerFormValue, propertyBody, propertyFormValue, useTags } from "@/components/customers";
 
 const TABS = [["active", "Customers"], ["lead", "Leads"], ["cancelled", "Cancelled"], ["all", "All"]] as const;
@@ -110,12 +111,27 @@ function Customers() {
   const [allMatching, setAllMatching] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   useEffect(() => { setPicked([]); setAllMatching(false); setCancelling(false); }, [query]);
+  useEffect(() => { setSending(null); }, [status, params.get("q"), params.get("f")]); // eslint-disable-line react-hooks/exhaustive-deps
   const rows = list.data?.rows ?? [];
   const allPicked = rows.length > 0 && rows.every((r) => picked.includes(r.id));
   const matchStatus = (["active", "lead", "cancelled", "all"] as const).find((k) => k === status) ?? "all";
   const selection = allMatching ? { match: { status: matchStatus, q: params.get("q") ?? undefined, filters } } : { ids: picked };
   const selCount = allMatching ? list.data?.total ?? 0 : picked.length;
   const clearSelection = () => { setPicked([]); setAllMatching(false); setCancelling(false); };
+  // Send: to the selection, or (nothing ticked) everyone the list matches.
+  const [sending, setSending] = useState<null | "email" | "phones">(null);
+  const sendTo = selCount > 0 ? selection : { match: { status: matchStatus, q: params.get("q") ?? undefined, filters } };
+  const sendCount = selCount > 0 ? selCount : list.data?.total ?? 0;
+  const audience = (() => {
+    if (selCount > 0 && !allMatching) return `${selCount.toLocaleString()} picked customer${selCount === 1 ? "" : "s"}`;
+    const tab = TABS.find(([k]) => k === status)?.[1] ?? "All";
+    const tagName = (id: string) => tags.find((t) => t.id === id)?.name ?? "a removed tag";
+    const serviceName = (id: string) => services.find((x) => x.id === id)?.name ?? "a removed service";
+    const parts = [tab, ...filters.map((r) => describeFilter(r, { field: filterField(r.f, custom), tagName, serviceName }))];
+    if (params.get("q")) parts.push(`search "${params.get("q")}"`);
+    return parts.join(" · ").slice(0, 300);
+  })();
+  const openSend = (k: "email" | "phones") => { setSending(k); setOpen(null); window.scrollTo({ top: 0, behavior: "smooth" }); };
   const bulk = useAction();
   const runBulk = (body: Record<string, unknown>, done: string) => bulk.run(async () => {
     const r = await api<{ changed: number; skipped: number; propertiesCancelled: number }>("/customers/bulk", { body: { ...selection, ...body } });
@@ -163,6 +179,14 @@ function Customers() {
   return (
     <>
       <PageHead title="Customers" sub={<CrmTabs at="customers" />}>
+        <Popover label={<>Send ▾</>} title="Email or text the customers on this list (or the ones ticked)" open={open === "send"} setOpen={toggle("send")} align="right" buttonClass="btn no-print">
+          <div className="cl-menu">
+            <button type="button" disabled={!sendCount} onClick={() => openSend("email")}>Email {sendCount.toLocaleString()} customer{sendCount === 1 ? "" : "s"}…</button>
+            <button type="button" disabled={!sendCount} onClick={() => openSend("phones")}>Text: copy their phone numbers…</button>
+            <hr />
+            <Link href="/customers/messages">Sent messages</Link>
+          </div>
+        </Popover>
         <button className="btn no-print" disabled={exporting.busy} onClick={() => exportCsv()}><Icon name="download" size={14} /> Export</button>
         <button className="btn no-print" onClick={() => window.print()}><Icon name="print" size={14} /> Print</button>
         {(test || can("admin", "customers")) && (
@@ -186,6 +210,11 @@ function Customers() {
       {samples && <SampleCustomersCard onChange={() => { list.reload(); reloadTags(); }} onClose={() => setSamples(false)} />}
       {adding && <AddCustomer key={adding} tags={tags} lead={adding === "lead"} onCancel={() => setAdding(null)} onSaved={(id) => router.push(`/customers/${id}`)} />}
       {notice && <div className="notice" role="status">{notice} <button type="button" className="linkbtn" onClick={() => setNotice(null)}>OK</button></div>}
+      {sending === "email" && (
+        <EmailComposer key={JSON.stringify(sendTo)} selection={sendTo} audience={audience} onClose={() => setSending(null)}
+          onSent={(m) => { setSending(null); clearSelection(); setNotice(`Sending to ${m.sending.toLocaleString()} customer${m.sending === 1 ? "" : "s"} now. Follow it under Messages.`); router.push(`/customers/messages/${m.id}`); }} />
+      )}
+      {sending === "phones" && <CopyPhones key={JSON.stringify(sendTo)} selection={sendTo} onClose={() => setSending(null)} />}
 
       <section className="card cl-bar no-print" aria-label="Find customers">
         <div className="cl-bar-row">
@@ -260,6 +289,12 @@ function Customers() {
                 <button type="button" disabled={bulk.busy} onClick={() => runBulk({ status: "lead" }, "Marked as leads")}>Lead</button>
                 <hr />
                 <button type="button" className="bad-text" onClick={() => { setCancelling(true); setOpen(null); }}>Cancelled… (asks why)</button>
+              </div>
+            </Popover>
+            <Popover label="Send ▾" open={open === "bulksend"} setOpen={toggle("bulksend")}>
+              <div className="cl-menu">
+                <button type="button" onClick={() => openSend("email")}>Email…</button>
+                <button type="button" onClick={() => openSend("phones")}>Text: copy phone numbers…</button>
               </div>
             </Popover>
             <button type="button" className="btn" disabled={exporting.busy} onClick={() => exportCsv(allMatching ? undefined : picked)}>Export selected</button>

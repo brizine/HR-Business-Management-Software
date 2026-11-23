@@ -1205,6 +1205,8 @@ export const customers = pgTable(
     sample: boolean("sample").notNull().default(false),
     stripeCustomerId: text("stripe_customer_id"),
     bigcapitalCustomerId: integer("bigcapital_customer_id"),
+    /** When they used the unsubscribe link in an email sent to many customers (invoices and receipts still go). */
+    emailOptOutAt: timestamp("email_opt_out_at", { withTimezone: true }),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     /** Custom field values (custom_fields), by field id. */
@@ -1322,6 +1324,52 @@ export const cancellations = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("cancellations_company_idx").on(t.companyId, t.effectiveDate)],
+);
+
+/** An email sent to many customers at once (the Customers list's Send menu). */
+export const customerMessages = pgTable(
+  "customer_messages",
+  {
+    id: id(),
+    companyId: companyId(),
+    channel: text("channel").notNull().default("email"),
+    subject: text("subject").notNull(),
+    /** With fill-in fields like {first_name}, filled in for each customer when sent. */
+    body: text("body").notNull(),
+    /** "sending", "sent" or "stopped". */
+    status: text("status").notNull().default("sending"),
+    /** Who it went to, in words (e.g. "Customers · Balance owed more than $0"). */
+    audience: text("audience"),
+    byId: uuid("by_id").references(() => employees.id, { onDelete: "set null" }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("customer_messages_company_idx").on(t.companyId, t.createdAt)],
+);
+
+/** One customer on a customer message: queued, sent, failed, or skipped (and why). */
+export const customerMessageRecipients = pgTable(
+  "customer_message_recipients",
+  {
+    id: id(),
+    companyId: companyId(),
+    messageId: uuid("message_id").notNull().references(() => customerMessages.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    /** The customer's name and address when it was sent. */
+    name: text("name").notNull(),
+    email: text("email"),
+    /** "queued", "sending", "sent", "failed" or "skipped". */
+    status: text("status").notNull().default("queued"),
+    skipReason: text("skip_reason"),
+    error: text("error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("customer_message_recipients_message_idx").on(t.messageId, t.status),
+    index("customer_message_recipients_customer_idx").on(t.customerId),
+    index("customer_message_recipients_queue_idx").on(t.status, t.createdAt),
+  ],
 );
 
 /** Every tag added or removed, by whom and how (hand, bulk, import, sample, automation): the feed for automations. */

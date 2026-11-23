@@ -145,6 +145,7 @@ export function filterSql(r: CustomerFilter, cols: ListColumns, custom: { id: st
     case "revenue": return numOp(cols.revenue, r.op, r.v, r.v2, cents);
     case "overdue": return r.op === "yes" ? sql`${cols.overdue} > 0` : sql`${cols.overdue} = 0`;
     case "taxExempt": return r.op === "yes" ? sql`"customers"."tax_exempt"` : sql`not "customers"."tax_exempt"`;
+    case "emailOptOut": return r.op === "yes" ? sql`"customers"."email_opt_out_at" is not null` : sql`"customers"."email_opt_out_at" is null`;
     case "po": return r.op === "yes" ? sql`"customers"."po_required"` : sql`not "customers"."po_required"`;
     case "lastService": return dateOp(sql`(${cols.lastService})::date`, r.op, r.v, r.v2);
     case "nextService": return r.op === "yes" ? sql`${cols.nextService} is not null` : sql`${cols.nextService} is null`;

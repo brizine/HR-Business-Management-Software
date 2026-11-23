@@ -1414,3 +1414,10 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .cl-pager select { width: auto; }
 @media (max-width: 700px) { .cl-stats { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; } .cl-stats button { padding: 4px 8px; } .cl-editor-row { grid-template-columns: 1fr; } .cl-pop { position: fixed; left: 12px !important; right: 12px !important; top: auto; bottom: 12px; max-width: none; width: auto; } }
 @media print { .cl-bar, .cl-bulk, .cl-pager, .no-print { display: none !important; } }
+/* Email customers */
+.cm-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.cm-fields { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cm-preview { min-width: 0; }
+.cm-subject { font-size: 14px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px 8px 0 0; border-bottom: 0; background: var(--bg); }
+.cm-frame { width: 100%; height: 320px; border: 1px solid var(--border); border-radius: 0 0 8px 8px; background: #fff; margin-top: -8px; }
+@media (max-width: 800px) { .cm-grid { grid-template-columns: 1fr; } }

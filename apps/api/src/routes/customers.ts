@@ -60,11 +60,17 @@ async function listWhere(companyId: string, query: { q?: string; tags?: string; 
   return { where, statusWhere, cols };
 }
 
-/** The customers a bulk action is for: the ticked ones, or all that match the list (up to BULK_MAX). */
-async function selectedIds(companyId: string, sel: CustomerSelection): Promise<string[]> {
+/** Which customers a request is for: { ids } (the ticked ones) or { match } (everyone the list matches). */
+export function parseSelection(raw: Record<string, unknown>): CustomerSelection {
+  return raw.match ? { match: parse(customerMatchSchema, raw.match) } : parse(customerIdsSchema, { ids: raw.ids });
+}
+
+/** The customers a bulk action is for: the ticked ones, or all that match the list (up to BULK_MAX), in name order. */
+export async function selectedIds(companyId: string, sel: CustomerSelection): Promise<string[]> {
   if ("ids" in sel) return sel.ids;
-  const { where, statusWhere } = await listWhere(companyId, sel.match);
-  const rows = await db.select({ id: customers.id }).from(customers).where(and(...where, ...(statusWhere ? [statusWhere] : []))).limit(BULK_MAX + 1);
+  const { where, statusWhere, cols } = await listWhere(companyId, sel.match);
+  const rows = await db.select({ id: customers.id }).from(customers).where(and(...where, ...(statusWhere ? [statusWhere] : [])))
+    .orderBy(sortSql("name", cols)!, asc(customers.number)).limit(BULK_MAX + 1);
   if (rows.length > BULK_MAX) throw new HttpError(400, `That's more than ${BULK_MAX.toLocaleString()} customers; narrow the list first`);
   return rows.map((r) => r.id);
 }
@@ -125,7 +131,7 @@ const routes: FastifyPluginAsync = async (app) => {
         id: customers.id, number: customers.number, kind: customers.kind, firstName: customers.firstName, lastName: customers.lastName,
         companyName: customers.companyName, email: customers.email, phone: customers.phone, altPhone: customers.altPhone, status: customers.status,
         tagIds: customers.tagIds, delivery: customers.delivery, sample: customers.sample, source: customers.source, poRequired: customers.poRequired,
-        taxExempt: customers.taxExempt, notes: sql<string | null>`left(${customers.notes}, 200)`, createdAt: customers.createdAt, custom: customers.custom,
+        taxExempt: customers.taxExempt, emailOptOutAt: customers.emailOptOutAt, notes: sql<string | null>`left(${customers.notes}, 200)`, createdAt: customers.createdAt, custom: customers.custom,
         billingStreet: customers.billingStreet, billingCity: customers.billingCity, billingState: customers.billingState, billingZip: customers.billingZip,
         propertyCount: cols.properties, address: cols.address, city: cols.city, zip: cols.zip, balanceCents: cols.balance, overdueCents: cols.overdue,
         creditCents: cols.credit, prepaidCents: cols.prepaid, revenueCents: cols.revenue, lastService: cols.lastService, nextService: cols.nextService,
@@ -150,7 +156,7 @@ const routes: FastifyPluginAsync = async (app) => {
    */
   app.post("/bulk", async (req) => {
     const raw = (req.body ?? {}) as Record<string, unknown>;
-    const sel: CustomerSelection = raw.match ? { match: parse(customerMatchSchema, raw.match) } : parse(customerIdsSchema, { ids: raw.ids });
+    const sel = parseSelection(raw);
     const body = parse(z.object({
       addTagIds: z.array(z.string().uuid()).max(20).default([]),
       removeTagIds: z.array(z.string().uuid()).max(20).default([]),

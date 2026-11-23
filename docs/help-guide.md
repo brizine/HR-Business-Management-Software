@@ -172,6 +172,24 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
       the current bill-to for are cancelled too. Anyone already cancelled is skipped. Reactivate from the
       customer's page.
   - **Pages:** 25, 50, 100 or 250 rows a page, with Previous and Next.
+  - **Send ▾** (top right, or in the bar when customers are ticked) goes to the ticked customers, or, with nothing
+    ticked, everyone the list shows (tab, search and filters).
+    - **Email…** opens a short form: a subject and message, with **Insert** buttons for fill-in fields like
+      {first_name}, {balance}, {next_service} and {company}. The right side shows the email filled in for the
+      first customer. It shows how many will get it and who's skipped: no email address, unsubscribed, sample
+      customers, and a second customer with the same address (each address gets it once). A misspelled field
+      like {frist_name} is pointed out.
+    - **Send me a test** emails it to you first. **Send to N customers** sends it; this can't be undone.
+    - The emails go out one at a time in the background (about four a second), from your company name, with
+      replies going to your company email. Each has your company's name, address and phone and an
+      **Unsubscribe** link at the bottom. Customers who unsubscribe still get invoices and receipts.
+    - **Text: copy phone numbers…** lists the customers' phone numbers (each number once) to copy, or download
+      with names, and paste into Talkroute's bulk texting. Texting straight from Crewdesk needs API access from
+      Talkroute.
+  - **Messages** (the tab next to Properties) lists every email sent this way, with how many were sent, didn't
+    go (and why) or were skipped. Open one to see each customer, or **Stop sending** while it's still going.
+    A customer's page shows the emails they were sent and whether they've unsubscribed (with **Resubscribe** if
+    they ask to be put back on). The **Unsubscribed from emails** filter and **Unsubscribed** column find them.
   - The address in the browser keeps the tab, search, filters, sort and page, so **Back**, refreshing and sharing
     the link all bring the same list up.
 - **Add customer:** Residential, Commercial or HOA (commercial and HOA accounts are listed by company name),
