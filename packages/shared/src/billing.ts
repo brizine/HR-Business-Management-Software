@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { optionalTaxRateSchema, taxFor, taxRateSchema } from "./tax";
+import { DEFAULT_SEND_SCHEDULE, autoSendSettingsSchema, lateFeeSettingsSchema } from "./billingRules";
+import { formatMoney } from "./money";
+
+export { formatMoney };
 
 /**
  * Billing (Phase 1): the services price list, invoices and the payments recorded against them.
@@ -69,12 +73,6 @@ export function priceFor(s: PricedService, sqFt: number | null | undefined): num
   return hit ? hit.priceCents : null;
 }
 
-/** "$45.00", "$1,250.50" (no cents shown as .00). */
-export function formatMoney(c: number | null | undefined): string {
-  if (c == null) return "—";
-  const sign = c < 0 ? "-" : "";
-  return `${sign}$${(Math.abs(c) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 /** How a service is priced, in words: "$45.00", "$4.25 per 1,000 sq ft (min $40.00)", "By lawn size: up to 5,000 sq ft $40.00, …". */
 export function describePricing(s: PricedService): string {
@@ -107,6 +105,8 @@ export const invoiceLineSchema = z.object({
   incomeAccountCode: z.string().trim().regex(/^\d{3,6}$/).default("4000"),
   /** Sales tax on this line, in percent (0 = not taxed). */
   taxRate: taxRateSchema.default(0),
+  /** A late fee Crewdesk added (not discounted or taxed). */
+  isLateFee: z.boolean().default(false),
 });
 export type InvoiceLineInput = z.infer<typeof invoiceLineSchema>;
 
@@ -132,14 +132,19 @@ export type InvoiceInput = z.infer<typeof invoiceSchema>;
 
 export interface InvoiceTotals { subtotalCents: number; discountCents: number; taxCents: number; totalCents: number }
 
-/** Line amounts, the discount (never more than the subtotal), the sales tax and the total. */
-export function invoiceTotals(lines: { quantity: number; unitPriceCents: number; taxRate?: number | null }[], discountKind: string, discountValue: number): InvoiceTotals {
+/**
+ * Line amounts, the discount (never more than the subtotal), the sales tax and the total. Late fee
+ * lines are left out of the discount and the tax: a 10% discount doesn't shrink a late fee.
+ */
+export function invoiceTotals(lines: { quantity: number; unitPriceCents: number; taxRate?: number | null; isLateFee?: boolean | null }[], discountKind: string, discountValue: number): InvoiceTotals {
   const subtotalCents = lines.reduce((s, l) => s + lineAmount(l), 0);
+  const work = lines.filter((l) => !l.isLateFee);
+  const workCents = work.reduce((s, l) => s + lineAmount(l), 0);
   let discountCents = 0;
   if (discountKind === "amount") discountCents = Math.round(discountValue);
-  else if (discountKind === "percent") discountCents = Math.round((subtotalCents * discountValue) / 100);
-  discountCents = Math.max(0, Math.min(discountCents, Math.max(subtotalCents, 0)));
-  const taxCents = taxFor(lines, discountCents);
+  else if (discountKind === "percent") discountCents = Math.round((workCents * discountValue) / 100);
+  discountCents = Math.max(0, Math.min(discountCents, Math.max(workCents, 0)));
+  const taxCents = taxFor(work, discountCents);
   return { subtotalCents, discountCents, taxCents, totalCents: subtotalCents - discountCents + taxCents };
 }
 
@@ -181,10 +186,15 @@ export const billingSettingsSchema = z.object({
   taxEnabled: z.boolean().default(false),
   taxName: z.string().trim().min(1, "Name the tax").max(40).default("Sales tax"),
   defaultTaxRate: taxRateSchema.default(0),
+  /** Saved from their own cards (left out, the saved ones are kept). */
+  lateFees: lateFeeSettingsSchema.optional(),
+  autoSend: autoSendSettingsSchema.optional(),
 });
 export type BillingSettings = z.infer<typeof billingSettingsSchema>;
 export const DEFAULT_BILLING_SETTINGS: BillingSettings = {
   nextInvoiceNumber: 1001, termsDays: 0, footer: "", payableTo: "", autoApplyCredits: true, taxEnabled: false, taxName: "Sales tax", defaultTaxRate: 0,
+  lateFees: { enabled: false, rules: [], emailCustomer: true },
+  autoSend: { enabled: false, schedule: DEFAULT_SEND_SCHEDULE, hour: 8, invoiceWorkOrders: true },
 };
 
 export function termsLabel(days: number) {

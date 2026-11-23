@@ -37,6 +37,8 @@ export function useBillingSettings() {
 export interface InvoiceFormValue {
   customer: { id: string; name: string } | null; propertyId: string; issueDate: string; dueDate: string; poNumber: string; notes: string;
   discountKind: "none" | "amount" | "percent"; discount: string; lines: Line[];
+  /** Late fees already on the invoice: shown, but only "Waive" on the invoice page takes one off. */
+  lateFees?: { description: string; cents: number }[];
 }
 
 export function invoiceFormValue(inv?: any, customer?: { id: string; name: string } | null): InvoiceFormValue {
@@ -45,7 +47,8 @@ export function invoiceFormValue(inv?: any, customer?: { id: string; name: strin
     customer: { id: inv.customer.id, name: inv.customer.name }, propertyId: inv.propertyId ?? "", issueDate: inv.issueDate, dueDate: inv.dueDate,
     poNumber: inv.poNumber ?? "", notes: inv.notes ?? "", discountKind: inv.discountKind,
     discount: inv.discountKind === "amount" ? dollars(inv.discountValue) : inv.discountKind === "percent" ? String(inv.discountValue) : "",
-    lines: inv.lines.map((l: any) => ({ serviceTypeId: l.serviceTypeId, description: l.description, quantity: String(l.quantity), price: dollars(l.unitPriceCents), incomeAccountCode: l.incomeAccountCode, tax: taxText(l.taxRate) })),
+    lateFees: inv.lines.filter((l: any) => l.isLateFee).map((l: any) => ({ description: l.description, cents: l.amountCents })),
+    lines: inv.lines.filter((l: any) => !l.isLateFee).map((l: any) => ({ serviceTypeId: l.serviceTypeId, description: l.description, quantity: String(l.quantity), price: dollars(l.unitPriceCents), incomeAccountCode: l.incomeAccountCode, tax: taxText(l.taxRate) })),
   };
 }
 
@@ -116,7 +119,8 @@ export function InvoiceFields({ value, onChange, lockCustomer, fresh }: { value:
     setLine(i, { serviceTypeId: s.id, description: value.lines[i].description || s.name, price: price != null ? dollars(price) : value.lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)) });
   };
   const parsed = value.lines.map((l) => ({ quantity: Number(l.quantity) || 0, unitPriceCents: toCents(l.price) || 0, taxRate: Number(l.tax) || 0 }));
-  const totals = invoiceTotals(parsed, value.discountKind, value.discountKind === "amount" ? toCents(value.discount || "0") || 0 : Number(value.discount) || 0);
+  const lateFees = value.lateFees ?? [];
+  const totals = invoiceTotals([...parsed, ...lateFees.map((f) => ({ quantity: 1, unitPriceCents: f.cents, isLateFee: true }))], value.discountKind, value.discountKind === "amount" ? toCents(value.discount || "0") || 0 : Number(value.discount) || 0);
   const needsPo = !!customer.data?.poRequired;
 
   return (
@@ -168,7 +172,13 @@ export function InvoiceFields({ value, onChange, lockCustomer, fresh }: { value:
                 <td>{value.lines.length > 1 && <button type="button" className="btn" aria-label={`Remove line ${i + 1}`} onClick={() => set({ lines: value.lines.filter((_, j) => j !== i) })}>✕</button>}</td>
               </tr>
             );
-          })}</tbody>
+          })}
+          {lateFees.map((f, i) => (
+            <tr key={`fee-${i}`} className="muted">
+              <td>Late fee</td><td colSpan={showTax ? 4 : 3}>{f.description} <span style={{ fontSize: 12 }}>(not discounted; waive it on the invoice page)</span></td>
+              <td style={{ textAlign: "right" }}>{formatMoney(f.cents)}</td><td />
+            </tr>
+          ))}</tbody>
         </table>
       </div>
       <div><button type="button" className="btn" onClick={() => set({ lines: [...value.lines, blankLine()] })}>Add a line</button></div>

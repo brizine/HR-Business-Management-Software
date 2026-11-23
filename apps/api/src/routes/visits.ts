@@ -145,7 +145,11 @@ async function whenWhere(v: Visit) {
  * items (dated when there are several). Skipped, "don't invoice" and already-invoiced ones are refused.
  */
 async function invoiceVisits(req: FastifyRequest, ids: string[]) {
-  const { companyId, sub } = req.user;
+  return invoiceVisitsFor(req.user.companyId, req.user.sub, ids);
+}
+
+/** Draft invoices for finished work orders: one per customer and property (the auto-send schedule uses this too, with no `sub`). */
+export async function invoiceVisitsFor(companyId: string, sub: string | null, ids: string[]) {
   const rows = await db.select().from(visits).where(and(eq(visits.companyId, companyId), inArray(visits.id, ids)));
   if (rows.length !== ids.length) notFound("Work order");
   const invIds = rows.map((v) => v.invoiceId).filter((x): x is string => !!x);

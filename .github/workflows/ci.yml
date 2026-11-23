@@ -34,6 +34,12 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - name: Start the built server
+        run: node scripts/smoke-start.mjs
+        env:
+          # Placeholders for this check only; the live site has its own.
+          JWT_SECRET: ci-smoke-check-only
+          ENCRYPTION_KEY: ci-smoke-check-only
 
   promote:
     needs: test

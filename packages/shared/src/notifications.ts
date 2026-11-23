@@ -23,9 +23,10 @@ export type NotificationLink =
   | { screen: "todos"; id?: string }
   | { screen: "workorder"; id: string }
   | { screen: "estimate"; id: string }
-  | { screen: "customer"; id: string };
+  | { screen: "customer"; id: string }
+  | { screen: "invoices" };
 
-export const NOTIFICATION_CATEGORIES = ["pto", "time", "schedule", "fleet", "documents", "onboarding", "hiring", "payroll", "wiki", "reviews", "training", "todos", "workorders", "estimates", "customers"] as const;
+export const NOTIFICATION_CATEGORIES = ["pto", "time", "schedule", "fleet", "documents", "onboarding", "hiring", "payroll", "wiki", "reviews", "training", "todos", "workorders", "estimates", "customers", "billing"] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
 /** Expo push tokens look like ExponentPushToken[xxxx] or ExpoPushToken[xxxx]. */
@@ -46,6 +47,7 @@ export const NOTIFICATION_CATEGORY_INFO: Record<NotificationCategory, { label: s
   todos: { label: "To-dos", description: "To-dos given to you, and a reminder the morning they're due" },
   estimates: { label: "Estimates", description: "Customers accepting or declining an estimate, or asking for changes" },
   customers: { label: "Customer notes", description: "Call notes and notes on a customer that someone flags for you" },
+  billing: { label: "Billing", description: "Invoices sent automatically, and late fees added" },
   payroll: { label: "Payroll & tax forms", description: "Pay periods to approve, and new or updated W-4s and direct deposit details to enter in payroll" },
 };
 
@@ -92,6 +94,7 @@ export function webPathFor(link: NotificationLink | null | undefined): string | 
     case "workorder": return `/visits/${link.id}`;
     case "estimate": return `/estimates/${link.id}`;
     case "customer": return `/customers/${link.id}`;
+    case "invoices": return "/invoices";
     default: return null;
   }
 }

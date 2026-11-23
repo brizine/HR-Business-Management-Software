@@ -188,7 +188,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
             <CallNotes customerId={id} customerName={c.name} onSaved={() => setVersion((v) => v + 1)} />
             <Timeline customerId={id} version={version} />
             <PaymentMethodsCard customerId={id} />
-            <InvoiceDefaultsBox customer={c} onEdit={() => setEditing(true)} />
+            <InvoiceDefaultsBox customer={c} onEdit={() => setEditing(true)} onSaved={reload} />
             <PortalBox customer={c} busy={action.busy} onViewAs={viewAs} />
             <div className="card">
               <h2 className="cp-h">Other contacts</h2>

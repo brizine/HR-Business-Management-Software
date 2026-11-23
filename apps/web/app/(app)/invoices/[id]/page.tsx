@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
-import { PAYMENT_METHOD_LABELS, formatMoney, formatTaxRate, type PaymentMethod } from "@crewdesk/shared";
+import { PAYMENT_METHOD_LABELS, describeLateFeeRule, formatMoney, formatTaxRate, type LateFeeRule, type PaymentMethod } from "@crewdesk/shared";
 import { API_URL, api, fmtDate, fmtDateTime } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { useAuth } from "@/lib/auth";
@@ -80,6 +80,7 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
               <h2 style={{ fontSize: 16, marginTop: 0 }}>Delivery</h2>
               <ul className="plain-list">
                 {!inv.number && <li className="muted">Not sent yet. Sending numbers it.</li>}
+                {inv.autoSentAt && <li>Sent automatically {fmtDateTime(inv.autoSentAt)} (auto-send schedule)</li>}
                 {inv.emailedAt && <li>Emailed {fmtDateTime(inv.emailedAt)} to {inv.emailedTo}</li>}
                 {inv.needsMailing && <li>Waiting to be printed and mailed (<Link href="/invoices?status=mail">To mail</Link>)</li>}
                 {inv.mailedAt && <li>Mailed {fmtDate(inv.mailedAt)}</li>}
@@ -108,6 +109,7 @@ export default function InvoiceDetail({ params }: { params: Promise<{ id: string
             </table>
             {inv.notes && <p style={{ whiteSpace: "pre-wrap" }}>{inv.notes}</p>}
           </div>
+          <LateFeesBox inv={inv} onChange={invoice.reload} />
           <InvoiceCredits invoice={inv} onChange={invoice.reload} />
           {addingCredit && <CreditForm customerId={inv.customer.id} properties={inv.property ? [{ id: inv.property.id, address: inv.property.address }] : []} invoiceId={id}
             onDone={() => { setAddingCredit(false); invoice.reload(); }} onClose={() => setAddingCredit(false)} />}
@@ -226,6 +228,38 @@ function VoidForm({ id, onDone, onClose }: { id: string; onDone: () => void; onC
     </form>
   );
 }
+
+/** The late fee steps this invoice got when it was sent, the fees added so far, and "Waive". */
+function LateFeesBox({ inv, onChange }: { inv: any; onChange: () => void }) {
+  const { busy, error, run } = useAction();
+  const rules: LateFeeRule[] = inv.lateFeeRules ?? [];
+  const fees: any[] = inv.lateFees ?? [];
+  if (!rules.length && !fees.length) return null;
+  const sent = inv.sentOn ?? inv.issueDate;
+  return (
+    <div className="card">
+      <h2 style={{ fontSize: 16, marginTop: 0 }}>Late fees</h2>
+      {rules.length > 0 && inv.status !== "void" && (
+        <p className="muted" style={{ marginTop: 0 }}>If it isn&apos;t paid: {rules.map((r) => `${describeLateFeeRule(r)} (${fmtDate(addDays(sent, r.days))})`).join("; ")}. These were set when it was sent.</p>
+      )}
+      {fees.length > 0 ? (
+        <ul className="plain-list">
+          {fees.map((f) => (
+            <li key={f.id} className="row" style={{ justifyContent: "space-between", opacity: f.waivedAt ? 0.6 : 1 }}>
+              <span><strong>{formatMoney(f.amountCents)}</strong> at {f.days} days <span className="muted">· added {fmtDate(f.createdAt)}{f.waivedAt ? ` · waived ${fmtDate(f.waivedAt)}` : ""}</span></span>
+              {!f.waivedAt && f.amountCents > 0 && inv.status !== "void" && (
+                <button className="btn" disabled={busy} onClick={() => confirm(`Waive this ${formatMoney(f.amountCents)} late fee? It comes off the invoice and won't be added again.`) && run(async () => { await api(`/invoices/${inv.id}/late-fees/${f.id}/waive`, { method: "POST" }); onChange(); })}>Waive</button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : <p className="muted" style={{ margin: 0 }}>None added yet.</p>}
+      <ErrorBox error={error} />
+    </div>
+  );
+}
+
+const addDays = (ymd: string, n: number) => new Date(Date.parse(`${ymd}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
 /** Where this invoice stands in Bigcapital, with a retry when it didn't get there. */
 function BooksStatus({ inv, onChange }: { inv: any; onChange: () => void }) {

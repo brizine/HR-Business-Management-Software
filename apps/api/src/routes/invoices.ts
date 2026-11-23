@@ -2,18 +2,19 @@ import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import {
-  billingSettingsSchema, customerName, formatAddress, formatMoney, invoiceSchema, invoiceTotals, isOverdue, lineAmount, paymentSchema, taxBreakdown,
+  DEFAULT_BILLING_SETTINGS, autoSendSettingsSchema, billingSettingsSchema, customerName, effectiveLateFeeRules, lateFeeSettingsSchema, formatAddress, formatMoney, invoiceSchema, invoiceTotals, isOverdue, lineAmount, paymentSchema, taxBreakdown,
   invoiceBalance, sendInvoiceSchema, termsLabel, voidSchema, type InvoiceInput,
 } from "@crewdesk/shared";
 import { db } from "../db";
 import { newRecordCustom, updatedCustom } from "../lib/customFields";
-import { companies, creditApplications, customerContacts, customerCredits, customers, invoiceLines, invoicePayments, invoices, paymentRefunds, prepayments, properties, serviceTypes } from "../db/schema";
+import { companies, creditApplications, customerContacts, customerCredits, customers, invoiceLateFees, invoiceLines, invoicePayments, invoices, paymentRefunds, prepayments, properties, serviceTypes } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
 import { customerInCompany, type Tx } from "../lib/crm";
 import { addDays, billingSettings, PAY_LINK_DAYS, payLinkFor, portalUrl, refreshInvoice, takeInvoiceNumber } from "../lib/invoices";
 import { autopayInvoice, chargeInvoice } from "../lib/paymentMethods";
+import { waiveLateFee } from "../lib/billingJobs";
 import { REFUND_REASONS, refundPayment, stripeConfig } from "../lib/stripe";
 import { batchPdf, billToLines, invoicePdf, type PdfCompany, type PdfInvoice } from "../lib/invoicePdf";
 import { emailTransport } from "../lib/channels";
@@ -94,6 +95,84 @@ const INVOICE_TEXT = (o: { company: string; number: number; customer: string; du
 const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]!);
 
 /**
+ * Sends an invoice: numbers a draft (and gives it the late fee rules in force), uses any credit and
+ * prepayment, emails the PDF with a pay link and/or puts it in the print queue, then autopay. Used
+ * by "Send" and by the auto-send schedule (`by` is null then).
+ */
+export async function sendInvoice(companyId: string, invoiceId: string, body: { via: ("email" | "paper")[]; emailTo?: string; message?: string }, by: string | null, opts: { auto?: boolean } = {}) {
+  const [first] = await db.select().from(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)));
+  if (!first) throw new HttpError(404, "Invoice not found");
+  if (first.status === "void") throw new HttpError(400, "A void invoice can't be sent");
+  const cust = await customerInCompany(db, companyId, first.customerId);
+  if (cust.poRequired && !first.poNumber) throw new HttpError(400, `${customerName(cust)} needs a PO number on every invoice. Add it, then send`);
+  const wantsEmail = body.via.includes("email");
+  const to = body.emailTo ?? cust.email;
+  if (wantsEmail && !to) throw new HttpError(400, "This customer has no email address. Add one, or send it by paper");
+  const transport = emailTransport();
+  if (wantsEmail && !transport) throw new HttpError(400, "Email isn't set up on this server yet, so it can't be emailed. Send it by paper for now");
+
+  // Number it (if it's a draft) before building the PDF, so the PDF shows the number.
+  const inv = await db.transaction(async (tx) => {
+    const [cur] = await tx.select().from(invoices).where(eq(invoices.id, first.id)).for("update");
+    if (cur.number != null) return cur;
+    const number = await takeInvoiceNumber(tx, companyId);
+    // It gets the late fee rules in force now (later changes to the rules don't touch it).
+    const rules = effectiveLateFeeRules((await billingSettings(companyId, tx)).lateFees ?? DEFAULT_BILLING_SETTINGS.lateFees!, cust.lateFeeMode, cust.lateFeeRules);
+    const [u] = await tx.update(invoices).set({ number, status: "sent", payToken: randomToken(24), lateFeeRules: rules.length ? rules : null, sentOn: await companyToday(companyId), updatedAt: new Date() }).where(eq(invoices.id, cur.id)).returning();
+    return u;
+  });
+  // Credit on the customer's account goes on the invoice before it's built and sent (if that's turned on).
+  let creditsUsed: string[] = [];
+  if ((await billingSettings(companyId)).autoApplyCredits) {
+    const made = await db.transaction((tx) => autoApplyCredits(tx, companyId, inv.customerId, { invoiceIds: [inv.id], by: by }));
+    creditsUsed = [...new Set(made.map((a) => a.creditId))];
+  }
+  // Then anything the customer prepaid pays it (with its share of any prepay discount).
+  const prepaid = await db.transaction((tx) => applyPrepayments(tx, companyId, inv.customerId, { invoiceIds: [inv.id], by: by }));
+  creditsUsed.push(...prepaid.creditIds);
+  // Each send restarts the pay link's 30 days.
+  const [linked] = await db.update(invoices).set({ payToken: inv.payToken ?? randomToken(24), payTokenExpiresAt: new Date(Date.now() + PAY_LINK_DAYS * 86_400_000) })
+    .where(eq(invoices.id, inv.id)).returning();
+  const fresh = await refreshInvoice(db, inv.id);
+  const payUrl = (await stripeConfig(companyId)) ? payLinkFor(linked)?.url ?? null : null;
+
+  if (wantsEmail && transport && to) {
+    const company = await companyForPdf(companyId);
+    const data = await pdfInvoice(companyId, inv.id);
+    const pdf = await invoicePdf(company, data);
+    const copies = (await db.select({ email: customerContacts.email }).from(customerContacts)
+      .where(and(eq(customerContacts.customerId, cust.id), eq(customerContacts.getsInvoices, true), isNotNull(customerContacts.email))))
+      .map((c) => c.email!).filter((e) => e !== to);
+    const amount = formatMoney(invoiceBalance(data));
+    const due = `${data.dueDate.slice(5, 7)}/${data.dueDate.slice(8, 10)}/${data.dueDate.slice(0, 4)}`;
+    const t = INVOICE_TEXT({ company: company.name, number: inv.number!, customer: customerName(cust), due: `${due} (${termsLabel(data.termsDays)})`, amount, dueDate: due, message: body.message, phone: company.phone, payUrl });
+    const html = `<p>Hello ${esc(customerName(cust))},</p>${body.message ? `<p>${esc(body.message).replace(/\n/g, "<br>")}</p>` : ""}
+<p>Your invoice <strong>${inv.number}</strong> from ${esc(company.name)} is attached.</p>
+<table style="border-collapse:collapse"><tr><td style="padding:2px 12px 2px 0;color:#667085">Amount due</td><td style="font-size:18px;font-weight:700">${amount}</td></tr>
+<tr><td style="padding:2px 12px 2px 0;color:#667085">Due</td><td>${esc(t.text.match(/Due: (.*)/)?.[1] ?? due)}</td></tr></table>
+${payUrl ? `<p><a href="${esc(payUrl)}" style="display:inline-block;background:#1f7a3a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600">Pay online</a></p>
+<p style="color:#667085;font-size:13px">Card or bank account. This button works for ${PAY_LINK_DAYS} days; after that, sign in at <a href="${esc(portalUrl(companyId))}">${esc(portalUrl(companyId).replace(/^https?:\/\//, "").replace(/\?.*$/, ""))}</a>.</p>` : ""}
+<p>${payUrl ? "Or, to pay by check" : "To pay by check"}, mail it with the bottom part of the invoice. Questions? Just reply to this email${company.phone ? ` or call ${esc(company.phone)}` : ""}.</p>
+<p>Thank you,<br>${esc(company.name)}</p>`;
+    await transport.send({
+      to, cc: copies, subject: t.subject, text: t.text, html, fromName: company.name, replyTo: company.email ?? undefined,
+      attachments: [{ filename: `Invoice-${inv.number}.pdf`, content: Buffer.from(pdf), contentType: "application/pdf" }],
+    });
+    await db.update(invoices).set({ emailedAt: new Date(), emailedTo: [to, ...copies].join(", ") }).where(eq(invoices.id, inv.id));
+  }
+  if (body.via.includes("paper")) await db.update(invoices).set({ needsMailing: true }).where(eq(invoices.id, inv.id));
+  queueBillingSync(() => syncInvoice(companyId, inv.id, by));
+  for (const paymentId of prepaid.paymentIds) queueBillingSync(() => syncPayment(companyId, paymentId, by));
+  for (const creditId of creditsUsed) queueBillingSync(() => syncCredit(companyId, creditId, by));
+  // Autopay: charge the card or bank account on file (after the invoice went out).
+  if (opts.auto) await db.update(invoices).set({ autoSentAt: new Date() }).where(eq(invoices.id, inv.id));
+  const autopay = await autopayInvoice(companyId, inv.id);
+  const [out] = await db.select().from(invoices).where(eq(invoices.id, inv.id));
+  const now = autopay?.ok ? await refreshInvoice(db, inv.id) : fresh;
+  return { ...out, status: now?.status ?? out.status, autopay };
+  }
+
+/**
  * Invoices and the payments recorded against them. Managers in Customers & billing work with them.
  * Drafts get their number when first sent; sending emails a PDF and/or puts the invoice in the
  * print queue for mailing.
@@ -164,8 +243,28 @@ const routes: FastifyPluginAsync = async (app) => {
     const body = parse(billingSettingsSchema, req.body);
     const [{ max }] = await db.select({ max: sql<number | null>`max(${invoices.number})` }).from(invoices).where(eq(invoices.companyId, req.user.companyId));
     if (max != null && body.nextInvoiceNumber <= max) throw new HttpError(400, `Invoice ${max} has already been used; the next number must be higher`);
-    await db.update(companies).set({ billing: body }).where(eq(companies.id, req.user.companyId));
-    return body;
+    // Late fees and auto-sending are saved from their own cards; keep them.
+    const current = await billingSettings(req.user.companyId);
+    const next = { ...body, lateFees: body.lateFees ?? current.lateFees, autoSend: body.autoSend ?? current.autoSend };
+    await db.update(companies).set({ billing: next }).where(eq(companies.id, req.user.companyId));
+    return next;
+  });
+
+  /** The company's default late fee rules (customers use these unless set otherwise). */
+  app.put("/settings/late-fees", { preHandler: requireRole("admin", AREA) }, async (req) => {
+    const lateFees = parse(lateFeeSettingsSchema, req.body);
+    if (lateFees.enabled && !lateFees.rules.length) throw new HttpError(400, "Add at least one late fee step, or turn late fees off");
+    const current = await billingSettings(req.user.companyId);
+    await db.update(companies).set({ billing: { ...current, lateFees } }).where(eq(companies.id, req.user.companyId));
+    return lateFees;
+  });
+
+  /** The company's default auto-send schedule. */
+  app.put("/settings/auto-send", { preHandler: requireRole("admin", AREA) }, async (req) => {
+    const autoSend = parse(autoSendSettingsSchema, req.body);
+    const current = await billingSettings(req.user.companyId);
+    await db.update(companies).set({ billing: { ...current, autoSend } }).where(eq(companies.id, req.user.companyId));
+    return autoSend;
   });
 
   /** A new draft. Its due date follows the company's terms unless given. */
@@ -282,8 +381,9 @@ const routes: FastifyPluginAsync = async (app) => {
       .from(creditApplications).innerJoin(customerCredits, eq(customerCredits.id, creditApplications.creditId))
       .where(and(eq(creditApplications.invoiceId, inv.id), isNull(creditApplications.removedAt))).orderBy(asc(creditApplications.createdAt));
     const openCredits = (await creditsFor(companyId, cust.id)).credits.filter((c) => c.leftCents > 0 && !c.prepaymentId);
+    const lateFees = await db.select().from(invoiceLateFees).where(eq(invoiceLateFees.invoiceId, inv.id)).orderBy(asc(invoiceLateFees.days));
     return {
-      ...inv, payToken: undefined, balanceCents: invoiceBalance(inv), overdue: isOverdue(inv, today), lines, payments, sync, credits: appliedCredits,
+      ...inv, payToken: undefined, lateFees, balanceCents: invoiceBalance(inv), overdue: isOverdue(inv, today), lines, payments, sync, credits: appliedCredits,
       availableCreditCents: inv.status === "sent" || inv.status === "partial" ? openCredits.filter((c) => !c.propertyId || c.propertyId === inv.propertyId).reduce((sum, c) => sum + c.leftCents, 0) : 0,
       openCredits: inv.status === "sent" || inv.status === "partial" ? openCredits.filter((c) => !c.propertyId || c.propertyId === inv.propertyId).map((c) => ({ id: c.id, number: c.number, description: c.description, leftCents: c.leftCents })) : [],
       payLink: payLinkFor(inv), onlinePayments: !!(await stripeConfig(companyId)),
@@ -304,14 +404,19 @@ const routes: FastifyPluginAsync = async (app) => {
       if (inv.paidCents > 0) throw new HttpError(400, "This invoice has payments, so it can't be changed. Void the payments first, or add a new invoice for the difference");
       if (inv.creditedCents > 0) throw new HttpError(400, "This invoice has credit on it. Take the credit off first (it goes back on the customer's account), then edit it");
       if (body.customerId !== inv.customerId && inv.number != null) throw new HttpError(400, "A sent invoice can't move to another customer; void it and make a new one");
-      const { totals } = await prepare(tx, companyId, body);
+      // Late fee lines stay as they are (only the late fee job adds them and "Waive" takes them off).
+      const lateLines = await tx.select().from(invoiceLines).where(and(eq(invoiceLines.invoiceId, inv.id), eq(invoiceLines.isLateFee, true))).orderBy(invoiceLines.sortOrder);
+      const lines = body.lines.filter((l) => !l.isLateFee);
+      if (!lines.length) throw new HttpError(400, "Add at least one line");
+      const { totals } = await prepare(tx, companyId, { ...body, lines: [...lines, ...lateLines.map((l) => ({ ...l, isLateFee: true }))] });
       const custom = await updatedCustom(companyId, "invoice", (req.body as { custom?: unknown })?.custom, inv.custom);
       const [u] = await tx.update(invoices).set({
         ...(custom ? { custom } : {}), customerId: body.customerId, propertyId: body.propertyId ?? null, issueDate: body.issueDate ?? inv.issueDate, dueDate: body.dueDate ?? inv.dueDate,
         poNumber: body.poNumber ?? null, notes: body.notes ?? null, discountKind: body.discountKind, discountValue: body.discountValue, ...totals, updatedAt: new Date(),
       }).where(eq(invoices.id, inv.id)).returning();
-      await tx.delete(invoiceLines).where(eq(invoiceLines.invoiceId, inv.id));
-      await tx.insert(invoiceLines).values(body.lines.map((l, i) => ({ ...l, serviceTypeId: l.serviceTypeId ?? null, invoiceId: inv.id, amountCents: lineAmount(l), sortOrder: i })));
+      await tx.delete(invoiceLines).where(and(eq(invoiceLines.invoiceId, inv.id), eq(invoiceLines.isLateFee, false)));
+      await tx.insert(invoiceLines).values(lines.map((l, i) => ({ ...l, serviceTypeId: l.serviceTypeId ?? null, invoiceId: inv.id, amountCents: lineAmount(l), sortOrder: i })));
+      for (const [j, l] of lateLines.entries()) await tx.update(invoiceLines).set({ sortOrder: lines.length + j }).where(eq(invoiceLines.id, l.id));
       return refreshInvoice(tx, u.id);
     });
     // A sent invoice that changed: update the Bigcapital copy.
@@ -338,74 +443,14 @@ const routes: FastifyPluginAsync = async (app) => {
    */
   app.post<{ Params: { id: string } }>("/:id/send", async (req) => {
     const body = parse(sendInvoiceSchema, req.body);
-    const { companyId } = req.user;
-    const [first] = await db.select().from(invoices).where(and(eq(invoices.id, req.params.id), eq(invoices.companyId, companyId)));
-    if (!first) throw new HttpError(404, "Invoice not found");
-    if (first.status === "void") throw new HttpError(400, "A void invoice can't be sent");
-    const cust = await customerInCompany(db, companyId, first.customerId);
-    if (cust.poRequired && !first.poNumber) throw new HttpError(400, `${customerName(cust)} needs a PO number on every invoice. Add it, then send`);
-    const wantsEmail = body.via.includes("email");
-    const to = body.emailTo ?? cust.email;
-    if (wantsEmail && !to) throw new HttpError(400, "This customer has no email address. Add one, or send it by paper");
-    const transport = emailTransport();
-    if (wantsEmail && !transport) throw new HttpError(400, "Email isn't set up on this server yet, so it can't be emailed. Send it by paper for now");
+    return sendInvoice(req.user.companyId, req.params.id, body, req.user.sub);
+  });
 
-    // Number it (if it's a draft) before building the PDF, so the PDF shows the number.
-    const inv = await db.transaction(async (tx) => {
-      const [cur] = await tx.select().from(invoices).where(eq(invoices.id, first.id)).for("update");
-      if (cur.number != null) return cur;
-      const number = await takeInvoiceNumber(tx, companyId);
-      const [u] = await tx.update(invoices).set({ number, status: "sent", payToken: randomToken(24), updatedAt: new Date() }).where(eq(invoices.id, cur.id)).returning();
-      return u;
-    });
-    // Credit on the customer's account goes on the invoice before it's built and sent (if that's turned on).
-    let creditsUsed: string[] = [];
-    if ((await billingSettings(companyId)).autoApplyCredits) {
-      const made = await db.transaction((tx) => autoApplyCredits(tx, companyId, inv.customerId, { invoiceIds: [inv.id], by: req.user.sub }));
-      creditsUsed = [...new Set(made.map((a) => a.creditId))];
-    }
-    // Then anything the customer prepaid pays it (with its share of any prepay discount).
-    const prepaid = await db.transaction((tx) => applyPrepayments(tx, companyId, inv.customerId, { invoiceIds: [inv.id], by: req.user.sub }));
-    creditsUsed.push(...prepaid.creditIds);
-    // Each send restarts the pay link's 30 days.
-    const [linked] = await db.update(invoices).set({ payToken: inv.payToken ?? randomToken(24), payTokenExpiresAt: new Date(Date.now() + PAY_LINK_DAYS * 86_400_000) })
-      .where(eq(invoices.id, inv.id)).returning();
-    const fresh = await refreshInvoice(db, inv.id);
-    const payUrl = (await stripeConfig(companyId)) ? payLinkFor(linked)?.url ?? null : null;
-
-    if (wantsEmail && transport && to) {
-      const company = await companyForPdf(companyId);
-      const data = await pdfInvoice(companyId, inv.id);
-      const pdf = await invoicePdf(company, data);
-      const copies = (await db.select({ email: customerContacts.email }).from(customerContacts)
-        .where(and(eq(customerContacts.customerId, cust.id), eq(customerContacts.getsInvoices, true), isNotNull(customerContacts.email))))
-        .map((c) => c.email!).filter((e) => e !== to);
-      const amount = formatMoney(invoiceBalance(data));
-      const due = `${data.dueDate.slice(5, 7)}/${data.dueDate.slice(8, 10)}/${data.dueDate.slice(0, 4)}`;
-      const t = INVOICE_TEXT({ company: company.name, number: inv.number!, customer: customerName(cust), due: `${due} (${termsLabel(data.termsDays)})`, amount, dueDate: due, message: body.message, phone: company.phone, payUrl });
-      const html = `<p>Hello ${esc(customerName(cust))},</p>${body.message ? `<p>${esc(body.message).replace(/\n/g, "<br>")}</p>` : ""}
-<p>Your invoice <strong>${inv.number}</strong> from ${esc(company.name)} is attached.</p>
-<table style="border-collapse:collapse"><tr><td style="padding:2px 12px 2px 0;color:#667085">Amount due</td><td style="font-size:18px;font-weight:700">${amount}</td></tr>
-<tr><td style="padding:2px 12px 2px 0;color:#667085">Due</td><td>${esc(t.text.match(/Due: (.*)/)?.[1] ?? due)}</td></tr></table>
-${payUrl ? `<p><a href="${esc(payUrl)}" style="display:inline-block;background:#1f7a3a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600">Pay online</a></p>
-<p style="color:#667085;font-size:13px">Card or bank account. This button works for ${PAY_LINK_DAYS} days; after that, sign in at <a href="${esc(portalUrl(companyId))}">${esc(portalUrl(companyId).replace(/^https?:\/\//, "").replace(/\?.*$/, ""))}</a>.</p>` : ""}
-<p>${payUrl ? "Or, to pay by check" : "To pay by check"}, mail it with the bottom part of the invoice. Questions? Just reply to this email${company.phone ? ` or call ${esc(company.phone)}` : ""}.</p>
-<p>Thank you,<br>${esc(company.name)}</p>`;
-      await transport.send({
-        to, cc: copies, subject: t.subject, text: t.text, html, fromName: company.name, replyTo: company.email ?? undefined,
-        attachments: [{ filename: `Invoice-${inv.number}.pdf`, content: Buffer.from(pdf), contentType: "application/pdf" }],
-      });
-      await db.update(invoices).set({ emailedAt: new Date(), emailedTo: [to, ...copies].join(", ") }).where(eq(invoices.id, inv.id));
-    }
-    if (body.via.includes("paper")) await db.update(invoices).set({ needsMailing: true }).where(eq(invoices.id, inv.id));
-    queueBillingSync(() => syncInvoice(companyId, inv.id, req.user.sub));
-    for (const paymentId of prepaid.paymentIds) queueBillingSync(() => syncPayment(companyId, paymentId, req.user.sub));
-    for (const creditId of creditsUsed) queueBillingSync(() => syncCredit(companyId, creditId, req.user.sub));
-    // Autopay: charge the card or bank account on file (after the invoice went out).
-    const autopay = await autopayInvoice(companyId, inv.id);
-    const [out] = await db.select().from(invoices).where(eq(invoices.id, inv.id));
-    const now = autopay?.ok ? await refreshInvoice(db, inv.id) : fresh;
-    return { ...out, status: now?.status ?? out.status, autopay };
+  /** Takes a late fee off the invoice (it won't be added again). */
+  app.post<{ Params: { id: string; feeId: string } }>("/:id/late-fees/:feeId/waive", async (req) => {
+    const fee = await waiveLateFee(req.user.companyId, req.params.id, req.params.feeId, req.user.sub);
+    if (!fee) throw new HttpError(404, "Late fee not found");
+    return { ok: true };
   });
 
   /** Charges what's owed to a card or bank account on file (the default one unless another is picked). */

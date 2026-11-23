@@ -7,6 +7,7 @@ import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox } from "@/components/ui";
 import { customerBody, customerFormValue } from "@/components/customers";
 import { visitWhen, type Visit } from "@/components/visits";
+import { CustomerBillingRules, describeCustomerRules } from "@/components/billing-rules";
 
 /**
  * Boxes on a customer's page, laid out like Homeworks': the account summary with a revenue
@@ -285,8 +286,10 @@ export function DeliveryBox({ customer, onSaved }: { customer: any; onSaved: () 
 }
 
 /** The customer's own defaults for invoices and estimates (Homeworks' Invoice Settings and Defaults). */
-export function InvoiceDefaultsBox({ customer, onEdit }: { customer: any; onEdit: () => void }) {
-  const settings = useApi<{ termsDays: number; autoApplyCredits?: boolean }>("/invoices/settings").data;
+export function InvoiceDefaultsBox({ customer, onEdit, onSaved }: { customer: any; onEdit: () => void; onSaved: () => void }) {
+  const settings = useApi<any>("/invoices/settings").data;
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const rules = describeCustomerRules(customer, settings ?? undefined);
   return (
     <div className="card">
       <div className="row" style={{ justifyContent: "space-between" }}>
@@ -301,7 +304,12 @@ export function InvoiceDefaultsBox({ customer, onEdit }: { customer: any; onEdit
         <dt>Sales tax</dt><dd>{customer.taxExempt ? `Exempt${customer.taxExemptNumber ? ` (${customer.taxExemptNumber})` : ""}` : customer.taxRate != null ? `${customer.taxRate}%` : "The usual rate"}</dd>
         <dt>Autopay</dt><dd>{customer.autopay ? "On (see Cards & bank accounts)" : "Off"}</dd>
         {settings?.autoApplyCredits !== undefined && <><dt>Credit</dt><dd>{settings.autoApplyCredits ? "Used on new invoices automatically" : "Applied by hand"}</dd></>}
+        <dt>Late fees</dt><dd>{rules.lateFees}</dd>
+        <dt>Auto-send</dt><dd>{rules.autoSend}</dd>
       </dl>
+      {rulesOpen
+        ? <CustomerBillingRules customer={customer} onCancel={() => setRulesOpen(false)} onSaved={() => { setRulesOpen(false); onSaved(); }} />
+        : <button type="button" className="linkbtn" onClick={() => setRulesOpen(true)}>Change late fees or auto-send</button>}
     </div>
   );
 }

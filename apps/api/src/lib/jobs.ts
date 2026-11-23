@@ -1,3 +1,4 @@
+import { applyLateFees, runAutoSend } from "./billingJobs";
 import { drainCustomerMessages } from "./customerMessages";
 import { refreshAddresses } from "./addresses";
 import { retryBillingSyncs } from "./billingSync";
@@ -39,6 +40,9 @@ export async function runScheduledChecks(now = new Date()) {
 
   // Customer emails left unsent by a restart.
   await drainCustomerMessages().catch((err) => console.error("customer emails failed", err));
+  // Late fees that have come due, and invoices to send on today's auto-send schedules.
+  await applyLateFees(now).catch((err) => console.error("late fees failed", err));
+  await runAutoSend(now).catch((err) => console.error("auto-send failed", err));
 
   // Preventive maintenance coming due or overdue: tell fleet managers and the assigned driver.
   const scheduleRows = await db

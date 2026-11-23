@@ -361,6 +361,43 @@ billing; admins change prices).
   **footer** printed on every invoice, and whether a customer's credit is **used automatically** on their invoices
   when they're sent (on by default).
 
+### Late fees
+
+Late fees are **off** until an admin turns them on in **Settings → Customers & billing → Late fees**.
+
+- **Steps.** Add up to six steps, each "N days after the invoice is sent, add $X" (or X% of the invoice). For example:
+  $15 at 30 days, then 2% at 60 days. Each step is added **once**, as a "Late fee" line on the invoice. It's worked
+  out from the **original** invoice total, so fees never pile on fees. The customer's discount doesn't reduce a
+  late fee, and it isn't taxed. Late fees post to income account **4950** in Bigcapital.
+- **When they're counted from.** Days count from the day the invoice was **first sent**, not its invoice date.
+- **Rules are set at sending.** An invoice gets the steps in force on the day it's first sent. Changing the steps
+  later only affects invoices sent after that. Invoices sent before late fees were turned on never get them.
+- **Paid invoices** get no fee. A bank payment that's still clearing counts as paid.
+- **Email.** With **Email the customer** ticked, a customer who gets invoices by email is told when a fee is added,
+  with the new balance and a pay link. The office gets a notification listing the fees added.
+- **Per customer.** On a customer's page, open **Invoice settings → Change late fees or auto-send**. Choose the
+  company default, **No late fees**, or the customer's own steps.
+- **Waive.** The invoice page has a **Late fees** box with the steps it got and their dates, plus any fees added.
+  **Waive** takes a fee off; it won't be added again. If the customer has already paid the fee, refund or add a
+  credit instead. Editing an invoice leaves its late fee lines as they are.
+
+### Auto-sending invoices
+
+Auto-send is **off** until an admin turns it on in **Settings → Customers & billing → Auto-send invoices**.
+
+- **Schedule.** Choose daily (every day, or weekdays only), weekly (pick the days), or monthly (a date such as the 1st
+  or the last day, or a weekday such as the first Monday). Also choose the hour it runs.
+- **What it does.** On a send day, each customer's **draft** invoices are sent the way that customer gets invoices.
+  Customers with an email get them by email with a pay link. Customers set to paper, or with no email, go on the
+  **To mail** list. Drafts with a $0 total are skipped.
+- **Finished work orders.** With **First make invoices for their finished work orders** ticked, completed work
+  orders that aren't on an invoice yet become invoices and go out in the same run.
+- **Once a day.** Each company's run happens once a day. A draft made after the run waits for the next send day.
+- **Summary.** The office gets a notification listing what went out and anything that couldn't, such as a missing
+  PO number.
+- **Per customer.** On the customer's page, choose the company default, **Don't send automatically**, or their own
+  schedule. An invoice that went out this way shows **Sent automatically** under Delivery.
+
 ### Sales tax
 
 Sales tax is **off** until you turn it on, so nothing is taxed today. It's built in so you're ready to sell

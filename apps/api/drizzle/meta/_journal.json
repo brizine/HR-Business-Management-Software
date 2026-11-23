@@ -540,6 +540,13 @@
       "when": 1795439476408,
       "tag": "0076_customer_page",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1795470284249,
+      "tag": "0077_late_fees_autosend",
+      "breakpoints": true
     }
   ]
 }

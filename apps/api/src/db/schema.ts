@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { CustomValues, TodoRule, BillingSettings, Bracket, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
+import type { CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -1217,6 +1217,12 @@ export const customers = pgTable(
     invoiceNotes: text("invoice_notes"),
     /** Days to pay (blank: the company's usual terms). */
     termsDays: integer("terms_days"),
+    /** Late fees: "default" (the company's), "none", or "custom" (lateFeeRules). */
+    lateFeeMode: text("late_fee_mode").notNull().default("default"),
+    lateFeeRules: jsonb("late_fee_rules").$type<LateFeeRule[]>(),
+    /** Auto-sending invoices: "default" (the company's), "off", or "custom" (autoSendSchedule). */
+    autoSendMode: text("auto_send_mode").notNull().default("default"),
+    autoSendSchedule: jsonb("auto_send_schedule").$type<SendSchedule>(),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     /** Custom field values (custom_fields), by field id. */
@@ -1364,6 +1370,23 @@ export const customerPaymentMethods = pgTable(
     uniqueIndex("customer_payment_methods_stripe_idx").on(t.stripePaymentMethodId),
     index("customer_payment_methods_customer_idx").on(t.customerId),
   ],
+);
+
+/** Each late fee step added to an invoice (once per step), and whether the office waived it. */
+export const invoiceLateFees = pgTable(
+  "invoice_late_fees",
+  {
+    id: id(),
+    companyId: companyId(),
+    invoiceId: uuid("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+    days: integer("days").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    lineId: uuid("line_id").references(() => invoiceLines.id, { onDelete: "set null" }),
+    waivedAt: timestamp("waived_at", { withTimezone: true }),
+    waivedById: uuid("waived_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("invoice_late_fees_step_idx").on(t.invoiceId, t.days)],
 );
 
 /** Notes on a customer (like Homeworks' Call Notes): a call or a note, who wrote it, who was told, and any follow-up to-do. */
@@ -1600,6 +1623,12 @@ export const invoices = pgTable(
     emailedTo: text("emailed_to"),
     /** Autopay tried the card or bank account on file and it didn't go through (why, and when). */
     autopayError: text("autopay_error"),
+    /** The late fee rules it got when first sent (later rule changes don't touch it). */
+    lateFeeRules: jsonb("late_fee_rules").$type<LateFeeRule[]>(),
+    /** The day it was first sent (late fee days count from here). */
+    sentOn: date("sent_on"),
+    /** Sent by the auto-send schedule rather than by hand. */
+    autoSentAt: timestamp("auto_sent_at", { withTimezone: true }),
     autopayFailedAt: timestamp("autopay_failed_at", { withTimezone: true }),
     mailedAt: timestamp("mailed_at", { withTimezone: true }),
     /** For the online pay link (Phase 1 portal). */
@@ -1636,6 +1665,8 @@ export const invoiceLines = pgTable(
     incomeAccountCode: text("income_account_code").notNull().default("4000"),
     /** Sales tax on the line, in percent (0 = not taxed). */
     taxRate: doublePrecision("tax_rate").notNull().default(0),
+    /** A late fee Crewdesk added (not discounted or taxed). */
+    isLateFee: boolean("is_late_fee").notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (t) => [index("invoice_lines_invoice_idx").on(t.invoiceId)],

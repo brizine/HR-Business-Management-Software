@@ -1,10 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { customerNoteSchema, formatMoney, hasRole, visitNumber } from "@crewdesk/shared";
+import { customerBillingRulesSchema, customerNoteSchema, formatMoney, hasRole, visitNumber } from "@crewdesk/shared";
 import { db } from "../db";
 import {
-  cancellations, customerCredits, customerFiles, customerMessageRecipients, customerMessages, customerNotes, customerPaymentMethods, employees, estimates,
+  cancellations, customerCredits, customerFiles, customers, customerMessageRecipients, customerMessages, customerNotes, customerPaymentMethods, employees, estimates,
   invoicePayments, invoices, prepayments, todos, visits,
 } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
@@ -72,6 +72,17 @@ const routes: FastifyPluginAsync = async (app) => {
     if (n.byId !== req.user.sub && !hasRole(req.user.role, "admin")) throw new HttpError(403, "Only whoever wrote it or an admin can remove it");
     await db.delete(customerNotes).where(eq(customerNotes.id, n.id));
     return { ok: true };
+  });
+
+  /** Their late fee and auto-send choices (company default, none/off, or their own). */
+  app.put<{ Params: { id: string } }>("/:id/billing-rules", async (req) => {
+    const body = parse(customerBillingRulesSchema, req.body);
+    const c = await customerInCompany(db, req.user.companyId, req.params.id);
+    const [u] = await db.update(customers).set({
+      lateFeeMode: body.lateFeeMode, lateFeeRules: body.lateFeeMode === "custom" ? body.lateFeeRules : null,
+      autoSendMode: body.autoSendMode, autoSendSchedule: body.autoSendMode === "custom" ? body.autoSendSchedule ?? null : null, updatedAt: new Date(),
+    }).where(eq(customers.id, c.id)).returning();
+    return { lateFeeMode: u.lateFeeMode, lateFeeRules: u.lateFeeRules, autoSendMode: u.autoSendMode, autoSendSchedule: u.autoSendSchedule };
   });
 
   /* ── Photos and documents ── */
