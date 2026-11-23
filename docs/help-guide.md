@@ -38,8 +38,8 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
 - **+ New:** everything you can add, in columns like Homeworks: **Team & Resources** (Employee, Time off request,
   Item & service, Equipment), **Finance** (Invoice), **Events** (Work order, To-do, Repair order) and **Customer** (Customer,
   Property). Each opens its page with the add form showing; you only see what your access allows.
-- **Your initials:** My profile, Company Wiki, Notification settings, Security, All settings, Help, **Back to the
-  real company** (in the test company) and **Sign out**.
+- **Your initials:** My profile, Company Wiki, Notification settings, Security, All settings, Help, **Open** the test
+  company (or **Back to the real company** when you're in it) and **Sign out**.
 - **Breadcrumb trail:** at the top of every page, the last pages you visited, oldest first, ending with the page
   you're on (in bold), such as **Jane Example / Invoice 1043 / Price list / Invoices**. Click one to go back to
   it. It shows your last three pages before this one; opening a page that's already in the trail moves it to the
@@ -459,8 +459,8 @@ form and go straight to Stripe; Crewdesk never sees or keeps them.
 
 A separate company, named after yours with "(Test)", for trying things out without touching real customers or books.
 
-- **Getting in:** owners, admins, managers and anyone with Customers & billing access click **Open test company** on
-  the Customers page (or Settings → Company Info). No separate password: you switch in as yourself. While
+- **Getting in:** owners, admins, managers and anyone with Customers & billing access click their initials at the top
+  right, then **Open … (Test)**, on any page (also on the Customers page's **⋯** menu, and Settings → Company Info). No separate password: you switch in as yourself. While
   you're in it, a yellow **TEST** badge sits next to the company name in the top bar (with a yellow line under
   the bar); click it, or open your initials menu, for **Back to the real company**.
 - **What's in it:** the sample customers are loaded the first time anyone opens it. Nothing else is copied: it has

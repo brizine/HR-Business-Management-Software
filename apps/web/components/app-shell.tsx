@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { NAV, NEW_MENU, SIDES, pathMatches, type NavGroup, type NavItem, type Side } from "@/lib/nav";
 import { Icon } from "@/components/icons";
 import { useClockPunch } from "@/components/clock-card";
-import { TestBadge, backToRealCompany } from "@/components/test-company";
+import { TestBadge, backToRealCompany, openTestCompany } from "@/components/test-company";
 import { THEME_CHOICES, setTheme, useTheme } from "@/lib/theme";
 import { DoneBox, dayLabel, type Todo } from "@/components/todos";
 
@@ -264,6 +264,13 @@ function ProfileMenu() {
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useDismiss(open, close, ref);
+  // The test company (looked up when the menu opens): open it, or set one up (owners).
+  const [testCo, setTestCo] = useState<{ isTest: boolean; exists?: boolean; name?: string | null; canOpen?: boolean; canCreate?: boolean } | null>(null);
+  const [switching, setSwitching] = useState(false);
+  useEffect(() => {
+    if (!open || testCo || me?.company.isTest) return;
+    api<NonNullable<typeof testCo>>("/auth/test-company").then(setTestCo, () => setTestCo({ isTest: false }));
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!me) return null;
   const initials = `${me.user.firstName[0] ?? ""}${me.user.lastName[0] ?? ""}`.toUpperCase();
   return (
@@ -279,6 +286,12 @@ function ProfileMenu() {
           <Link role="menuitem" href="/settings/security" onClick={close}>All settings</Link>
           <Link role="menuitem" href="/help" onClick={close}>Help</Link>
           {me.company.isTest && <button type="button" role="menuitem" onClick={() => { setOpen(false); backToRealCompany(); }}>Back to the real company</button>}
+          {!me.company.isTest && testCo?.exists && testCo.canOpen && (
+            <button type="button" role="menuitem" disabled={switching} onClick={() => { setSwitching(true); openTestCompany().catch((e) => { setSwitching(false); alert((e as Error).message); }); }}>
+              {switching ? "Opening…" : `Open ${testCo.name ?? "test company"}`}
+            </button>
+          )}
+          {!me.company.isTest && testCo && !testCo.exists && testCo.canCreate && <Link role="menuitem" href="/settings/company-info" onClick={close}>Set up a test company</Link>}
           <button type="button" role="menuitem" className="menu-danger" onClick={() => { setOpen(false); signOut().then(() => router.replace("/login")); }}>
             <Icon name="logout" size={16} />Sign out
           </button>
