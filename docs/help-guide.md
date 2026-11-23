@@ -364,6 +364,35 @@ products or taxable services later.
   - Drafts and void invoices stay out.
   - **Print** it or **Export CSV** for your filing.
 
+### Estimates
+
+Billing → **Estimates** (or **New → Estimate**, or **New estimate** on a customer's page), laid out like Homeworks':
+
+- **The list:** small tabs with counts (**Total**, **Pending**, **Accepted**, **Declined**, **Changes requested**, **Drafts**),
+  a search (customer, title or number), and a **Next step** column (send it, waiting for the customer, make a work order
+  or invoice). Estimates are numbered from 1000.
+- **Making one:** a title, the customer and service address, the date, **Good until** (after that the customer can't
+  accept it online), P.O. number, discount %, and when they asked for it. Then the lines, from the price list (priced
+  for the lawn) or typed in, with **Qty**, **Rate**, **Visits** (a line's total is quantity × rate × visits, e.g. 6
+  fertilizer rounds) and **Tax %**. **More** on a line:
+  - **Optional (the customer chooses)**, and whether it **Starts ticked**; **Recommended** shows a badge.
+  - A different service address for that line, **Our cost** (each) and **Hours per visit**: these stay in the office.
+  - **Add package** adds a package's lines.
+  - The totals show the subtotal, discount, tax and total, and (for the office only) the amount per visit, budgeted
+    hours, our cost and the estimated profit and margin. Add **Terms**, **Notes for the customer** and **Internal
+    notes**.
+- **Send:** emails it with the PDF and a link. The customer sees it (no sign-in), ticks the options they want (the
+  total updates), and **Accepts** by typing their name, **Asks for changes** (saying what), or **Declines**. You get a
+  notification (Settings → Notifications → **Estimates**), and the estimate shows when it was seen. Signed-in
+  customers also see their estimates in the portal.
+- **Record their answer** if they tell you by phone; **Undo answer** puts a mistake back to pending.
+- **After it's accepted:** **Make a work order** opens a new work order filled in with its title, address and the
+  lines they chose (set the dates, crew and any repeat there); **Make an invoice** makes a draft invoice of those
+  lines (multi-visit lines with the visits as the quantity). Both are linked from the estimate. To change an accepted
+  or declined estimate, **Copy** it to a new draft.
+- On the Customers list, the **Estimates** filter (pending, accepted, declined, changes requested, or none) and the
+  **Open estimates** column (what pending ones come to).
+
 ### Online payments and the customer portal
 
 Customers pay invoices by **card or US bank account** through Stripe. Card and bank details are typed into Stripe's own

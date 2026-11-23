@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PAYMENT_ON_FILE_OPTIONS } from "./paymentMethods";
+import { ESTIMATE_FILTER_OPTIONS } from "./estimates";
 import { CUSTOMER_KINDS, CUSTOMER_KIND_LABELS, DELIVERY_LABELS, DELIVERY_METHODS, LEAD_SOURCES } from "./customers";
 
 /**
@@ -50,6 +51,7 @@ export const CUSTOMER_FILTER_FIELDS: readonly FilterField[] = [
   { key: "taxExempt", label: "Tax exempt", group: "Money", kind: "bool" },
   { key: "paymentOnFile", label: "Payment method on file", group: "Money", kind: "enum", options: PAYMENT_ON_FILE_OPTIONS },
   { key: "autopay", label: "Autopay", group: "Money", kind: "bool" },
+  { key: "estimate", label: "Estimates", group: "Service", kind: "enum", options: ESTIMATE_FILTER_OPTIONS },
   { key: "po", label: "Needs a PO number", group: "Money", kind: "bool" },
   { key: "lastService", label: "Last service", group: "Service", kind: "date" },
   { key: "nextService", label: "Next service scheduled", group: "Service", kind: "presence" },
@@ -163,6 +165,7 @@ export const CUSTOMER_COLUMNS: readonly CustomerColumn[] = [
   { key: "taxExempt", label: "Tax exempt", group: "Money" },
   { key: "onFile", label: "Card / bank on file", group: "Money" },
   { key: "autopay", label: "Autopay", group: "Money" },
+  { key: "openEstimates", label: "Open estimates", group: "Money", sort: true, align: "right" },
   { key: "po", label: "PO required", group: "Money" },
   { key: "lastService", label: "Last service", group: "Service", sort: true },
   { key: "nextService", label: "Next scheduled", group: "Service", sort: true },

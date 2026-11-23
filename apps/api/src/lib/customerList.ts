@@ -25,6 +25,8 @@ export function listColumns(today: string, yearStart: string) {
     revenue: sql<number>`(select coalesce(sum(i.total_cents), 0)::int from invoices i where i.customer_id = ${C} and i.status <> 'void' and i.number is not null and i.issue_date >= ${yearStart}::date)`,
     lastService: sql<string | null>`(select max(v.date)::text from visits v where v.customer_id = ${C} and v.status = 'completed')`,
     nextService: sql<string | null>`(select min(v.date)::text from visits v where v.customer_id = ${C} and v.status in ('open', 'on_site') and v.date >= ${today}::date)`,
+    /** What open estimates (pending or changes requested) come to. */
+    openEstimates: sql<number>`(select coalesce(sum(e.total_cents), 0)::int from estimates e where e.customer_id = ${C} and e.status in ('sent', 'changes'))`,
     /** The default card or bank account on file, e.g. "visa 4242" / "ach Arvest Bank 6789" (labelled in the browser). */
     onFile: sql<string | null>`(select m.type || '|' || coalesce(m.brand, '') || '|' || coalesce(m.bank_name, '') || '|' || coalesce(m.account_type, '') || '|' || coalesce(m.last4, '')
       from customer_payment_methods m where m.customer_id = ${C} order by m.is_default desc, m.created_at limit 1)`,
@@ -129,6 +131,17 @@ export function filterSql(r: CustomerFilter, cols: ListColumns, custom: { id: st
       const x = sql.raw(`"customers"."${r.f}"`);
       return r.op === "isnot" ? sql`(${x} is null or not ${inList(x, vals)})` : inList(x, vals);
     }
+    case "estimate": {
+      if (!vals.length) return null;
+      const statuses = vals.filter((v) => ["sent", "accepted", "declined", "changes"].includes(v));
+      const parts = [
+        ...(statuses.length ? [sql`exists (select 1 from estimates e where e.customer_id = ${C} and e.status in (${sql.join(statuses.map((v) => sql`${v}`), sql`, `)})${r.from ? sql` and e.issue_date >= ${r.from}::date` : sql``}${r.to ? sql` and e.issue_date <= ${r.to}::date` : sql``})`] : []),
+        ...(vals.includes("none") ? [sql`not exists (select 1 from estimates e where e.customer_id = ${C} and e.status <> 'draft')`] : []),
+      ];
+      if (!parts.length) return null;
+      const has = sql`(${sql.join(parts, sql` or `)})`;
+      return r.op === "isnot" ? sql`not ${has}` : has;
+    }
     case "paymentOnFile": {
       if (!vals.length) return null;
       const kinds = vals.filter((v) => v === "card" || v === "ach");
@@ -187,6 +200,7 @@ export function sortSql(key: string, cols: ListColumns): SQL | null {
     case "name": return sql`lower(coalesce("customers"."company_name", "customers"."last_name", "customers"."first_name", ''))`;
     case "type": return sql`"customers"."kind"`;
     case "status": return sql`"customers"."status"`;
+    case "openEstimates": return cols.openEstimates;
     case "source": return sql`"customers"."source"`;
     case "since": return sql`"customers"."created_at"`;
     case "email": return sql`lower("customers"."email")`;

@@ -10,7 +10,7 @@ import {
 } from "@crewdesk/shared";
 import { db } from "../db";
 import type { Tx } from "../lib/crm";
-import { crews, crmTags, customers, employees, invoiceLines, invoices, properties, propertyAssignments, serviceTypes, visitAssignees, visitFiles, visitLines, visits } from "../db/schema";
+import { crews, crmTags, customers, employees, estimates, invoiceLines, invoices, properties, propertyAssignments, serviceTypes, visitAssignees, visitFiles, visitLines, visits } from "../db/schema";
 import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { addDays, billingSettings } from "../lib/invoices";
@@ -260,6 +260,12 @@ const routes: FastifyPluginAsync = async (app) => {
       const ls = rows.flatMap((v) => lineRows(v.id, body));
       if (ls.length) await tx.insert(visitLines).values(ls);
       if (crew.length) await tx.insert(visitAssignees).values(rows.flatMap((v) => crew.map((employeeId) => ({ visitId: v.id, employeeId }))));
+      // Made from an accepted estimate: link it, so the estimate shows its work order.
+      const estimateId = (req.body as { estimateId?: unknown })?.estimateId;
+      if (typeof estimateId === "string" && /^[0-9a-f-]{36}$/i.test(estimateId)) {
+        await tx.update(estimates).set({ visitId: rows[0].id, updatedAt: new Date() })
+          .where(and(eq(estimates.id, estimateId), eq(estimates.companyId, companyId), eq(estimates.status, "accepted"), isNull(estimates.visitId)));
+      }
       return rows;
     });
     const first = created[0];

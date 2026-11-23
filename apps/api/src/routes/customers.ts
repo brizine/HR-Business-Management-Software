@@ -131,7 +131,7 @@ const routes: FastifyPluginAsync = async (app) => {
         id: customers.id, number: customers.number, kind: customers.kind, firstName: customers.firstName, lastName: customers.lastName,
         companyName: customers.companyName, email: customers.email, phone: customers.phone, altPhone: customers.altPhone, status: customers.status,
         tagIds: customers.tagIds, delivery: customers.delivery, sample: customers.sample, source: customers.source, poRequired: customers.poRequired,
-        taxExempt: customers.taxExempt, emailOptOutAt: customers.emailOptOutAt, autopay: customers.autopay, onFile: cols.onFile, notes: sql<string | null>`left(${customers.notes}, 200)`, createdAt: customers.createdAt, custom: customers.custom,
+        taxExempt: customers.taxExempt, emailOptOutAt: customers.emailOptOutAt, autopay: customers.autopay, onFile: cols.onFile, openEstimates: cols.openEstimates, notes: sql<string | null>`left(${customers.notes}, 200)`, createdAt: customers.createdAt, custom: customers.custom,
         billingStreet: customers.billingStreet, billingCity: customers.billingCity, billingState: customers.billingState, billingZip: customers.billingZip,
         propertyCount: cols.properties, address: cols.address, city: cols.city, zip: cols.zip, balanceCents: cols.balance, overdueCents: cols.overdue,
         creditCents: cols.credit, prepaidCents: cols.prepaid, revenueCents: cols.revenue, lastService: cols.lastService, nextService: cols.nextService,

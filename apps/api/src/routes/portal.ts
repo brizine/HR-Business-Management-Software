@@ -5,7 +5,7 @@ import { z } from "zod";
 import { customerName, formatAddress, invoiceBalance, isInactive, isOverdue } from "@crewdesk/shared";
 import { db } from "../db";
 import { billingSettings } from "../lib/invoices";
-import { companies, creditApplications, customerContacts, customerCredits, customerPaymentMethods, customers, employees, invoiceLines, invoicePayments, invoices, paymentRefunds, portalCodes, prepayments, properties, propertyAssignments } from "../db/schema";
+import { companies, creditApplications, customerContacts, customerCredits, customerPaymentMethods, customers, employees, estimates, invoiceLines, invoicePayments, invoices, paymentRefunds, portalCodes, prepayments, properties, propertyAssignments } from "../db/schema";
 import { finishSetup, makeDefault, methodView, removeMethod, setAutopay, startSetup } from "../lib/paymentMethods";
 import { authenticate, requireRole, WEB_CLIENT_HEADER, type AuthUser } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
@@ -249,6 +249,8 @@ const portalRoutes: FastifyPluginAsync = async (app) => {
       .where(and(inArray(customerCredits.customerId, v.customerIds), eq(customerCredits.status, "open"), isNull(customerCredits.prepaymentId)));
     const pps = await db.select().from(prepayments).where(and(inArray(prepayments.customerId, v.customerIds), inArray(prepayments.status, ["requested", "pending", "open", "closed"])))
       .orderBy(desc(prepayments.createdAt)).limit(50);
+    const ests = await db.select().from(estimates).where(and(eq(estimates.companyId, v.companyId), inArray(estimates.customerId, v.customerIds), inArray(estimates.status, ["sent", "accepted", "declined", "changes"])))
+      .orderBy(desc(estimates.number)).limit(30);
     const savedMethods = await db.select().from(customerPaymentMethods).where(inArray(customerPaymentMethods.customerId, v.customerIds))
       .orderBy(desc(customerPaymentMethods.isDefault), asc(customerPaymentMethods.createdAt));
     const pend = invs.length ? await db.select({ invoiceId: invoicePayments.invoiceId, cents: sql<number>`sum(${invoicePayments.amountCents})::int` }).from(invoicePayments)
@@ -283,6 +285,7 @@ const portalRoutes: FastifyPluginAsync = async (app) => {
         };
       }),
       invoices: list,
+      estimates: ests.map((e) => ({ id: e.id, number: e.number, title: e.title, status: e.status, issueDate: e.issueDate, totalCents: e.totalCents, customerId: e.customerId, link: e.token ? `/estimate/${e.token}` : null })),
       prepayments: await Promise.all(pps.filter((x) => x.status !== "requested" || (x.payTokenExpiresAt && x.payTokenExpiresAt > new Date())).map((x) => prepaymentView(x))),
       paymentHistory: pays.map(({ p, number }) => ({ id: p.id, invoiceId: p.invoiceId, invoiceNumber: number, amountCents: p.amountCents, refundedCents: p.refundedCents, method: p.method, methodDetail: p.methodDetail, receivedOn: p.receivedOn, status: p.status })),
     };

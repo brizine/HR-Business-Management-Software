@@ -201,6 +201,7 @@ export function cellText(col: Col, c: any, tags: Tag[]): string {
     case "revenue": return money(c.revenueCents);
     case "taxExempt": return c.taxExempt ? "Yes" : "";
     case "autopay": return c.autopay ? "On" : "";
+    case "openEstimates": return c.openEstimates ? formatMoney(c.openEstimates) : "";
     case "onFile": {
       if (!c.onFile) return "";
       const [type, brand, bankName, accountType, last4] = String(c.onFile).split("|");

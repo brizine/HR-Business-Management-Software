@@ -13,6 +13,7 @@ type Me = {
   customers: { id: string; number: number; name: string; email: string | null; phone: string | null; billing: { street: string | null; city: string | null; state: string | null; zip: string | null }; balanceCents: number; overdueCents: number; creditCents: number; prepaidCents: number; properties: { id: string; address: string }[]; autopay: boolean; paymentMethods: SavedMethod[] }[];
   invoices: { id: string; number: number; customerId: string; status: string; issueDate: string; dueDate: string; totalCents: number; paidCents: number; balanceCents: number; pendingCents: number; overdue: boolean; serviceAddress: string | null }[];
   paymentHistory: PortalPayment[];
+  estimates: { id: string; number: number; title: string | null; status: string; issueDate: string; totalCents: number; customerId: string; link: string | null }[];
   prepayments: { id: string; number: number; description: string; amountCents: number; discountCents: number; status: string; receivedOn: string | null; methodDetail: string | null; cashLeftCents: number; customer: { id: string } }[];
 };
 
@@ -120,6 +121,22 @@ function Home({ me, reload }: { me: Me; reload: () => void }) {
                     ))}
                   </ul>
                 )}
+              </>
+            )}
+            {me.estimates.some((x) => x.customerId === cust.id) && (
+              <>
+                <h2 className="pt-h2">Estimates</h2>
+                <ul className="pt-list">
+                  {me.estimates.filter((x) => x.customerId === cust.id).map((x) => (
+                    <li key={x.id}>
+                      <a href={x.link ?? "#"} className="pt-row">
+                        <span><strong>{x.title || `Estimate ${x.number}`}</strong> <span className={`pt-pill ${x.status === "accepted" ? "ok" : x.status === "declined" ? "" : "warn"}`}>{x.status === "sent" ? "Waiting for you" : x.status === "changes" ? "Changes asked for" : x.status === "accepted" ? "Accepted" : "Declined"}</span>
+                          <span className="pt-muted block">Estimate {x.number} · {longDate(x.issueDate)}</span></span>
+                        <span className="pt-right"><strong>{formatMoney(x.totalCents)}</strong>{(x.status === "sent" || x.status === "changes") && !staff && <span className="pt-btn primary small">View</span>}</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
               </>
             )}
             <Prepayments me={me} customerId={cust.id} staff={staff} onPaid={reload} />

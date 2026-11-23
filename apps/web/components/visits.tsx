@@ -89,16 +89,18 @@ const draftLine = (l?: VisitLine): LineDraft => ({ serviceTypeId: l?.serviceType
  * repeating with an off-season, or the waitlist); crew; notes.
  */
 export function VisitForm({ visit, preset, onSaved, onCancel }: {
-  visit?: Visit; preset?: { customer?: { id: string; name: string }; propertyId?: string; date?: string };
+  visit?: Visit;
+  /** Starts filled in (from a customer or property page, a calendar day, or an accepted estimate). */
+  preset?: { customer?: { id: string; name: string }; propertyId?: string; date?: string; title?: string; lines?: Partial<VisitLine>[]; estimateId?: string; notes?: string };
   onSaved: (v: Visit, created: number) => void; onCancel: () => void;
 }) {
-  const [title, setTitle] = useState(visit?.title ?? "");
+  const [title, setTitle] = useState(visit?.title ?? preset?.title ?? "");
   const [customer, setCustomer] = useState<{ id: string; name: string } | null>(visit ? { id: visit.customer.id, name: visit.customer.name } : preset?.customer ?? null);
   const [propertyId, setPropertyId] = useState(visit?.propertyId ?? preset?.propertyId ?? "");
   const [color, setColor] = useState(visit?.color ?? DEFAULT_TODO_COLOR);
   const [location, setLocation] = useState(visit?.location ?? "");
   const [billing, setBilling] = useState<VisitBilling>(visit?.billing ?? "invoice");
-  const [lines, setLines] = useState<LineDraft[]>(visit?.lines.length ? visit.lines.map(draftLine) : [draftLine()]);
+  const [lines, setLines] = useState<LineDraft[]>(visit?.lines.length ? visit.lines.map(draftLine) : preset?.lines?.length ? preset.lines.map((l) => draftLine(l as VisitLine)) : [draftLine()]);
   const [scheduling, setScheduling] = useState<VisitScheduling>(visit && !visit.date ? "waitlist" : "single");
   const [date, setDate] = useState(visit?.date ?? preset?.date ?? localToday());
   const [multi, setMulti] = useState(!!visit?.endDate);
@@ -115,7 +117,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
   const [crewId, setCrewId] = useState(visit?.crewId ?? "");
   const [tagIds, setTagIds] = useState<string[]>(visit?.tagIds ?? []);
   const { tags } = useTags();
-  const [notes, setNotes] = useState(visit?.notes ?? "");
+  const [notes, setNotes] = useState(visit?.notes ?? preset?.notes ?? "");
   const [custom, setCustom] = useState<CustomValues>(visit?.custom ?? {});
   const [applyTo, setApplyTo] = useState<"one" | "following">("one");
   const save = useAction();
@@ -174,7 +176,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
         date: scheduling === "waitlist" ? null : date, endDate: multi && scheduling === "single" ? endDate : null,
         startTime: timed && scheduling !== "waitlist" ? startTime : null, endTime: timed && scheduling !== "waitlist" ? endTime || null : null,
         budgetedHours: hours.trim() === "" ? null : Number(hours), assigneeIds: crew, crewId: crewId || null, tagIds, custom,
-        ...(visit ? {} : { scheduling, repeatEvery: Number(every) || 1, repeatUnit: unit, repeatUntil: scheduling === "repeat" ? until : null, offMonths }),
+        ...(visit ? {} : { scheduling, repeatEvery: Number(every) || 1, repeatUnit: unit, repeatUntil: scheduling === "repeat" ? until : null, offMonths, estimateId: preset?.estimateId }),
       };
       const r = visit
         ? await api<Visit & { changed: number }>(`/visits/${visit.id}${visit.seriesId && applyTo === "following" ? "?applyTo=following" : ""}`, { method: "PUT", body })

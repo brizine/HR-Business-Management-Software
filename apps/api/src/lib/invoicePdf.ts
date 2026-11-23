@@ -8,11 +8,11 @@ import { formatAddress, formatMoney, formatTaxRate, termsLabel } from "@crewdesk
  * with a check.
  */
 
-const W = 612, H = 792, IN = 72;
-const INK = rgb(0.1, 0.12, 0.16), MUTED = rgb(0.42, 0.45, 0.5), LINE = rgb(0.82, 0.84, 0.87);
+export const W = 612, H = 792, IN = 72;
+export const INK = rgb(0.1, 0.12, 0.16), MUTED = rgb(0.42, 0.45, 0.5), LINE = rgb(0.82, 0.84, 0.87);
 
 /** Standard PDF fonts only cover Windows-1252; anything else becomes "?". */
-const safe = (s: string) => s.replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/[^\x20-\x7E\xA0-\xFF\n]/g, "?");
+export const safe = (s: string) => s.replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/[^\x20-\x7E\xA0-\xFF\n]/g, "?");
 
 export interface PdfCompany {
   name: string; legalName?: string | null; addressLine1?: string | null; addressLine2?: string | null; city?: string | null; state?: string | null; zip?: string | null;
@@ -32,10 +32,10 @@ export interface PdfInvoice {
   payOnline?: string | null;
 }
 
-const usDate = (iso: string) => { const [y, m, d] = iso.split("-"); return `${Number(m)}/${Number(d)}/${y}`; };
-const qty = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+export const usDate = (iso: string) => { const [y, m, d] = iso.split("-"); return `${Number(m)}/${Number(d)}/${y}`; };
+export const qty = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
 
-function wrap(text: string, font: PDFFont, size: number, width: number): string[] {
+export function wrap(text: string, font: PDFFont, size: number, width: number): string[] {
   const out: string[] = [];
   for (const para of safe(text).split("\n")) {
     let line = "";
@@ -48,7 +48,7 @@ function wrap(text: string, font: PDFFont, size: number, width: number): string[
   return out;
 }
 
-class Pen {
+export class Pen {
   constructor(public page: PDFPage, public reg: PDFFont, public bold: PDFFont) {}
   text(s: string, x: number, yTop: number, o: { size?: number; bold?: boolean; color?: ReturnType<typeof rgb>; right?: boolean; center?: boolean } = {}) {
     const size = o.size ?? 10, font = o.bold ? this.bold : this.reg, t = safe(s);
@@ -61,9 +61,9 @@ class Pen {
   }
 }
 
-const companyLines = (c: PdfCompany) => [c.addressLine1, c.addressLine2, [c.city, [c.state, c.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")].filter((x): x is string => !!x);
+export const companyLines = (c: PdfCompany) => [c.addressLine1, c.addressLine2, [c.city, [c.state, c.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")].filter((x): x is string => !!x);
 
-async function embedLogo(doc: PDFDocument, logo: Buffer | null | undefined): Promise<PDFImage | null> {
+export async function embedLogo(doc: PDFDocument, logo: Buffer | null | undefined): Promise<PDFImage | null> {
   if (!logo) return null;
   try {
     if (logo[0] === 0x89 && logo[1] === 0x50) return await doc.embedPng(logo);

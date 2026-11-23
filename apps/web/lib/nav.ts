@@ -33,6 +33,7 @@ export const NAV: Record<Side, NavGroup[]> = {
       key: "billing", label: "Billing", icon: "billing",
       items: [
         { href: "/invoices", label: "Invoices", min: "manager", area: "customers" },
+        { href: "/estimates", label: "Estimates", min: "manager", area: "customers" },
         { href: "/price-list", label: "Price list", min: "manager", area: "customers" },
         { href: "/sales-tax", label: "Sales tax report", min: "manager", area: "customers" },
       ],
@@ -114,6 +115,7 @@ export const NEW_MENU: { group: string; items: NewItem[] }[] = [
     group: "Finance",
     items: [
       { label: "Invoice", href: "/invoices/new", icon: "billing", min: "manager", area: "customers" },
+      { label: "Estimate", href: "/estimates/new", icon: "billing", min: "manager", area: "customers" },
     ],
   },
   {

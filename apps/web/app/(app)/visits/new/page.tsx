@@ -12,9 +12,20 @@ import { VisitForm } from "@/components/visits";
 export default function NewWorkOrder() {
   const router = useRouter();
   const { can } = useAuth();
-  const [preset, setPreset] = useState<{ customer?: { id: string; name: string }; propertyId?: string; date?: string } | null>(null);
+  const [preset, setPreset] = useState<Parameters<typeof VisitForm>[0]["preset"] | null>(null);
   useEffect(() => {
     const url = new URL(window.location.href);
+    // From an accepted estimate: its customer, address, title and the lines the customer chose (per visit).
+    const estimateId = url.searchParams.get("estimateId");
+    if (estimateId) {
+      api<any>(`/estimates/${estimateId}`).then((e) => setPreset({
+        customer: { id: e.customer.id, name: e.customer.name }, propertyId: e.propertyId ?? e.lines.find((l: any) => l.propertyId)?.propertyId ?? undefined,
+        title: e.title || `Estimate ${e.number}`, estimateId: e.id,
+        notes: e.lines.some((l: any) => l.included && l.visits > 1) ? `From estimate ${e.number}: ${e.lines.filter((l: any) => l.included && l.visits > 1).map((l: any) => `${l.description} × ${l.visits} visits`).join("; ")}. Set it to repeat below.` : undefined,
+        lines: e.lines.filter((l: any) => l.included).map((l: any) => ({ serviceTypeId: l.serviceTypeId, description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, taxRate: l.taxRate, budgetedHours: l.budgetedHours })),
+      }), () => setPreset({}));
+      return;
+    }
     const customerId = url.searchParams.get("customerId");
     const propertyId = url.searchParams.get("propertyId") ?? undefined;
     const date = url.searchParams.get("date") ?? undefined;

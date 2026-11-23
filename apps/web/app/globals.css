@@ -1423,3 +1423,24 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .cm-subject { font-size: 14px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px 8px 0 0; border-bottom: 0; background: var(--bg); }
 .cm-frame { width: 100%; height: 320px; border: 1px solid var(--border); border-radius: 0 0 8px 8px; background: #fff; margin-top: -8px; }
 @media (max-width: 800px) { .cm-grid { grid-template-columns: 1fr; } }
+
+/* Estimates */
+.est-lines { display: grid; gap: 8px; }
+.est-line { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--surface); }
+.est-line.optional { border-style: dashed; }
+.est-line-main { display: grid; grid-template-columns: minmax(200px, 2.4fr) repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; align-items: start; }
+.est-line-main > label { font-size: 12px; }
+.est-amount { display: grid; gap: 4px; justify-items: end; padding-top: 2px; }
+.est-amount strong { font-size: 15px; font-variant-numeric: tabular-nums; padding-top: 6px; }
+.est-line-more { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.est-line-more > label:not(.check) { width: 150px; font-size: 12px; }
+.est-totals { display: flex; flex-wrap: wrap; gap: 16px; justify-content: flex-end; margin-top: 10px; }
+.est-totals .totals { min-width: 240px; }
+.est-internal { background: var(--info-bg); border-radius: 8px; padding: 8px 12px; }
+.ok-card { border-left: 4px solid var(--ok); }
+.bad-card { border-left: 4px solid var(--bad); }
+.warn-card { border-left: 4px solid var(--warn); }
+.est-pt-line.out { opacity: .55; }
+.est-pt-totals { max-width: 320px; margin-left: auto; display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; }
+.est-pt-totals dd { text-align: right; margin: 0; font-variant-numeric: tabular-nums; }
+@media (max-width: 700px) { .est-line-main { grid-template-columns: 1fr 1fr; } .est-line-main > :first-child { grid-column: 1 / -1; } .est-totals .totals { min-width: 0; width: 100%; } }

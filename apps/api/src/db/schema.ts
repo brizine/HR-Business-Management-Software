@@ -1358,6 +1358,84 @@ export const customerPaymentMethods = pgTable(
   ],
 );
 
+/** An estimate (quote) for a customer, like Homeworks': numbered from 1000, sent with a link to accept online. */
+export const estimates = pgTable(
+  "estimates",
+  {
+    id: id(),
+    companyId: companyId(),
+    number: integer("number").notNull(),
+    customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+    propertyId: uuid("property_id").references(() => properties.id, { onDelete: "set null" }),
+    title: text("title"),
+    /** draft, sent (pending), accepted, declined, changes (changes requested). */
+    status: text("status").notNull().default("draft"),
+    issueDate: date("issue_date").notNull(),
+    validUntil: date("valid_until"),
+    requestedAt: timestamp("requested_at", { withTimezone: true }),
+    poNumber: text("po_number"),
+    discountPercent: doublePrecision("discount_percent").notNull().default(0),
+    /** With the lines that count (optional ones ticked, or the customer's choice once answered). */
+    subtotalCents: integer("subtotal_cents").notNull().default(0),
+    discountCents: integer("discount_cents").notNull().default(0),
+    taxCents: integer("tax_cents").notNull().default(0),
+    totalCents: integer("total_cents").notNull().default(0),
+    terms: text("terms"),
+    customerNotes: text("customer_notes"),
+    internalNotes: text("internal_notes"),
+    /** The link the customer opens to see and answer it. */
+    token: text("token"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    emailedTo: text("emailed_to"),
+    viewedAt: timestamp("viewed_at", { withTimezone: true }),
+    respondedAt: timestamp("responded_at", { withTimezone: true }),
+    /** The name typed to accept, and any comment (why declined, what to change). */
+    responseName: text("response_name"),
+    responseComment: text("response_comment"),
+    /** "customer" (online) or "office" (taken by phone, recorded by respondedById). */
+    respondedBy: text("responded_by"),
+    respondedById: uuid("responded_by_id").references(() => employees.id, { onDelete: "set null" }),
+    /** The optional lines the customer chose. */
+    chosenLineIds: uuid("chosen_line_ids").array(),
+    visitId: uuid("visit_id").references(() => visits.id, { onDelete: "set null" }),
+    invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    custom: jsonb("custom").$type<CustomValues>().notNull().default({}),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("estimates_company_number_idx").on(t.companyId, t.number),
+    uniqueIndex("estimates_token_idx").on(t.token),
+    index("estimates_customer_idx").on(t.customerId),
+    index("estimates_company_status_idx").on(t.companyId, t.status),
+  ],
+);
+
+export const estimateLines = pgTable(
+  "estimate_lines",
+  {
+    id: id(),
+    estimateId: uuid("estimate_id").notNull().references(() => estimates.id, { onDelete: "cascade" }),
+    serviceTypeId: uuid("service_type_id").references(() => serviceTypes.id, { onDelete: "set null" }),
+    propertyId: uuid("property_id").references(() => properties.id, { onDelete: "set null" }),
+    description: text("description").notNull(),
+    quantity: doublePrecision("quantity").notNull().default(1),
+    unitPriceCents: integer("unit_price_cents").notNull().default(0),
+    visits: integer("visits").notNull().default(1),
+    taxRate: doublePrecision("tax_rate").notNull().default(0),
+    incomeAccountCode: text("income_account_code").notNull().default("4000"),
+    costCents: integer("cost_cents"),
+    budgetedHours: doublePrecision("budgeted_hours"),
+    optional: boolean("optional").notNull().default(false),
+    selected: boolean("selected").notNull().default(true),
+    recommended: boolean("recommended").notNull().default(false),
+    amountCents: integer("amount_cents").notNull().default(0),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("estimate_lines_estimate_idx").on(t.estimateId)],
+);
+
 /** An email sent to many customers at once (the Customers list's Send menu). */
 export const customerMessages = pgTable(
   "customer_messages",

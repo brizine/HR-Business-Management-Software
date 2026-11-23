@@ -16,6 +16,7 @@ import { CancelForm, CustomerFields, PropertyFields, TagChips, customerBody, cus
 import { CustomFieldsCard } from "@/components/custom-fields";
 import { CustomerEmails } from "@/components/customer-messages";
 import { PaymentMethodsCard } from "@/components/payment-methods";
+import { LinkedEstimates } from "@/components/estimates";
 
 export default function CustomerDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -113,6 +114,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
       </div>
 
       <CustomerBilling customerId={id} key={`billing-${creditVersion}`} />
+      <LinkedEstimates customerId={id} />
       <PaymentMethodsCard customerId={id} />
       <CustomerPrepayments customerId={id} onChange={() => setCreditVersion((v) => v + 1)}
         properties={current.filter((p: any) => p.status !== "cancelled").map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", "), lawnSqFt: p.lawnSqFt }))} />
