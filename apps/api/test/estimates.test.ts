@@ -99,6 +99,8 @@ describe("estimates", () => {
     const ch = await call("POST", `/public/estimates/${ID.token}/respond`, null, { action: "changes", comment: "Can you do grub control instead of aeration?" });
     expect(ch.body.estimate).toMatchObject({ status: "changes", responseComment: "Can you do grub control instead of aeration?" });
     expect(ch.body.canRespond).toBe(true);
+    // Notifications go out in the background: wait for them before looking.
+    await flushNotifications();
     expect((await call("GET", "/notifications", "office")).body.items?.[0]?.title ?? (await call("GET", "/notifications", "office")).body[0]?.title).toMatch(/asked for changes to estimate 1000/);
     expect((await call("POST", `/public/estimates/${ID.token}/respond`, null, { action: "accept" })).body.error).toMatch(/Type your name/);
     const ok = await call("POST", `/public/estimates/${ID.token}/respond`, null, { action: "accept", name: "Ann Apple", selectedLineIds: [ID.optGrub] });
