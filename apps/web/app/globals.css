@@ -804,6 +804,10 @@ kbd { font: 11px ui-monospace, monospace; padding: 1px 6px; border-radius: 4px; 
 .rail-heading { display: flex; align-items: center; gap: 8px; padding: 12px 10px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; opacity: .65; }
 .rail-group.active .rail-heading { opacity: 1; color: #fff; }
 .rail-items .menu-link { padding-left: 36px; }
+.rail-heading-btn { width: 100%; border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.rail-heading-btn > span { flex: 1; }
+.rail-caret { opacity: .6; flex: none; }
+.rail-group.active .rail-heading-btn { color: #fff; }
 .rail-link { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; color: var(--sidebar-text); text-decoration: none; }
 .rail-link:hover { background: rgba(255,255,255,.06); color: #fff; }
 .rail-link.active { background: rgba(255,255,255,.12); color: #fff; }

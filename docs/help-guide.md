@@ -51,11 +51,14 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   customer's device.
 - **Left menu:** one icon per group. Point at (or click) a group to see its pages; groups with one page open
   straight away. **Company Wiki**, **Settings**, **Help** and light or dark mode are at the bottom. The top bar's menu button widens
-  the menu to list every page under its group, with your company logo on top (click it again to narrow it);
-  Crewdesk remembers your choice on that computer.
-- **Operations:** **Customers** (Customers, Properties), **Schedule** (Calendar, Work orders, To-dos), **Billing** (Invoices, Price list), **Field**
+  the menu, with your company logo on top (click it again to narrow it); Crewdesk remembers your choice on that
+  computer. Widened (and on a phone), each heading opens and closes its pages, like Homeworks: click **Billing** to
+  see Invoices, Estimates and Sales tax report, and click it again to fold it away. The section you're in starts
+  open, and the menu remembers which ones you opened or closed.
+- **Operations:** **Customers** (Customers, Properties), **Schedule** (Calendar, Work orders, To-dos), **Billing** (Invoices,
+  Estimates, Sales tax report), **Resources** (Items & services, Custom fields, Tags; like Homeworks' Resources), **Field**
   (Property Measure, Spray Mix Calculator), **Fleet** (Assets, Repair Orders, Inspections) and **Reports**
-  (managers). Scheduling and customer messages will be added here.
+  (managers).
 - **Team:** **Dashboard** (managers), **People** (Team, Shifts, Crews, Time Clock, Attendance, Time Off, Reviews &
   Discipline, Training, Documents, Onboarding, Hiring), **Pay** (Payroll, Accounting, Pay & Tax Forms) and
   **Reports** (managers).
@@ -230,7 +233,8 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
 
 ### Billing: price list and invoices
 
-Operations → **Billing** has **Invoices** and the **Price list** (managers in Customers & billing; admins change prices).
+Operations → **Billing** has **Invoices**, and **Resources → Items & services** is the price list (managers in Customers &
+billing; admins change prices).
 
 - **Price list:** each service is priced one of three ways: a **flat price**, **per 1,000 sq ft** (with an optional
   minimum charge), or **by lawn size** (brackets such as "up to 8,000 sq ft $75, larger $95"). Each service posts to
@@ -570,7 +574,7 @@ calendar: **Work orders**, **To-dos**, **Repair orders** (by due date), **Time o
 ## Custom fields
 
 Your own fields, like Homeworks' Custom Fields: "Gallons used" on work orders, "Grass type" on properties,
-"Referred by" on customers, "Tag number" on equipment. Open **Customers → Custom fields** in the Operations menu
+"Referred by" on customers, "Tag number" on equipment. Open **Resources → Custom fields** in the Operations menu
 (or **Settings → Custom fields**). Owners and admins add and change them; everyone else sees and fills them in.
 
 - **New field** (Homeworks' "Add New Field"):

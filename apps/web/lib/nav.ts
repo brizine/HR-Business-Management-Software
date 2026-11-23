@@ -2,8 +2,8 @@ import type { PermissionArea, Role } from "@crewdesk/shared";
 
 /**
  * The app's menus, laid out like Homeworks: a top bar on every page, and a left menu of icon groups
- * for the side you're on (Operations or Team). Each group pops out its pages, or lists them when the
- * menu is expanded.
+ * for the side you're on (Operations or Team). Each group pops out its pages; when the menu is
+ * expanded, each heading opens and closes its pages (like Homeworks).
  */
 export type Side = "operations" | "team";
 export const SIDES: { key: Side; label: string }[] = [{ key: "operations", label: "Operations" }, { key: "team", label: "Team" }];
@@ -18,7 +18,6 @@ export const NAV: Record<Side, NavGroup[]> = {
       items: [
         { href: "/customers", label: "Customers", min: "manager", area: "customers" },
         { href: "/properties", label: "Properties", min: "manager", area: "customers" },
-        { href: "/custom-fields", label: "Custom fields", min: "admin" },
       ],
     },
     {
@@ -34,8 +33,16 @@ export const NAV: Record<Side, NavGroup[]> = {
       items: [
         { href: "/invoices", label: "Invoices", min: "manager", area: "customers" },
         { href: "/estimates", label: "Estimates", min: "manager", area: "customers" },
-        { href: "/price-list", label: "Price list", min: "manager", area: "customers" },
         { href: "/sales-tax", label: "Sales tax report", min: "manager", area: "customers" },
+      ],
+    },
+    {
+      // Like Homeworks' Resources: the lists the rest of the app draws on.
+      key: "resources", label: "Resources", icon: "layers",
+      items: [
+        { href: "/price-list", label: "Items & services", min: "manager", area: "customers" },
+        { href: "/custom-fields", label: "Custom fields", min: "admin" },
+        { href: "/settings/customers", label: "Tags", min: "admin", area: "customers" },
       ],
     },
     {

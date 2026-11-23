@@ -447,9 +447,11 @@ function ThemeSwitch() {
   );
 }
 
+const OPEN_KEY = "crewdesk.menu-open";
+
 /**
  * The left menu: one icon per group for the side you're on. Narrow, a group pops out its pages
- * (hover or click); expanded, every page is listed under its group, with the company logo on top.
+ * (hover or click); expanded, each heading opens and closes its pages, with the company logo on top.
  * Wiki, Settings and Help sit at the bottom. The top bar's menu button widens or narrows it; on
  * phones the same button opens it as a drawer.
  */
@@ -469,6 +471,17 @@ export function Rail(props: {
   const themeNow = THEME_CHOICES.find((c) => c.key === theme) ?? THEME_CHOICES[2];
   const groupActive = (g: NavGroup) => g.items.some((i) => pathMatches(path, i.href)) || (g.key === "pay" && (path.startsWith("/pay-periods") || path.startsWith("/tax-forms")));
   const pick = () => { setOpenGroup(null); props.onCloseDrawer(); };
+  // Which headings are open in the expanded menu: what each person opened or closed (kept in this
+  // browser); otherwise just the section of the page you're on.
+  const [shown, setShown] = useState<Record<string, boolean>>({});
+  useEffect(() => { try { setShown(JSON.parse(localStorage.getItem(OPEN_KEY) ?? "{}")); } catch { /* storage blocked */ } }, []);
+  const isOpen = (g: NavGroup) => shown[`${props.side}:${g.key}`] ?? groupActive(g);
+  const toggleGroup = (g: NavGroup) => setShown((s) => {
+    const k = `${props.side}:${g.key}`;
+    const next = { ...s, [k]: !(s[k] ?? groupActive(g)) };
+    try { localStorage.setItem(OPEN_KEY, JSON.stringify(next)); } catch { /* storage blocked */ }
+    return next;
+  });
 
   return (
     <>
@@ -489,14 +502,19 @@ export function Rail(props: {
         {props.groups.map((g) => {
           const single = g.items.length === 1;
           if (wide) {
+            // Like Homeworks: each heading opens and closes its pages. The section you're in starts open.
+            const open = isOpen(g);
             return (
               <div key={g.key} className={`rail-group ${groupActive(g) ? "active" : ""}`}>
                 {single ? (
                   <Link href={g.items[0].href} className={`rail-link ${groupActive(g) ? "active" : ""}`} onClick={pick}><Icon name={g.icon} size={18} /><span>{g.label}</span></Link>
                 ) : (
                   <>
-                    <div className="rail-heading"><Icon name={g.icon} size={18} /><span>{g.label}</span></div>
-                    <div className="rail-items">{g.items.map((i) => <div key={i.href}>{props.renderItem(i, pick)}</div>)}</div>
+                    <button type="button" className={`rail-link rail-heading-btn ${groupActive(g) && !open ? "active" : ""}`} aria-expanded={open} aria-controls={`rail-${props.side}-${g.key}`}
+                      onClick={() => toggleGroup(g)}>
+                      <Icon name={g.icon} size={18} /><span>{g.label}</span><Icon name={open ? "chevron" : "right"} size={16} className="rail-caret" />
+                    </button>
+                    {open && <div id={`rail-${props.side}-${g.key}`} className="rail-items">{g.items.map((i) => <div key={i.href}>{props.renderItem(i, pick)}</div>)}</div>}
                   </>
                 )}
               </div>
