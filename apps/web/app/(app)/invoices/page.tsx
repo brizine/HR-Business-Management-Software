@@ -11,6 +11,8 @@ const TABS = [["open", "Open"], ["overdue", "Overdue"], ["draft", "Drafts"], ["m
 
 export default function Invoices() {
   const [status, setStatus] = useState<string>("open");
+  // From My Day's tiles: /invoices?status=overdue (or open, paid…).
+  useEffect(() => { const st = new URL(window.location.href).searchParams.get("status"); if (st && ["open", "overdue", "draft", "paid", "void", "mail", "all"].includes(st)) setStatus(st); }, []);
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<string[]>([]);

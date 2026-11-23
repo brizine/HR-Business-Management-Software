@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AUTOMATION_ACTIONS, AUTOMATION_FIELDS, AUTOMATION_TRIGGERS, SAMPLE_AUTOMATION_VARS, STOP_CONDITIONS, describeWait, fillTemplate, isInactive, stopsFor, textSegments,
   type AutomationAction, type AutomationTrigger, type StopCondition,
@@ -35,6 +35,7 @@ export const RunStatus = ({ s }: { s: string }) => <span className={`badge ${STA
 
 export function AutomationsPage() {
   const [tab, setTab] = useState<"list" | "review" | "history" | "templates">("list");
+  useEffect(() => { const t = new URL(window.location.href).searchParams.get("tab"); if (t === "review" || t === "history" || t === "templates") setTab(t); }, []);
   const list = useApi<{ review: number; automations: Automation[] }>("/automations");
   return (
     <div className="stack auto-page">

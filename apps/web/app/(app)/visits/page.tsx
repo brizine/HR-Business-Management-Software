@@ -25,7 +25,12 @@ function WorkOrders() {
   const tagList = useApi<{ id: string; name: string; archived: boolean }[]>(manager ? "/crm/tags" : null);
   const tags = tagList.data ?? [];
   // From a crew's card on the Crews page (?crew=…).
-  useEffect(() => { const c = new URL(window.location.href).searchParams.get("crew"); if (c) setCrewF(c); }, []);
+  useEffect(() => {
+    const u = new URL(window.location.href).searchParams;
+    const c = u.get("crew"); if (c) setCrewF(c);
+    // From My Day's job tiles.
+    const v = u.get("view"); if (v && VIEWS.some(([k]) => k === v)) setView(v as View);
+  }, []);
   const crews = useApi<{ id: string; name: string }[]>("/crews?all=1");
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");

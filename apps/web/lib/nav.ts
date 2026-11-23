@@ -13,6 +13,7 @@ export type NavGroup = { key: string; label: string; icon: string; items: NavIte
 
 export const NAV: Record<Side, NavGroup[]> = {
   operations: [
+    { key: "myday", label: "My Day", icon: "dashboard", items: [{ href: "/my-day", label: "My Day", min: "manager", area: "customers" }] },
     {
       key: "customers", label: "Customers", icon: "customers",
       items: [

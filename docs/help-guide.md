@@ -123,6 +123,22 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
 The **Notifications** bell in the top bar shows your new alerts in a pop-up (the red number is how many are
 unread); **View all** there, or the Notifications page, has the full inbox. Phone pop-ups need the Crewdesk app installed and signed in.
 
+## My Day
+
+The first page on the **Operations** side, and where Customers & billing managers land after signing in, like
+Homeworks' My Day.
+
+- **Account standing:** **Past due** (what's owed on invoices past their due date), **Outstanding** (owed, not yet
+  due), **Credit** (unused credit on customers' accounts) and **Paid** (money received in the date range below,
+  including prepayments). Each tile opens that list.
+- **Job stats:** work orders dated in the range you pick (today, this week, last 30 days, this month, this year,
+  a custom range and more; it remembers your pick on this browser). **Total jobs**, **Yet to start**,
+  **In progress** and **Completed**; skipped ones aren't counted. For a single day the tiles open the calendar on
+  that day.
+- **Lists:** automations waiting in review, upcoming to-dos (with how many are overdue), today's work orders, recent
+  payments, invoices and estimates, each with a link to see all. Unread texts from customers show at the top right
+  when there are any.
+
 ## Dashboard
 
 Headcount, who's on the clock, pending time off, overdue maintenance, open repair orders and expiring
