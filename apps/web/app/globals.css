@@ -1358,3 +1358,58 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 /* Sales tax report */
 .tax-report th.num, .tax-report td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tax-report tr.total td { border-top: 2px solid var(--border); }
+
+/* Customers list (like Homeworks' Customers page, compact): tabs, status counts, filter chips, columns, bulk bar. */
+.crm-tabs { margin-top: 4px; }
+.crm-tabs a { display: inline-flex; align-items: center; height: 26px; padding: 0 12px; border-radius: 6px; color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600; }
+.crm-tabs a.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.cl-bar { padding: 10px 12px; display: grid; gap: 8px; position: relative; }
+.cl-bar-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cl-stats { display: inline-flex; padding: 3px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); flex-wrap: wrap; }
+.cl-stats button { border: 0; background: transparent; color: var(--muted); padding: 4px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.cl-stats button b { color: var(--text); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.cl-stats button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); font-weight: 600; }
+.cl-search { flex: 1 1 240px; min-width: 180px; height: 34px; }
+.cl-pop-wrap { position: relative; }
+.cl-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 70; min-width: 220px; max-width: min(92vw, 360px); padding: 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,.16); }
+.cl-pop.align-right { left: auto; right: 0; }
+.cl-pop-wide { width: min(92vw, 440px); max-width: min(92vw, 440px); }
+.cl-pop-inline { position: static; box-shadow: none; }
+.cl-menu { display: grid; gap: 2px; max-height: 60vh; overflow-y: auto; }
+.cl-menu > button, .cl-menu > a, .cl-menu-row > button:first-child { text-align: left; border: 0; background: transparent; color: var(--text); padding: 6px 8px; border-radius: 6px; cursor: pointer; text-decoration: none; font-size: 14px; }
+.cl-menu > button:hover, .cl-menu > a:hover, .cl-menu-row > button:first-child:hover { background: var(--bg); }
+.cl-menu .todo-label { padding: 6px 8px 2px; }
+.cl-menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; width: 100%; }
+.cl-menu-row { display: flex; align-items: center; justify-content: space-between; }
+.cl-menu-row > button:first-child { flex: 1; }
+.cl-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; max-height: 220px; overflow-y: auto; padding: 2px; }
+.cl-editor-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cl-editor select, .cl-editor input:not([type="checkbox"]) { width: 100%; }
+.cl-between { gap: 6px; flex-wrap: nowrap; }
+.cl-between input { min-width: 0; }
+.cl-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cl-chip { display: inline-flex; align-items: center; border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border)); background: var(--info-bg); border-radius: 999px; font-size: 13px; overflow: hidden; }
+.cl-chip-text { border: 0; background: transparent; color: var(--text); padding: 3px 4px 3px 10px; cursor: pointer; }
+.cl-chip-x { border: 0; background: transparent; color: var(--muted); padding: 3px 9px 3px 5px; cursor: pointer; font-size: 12px; }
+.cl-chip-x:hover { color: var(--bad); }
+.cl-columns { gap: 8px; }
+.cl-shown { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 220px; overflow-y: auto; }
+.cl-shown li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 2px 0; font-size: 14px; }
+.cl-shown .btn { padding: 2px 7px; font-size: 12px; }
+.cl-addcols { display: grid; gap: 6px; max-height: 220px; overflow-y: auto; }
+.cl-addcol { display: inline-flex; align-items: center; gap: 4px; margin: 2px 4px 2px 0; padding: 3px 9px; border: 1px dashed var(--border); border-radius: 999px; background: transparent; color: var(--text); font-size: 13px; cursor: pointer; }
+.cl-addcol:hover { border-color: var(--primary); }
+.cl-table-card { padding-top: 6px; }
+.cl-bulk { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 4px 10px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.cl-table th { white-space: nowrap; }
+.cl-table th.num, .cl-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cl-table td.nowrap { white-space: nowrap; }
+.cl-table .cl-check { width: 30px; }
+.cl-table tr.picked td { background: var(--info-bg); }
+.cl-sort { border: 0; background: transparent; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.cl-sort:hover { color: var(--primary); }
+.cl-notes { display: inline-block; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.cl-pager { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 10px; }
+.cl-pager select { width: auto; }
+@media (max-width: 700px) { .cl-stats { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; } .cl-stats button { padding: 4px 8px; } .cl-editor-row { grid-template-columns: 1fr; } .cl-pop { position: fixed; left: 12px !important; right: 12px !important; top: auto; bottom: 12px; max-width: none; width: auto; } }
+@media print { .cl-bar, .cl-bulk, .cl-pager, .no-print { display: none !important; } }

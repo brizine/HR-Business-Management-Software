@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useAction, useApi, useNewForm } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
 import { CustomerPicker, PropertyFields, TagChips, TagFilter, propertyBody, propertyFormValue, tagQuery, useTags, type TagFilterState } from "@/components/customers";
+import { CrmTabs } from "@/components/customer-list";
 
 export default function Properties() {
   const router = useRouter();
@@ -28,7 +29,7 @@ export default function Properties() {
 
   return (
     <>
-      <PageHead title="Properties" sub={<span role="status">{list.data ? `${list.data.total} ${list.data.total === 1 ? "property" : "properties"}` : "Loading…"}</span>}>
+      <PageHead title="Properties" sub={<span className="row" style={{ gap: 10 }}><CrmTabs at="properties" /><span role="status">{list.data ? `${list.data.total} ${list.data.total === 1 ? "property" : "properties"}` : "Loading…"}</span></span>}>
         <Link className="btn" href="/customers">Customers</Link>
         <button className="btn primary" onClick={() => setAdding(!adding)}>Add property</button>
       </PageHead>

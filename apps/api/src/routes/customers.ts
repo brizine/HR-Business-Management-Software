@@ -1,8 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
 import { and, arrayContains, arrayOverlaps, asc, desc, eq, ilike, inArray, isNull, not, or, sql, type SQL } from "drizzle-orm";
-import { cancelSchema, customerName, customerSchema, customerUpdateSchema, lawnTotal } from "@crewdesk/shared";
+import { z } from "zod";
+import { cancelSchema, customerName, customerSchema, customerUpdateSchema, lawnTotal, parseCustomerFilters } from "@crewdesk/shared";
 import { db } from "../db";
-import { newRecordCustom, updatedCustom } from "../lib/customFields";
+import { fieldsFor, newRecordCustom, updatedCustom } from "../lib/customFields";
+import { filterSql, listColumns, sortSql } from "../lib/customerList";
 import { cancellationReasons, cancellations, customerContacts, customerCredits, customers, invoices, prepayments, properties, propertyAssignments, visits } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
@@ -18,7 +20,7 @@ export function idList(v: unknown): string[] {
   return v.split(",").map((s) => s.trim()).filter((s) => /^[0-9a-f-]{36}$/i.test(s)).slice(0, 50);
 }
 
-type ListQuery = { q?: string; status?: string; tags?: string; anyTags?: string; notTags?: string; limit?: string; offset?: string };
+type ListQuery = { q?: string; status?: string; tags?: string; anyTags?: string; notTags?: string; limit?: string; offset?: string; filters?: string; sort?: string; dir?: string; export?: string };
 
 /**
  * Customers: the people and companies ProSpray bills. Managers (in Customers & billing) see and
@@ -28,17 +30,17 @@ const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
   app.addHook("preHandler", requireRole("manager", AREA));
 
-  // Written out with table aliases: in a plain select the outer table's columns lose their table name.
-  const currentProps = sql<number>`(select count(*)::int from property_assignments pa where pa.customer_id = "customers"."id" and pa.end_date is null)`;
-  const firstAddress = sql<string | null>`(select p.street || coalesce(', ' || p.city, '') from property_assignments pa join properties p on p.id = pa.property_id
-    where pa.customer_id = "customers"."id" and pa.end_date is null order by pa.role, pa.created_at limit 1)`;
-
+  /**
+   * The list (like Homeworks' Customers page): a status tab, a quick search, any number of filter
+   * rules (all must match), a sort, a page; with counts by status for the tabs and the worked-out
+   * columns (balance, credit, prepaid, billed this year, last and next service). export=1 returns up
+   * to 5,000 rows at once for the spreadsheet export.
+   */
   app.get<{ Querystring: ListQuery }>("/", async (req) => {
     const { companyId } = req.user;
+    const today = await companyToday(companyId);
+    const cols = listColumns(today, `${today.slice(0, 4)}-01-01`);
     const where: SQL[] = [eq(customers.companyId, companyId)];
-    const status = req.query.status ?? "current";
-    if (status === "current") where.push(inArray(customers.status, ["active", "lead"]));
-    else if (["active", "lead", "cancelled"].includes(status)) where.push(eq(customers.status, status));
     const q = (req.query.q ?? "").trim().slice(0, 100);
     if (q) {
       const like = `%${q}%`;
@@ -52,26 +54,80 @@ const routes: FastifyPluginAsync = async (app) => {
       if (/^\d+$/.test(q)) match.push(eq(customers.number, Number(q)));
       where.push(or(...match)!);
     }
+    // The older tag filters (still used by links from elsewhere).
     const all = idList(req.query.tags), any = idList(req.query.anyTags), none = idList(req.query.notTags);
     if (all.length) where.push(arrayContains(customers.tagIds, all));
     if (any.length) where.push(arrayOverlaps(customers.tagIds, any));
     if (none.length) where.push(not(arrayOverlaps(customers.tagIds, none)));
-
-    const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
+    // Filter rules.
+    const rules = parseCustomerFilters(req.query.filters);
+    if (rules.length) {
+      const custom = rules.some((r) => r.f.startsWith("cf:")) ? await fieldsFor(companyId, "customer") : [];
+      for (const r of rules) { const w = filterSql(r, cols, custom); if (w) where.push(w); }
+    }
+    // Counts by status for the tabs (everything but the status itself).
+    const counts = await db.select({ status: customers.status, n: sql<number>`count(*)::int` }).from(customers).where(and(...where)).groupBy(customers.status);
+    const count = (s: string) => counts.find((c) => c.status === s)?.n ?? 0;
+    const status = req.query.status ?? "current";
+    if (status === "current") where.push(inArray(customers.status, ["active", "lead"]));
+    else if (["active", "lead", "cancelled"].includes(status)) where.push(eq(customers.status, status));
+    const max = req.query.export === "1" ? 5000 : 250;
+    const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), max);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const by = sortSql(req.query.sort ?? "name", cols) ?? sortSql("name", cols)!;
+    const dir = req.query.dir === "desc" ? sql`desc nulls last` : sql`asc nulls last`;
     const rows = await db
       .select({
         id: customers.id, number: customers.number, kind: customers.kind, firstName: customers.firstName, lastName: customers.lastName,
-        companyName: customers.companyName, email: customers.email, phone: customers.phone, status: customers.status,
-        tagIds: customers.tagIds, delivery: customers.delivery, sample: customers.sample, propertyCount: currentProps, address: firstAddress,
+        companyName: customers.companyName, email: customers.email, phone: customers.phone, altPhone: customers.altPhone, status: customers.status,
+        tagIds: customers.tagIds, delivery: customers.delivery, sample: customers.sample, source: customers.source, poRequired: customers.poRequired,
+        taxExempt: customers.taxExempt, notes: sql<string | null>`left(${customers.notes}, 200)`, createdAt: customers.createdAt, custom: customers.custom,
+        billingStreet: customers.billingStreet, billingCity: customers.billingCity, billingState: customers.billingState, billingZip: customers.billingZip,
+        propertyCount: cols.properties, address: cols.address, city: cols.city, zip: cols.zip, balanceCents: cols.balance, overdueCents: cols.overdue,
+        creditCents: cols.credit, prepaidCents: cols.prepaid, revenueCents: cols.revenue, lastService: cols.lastService, nextService: cols.nextService,
       })
       .from(customers)
       .where(and(...where))
-      .orderBy(sql`lower(coalesce(${customers.companyName}, ${customers.lastName}, ${customers.firstName}, ''))`, asc(customers.firstName))
+      .orderBy(sql`${by} ${dir}`, asc(customers.number))
       .limit(limit)
       .offset(offset);
     const [{ total }] = await db.select({ total: sql<number>`count(*)::int` }).from(customers).where(and(...where));
-    return { total, rows: rows.map((r) => ({ ...r, name: customerName(r) })) };
+    return {
+      total, rows: rows.map((r) => ({ ...r, name: customerName(r) })),
+      counts: { active: count("active"), lead: count("lead"), cancelled: count("cancelled"), current: count("active") + count("lead"), all: count("active") + count("lead") + count("cancelled") },
+    };
+  });
+
+  /**
+   * Several customers at once (the list's checkboxes): add or remove tags, or mark them active or
+   * leads. Cancelling has its own step, with a reason.
+   */
+  app.post("/bulk", async (req) => {
+    const body = parse(z.object({
+      ids: z.array(z.string().uuid()).min(1, "Pick the customers").max(500),
+      addTagIds: z.array(z.string().uuid()).max(20).default([]),
+      removeTagIds: z.array(z.string().uuid()).max(20).default([]),
+      status: z.enum(["active", "lead"]).optional(),
+    }), req.body);
+    if (!body.addTagIds.length && !body.removeTagIds.length && !body.status) throw new HttpError(400, "Pick tags to add or remove, or a status");
+    const { companyId, sub } = req.user;
+    return db.transaction(async (tx) => {
+      const add = await checkTags(tx, companyId, body.addTagIds);
+      const rows = await tx.select().from(customers).where(and(eq(customers.companyId, companyId), inArray(customers.id, body.ids)));
+      let changed = 0, skipped = 0;
+      for (const c of rows) {
+        const tagIds = [...new Set([...c.tagIds.filter((t) => !body.removeTagIds.includes(t)), ...add])];
+        // Cancelled customers keep their status (reactivating has its own step).
+        const nextStatus = body.status && c.status !== "cancelled" ? body.status : c.status;
+        if (body.status && c.status === "cancelled") skipped++;
+        const sameTags = tagIds.length === c.tagIds.length && tagIds.every((t) => c.tagIds.includes(t));
+        if (sameTags && nextStatus === c.status) continue;
+        await tx.update(customers).set({ tagIds, status: nextStatus, updatedAt: new Date() }).where(eq(customers.id, c.id));
+        await recordTagChanges(tx, { companyId, before: c.tagIds, after: tagIds, customerId: c.id, source: "bulk", byId: sub });
+        changed++;
+      }
+      return { changed, skipped, missing: body.ids.length - rows.length };
+    });
   });
 
   /** A new customer, optionally with their first service address (they become its bill-to). */

@@ -138,9 +138,36 @@ records: a property is assigned to one **bill-to** customer (who gets the invoic
 of **residents** (tenants, who get reminders). One customer can have many properties. Seeing and editing
 customers takes manager access in **Customers & billing** (Settings → Permissions).
 
-- **Customers** (Operations → Customers): search by name, phone, email, service address or customer number,
-  filter by status (Current = active and leads; Active; Leads; Cancelled; All) and by tags. Click a tag once to
-  show only customers with it, again to show only those without it, and again to clear it.
+- **Customers** (Operations → Customers), laid out like Homeworks' Customers page but compact:
+  - **Header row:** the **Customers | Properties** tabs, **Export** (a spreadsheet of every matching customer, with
+    the columns you show, in your order), **Print**, **⋯** (sample customers, the test company, custom fields)
+    and **+ New** (customer, lead or property).
+  - **Status tabs with counts:** **Customers**, **Leads**, **Cancelled**, **All**. They replace Homeworks' big
+    boxes, and the counts follow your search and filters.
+  - **Quick search:** name, phone, email, service address or customer number.
+  - **+ Filter** (Homeworks' filter box): pick a field, a comparison and a value, e.g. "Balance owed · more than
+    · $50", "Tags · has any of · MAP 100", "Last service · on or before · Dec 31", or "A service · Core aeration ·
+    completed · from Apr 1".
+    - Fields: name, customer #, status, type, tags, lead source, customer since, email, phone, invoice delivery,
+      service address, city, ZIP, number of properties, balance owed, overdue, account credit, prepaid balance,
+      billed this year, tax exempt, PO required, last service, next service scheduled, any service (completed,
+      scheduled, invoiced or never), and your customer custom fields.
+    - Add as many as you like; a customer has to match them all. Each shows as a chip: click it to change it,
+      **✕** to remove it.
+  - **Views ▾:** ready-made views (Owes money, Overdue, Nothing scheduled, Not serviced this year, Never
+    serviced, New this month, Unused credit or prepaid). **Save this view…** keeps your status, search, filters,
+    sort and columns under a name. Your views are kept in this browser.
+  - **Columns:** choose from about 25 columns (Homeworks offers 9), grouped (Customer, Contact, Address, Money,
+    Service, custom fields) with a search.
+    - **↑ / ↓** set the order, **✕** hides one, and **Reset** goes back to the usual nine.
+    - Your choice is kept for you in this browser.
+  - **Sorting:** click a column heading to sort by it, and again to reverse.
+  - **Selecting:** tick customers (or the box at the top for the whole page) to **Add tag**, **Remove tag**,
+    **Change status** (active or lead; cancelling is done on the customer's page, since it asks why), **Export
+    selected** or **Print selected**.
+  - **Pages:** 25, 50, 100 or 250 rows a page, with Previous and Next.
+  - The address in the browser keeps the tab, search, filters, sort and page, so **Back**, refreshing and sharing
+    the link all bring the same list up.
 - **Add customer:** Residential, Commercial or HOA (commercial and HOA accounts are listed by company name),
   contact details, billing address, how invoices are sent (email, paper, text; any of them), how they heard
   about you, tags, notes and **Other contacts** (a spouse, property manager or accounts payable; tick **Copy on
