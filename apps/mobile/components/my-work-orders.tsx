@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Alert, Linking, Platform, Pressable, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
 import { formatTodoTime } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
@@ -13,6 +14,25 @@ const plusDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`)
 function openMap(address: string, lat?: number | null, lng?: number | null) {
   const q = lat != null && lng != null ? `${lat},${lng}` : encodeURIComponent(address);
   Linking.openURL(Platform.OS === "ios" ? `http://maps.apple.com/?q=${q}` : `geo:0,0?q=${q}`).catch(() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${q}`));
+}
+
+/**
+ * Where the phone is, for the application record's GPS stamp: only when location is already
+ * allowed (it never asks here), and never holding up the Completed button for long.
+ */
+async function completionSpot(): Promise<{ lat?: number; lng?: number; accuracy?: number }> {
+  try {
+    if (!(await Location.getForegroundPermissionsAsync()).granted) return {};
+    const recent = await Location.getLastKnownPositionAsync({ maxAge: 5 * 60_000, requiredAccuracy: 200 });
+    const pos = recent ?? await Promise.race([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      new Promise<null>((r) => setTimeout(() => r(null), 8000)),
+    ]);
+    if (!pos) return {};
+    return { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? undefined };
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -105,7 +125,7 @@ export function MyWorkOrdersCard({ refreshKey }: { refreshKey?: number }) {
                 <Row>
                   <View style={{ flex: 1 }}><Button title={w.kind === "complete" ? "Mark completed" : "Skip it"} busy={busy === v.id}
                     disabled={w.kind === "skip" && !w.text.trim()}
-                    onPress={() => post(v.id, w.kind, w.kind === "complete" ? { notes: w.text } : { reason: w.text })} /></View>
+                    onPress={async () => { setBusy(v.id); post(v.id, w.kind, w.kind === "complete" ? { notes: w.text, ...(await completionSpot()) } : { reason: w.text }); }} /></View>
                   <View style={{ flex: 1 }}><Button title="Cancel" kind="secondary" onPress={() => setWriting(null)} /></View>
                 </Row>
               </View>

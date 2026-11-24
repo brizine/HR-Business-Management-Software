@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { AutomationStep, CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
+import type { AutomationStep, CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings, WeatherSettings } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -40,6 +40,8 @@ export const companies = pgTable("companies", {
   stripeWebhookSecret: text("stripe_webhook_secret"),
   /** Invoice numbering, terms and the printed footer (Settings → Billing); defaults apply when unset. */
   billing: jsonb("billing").$type<Partial<BillingSettings>>(),
+  /** Weather on chemical applications: automatic, manual or off, and the wind (drift) limit. */
+  weather: jsonb("weather").$type<WeatherSettings>(),
   /** Set on a test company: the real company it's a sandbox for (sample customers, test mode payments). */
   testOfCompanyId: uuid("test_of_company_id").references((): AnyPgColumn => companies.id, { onDelete: "cascade" }),
   timezone: text("timezone").notNull().default("America/Chicago"),
@@ -1608,11 +1610,13 @@ export const serviceTypes = pgTable(
     brackets: jsonb("brackets").$type<Bracket[]>().notNull().default([]),
     /** The income account's code in the books (4000, 4100, 4200…), so it works in real and test books alike. */
     incomeAccountCode: text("income_account_code").notNull().default("4000"),
-    /** Homeworks' "This is Taxable": its lines get the sales tax rate once sales tax is on. */
     /** Time estimate: setup minutes plus minutes per 1,000 sq ft. */
     setupMinutes: integer("setup_minutes"),
     minutesPer1000: doublePrecision("minutes_per_1000"),
+    /** Homeworks' "This is Taxable": its lines get the sales tax rate once sales tax is on. */
     taxable: boolean("taxable").notNull().default(false),
+    /** A chemical application: work orders with it get the weather recorded when completed. */
+    chemical: boolean("chemical").notNull().default(false),
     active: boolean("active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: createdAt(),
@@ -2118,6 +2122,10 @@ export const visits = pgTable(
     status: text("status").notNull().default("open"),
     startedAt: timestamp("started_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    /** Where the phone was when it was marked completed (when location was allowed). */
+    completedLat: doublePrecision("completed_lat"),
+    completedLng: doublePrecision("completed_lng"),
+    completedAccuracy: doublePrecision("completed_accuracy"),
     skippedAt: timestamp("skipped_at", { withTimezone: true }),
     finishedById: uuid("finished_by_id").references(() => employees.id, { onDelete: "set null" }),
     skipReason: text("skip_reason"),
@@ -2404,4 +2412,59 @@ export const savedViews = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("saved_views_company_page_idx").on(t.companyId, t.page)],
+);
+
+/**
+ * The weather on a completed chemical application (one per work order): automatic from the
+ * National Weather Service, the office's entry for the day, or typed in for this one. `source` is
+ * null while automatic is still waiting for the station to report (tries and the last error kept).
+ */
+export const visitWeather = pgTable(
+  "visit_weather",
+  {
+    visitId: uuid("visit_id").primaryKey().references(() => visits.id, { onDelete: "cascade" }),
+    companyId: companyId(),
+    /** "auto", "day" or "office"; null until there's a reading. */
+    source: text("source"),
+    observedAt: timestamp("observed_at", { withTimezone: true }),
+    windMph: doublePrecision("wind_mph"),
+    windDeg: integer("wind_deg"),
+    gustMph: doublePrecision("gust_mph"),
+    tempF: doublePrecision("temp_f"),
+    rainIn: doublePrecision("rain_in"),
+    /** The weather station (automatic), e.g. "Norman, Max Westheimer Airport (KOUN)". */
+    station: text("station"),
+    note: text("note"),
+    enteredById: uuid("entered_by_id").references(() => employees.id, { onDelete: "set null" }),
+    tries: integer("tries").notNull().default(0),
+    lastTryAt: timestamp("last_try_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    /** Over the wind limit: reviewed by the office, with a note. */
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewedById: uuid("reviewed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    reviewNote: text("review_note"),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("visit_weather_company_idx").on(t.companyId, t.source)],
+);
+
+/** The office's weather for a day (manual mode, or a fallback): applied to that day's applications. */
+export const weatherDays = pgTable(
+  "weather_days",
+  {
+    id: id(),
+    companyId: companyId(),
+    date: date("date").notNull(),
+    windMph: doublePrecision("wind_mph").notNull(),
+    windDeg: integer("wind_deg"),
+    gustMph: doublePrecision("gust_mph"),
+    tempF: doublePrecision("temp_f"),
+    rainIn: doublePrecision("rain_in"),
+    note: text("note"),
+    enteredById: uuid("entered_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("weather_days_company_date_idx").on(t.companyId, t.date)],
 );

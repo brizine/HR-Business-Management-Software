@@ -921,6 +921,38 @@ Admins choose which employees can edit products, rates and mixes; every change i
 Editors can change the order of the products: drag a row up or down by its handle (⠿) at the left, on a
 computer or a phone, or focus the handle and use the up and down arrow keys. The new order is saved for everyone.
 
+## Weather
+
+**Field → Weather** (Customers & billing managers) keeps the weather on chemical applications for the records, as
+the Crewdesk plan describes: the office handles it, and techs never see or enter it.
+
+- **Which work orders:** tick **Chemical application** on a service in the price list (Resources → Items &
+  services). Work orders with one of those services get the weather when they're completed. They show
+  **chemical** in the price list.
+- **Settings** (admins; **Change** at the top of the page):
+  - **Automatic** (to start): wind speed and direction, gusts, temperature and the last 24 hours' rain come from the
+    nearest **National Weather Service** station for the property's map location at the time it was completed. If
+    the station hasn't reported yet, Crewdesk tries again every 15 minutes (for up to a week, which is as long as
+    stations keep readings). A property with no map location uses the phone's location from when it was completed.
+  - **Manual:** the office enters **the day's weather** once, and it goes on every chemical application completed
+    that day, including ones completed after it's entered.
+  - **Off:** nothing is recorded.
+  - **Wind (drift) limit** (10 mph to start): readings above it are flagged **Over wind limit**.
+- **The list** shows completed chemical applications for the dates you pick, with **Needs weather** (still waiting,
+  and why: not reported yet, no map location) and **Over wind limit** tabs.
+  - **Enter weather** / **Edit:** type the wind, direction, gusts, temperature, rain and a note. It's marked
+    **Entered by the office** and kept as is.
+  - **Look up:** gets it from the Weather Service now, replacing what's there.
+  - **Review:** on one over the limit, say what you found (e.g. the label allows 15 mph, low-drift nozzles). It
+    then shows **Reviewed** with your note.
+- **The day's weather** (any mode): pick a day and enter it once. In automatic mode it fills in only that day's
+  applications still waiting for weather; automatic and office readings are kept. **Delete this day's entry** takes
+  it back off.
+- **On the work order:** a completed chemical work order's page has a **Weather** box with the reading, where it
+  came from (the station and time, the day's entry, or who typed it), the review, and the **GPS** stamp. The phone
+  app adds the GPS stamp when **Completed** is tapped, if location is already allowed (it never asks just for this).
+- **Undo** on a completed work order clears its weather; it's looked up again when it's completed again.
+
 ## Property Measure
 
 Measure turf square footage from aerial photos, choosing photos taken in winter when the leaves are off.

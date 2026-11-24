@@ -112,7 +112,13 @@ export const visitUpdateSchema = visitFields.omit({ scheduling: true, repeatEver
   .superRefine((v, ctx) => checkVisit({ ...v, scheduling: v.date ? "single" : "waitlist" }, ctx));
 export type VisitUpdate = z.infer<typeof visitUpdateSchema>;
 
-export const visitCompleteSchema = z.object({ notes: z.preprocess(blankToNull, z.string().trim().max(5000).nullable()).optional() });
+export const visitCompleteSchema = z.object({
+  notes: z.preprocess(blankToNull, z.string().trim().max(5000).nullable()).optional(),
+  /** Where the phone was (when location is allowed): stamped on the application record. */
+  lat: z.number().min(-90).max(90).nullable().optional(),
+  lng: z.number().min(-180).max(180).nullable().optional(),
+  accuracy: z.number().min(0).max(100_000).nullable().optional(),
+});
 export const visitSkipSchema = z.object({ reason: z.string().trim().min(1, "Say why it was skipped").max(500) });
 
 const toIso = (y: number, m: number, d: number) => new Date(Date.UTC(y, m, d)).toISOString().slice(0, 10);

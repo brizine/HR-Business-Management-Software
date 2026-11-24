@@ -2,6 +2,7 @@ import { applyLateFees, runAutoSend } from "./billingJobs";
 import { pollInboundTexts } from "./texting";
 import { runAutomations } from "./automations";
 import { pruneEmailLog } from "./emailHealth";
+import { runWeather } from "./weather";
 import { drainCustomerMessages } from "./customerMessages";
 import { refreshAddresses } from "./addresses";
 import { retryBillingSyncs } from "./billingSync";
@@ -49,6 +50,8 @@ export async function runScheduledChecks(now = new Date()) {
   await pollInboundTexts().catch((err) => console.error("checking texts failed", err));
   await runAutomations(now).catch((err) => console.error("automations failed", err));
   await pruneEmailLog(now).catch((err) => console.error("email log prune failed", err));
+  // Weather for chemical applications whose station hadn't reported yet.
+  await runWeather(now).catch((err) => console.error("weather lookups failed", err));
 
   // Preventive maintenance coming due or overdue: tell fleet managers and the assigned driver.
   const scheduleRows = await db

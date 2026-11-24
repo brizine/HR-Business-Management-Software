@@ -1603,3 +1603,14 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 @media (max-width: 700px) { .wl-search { width: 100%; } .wl-table-wrap { max-height: none; } .wl-map-bar .row { margin-left: 0 !important; } }
 .wl-tag-list { display: grid; gap: 4px; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
 .wl-tag-list .check { display: flex; align-items: center; gap: 6px; }
+
+/* ───────────── Weather ───────────── */
+.wx-page { gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.wx-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.wx-settings { flex-wrap: wrap; gap: 8px; padding: 10px 14px; }
+.wx-table td { vertical-align: top; }
+.wx-table tr.wx-over td { background: var(--bad-bg); }
+.wx-page > .card.stack { grid-template-columns: minmax(0, 1fr); }
+.wx-page .cal-seg { flex-wrap: wrap; }
+.wx-page .cal-seg button { white-space: nowrap; }
+@media (max-width: 700px) { .wx-table td { min-width: 0 !important; } }

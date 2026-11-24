@@ -5,6 +5,7 @@ import { use, useState } from "react";
 import { PRIORITY_LABELS, VISIT_BILLING_LABELS, formatMoney, formatTaxRate, taxFor, visitNumber } from "@crewdesk/shared";
 import { api, fmtDate, fmtDateTime } from "@/lib/api";
 import { BackToWaitlist, windowText } from "@/components/waitlist";
+import { WorkOrderWeather } from "@/components/weather";
 import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead } from "@/components/ui";
 import { CrewButtons, VisitForm, VisitStatus, VisitTags, crewNames, trackedLabel, visitWhen, type Visit } from "@/components/visits";
@@ -111,6 +112,7 @@ export default function WorkOrder({ params }: { params: Promise<{ id: string }> 
           </div>
         </div>
       )}
+      {!editing && v.canManage && v.status === "completed" && <div style={{ marginTop: 16 }}><WorkOrderWeather visitId={v.id} /></div>}
       {!editing && <div style={{ marginTop: 16 }}><CustomFieldsCard target="workorder" id={v.id} canEdit={v.canManage || v.isCrew} values={v.custom ?? {}} onSaved={(custom) => update({ ...v, custom })} /></div>}
       {!editing && <div style={{ marginTop: 16 }}><VisitFiles visitId={v.id} canAdd={v.canManage || v.isCrew} canManage={v.canManage} meId={me?.user.id} /></div>}
     </>

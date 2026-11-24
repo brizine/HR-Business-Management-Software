@@ -10,13 +10,14 @@ import {
 } from "@crewdesk/shared";
 import { db } from "../db";
 import type { Tx } from "../lib/crm";
-import { crews, crmTags, customers, employees, estimates, invoiceLines, invoices, properties, propertyAssignments, serviceTypes, visitAssignees, visitFiles, visitLines, visits } from "../db/schema";
+import { crews, crmTags, customers, employees, estimates, invoiceLines, invoices, properties, propertyAssignments, serviceTypes, visitAssignees, visitFiles, visitLines, visitWeather, visits } from "../db/schema";
 import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { addDays, billingSettings } from "../lib/invoices";
 import { jobSources, newRecordCustom, updatedCustom } from "../lib/customFields";
 import { companyToday } from "../lib/payRates";
 import { except, notify } from "../lib/notify";
+import { weatherAfterComplete } from "../lib/weather";
 
 type Visit = typeof visits.$inferSelect;
 /** Customers & billing managers schedule, see and invoice every work order; the crew sees theirs. */
@@ -341,9 +342,12 @@ const routes: FastifyPluginAsync = async (app) => {
   });
   app.post<{ Params: { id: string } }>("/:id/complete", async (req) => {
     const v = await crewAction(req, req.params.id);
-    const { notes } = parse(visitCompleteSchema, req.body ?? {});
+    const { notes, lat, lng, accuracy } = parse(visitCompleteSchema, req.body ?? {});
     if (v.status === "completed" || v.status === "skipped") throw new HttpError(400, `This work order is already ${VISIT_STATUS_LABELS[v.status as VisitStatus].toLowerCase()}`);
-    await db.update(visits).set({ status: "completed", completedAt: new Date(), finishedById: req.user.sub, completionNotes: notes ?? null, updatedAt: new Date() }).where(eq(visits.id, v.id));
+    const gps = lat != null && lng != null ? { completedLat: lat, completedLng: lng, completedAccuracy: accuracy ?? null } : { completedLat: null, completedLng: null, completedAccuracy: null };
+    await db.update(visits).set({ status: "completed", completedAt: new Date(), finishedById: req.user.sub, completionNotes: notes ?? null, ...gps, updatedAt: new Date() }).where(eq(visits.id, v.id));
+    // Chemical applications get the weather (in the background).
+    weatherAfterComplete(v.id, v.companyId);
     return reply(req, v.id);
   });
   app.post<{ Params: { id: string } }>("/:id/skip", async (req) => {
@@ -358,7 +362,9 @@ const routes: FastifyPluginAsync = async (app) => {
     if (v.invoiceId && (await db.select({ id: invoices.id }).from(invoices).where(and(eq(invoices.id, v.invoiceId), sql`${invoices.status} <> 'void'`))).length) {
       throw new HttpError(400, "This work order is on an invoice; void the invoice first");
     }
-    await db.update(visits).set({ status: "open", startedAt: null, completedAt: null, skippedAt: null, finishedById: null, skipReason: null, updatedAt: new Date() }).where(eq(visits.id, v.id));
+    await db.update(visits).set({ status: "open", startedAt: null, completedAt: null, skippedAt: null, finishedById: null, skipReason: null, completedLat: null, completedLng: null, completedAccuracy: null, updatedAt: new Date() }).where(eq(visits.id, v.id));
+    // Its weather was for the completion being undone.
+    await db.delete(visitWeather).where(eq(visitWeather.visitId, v.id));
     return reply(req, v.id);
   });
 

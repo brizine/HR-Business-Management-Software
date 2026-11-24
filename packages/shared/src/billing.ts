@@ -50,6 +50,8 @@ export const serviceTypeSchema = z.object({
   active: z.boolean().default(true),
   /** Time estimate for the waiting list: setup minutes plus minutes per 1,000 sq ft. */
   setupMinutes: z.preprocess((v) => (v === "" ? null : v), z.coerce.number().int().min(0).max(600).nullable()).optional(),
+  /** A chemical application: work orders with it get the weather recorded when completed. */
+  chemical: z.boolean().optional(),
   minutesPer1000: z.preprocess((v) => (v === "" ? null : v), z.coerce.number().min(0).max(120).nullable()).optional(),
 }).superRefine((s, ctx) => {
   if (s.pricing === "bracket") {
