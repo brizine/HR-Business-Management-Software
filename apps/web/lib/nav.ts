@@ -56,6 +56,7 @@ export const NAV: Record<Side, NavGroup[]> = {
         { href: "/measure", label: "Property Measure" },
         { href: "/spray-mix", label: "Spray Mix Calculator" },
         { href: "/weather", label: "Weather", min: "manager", area: "customers" },
+        { href: "/chemical-records", label: "Chemical records", min: "manager", area: "customers" },
       ],
     },
     {

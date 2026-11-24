@@ -42,6 +42,8 @@ export const companies = pgTable("companies", {
   billing: jsonb("billing").$type<Partial<BillingSettings>>(),
   /** Weather on chemical applications: automatic, manual or off, and the wind (drift) limit. */
   weather: jsonb("weather").$type<WeatherSettings>(),
+  /** Chemical application records: the company's pesticide license number (on every record). */
+  pesticideLicenseNo: text("pesticide_license_no"),
   /** Set on a test company: the real company it's a sandbox for (sample customers, test mode payments). */
   testOfCompanyId: uuid("test_of_company_id").references((): AnyPgColumn => companies.id, { onDelete: "cascade" }),
   timezone: text("timezone").notNull().default("America/Chicago"),
@@ -1085,6 +1087,9 @@ export const products = pgTable(
     cogsAccountCode: text("cogs_account_code"),
     taxable: boolean("taxable").notNull().default(false),
     trackRecords: boolean("track_records").notNull().default(true),
+    /** When the label requires a specific adjuvant or drift agent (ODAFF items 13–14), its name. */
+    requiredAdjuvant: text("required_adjuvant"),
+    requiredDriftAgent: text("required_drift_agent"),
     active: boolean("active").notNull().default(true),
     updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1743,6 +1748,8 @@ export const serviceTypes = pgTable(
     taxable: boolean("taxable").notNull().default(false),
     /** A chemical application: work orders with it get the weather recorded when completed. */
     chemical: boolean("chemical").notNull().default(false),
+    /** Chemical records: where it's applied (ODAFF item 16), e.g. "Turf – front and back lawn". */
+    applicationSite: text("application_site"),
     active: boolean("active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: createdAt(),
@@ -2593,4 +2600,126 @@ export const weatherDays = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("weather_days_company_date_idx").on(t.companyId, t.date)],
+);
+
+/** A product's label (PDF or photo), kept by upload date so each record links the label in force that day (ODAFF item 19). */
+export const productLabels = pgTable(
+  "product_labels",
+  {
+    id: id(),
+    companyId: companyId(),
+    productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    storageKey: text("storage_key").notNull(),
+    caption: text("caption"),
+    uploadedById: uuid("uploaded_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("product_labels_product_idx").on(t.productId, t.createdAt)],
+);
+
+/** An employee's pesticide applicator certification (ODAFF item 4). */
+export const applicatorCerts = pgTable("applicator_certs", {
+  employeeId: uuid("employee_id").primaryKey().references(() => employees.id, { onDelete: "cascade" }),
+  companyId: companyId(),
+  certNo: text("cert_no").notNull(),
+  expiresOn: date("expires_on").notNull(),
+  categories: text("categories"),
+  updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * A chemical application record, made when a work order applying tracked products is completed:
+ * everything OAC 35:30-17-21(a) asks for, copied as it was that day. Never deleted: a reopened work
+ * order voids its record (a new one is made when it's completed again); corrections are logged.
+ */
+export const applicationRecords = pgTable(
+  "application_records",
+  {
+    id: id(),
+    companyId: companyId(),
+    /** Kept if the work order is later deleted (records outlive it). */
+    visitId: uuid("visit_id").references(() => visits.id, { onDelete: "set null" }),
+    visitNumber: integer("visit_number"),
+    /** 3: the company. */
+    companyName: text("company_name").notNull(),
+    companyAddress: text("company_address"),
+    companyLicenseNo: text("company_license_no"),
+    /** 4: the certified applicator who made it. */
+    applicatorId: uuid("applicator_id").references(() => employees.id, { onDelete: "set null" }),
+    applicatorName: text("applicator_name").notNull(),
+    applicatorCertNo: text("applicator_cert_no"),
+    applicatorCertExpires: date("applicator_cert_expires"),
+    /** 5: for whom. 6: where (street address). */
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    customerName: text("customer_name").notNull(),
+    customerAddress: text("customer_address"),
+    propertyId: uuid("property_id").references(() => properties.id, { onDelete: "set null" }),
+    siteAddress: text("site_address"),
+    /** 7: date. 1: start and stop. */
+    appliedOn: date("applied_on").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    stoppedAt: timestamp("stopped_at", { withTimezone: true }),
+    /** 16: site. 17: area. 10: tank mix used (gallons; null when nothing was mixed). */
+    site: text("site"),
+    areaSqFt: doublePrecision("area_sq_ft"),
+    tankMixGal: doublePrecision("tank_mix_gal"),
+    /** Where the phone was at completion, when location was allowed. */
+    lat: doublePrecision("lat"),
+    lng: doublePrecision("lng"),
+    /** What's missing or wrong, for the office to fix (empty = complete). */
+    issues: jsonb("issues").$type<string[]>().notNull().default([]),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidReason: text("void_reason"),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("application_records_company_date_idx").on(t.companyId, t.appliedOn), index("application_records_visit_idx").on(t.visitId)],
+);
+
+/** Each product on a record: 2 amount, 8 rate, 9 dilution, 11 trade name, 12 EPA #, 13–14 adjuvants, 15 target, 18 REI, 19 label. */
+export const applicationRecordProducts = pgTable(
+  "application_record_products",
+  {
+    id: id(),
+    recordId: uuid("record_id").notNull().references(() => applicationRecords.id, { onDelete: "cascade" }),
+    productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+    tradeName: text("trade_name").notNull(),
+    epaRegNo: text("epa_reg_no"),
+    productType: text("product_type"),
+    restrictedUse: boolean("restricted_use").notNull().default(false),
+    rateName: text("rate_name"),
+    ratePer1000: doublePrecision("rate_per_1000").notNull(),
+    unit: text("unit").notNull(),
+    /** Product per gallon of spray; null for products applied dry. */
+    dilutionPerGal: doublePrecision("dilution_per_gal"),
+    carrierGalPer1000: doublePrecision("carrier_gal_per_1000"),
+    amount: doublePrecision("amount").notNull(),
+    targets: text("targets"),
+    reiHours: doublePrecision("rei_hours"),
+    labelId: uuid("label_id").references(() => productLabels.id, { onDelete: "set null" }),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("application_record_products_record_idx").on(t.recordId)],
+);
+
+/** Corrections to a record: who changed what, from what, and why. */
+export const applicationRecordChanges = pgTable(
+  "application_record_changes",
+  {
+    id: id(),
+    recordId: uuid("record_id").notNull().references(() => applicationRecords.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    field: text("field").notNull(),
+    oldValue: text("old_value"),
+    newValue: text("new_value"),
+    reason: text("reason").notNull(),
+    /** Order within the record's log (changes saved together share a time). */
+    seq: integer("seq").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("application_record_changes_record_idx").on(t.recordId, t.seq)],
 );

@@ -87,6 +87,9 @@ export const productSchema = z
     taxable: z.boolean().default(false),
     /** Record every application of it (state chemical records). */
     trackRecords: z.boolean().default(true),
+    /** When the label requires a specific adjuvant or drift agent, its name (it must be on the same application). */
+    requiredAdjuvant: optText(120),
+    requiredDriftAgent: optText(120),
     active: z.boolean().default(true),
     rates: z.array(productRateSchema).max(20).default([]),
   })

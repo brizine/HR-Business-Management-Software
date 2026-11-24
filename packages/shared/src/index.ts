@@ -45,3 +45,4 @@ export * from "./automations";
 export * from "./waitlist";
 export * from "./weather";
 export * from "./products";
+export * from "./chemicalRecords";

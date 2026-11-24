@@ -5,9 +5,9 @@ import {
   SIGNAL_WORDS, SIGNAL_WORD_LABELS, costPerUseUnitCents, formatMoney, formatRateAmount, rateCostPer1000Cents,
   type ApplicationMethod, type Formulation, type ProductType,
 } from "@crewdesk/shared";
-import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi, useNewForm } from "@/lib/hooks";
+import { API_URL, api, fmtDate } from "@/lib/api";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
 import { toCents } from "@/components/invoices";
 
@@ -19,6 +19,7 @@ interface Product {
   reiHours: number | null; targets: string | null; useUnit: string; purchaseUnitName: string | null; purchaseUnitSize: number | null;
   labelMaxPer1000: number | null; labelMaxPerYearPer1000: number | null; labelInstructions: string | null; customerNote: string | null;
   incomeAccountCode: string | null; cogsAccountCode: string | null; taxable: boolean; trackRecords: boolean; active: boolean;
+  requiredAdjuvant: string | null; requiredDriftAgent: string | null;
   rates: Rate[]; costs: Cost[]; currentCost: Omit<Cost, "id"> | null; costPerUseUnitCents: number | null;
 }
 
@@ -98,6 +99,7 @@ function ProductForm({ product, onDone, onClose }: { product: Product | null; on
     labelInstructions: p?.labelInstructions ?? "", customerNote: p?.customerNote ?? "",
     incomeAccountCode: p?.incomeAccountCode ?? "", cogsAccountCode: p?.cogsAccountCode ?? "",
     taxable: p?.taxable ?? false, trackRecords: p?.trackRecords ?? true, active: p?.active ?? true,
+    requiredAdjuvant: p?.requiredAdjuvant ?? "", requiredDriftAgent: p?.requiredDriftAgent ?? "",
   });
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((x) => ({ ...x, [k]: v }));
   const [ais, setAis] = useState(p?.activeIngredients.length ? p.activeIngredients.map((a) => ({ name: a.name, percent: str(a.percent) })) : [{ name: "", percent: "" }]);
@@ -220,7 +222,12 @@ function ProductForm({ product, onDone, onClose }: { product: Product | null; on
         <label>Targets (weeds, pests or diseases)<input value={f.targets} onChange={(e) => set("targets", e.target.value)} /></label>
         <label>Label instructions<textarea rows={3} value={f.labelInstructions} onChange={(e) => set("labelInstructions", e.target.value)} /></label>
         <label>Note for the customer <span className="muted">(route sheet and after-visit message)</span><textarea rows={2} value={f.customerNote} onChange={(e) => set("customerNote", e.target.value)} placeholder="e.g. Water in within 24 hours. Keep pets off until dry." /></label>
+        <div className="formgrid">
+          <label>Adjuvant the label requires <span className="muted">(if any)</span><input value={f.requiredAdjuvant} onChange={(e) => set("requiredAdjuvant", e.target.value)} placeholder="e.g. a nonionic surfactant product name" /></label>
+          <label>Drift agent the label requires <span className="muted">(if any)</span><input value={f.requiredDriftAgent} onChange={(e) => set("requiredDriftAgent", e.target.value)} /></label>
+        </div>
         <label className="check"><input type="checkbox" checked={f.restrictedUse} onChange={(e) => set("restrictedUse", e.target.checked)} /> Restricted use pesticide (RUP)</label>
+        {p ? <ProductLabels productId={p.id} /> : <p className="muted" style={{ margin: 0 }}>Save the product, then upload its label here (chemical records link to it).</p>}
       </fieldset>
 
       <fieldset className="contacts">
@@ -242,3 +249,28 @@ function ProductForm({ product, onDone, onClose }: { product: Product | null; on
   );
 }
 
+
+/** The product's labels (PDF or photo), newest first; each chemical record links the one in force that day. */
+function ProductLabels({ productId }: { productId: string }) {
+  const labels = useApi<{ id: string; fileName: string; sizeBytes: number; createdAt: string }[]>(`/chemical-records/labels/${productId}`);
+  const act = useAction();
+  const upload = (file: File | undefined) => file && act.run(async () => {
+    const fd = new FormData();
+    fd.append("file", file);
+    await api(`/chemical-records/labels/${productId}`, { method: "POST", body: fd });
+    labels.reload();
+  });
+  const list = labels.data ?? [];
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <strong>Product label</strong>
+      {list.length ? list.map((l, i) => (
+        <div key={l.id}><a href={`${API_URL}/chemical-records/label-files/${l.id}`} target="_blank" rel="noreferrer">{l.fileName}</a> <span className="muted">uploaded {fmtDate(l.createdAt)}{i === 0 ? " · current" : ""}</span></div>
+      )) : <span className="badge warn" style={{ alignSelf: "flex-start" }}>no label on file</span>}
+      <label style={{ maxWidth: 360 }}>{list.length ? "Upload a newer label" : "Upload the label"} <span className="muted">(PDF or photo; older ones are kept)</span>
+        <input type="file" accept="application/pdf,image/*" disabled={act.busy} onChange={(e) => upload(e.target.files?.[0])} />
+      </label>
+      <ErrorBox error={act.error} />
+    </div>
+  );
+}

@@ -72,6 +72,7 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
   const [active, setActive] = useState(service?.active ?? true);
   const [taxable, setTaxable] = useState(service?.taxable ?? false);
   const [chemical, setChemical] = useState(service?.chemical ?? false);
+  const [site, setSite] = useState(service?.applicationSite ?? "Turf");
   const [tiers, setTiers] = useState<{ from: string; rate: string }[]>(
     service?.tiers?.length ? service.tiers.map((t) => ({ from: String(t.fromSqFt), rate: dollars(t.ratePer1000Cents) })) : [{ from: "3000", rate: "" }, { from: "6000", rate: "" }, { from: "10000", rate: "" }],
   );
@@ -113,7 +114,7 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
     <form className="card stack" onSubmit={(e) => {
       e.preventDefault();
       const body: Record<string, unknown> = {
-        name, description: description || undefined, pricing, incomeAccountCode, active, taxable, chemical, priceCents: 0, minimumCents: 0, brackets: [],
+        name, description: description || undefined, pricing, incomeAccountCode, active, taxable, chemical, applicationSite: chemical ? site : null, priceCents: 0, minimumCents: 0, brackets: [],
         setupMinutes: setupMin.trim() === "" ? null : Number(setupMin), minutesPer1000: per1000.trim() === "" ? null : Number(per1000),
         targetCentsPerHour: target.trim() ? toCents(target) : null,
       };
@@ -242,6 +243,7 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
       </fieldset>
       <label>Description (optional)<input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
       <label className="check"><input type="checkbox" checked={chemical} onChange={(e) => setChemical(e.target.checked)} /> Chemical application <span className="muted">(record the weather when it&apos;s completed; see Field → Weather)</span></label>
+      {chemical && <label>Site where applied <span className="muted">(on chemical records, e.g. Turf – front and back lawn)</span><input value={site} onChange={(e) => setSite(e.target.value)} /></label>}
       <label className="check"><input type="checkbox" checked={taxable} onChange={(e) => setTaxable(e.target.checked)} /> This is taxable <span className="muted">(gets the sales tax rate on work orders and invoices once sales tax is on)</span></label>
       {service && <label className="check"><input type="checkbox" checked={!active} onChange={(e) => setActive(!e.target.checked)} /> Retired (kept on past invoices, not offered for new ones)</label>}
       <ErrorBox error={error} />

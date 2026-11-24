@@ -17,6 +17,7 @@ import { addDays, billingSettings } from "../lib/invoices";
 import { jobSources, newRecordCustom, updatedCustom } from "../lib/customFields";
 import { companyToday } from "../lib/payRates";
 import { snapshotVisitProducts, visitProductRows } from "../lib/productCosts";
+import { createApplicationRecord, voidApplicationRecords } from "../lib/chemicalRecords";
 import { except, notify } from "../lib/notify";
 import { weatherAfterComplete } from "../lib/weather";
 
@@ -350,6 +351,8 @@ const routes: FastifyPluginAsync = async (app) => {
       await tx.update(visits).set({ status: "completed", completedAt: new Date(), finishedById: req.user.sub, completionNotes: notes ?? null, ...gps, updatedAt: new Date() }).where(eq(visits.id, v.id));
       // What it applied, at the cost in force on its day (kept as is when prices change later).
       await snapshotVisitProducts(tx, v.id, req.user.companyId);
+      // The chemical application record (ODAFF), from what it applied and who, where and when.
+      await createApplicationRecord(tx, v.id, req.user.companyId);
     });
     // Chemical applications get the weather (in the background).
     weatherAfterComplete(v.id, v.companyId);
@@ -372,6 +375,8 @@ const routes: FastifyPluginAsync = async (app) => {
       // Its weather and products were for the completion being undone.
       await tx.delete(visitWeather).where(eq(visitWeather.visitId, v.id));
       await tx.delete(visitProducts).where(eq(visitProducts.visitId, v.id));
+      // Chemical records are never deleted: this completion's record is voided instead.
+      await voidApplicationRecords(tx, v.id, "Work order reopened");
     });
     return reply(req, v.id);
   });

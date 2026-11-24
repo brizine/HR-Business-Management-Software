@@ -77,6 +77,8 @@ export const serviceTypeSchema = z.object({
   setupMinutes: z.preprocess((v) => (v === "" ? null : v), z.coerce.number().int().min(0).max(600).nullable()).optional(),
   /** A chemical application: work orders with it get the weather recorded when completed. */
   chemical: z.boolean().optional(),
+  /** Chemical records: where it's applied (ODAFF item 16), e.g. "Turf – front and back lawn". */
+  applicationSite: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), z.string().trim().max(200).nullable()).optional(),
   minutesPer1000: z.preprocess((v) => (v === "" ? null : v), z.coerce.number().min(0).max(120).nullable()).optional(),
 }).superRefine((s, ctx) => {
   if (s.pricing === "bracket") {
