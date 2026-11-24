@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { AutomationStep, CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
+import type { AutomationStep, CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -1606,6 +1606,18 @@ export const serviceTypes = pgTable(
     priceCents: integer("price_cents").notNull().default(0),
     minimumCents: integer("minimum_cents").notNull().default(0),
     brackets: jsonb("brackets").$type<Bracket[]>().notNull().default([]),
+    /** "tiered": volume-discount tiers after the minimum (the minimum covers lawns up to the first tier). */
+    tiers: jsonb("tiers").$type<Tier[]>().notNull().default([]),
+    /** "tiered": price in size bands of this many sq ft (null = exact price for every square foot). */
+    bandSizeSqFt: integer("band_size_sq_ft"),
+    /** "tiered": price each band at its start (0), middle (0.5) or end (1). */
+    bandPricePoint: doublePrecision("band_price_point").notNull().default(0.5),
+    /** "tiered": round to this many cents (50 = nearest $0.50). */
+    roundToCents: integer("round_to_cents").notNull().default(50),
+    /** "tiered": bigger lawns need a price typed in. */
+    maxAutoSqFt: integer("max_auto_sq_ft"),
+    /** Profit check: target revenue per man-hour, in cents. */
+    targetCentsPerHour: integer("target_cents_per_hour"),
     /** The income account's code in the books (4000, 4100, 4200…), so it works in real and test books alike. */
     incomeAccountCode: text("income_account_code").notNull().default("4000"),
     /** Homeworks' "This is Taxable": its lines get the sales tax rate once sales tax is on. */

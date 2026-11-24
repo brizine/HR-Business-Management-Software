@@ -582,6 +582,13 @@
       "when": 1795485186220,
       "tag": "0082_waiting_list",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1795497851891,
+      "tag": "0083_tiered_pricing",
+      "breakpoints": true
     }
   ]
 }
