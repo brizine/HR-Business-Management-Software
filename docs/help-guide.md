@@ -937,19 +937,16 @@ the Crewdesk plan describes: the office handles it, and techs never see or enter
   - **Manual:** the office enters **the day's weather** once, and it goes on every chemical application completed
     that day, including ones completed after it's entered.
   - **Off:** nothing is recorded.
-  - **Wind (drift) limit** (10 mph to start): readings above it are flagged **Over wind limit**.
 - **The list** shows completed chemical applications for the dates you pick, with **Needs weather** (still waiting,
-  and why: not reported yet, no map location) and **Over wind limit** tabs.
+  and why: not reported yet, no map location) and **All** tabs.
   - **Enter weather** / **Edit:** type the wind, direction, gusts, temperature, rain and a note. It's marked
     **Entered by the office** and kept as is.
   - **Look up:** gets it from the Weather Service now, replacing what's there.
-  - **Review:** on one over the limit, say what you found (e.g. the label allows 15 mph, low-drift nozzles). It
-    then shows **Reviewed** with your note.
 - **The day's weather** (any mode): pick a day and enter it once. In automatic mode it fills in only that day's
   applications still waiting for weather; automatic and office readings are kept. **Delete this day's entry** takes
   it back off.
 - **On the work order:** a completed chemical work order's page has a **Weather** box with the reading, where it
-  came from (the station and time, the day's entry, or who typed it), the review, and the **GPS** stamp. The phone
+  came from (the station and time, the day's entry, or who typed it), and the **GPS** stamp. The phone
   app adds the GPS stamp when **Completed** is tapped, if location is already allowed (it never asks just for this).
 - **Undo** on a completed work order clears its weather; it's looked up again when it's completed again.
 

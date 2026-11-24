@@ -1,9 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
 import { and, eq } from "drizzle-orm";
-import { z } from "zod";
 import { weatherReadingSchema, weatherSettingsSchema } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, visitWeather, visits, weatherDays } from "../db/schema";
+import { companies, visits, weatherDays } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
@@ -63,15 +62,6 @@ const routes: FastifyPluginAsync = async (app) => {
     return (await weatherRecords(req.user.companyId, { visitIds: [req.params.visitId] })).records[0] ?? null;
   });
 
-  /** Over the wind limit: the office has looked at it (with a note). */
-  app.post<{ Params: { visitId: string } }>("/records/:visitId/review", async (req) => {
-    const b = parse(z.object({ note: z.string().trim().min(1, "Say what you found (e.g. label allows 15 mph; low-drift nozzles)").max(500) }), req.body);
-    const rec = (await weatherRecords(req.user.companyId, { visitIds: [req.params.visitId] })).records[0];
-    if (!rec) throw new HttpError(404, "Work order not found");
-    if (!rec.overLimit) throw new HttpError(400, "This one isn't over the wind limit");
-    await db.update(visitWeather).set({ reviewedAt: new Date(), reviewedById: req.user.sub, reviewNote: b.note, updatedAt: new Date() }).where(eq(visitWeather.visitId, req.params.visitId));
-    return (await weatherRecords(req.user.companyId, { visitIds: [req.params.visitId] })).records[0];
-  });
 
   /** The office's weather for a day: applied to that day's applications without their own reading. */
   app.put<{ Params: { date: string } }>("/days/:date", async (req) => {

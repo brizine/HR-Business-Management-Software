@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import {
-  DEFAULT_WEATHER_SETTINGS, customerName, formatAddress, overWindLimit, readingAt,
+  DEFAULT_WEATHER_SETTINGS, customerName, formatAddress, readingAt,
   type Observation, type WeatherReadingInput, type WeatherSettings, type WeatherSource,
 } from "@crewdesk/shared";
 import { db } from "../db";
@@ -16,7 +16,7 @@ import { localParts } from "./tz";
 
 export async function weatherSettings(companyId: string): Promise<WeatherSettings> {
   const [c] = await db.select({ weather: companies.weather }).from(companies).where(eq(companies.id, companyId));
-  return { ...DEFAULT_WEATHER_SETTINGS, ...(c?.weather ?? {}) };
+  return { mode: c?.weather?.mode ?? DEFAULT_WEATHER_SETTINGS.mode };
 }
 
 /* ───────────── The weather service ───────────── */
@@ -226,9 +226,9 @@ export type WeatherRecord = {
   gps: { lat: number; lng: number; accuracy: number | null } | null;
   weather: null | {
     source: WeatherSource | null; observedAt: string | null; windMph: number | null; windDeg: number | null; gustMph: number | null; tempF: number | null; rainIn: number | null;
-    station: string | null; note: string | null; enteredBy: string | null; tries: number; lastError: string | null; reviewedAt: string | null; reviewedBy: string | null; reviewNote: string | null;
+    station: string | null; note: string | null; enteredBy: string | null; tries: number; lastError: string | null;
   };
-  needsWeather: boolean; overLimit: boolean;
+  needsWeather: boolean;
 };
 
 /** Completed chemical work orders (completed between `from` and `to`, local dates) and their weather. */
@@ -246,7 +246,7 @@ export async function weatherRecords(companyId: string, o: { from?: string; to?:
   const ids = rows.map((r) => r.v.id);
   const lines = ids.length ? await db.select({ visitId: visitLines.visitId, name: serviceTypes.name }).from(visitLines)
     .innerJoin(serviceTypes, eq(serviceTypes.id, visitLines.serviceTypeId)).where(and(inArray(visitLines.visitId, ids), eq(serviceTypes.chemical, true))) : [];
-  const people = [...new Set(rows.flatMap((r) => [r.v.finishedById, r.w?.enteredById, r.w?.reviewedById]).filter((x): x is string => !!x))];
+  const people = [...new Set(rows.flatMap((r) => [r.v.finishedById, r.w?.enteredById]).filter((x): x is string => !!x))];
   const names = new Map((people.length ? await db.select({ id: employees.id, first: employees.firstName, last: employees.lastName }).from(employees).where(inArray(employees.id, people)) : [])
     .map((e) => [e.id, `${e.first} ${e.last}`]));
   const records: WeatherRecord[] = rows.map(({ v, w, c, p }) => {
@@ -260,10 +260,8 @@ export async function weatherRecords(companyId: string, o: { from?: string; to?:
       weather: w ? {
         source: (w.source as WeatherSource | null) ?? null, observedAt: w.observedAt?.toISOString() ?? null, windMph: w.windMph, windDeg: w.windDeg, gustMph: w.gustMph, tempF: w.tempF, rainIn: w.rainIn,
         station: w.station, note: w.note, enteredBy: w.enteredById ? names.get(w.enteredById) ?? null : null, tries: w.tries, lastError: w.lastError,
-        reviewedAt: w.reviewedAt?.toISOString() ?? null, reviewedBy: w.reviewedById ? names.get(w.reviewedById) ?? null : null, reviewNote: w.reviewNote,
       } : null,
       needsWeather: !has,
-      overLimit: has && overWindLimit(w, settings.windLimitMph),
     };
   });
   return { settings, records };

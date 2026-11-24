@@ -1,5 +1,5 @@
 {
-  "id": "e7418deb-77d2-45ce-bb6e-1fb95c843c68",
+  "id": "6122a52f-834e-4e73-a382-e0f7c65f21b0",
   "prevId": "40ab496b-fb7b-4bcb-9c9b-6f2d09933f2d",
   "version": "7",
   "dialect": "postgresql",
@@ -12057,45 +12057,6 @@
           "notNull": true,
           "default": "'[]'::jsonb"
         },
-        "tiers": {
-          "name": "tiers",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "band_size_sq_ft": {
-          "name": "band_size_sq_ft",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "band_price_point": {
-          "name": "band_price_point",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0.5
-        },
-        "round_to_cents": {
-          "name": "round_to_cents",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 50
-        },
-        "max_auto_sq_ft": {
-          "name": "max_auto_sq_ft",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "target_cents_per_hour": {
-          "name": "target_cents_per_hour",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "income_account_code": {
           "name": "income_account_code",
           "type": "text",
@@ -14300,24 +14261,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "reviewed_at": {
-          "name": "reviewed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reviewed_by_id": {
-          "name": "reviewed_by_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "review_note": {
-          "name": "review_note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -14389,19 +14332,6 @@
           "tableTo": "employees",
           "columnsFrom": [
             "entered_by_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "visit_weather_reviewed_by_id_employees_id_fk": {
-          "name": "visit_weather_reviewed_by_id_employees_id_fk",
-          "tableFrom": "visit_weather",
-          "tableTo": "employees",
-          "columnsFrom": [
-            "reviewed_by_id"
           ],
           "columnsTo": [
             "id"

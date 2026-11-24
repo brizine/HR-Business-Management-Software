@@ -4,7 +4,6 @@ import { z } from "zod";
  * Weather on chemical applications (from the Crewdesk plan): the office handles it, techs never
  * enter it. Automatic pulls wind, temperature and recent rain for each stop's location and time as
  * it's completed; manual applies the office's entry for the day to every application that day.
- * Readings above the company's wind (drift) limit are flagged for review.
  */
 
 export const WEATHER_MODES = ["auto", "manual", "off"] as const;
@@ -22,11 +21,9 @@ export const WEATHER_SOURCE_LABELS: Record<WeatherSource, string> = { auto: "Aut
 
 export const weatherSettingsSchema = z.object({
   mode: z.enum(WEATHER_MODES),
-  /** Wind (drift) limit: readings above it are flagged for review. */
-  windLimitMph: z.coerce.number().min(1, "At least 1 mph").max(40, "At most 40 mph"),
 });
 export type WeatherSettings = z.infer<typeof weatherSettingsSchema>;
-export const DEFAULT_WEATHER_SETTINGS: WeatherSettings = { mode: "auto", windLimitMph: 10 };
+export const DEFAULT_WEATHER_SETTINGS: WeatherSettings = { mode: "auto" };
 
 const blankToNull = (v: unknown) => (typeof v === "string" && v.trim() === "" ? null : v);
 const num = (min: number, max: number, msg: string) => z.preprocess(blankToNull, z.coerce.number().min(min, msg).max(max, msg).nullable()).optional();
@@ -84,9 +81,6 @@ export function readingAt(obs: Observation[], at: Date): WeatherReading | null {
     rainIn: rainMm != null ? mmToIn(rainMm) : null,
   };
 }
-
-/** Over the company's wind (drift) limit. */
-export const overWindLimit = (r: { windMph: number | null } | null | undefined, limitMph: number) => !!r && r.windMph != null && r.windMph > limitMph;
 
 /** "8 mph SSW, gusts 15" */
 export function windText(r: { windMph: number | null; windDeg?: number | null; gustMph?: number | null }) {

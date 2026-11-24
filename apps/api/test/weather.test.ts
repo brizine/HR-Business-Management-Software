@@ -1,4 +1,4 @@
-/** Weather on chemical applications: automatic lookups, retries, the day's entry, office edits, the wind limit. */
+/** Weather on chemical applications: automatic lookups, retries, the day's entry, office edits. */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
@@ -77,11 +77,11 @@ const complete = async (id: string, gps?: { lat: number; lng: number; accuracy?:
 };
 
 describe("weather", () => {
-  it("settings: automatic with a 10 mph limit to start; admins change them", async () => {
-    expect((await call("GET", "/weather/settings", "mgr")).body).toEqual({ mode: "auto", windLimitMph: 10 });
-    expect((await call("PUT", "/weather/settings", "mgr", { mode: "manual", windLimitMph: 12 })).status).toBe(403);
-    expect((await call("PUT", "/weather/settings", "owner", { mode: "auto", windLimitMph: 0 })).status).toBe(400);
-    expect((await call("PUT", "/weather/settings", "owner", { mode: "auto", windLimitMph: 12 })).status).toBe(200);
+  it("settings: automatic to start; admins change it", async () => {
+    expect((await call("GET", "/weather/settings", "mgr")).body).toEqual({ mode: "auto" });
+    expect((await call("PUT", "/weather/settings", "mgr", { mode: "manual" })).status).toBe(403);
+    expect((await call("PUT", "/weather/settings", "owner", { mode: "sometimes" })).status).toBe(400);
+    expect((await call("PUT", "/weather/settings", "owner", { mode: "auto" })).status).toBe(200);
     expect((await call("GET", "/weather/records", "tech")).status).toBe(403);
   });
 
@@ -91,7 +91,7 @@ describe("weather", () => {
     expect(calls.at(-1)).toEqual({ lat: 35.2226, lng: -97.4395 });
     const r = await record(ID.a);
     expect(r).toMatchObject({
-      services: ["Weed control"], needsWeather: false, overLimit: false, gps: { lat: 35.2229, lng: -97.44, accuracy: 12 },
+      services: ["Weed control"], needsWeather: false, gps: { lat: 35.2229, lng: -97.44, accuracy: 12 },
       weather: { source: "auto", windMph: 10, windDeg: 200, gustMph: 20, tempF: 77, rainIn: 0.1, station: "Norman, Max Westheimer Airport (KOUN)", lastError: null },
     });
     // A non-chemical work order gets none, and isn't on the list.
@@ -101,7 +101,7 @@ describe("weather", () => {
     expect(calls.length).toBe(before);
     const list = (await call("GET", "/weather/records", "mgr")).body;
     expect(list.records.map((x: any) => x.visitId)).toEqual([ID.a]);
-    expect(list.settings.windLimitMph).toBe(12);
+    expect(list.settings).toEqual({ mode: "auto" });
   });
 
   it("waits for the station to report, then tries again", async () => {
@@ -126,15 +126,15 @@ describe("weather", () => {
     expect((await record(ID.d)).weather.source).toBe("auto");
   });
 
-  it("flags readings over the wind limit for review, with a note", async () => {
+  it("records any wind as it was, with no limit or review", async () => {
     wind = 30; // 18.6 mph
     ID.e = await workOrder("weed");
     await complete(ID.e);
-    expect(await record(ID.e)).toMatchObject({ overLimit: true, weather: { windMph: 18.6, reviewedAt: null } });
-    expect((await call("POST", `/weather/records/${ID.e}/review`, "mgr", { note: "" })).status).toBe(400);
-    expect((await call("POST", `/weather/records/${ID.a}/review`, "mgr", { note: "ok" })).status).toBe(400);
-    const r = await call("POST", `/weather/records/${ID.e}/review`, "mgr", { note: "Gusts were brief; used low-drift nozzles" });
-    expect(r.body).toMatchObject({ overLimit: true, weather: { reviewedBy: "Mo Manager", reviewNote: "Gusts were brief; used low-drift nozzles" } });
+    const r = await record(ID.e);
+    expect(r).toMatchObject({ needsWeather: false, weather: { windMph: 18.6 } });
+    expect(r).not.toHaveProperty("overLimit");
+    expect(r.weather).not.toHaveProperty("reviewedAt");
+    expect((await call("POST", `/weather/records/${ID.e}/review`, "mgr", { note: "ok" })).status).toBe(404);
     wind = 16.09;
   });
 
@@ -154,7 +154,7 @@ describe("weather", () => {
   });
 
   it("manual: the day's entry goes on that day's applications without their own reading", async () => {
-    await call("PUT", "/weather/settings", "owner", { mode: "manual", windLimitMph: 12 });
+    await call("PUT", "/weather/settings", "owner", { mode: "manual" });
     const before = calls.length;
     ID.f = await workOrder("weed");
     await complete(ID.f);
@@ -183,7 +183,7 @@ describe("weather", () => {
     expect(await db.select().from(visitWeather).where(eq(visitWeather.visitId, ID.a))).toEqual([]);
     const [v] = await db.select().from(visits).where(eq(visits.id, ID.a));
     expect(v.completedLat).toBeNull();
-    await call("PUT", "/weather/settings", "owner", { mode: "off", windLimitMph: 12 });
+    await call("PUT", "/weather/settings", "owner", { mode: "off" });
     const before = calls.length;
     ID.h = await workOrder("weed");
     await complete(ID.h);

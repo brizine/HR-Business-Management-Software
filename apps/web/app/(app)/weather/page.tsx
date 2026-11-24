@@ -12,13 +12,13 @@ import {
 } from "@/components/weather";
 
 type Data = { from: string; to: string; today: string; settings: WeatherSettings; records: WeatherRecord[]; days: WeatherDay[] };
-const SHOW = [["needs", "Needs weather"], ["over", "Over wind limit"], ["all", "All"]] as const;
+const SHOW = [["needs", "Needs weather"], ["all", "All"]] as const;
 type Show = (typeof SHOW)[number][0];
 
 /**
  * Weather on chemical applications (Field → Weather): the settings, the day's weather for manual
  * mode, and every completed chemical work order with its reading, flagged when it still needs
- * weather or is over the wind limit.
+ * weather.
  */
 export default function WeatherPage() {
   const { can } = useAuth();
@@ -27,9 +27,8 @@ export default function WeatherPage() {
   const [show, setShow] = useState<Show | null>(null);
   const d = data.data;
   const needs = d?.records.filter((r) => r.needsWeather) ?? [];
-  const over = d?.records.filter((r) => r.overLimit && !r.weather?.reviewedAt) ?? [];
-  const tab: Show = show ?? (needs.length ? "needs" : over.length ? "over" : "all");
-  const rows = tab === "needs" ? needs : tab === "over" ? over : d?.records ?? [];
+  const tab: Show = show ?? (needs.length ? "needs" : "all");
+  const rows = tab === "needs" ? needs : d?.records ?? [];
   const update = (r: WeatherRecord) => d && data.setData({ ...d, records: d.records.map((x) => (x.visitId === r.visitId ? r : x)) });
 
   return (
@@ -45,7 +44,7 @@ export default function WeatherPage() {
               <div className="cal-seg" role="tablist" aria-label="Show">
                 {SHOW.map(([k, label]) => (
                   <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setShow(k)}>
-                    {label}{k === "needs" ? ` (${needs.length})` : k === "over" ? ` (${over.length})` : ` (${d.records.length})`}
+                    {label}{k === "needs" ? ` (${needs.length})` : ` (${d.records.length})`}
                   </button>
                 ))}
               </div>
@@ -60,14 +59,13 @@ export default function WeatherPage() {
                   <thead><tr><th>Completed</th><th>Work order</th><th>Property</th><th>Weather</th><th>From</th><th /></tr></thead>
                   <tbody>
                     {rows.map((r) => (
-                      <tr key={r.visitId} className={r.overLimit && !r.weather?.reviewedAt ? "wx-over" : undefined}>
+                      <tr key={r.visitId}>
                         <td className="nowrap">{dayOf(r.date)}<div className="muted wl-sub">{timeOf(r.completedAt)}{r.finishedBy ? ` · ${r.finishedBy}` : ""}</div></td>
                         <td>{recordLink(r)}<div className="muted wl-sub">{r.services.join(", ")}</div></td>
                         <td>{r.property ? <Link href={`/properties/${r.property.id}`}>{r.property.address}</Link> : "—"}<div className="muted wl-sub"><Link href={`/customers/${r.customer.id}`}>{r.customer.name}</Link></div></td>
                         <td>
                           {r.weather?.source ? readingText(r.weather) : <span className="muted">{r.weather?.lastError ?? "Waiting"}</span>}
                           <div style={{ marginTop: 3 }}><WeatherFlags r={r} /></div>
-                          {r.weather?.reviewedAt && <div className="muted wl-sub">Reviewed: {r.weather.reviewNote}</div>}
                         </td>
                         <td className="muted wl-sub">{r.weather?.source ? sourceText(r.weather) : ""}</td>
                         <td style={{ minWidth: 220 }}><RecordActions r={r} compact onChange={update} /></td>
@@ -78,7 +76,7 @@ export default function WeatherPage() {
               </div>
             ) : (
               <Empty>
-                {tab === "needs" ? "Nothing is waiting for weather." : tab === "over" ? "Nothing over the wind limit." : d.records.length ? "" : <>No chemical applications completed in these dates. Tick <strong>Chemical application</strong> on services in the <Link href="/price-list">price list</Link> to record their weather.</>}
+                {tab === "needs" ? "Nothing is waiting for weather." : d.records.length ? "" : <>No chemical applications completed in these dates. Tick <strong>Chemical application</strong> on services in the <Link href="/price-list">price list</Link> to record their weather.</>}
               </Empty>
             )}
           </div>

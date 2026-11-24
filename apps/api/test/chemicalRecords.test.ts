@@ -63,7 +63,7 @@ beforeAll(async () => {
   today = (await call("GET", "/todos?limit=1", "owner")).body.today;
 
   // Weather: the office's entry for the day (manual mode, no network).
-  await call("PUT", "/weather/settings", "owner", { mode: "manual", windLimitMph: 10 });
+  await call("PUT", "/weather/settings", "owner", { mode: "manual" });
   await call("PUT", `/weather/days/${today}`, "office", { windMph: 6, windDeg: 180, tempF: 72 });
 
   const herb = (await call("POST", "/products", "owner", {
