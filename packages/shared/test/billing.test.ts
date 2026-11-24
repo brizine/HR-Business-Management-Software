@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describePricing, formatMoney, invoiceSchema, invoiceTotals, isOverdue, priceFor, serviceTypeSchema, invoiceBalance, creditSchema, billingSettingsSchema, prepayTotals, prepaySplit, prepaymentSchema, splitIncome } from "../src/billing";
+import { describePricing, tieredBreakdown, formatMoney, invoiceSchema, invoiceTotals, isOverdue, priceFor, serviceTypeSchema, invoiceBalance, creditSchema, billingSettingsSchema, prepayTotals, prepaySplit, prepaymentSchema, splitIncome } from "../src/billing";
 
 describe("price list", () => {
   it("prices flat, per 1,000 sq ft (with a minimum) and by lawn size", () => {
@@ -88,5 +88,72 @@ describe("prepayment income", () => {
     expect(splitIncome(100, [["4000", 1], ["4100", 1], ["4200", 1]]).reduce((s, p) => s + p.cents, 0)).toBe(100);
     expect(splitIncome(47500, [["4000", 30000], ["4000", 20000]])).toEqual([{ code: "4000", cents: 47500 }]);
     expect(splitIncome(5000, [])).toEqual([{ code: "4000", cents: 5000 }]);
+  });
+});
+
+describe("volume-discount (tiered) pricing", () => {
+  // The rate card from the "Per-1,000 Sq Ft Rate Matrix Builder" sheet: $38 covers up to 3,000 sq ft,
+  // then $6.50 / $6.25 / $5.75 / $5.00 per 1,000, 500 sq ft bands priced at their middle, nearest $0.50.
+  const card = {
+    pricing: "tiered", priceCents: 0, brackets: [], minimumCents: 3800,
+    tiers: [{ fromSqFt: 3000, ratePer1000Cents: 650 }, { fromSqFt: 6000, ratePer1000Cents: 625 }, { fromSqFt: 10000, ratePer1000Cents: 575 }, { fromSqFt: 20000, ratePer1000Cents: 500 }],
+    bandSizeSqFt: 500, bandPricePoint: 0.5, roundToCents: 50, maxAutoSqFt: null,
+  };
+
+  it("matches the sheet's matrix rows", () => {
+    // [lawn sq ft, expected cents] — one lawn from several rows of the sheet's Matrix tab.
+    const rows: [number, number][] = [
+      [1, 3800], [3000, 3800], [3001, 3950], [3500, 3950], [3750, 4300], [4250, 4600], [5000, 4950],
+      [6000, 5600], [6250, 5900], [7250, 6550], [8000, 6850], [9750, 8100], [10250, 8400], [12000, 9250], [15000, 11000],
+    ];
+    for (const [sqFt, cents] of rows) expect([sqFt, priceFor(card, sqFt)]).toEqual([sqFt, cents]);
+  });
+
+  it("puts band edges in the right band", () => {
+    expect(tieredBreakdown(card, 3000)?.band).toEqual({ fromSqFt: 0, toSqFt: 3000 });
+    expect(tieredBreakdown(card, 3001)?.band).toEqual({ fromSqFt: 3001, toSqFt: 3500 });
+    expect(tieredBreakdown(card, 3500)?.band).toEqual({ fromSqFt: 3001, toSqFt: 3500 });
+    expect(tieredBreakdown(card, 3501)?.band).toEqual({ fromSqFt: 3501, toSqFt: 4000 });
+    expect(tieredBreakdown(card, 3500.4)?.band).toEqual({ fromSqFt: 3001, toSqFt: 3500 });
+  });
+
+  it("prices continuously when there are no bands", () => {
+    const exact = { ...card, bandSizeSqFt: null };
+    const b = tieredBreakdown(exact, 7250)!;
+    expect(b.parts.map((p) => [p.sqFt, p.cents])).toEqual([[3000, 1950], [1250, 781.25]]);
+    expect(b.exactCents).toBeCloseTo(6531.25, 6);
+    expect(b.priceCents).toBe(6550);
+    expect(priceFor({ ...exact, roundToCents: 1 }, 7250)).toBe(6531);
+  });
+
+  it("never charges a bigger lawn less, in either mode", () => {
+    for (const mode of [card, { ...card, bandSizeSqFt: null }, { ...card, bandPricePoint: 0 }, { ...card, bandPricePoint: 1 }]) {
+      let last = 0;
+      for (let sqFt = 1; sqFt <= 30000; sqFt += 7) {
+        const p = priceFor(mode, sqFt)!;
+        expect(p).toBeGreaterThanOrEqual(last);
+        last = p;
+      }
+    }
+  });
+
+  it("needs a size, and leaves lawns over the limit to be priced by hand", () => {
+    expect(priceFor(card, null)).toBeNull();
+    expect(priceFor(card, 0)).toBeNull();
+    expect(priceFor({ ...card, maxAutoSqFt: 40000 }, 40000)).not.toBeNull();
+    expect(priceFor({ ...card, maxAutoSqFt: 40000 }, 40001)).toBeNull();
+  });
+
+  it("describes the rate card", () => {
+    expect(describePricing(card)).toBe("$38.00 up to 3,000 sq ft, then $6.50 per 1,000 to 6,000 · $6.25 per 1,000 to 10,000 · $5.75 per 1,000 to 20,000 · $5.00 per 1,000 after that");
+  });
+
+  it("checks tiers go up in size and never up in rate", () => {
+    const base = { name: "Early Spring", pricing: "tiered", minimumCents: 3800 };
+    expect(serviceTypeSchema.safeParse({ ...base, tiers: card.tiers }).success).toBe(true);
+    expect(serviceTypeSchema.safeParse({ ...base, tiers: [] }).success).toBe(false);
+    expect(serviceTypeSchema.safeParse({ ...base, tiers: [{ fromSqFt: 6000, ratePer1000Cents: 600 }, { fromSqFt: 3000, ratePer1000Cents: 500 }] }).success).toBe(false);
+    expect(serviceTypeSchema.safeParse({ ...base, tiers: [{ fromSqFt: 3000, ratePer1000Cents: 600 }, { fromSqFt: 6000, ratePer1000Cents: 700 }] }).success).toBe(false);
+    expect(serviceTypeSchema.safeParse({ ...base, tiers: card.tiers, maxAutoSqFt: 2000 }).success).toBe(false);
   });
 });
