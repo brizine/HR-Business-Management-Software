@@ -1,9 +1,9 @@
 "use client";
 import { useState } from "react";
-import { INCOME_ACCOUNTS, PRICING_KINDS, PRICING_LABELS, describePricing, type PricingKind } from "@crewdesk/shared";
+import { INCOME_ACCOUNTS, PRICING_KINDS, PRICING_LABELS, appliesOn, costPerUseUnitCents, describePricing, formatMoney, formatRateAmount, priceFor, sizeMinutes, type PricedService, type PricingKind } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useAction, useNewForm } from "@/lib/hooks";
+import { useAction, useApi, useNewForm } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
 import { dollars, toCents, useServices, type ServiceType } from "@/components/invoices";
 import { PackagesCard } from "@/components/packages";
@@ -72,14 +72,57 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
   const [active, setActive] = useState(service?.active ?? true);
   const [taxable, setTaxable] = useState(service?.taxable ?? false);
   const [chemical, setChemical] = useState(service?.chemical ?? false);
+  const [site, setSite] = useState(service?.applicationSite ?? "Turf");
+  const [tiers, setTiers] = useState<{ from: string; rate: string }[]>(
+    service?.tiers?.length ? service.tiers.map((t) => ({ from: String(t.fromSqFt), rate: dollars(t.ratePer1000Cents) })) : [{ from: "3000", rate: "" }, { from: "6000", rate: "" }, { from: "10000", rate: "" }],
+  );
+  const [bandSize, setBandSize] = useState(service?.bandSizeSqFt != null ? String(service.bandSizeSqFt) : service?.pricing === "tiered" ? "" : "500");
+  const [pricePoint, setPricePoint] = useState(String(service?.bandPricePoint ?? 0.5));
+  const [roundTo, setRoundTo] = useState(String(service?.roundToCents ?? 50));
+  const [maxAuto, setMaxAuto] = useState(service?.maxAutoSqFt != null ? String(service.maxAutoSqFt) : "");
+  const [target, setTarget] = useState(service?.targetCentsPerHour != null ? dollars(service.targetCentsPerHour) : "");
+  const [links, setLinks] = useState<{ productId: string; productRateId: string; startDate: string; endDate: string }[]>(
+    (service?.products ?? []).map((l) => ({ productId: l.productId, productRateId: l.productRateId, startDate: l.startDate ?? "", endDate: l.endDate ?? "" })),
+  );
+  const catalog = useApi<CatalogProduct[]>("/products");
   const [setupMin, setSetupMin] = useState(service?.setupMinutes != null ? String(service.setupMinutes) : "");
   const [per1000, setPer1000] = useState(service?.minutesPer1000 != null ? String(service.minutesPer1000) : "");
   const { busy, error, run, setError } = useAction();
+  const today = new Date().toISOString().slice(0, 10);
+  const linkCost = (l: { productId: string; productRateId: string }) => {
+    const p = catalog.data?.find((x) => x.id === l.productId);
+    const r = p?.rates.find((x) => x.id === l.productRateId);
+    const perUse = p ? costPerUseUnitCents(p.currentCost?.costPerPurchaseUnitCents, p.purchaseUnitSize) : null;
+    return { p, r, cost: r && perUse != null ? r.amountPer1000 * perUse : null };
+  };
+  const applying = links.filter((l) => l.productRateId && appliesOn({ startDate: l.startDate || null, endDate: l.endDate || null }, today));
+  const materialPer1000 = applying.length ? applying.reduce((s, l) => s + (linkCost(l).cost ?? 0), 0) : null;
+  const num = (v: string) => Number(v.replace(/[,\s]/g, ""));
+  /** The volume-discount fields as the API takes them, from what's typed so far. */
+  const tieredDraft = () => {
+    const list = tiers.filter((t) => t.from.trim() && t.rate.trim());
+    return {
+      minimumCents: minimum.trim() ? toCents(minimum) : null,
+      tiers: list.map((t) => ({ fromSqFt: num(t.from), ratePer1000Cents: toCents(t.rate) })),
+      bandSizeSqFt: bandSize.trim() ? num(bandSize) : null,
+      bandPricePoint: Number(pricePoint),
+      roundToCents: Number(roundTo),
+      maxAutoSqFt: maxAuto.trim() ? num(maxAuto) : null,
+    };
+  };
   return (
     <form className="card stack" onSubmit={(e) => {
       e.preventDefault();
-      const body: Record<string, unknown> = { name, description: description || undefined, pricing, incomeAccountCode, active, taxable, chemical, priceCents: 0, minimumCents: 0, brackets: [], setupMinutes: setupMin.trim() === "" ? null : Number(setupMin), minutesPer1000: per1000.trim() === "" ? null : Number(per1000) };
-      if (pricing !== "bracket") {
+      const body: Record<string, unknown> = {
+        name, description: description || undefined, pricing, incomeAccountCode, active, taxable, chemical, applicationSite: chemical ? site : null, priceCents: 0, minimumCents: 0, brackets: [],
+        setupMinutes: setupMin.trim() === "" ? null : Number(setupMin), minutesPer1000: per1000.trim() === "" ? null : Number(per1000),
+        targetCentsPerHour: target.trim() ? toCents(target) : null,
+      };
+      if (pricing === "tiered") {
+        const t = tieredDraft();
+        if (t.minimumCents == null) return setError("Enter the minimum charge");
+        Object.assign(body, t);
+      } else if (pricing !== "bracket") {
         const p = toCents(price);
         if (!Number.isFinite(p) || p < 0) return setError("Enter the price");
         body.priceCents = p;
@@ -88,7 +131,14 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
         const list = brackets.filter((b) => b.price.trim());
         body.brackets = list.map((b, i) => ({ upToSqFt: i === list.length - 1 && !b.upTo.trim() ? null : Number(b.upTo.replace(/,/g, "")), priceCents: toCents(b.price) }));
       }
-      run(async () => { await api(service ? `/service-types/${service.id}` : "/service-types", { method: service ? "PUT" : "POST", body }); onDone(); });
+      run(async () => {
+        const saved = await api<{ id: string }>(service ? `/service-types/${service.id}` : "/service-types", { method: service ? "PUT" : "POST", body });
+        const used = links.filter((l) => l.productId && l.productRateId);
+        if (service || used.length) {
+          await api(`/service-types/${saved.id}/products`, { method: "PUT", body: { products: used.map((l) => ({ ...l, startDate: l.startDate || null, endDate: l.endDate || null })) } });
+        }
+        onDone();
+      });
     }}>
       <h2 style={{ fontSize: 16, margin: 0 }}>{service ? "Edit service" : "New service"}</h2>
       <div className="formgrid">
@@ -100,6 +150,7 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
           <select value={pricing} onChange={(e) => setPricing(e.target.value as PricingKind)}>{PRICING_KINDS.map((k) => <option key={k} value={k}>{PRICING_LABELS[k]}</option>)}</select>
         </label>
         {pricing === "flat" && <label>Price ($)<input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} required /></label>}
+        {pricing === "tiered" && <label>Minimum charge ($)<input inputMode="decimal" value={minimum} onChange={(e) => setMinimum(e.target.value)} required /></label>}
         {pricing === "per_thousand" && <>
           <label>Per 1,000 sq ft ($)<input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} required /></label>
           <label>Minimum charge ($)<input inputMode="decimal" value={minimum} onChange={(e) => setMinimum(e.target.value)} placeholder="optional" /></label>
@@ -118,16 +169,81 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
           <div><button type="button" className="btn" onClick={() => setBrackets([...brackets, { upTo: "", price: "" }])}>Add a size</button></div>
         </fieldset>
       )}
+      {pricing === "tiered" && (() => {
+        const draft = tieredDraft();
+        return (
+          <fieldset className="contacts">
+            <legend>Volume discount <span className="muted">(each rate applies only to the sq ft inside its tier, so a bigger lawn never costs less)</span></legend>
+            {tiers.map((t, i) => (
+              <div key={i} className="row">
+                <label style={{ width: 210 }}>{i === 0 ? "Minimum covers up to (sq ft)" : "Next tier from (sq ft)"}<input inputMode="numeric" value={t.from} onChange={(e) => setTiers(tiers.map((x, j) => (j === i ? { ...x, from: e.target.value } : x)))} /></label>
+                <label style={{ width: 170 }}>{i === 0 ? "Then per 1,000 sq ft ($)" : "Per 1,000 sq ft ($)"}<input inputMode="decimal" value={t.rate} onChange={(e) => setTiers(tiers.map((x, j) => (j === i ? { ...x, rate: e.target.value } : x)))} /></label>
+                {tiers.length > 1 && <button type="button" className="btn" style={{ alignSelf: "flex-end" }} onClick={() => setTiers(tiers.filter((_, j) => j !== i))}>Remove</button>}
+              </div>
+            ))}
+            <div><button type="button" className="btn" onClick={() => setTiers([...tiers, { from: "", rate: "" }])}>Add a tier</button></div>
+            <div className="formgrid">
+              <label>Price in steps of (sq ft)<input inputMode="numeric" value={bandSize} onChange={(e) => setBandSize(e.target.value)} placeholder="blank = exact price" /></label>
+              {bandSize.trim() && <label>Price each step at
+                <select value={pricePoint} onChange={(e) => setPricePoint(e.target.value)}><option value="0">Its smallest size</option><option value="0.5">Its middle (fairest)</option><option value="1">Its largest size</option></select>
+              </label>}
+              <label>Round prices to
+                <select value={roundTo} onChange={(e) => setRoundTo(e.target.value)}><option value="1">the cent</option><option value="25">$0.25</option><option value="50">$0.50</option><option value="100">$1.00</option></select>
+              </label>
+              <label>Price by hand above (sq ft)<input inputMode="numeric" value={maxAuto} onChange={(e) => setMaxAuto(e.target.value)} placeholder="optional" /></label>
+            </div>
+            <RatePreview service={{ pricing: "tiered", priceCents: 0, brackets: [], ...draft, minimumCents: draft.minimumCents ?? 0 }}
+              setupMinutes={setupMin.trim() === "" ? null : Number(setupMin)} minutesPer1000={per1000.trim() === "" ? null : Number(per1000)}
+              targetCents={target.trim() ? toCents(target) : null} materialPer1000Cents={materialPer1000} />
+          </fieldset>
+        );
+      })()}
+      <fieldset className="contacts">
+        <legend>Products applied <span className="muted">(budgets material cost; saved on each completed work order at that day's price)</span></legend>
+        {links.map((l, i) => {
+          const { p, cost } = linkCost(l);
+          const upd = (patch: Partial<typeof l>) => setLinks(links.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+          return (
+            <div key={i} className="row">
+              <label style={{ flex: 1, minWidth: 200 }}>Product
+                <select value={l.productId} onChange={(e) => { const np = catalog.data?.find((x) => x.id === e.target.value); upd({ productId: e.target.value, productRateId: np?.rates[0]?.id ?? "" }); }}>
+                  <option value="">Pick a product…</option>
+                  {catalog.data?.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                </select>
+              </label>
+              <label style={{ width: 200 }}>Rate per 1,000 sq ft
+                <select value={l.productRateId} onChange={(e) => upd({ productRateId: e.target.value })} disabled={!p}>
+                  {!p?.rates.length && <option value="">No rates yet</option>}
+                  {p?.rates.map((r) => <option key={r.id} value={r.id}>{r.name}: {formatRateAmount(r.amountPer1000, p.useUnit)}</option>)}
+                </select>
+              </label>
+              <label style={{ width: 150 }}>From <span className="muted">(optional)</span><input type="date" value={l.startDate} onChange={(e) => upd({ startDate: e.target.value })} /></label>
+              <label style={{ width: 150 }}>Until <span className="muted">(optional)</span><input type="date" value={l.endDate} onChange={(e) => upd({ endDate: e.target.value })} /></label>
+              <div className="muted" style={{ alignSelf: "flex-end", minWidth: 110 }}>{p && l.productRateId ? (cost == null ? "no cost yet" : `${formatMoney(Math.round(cost))} / 1,000`) : ""}</div>
+              <button type="button" className="btn" style={{ alignSelf: "flex-end" }} onClick={() => setLinks(links.filter((_, j) => j !== i))}>Remove</button>
+            </div>
+          );
+        })}
+        <div className="row">
+          <button type="button" className="btn" onClick={() => setLinks([...links, { productId: "", productRateId: "", startDate: "", endDate: "" }])}>Add a product</button>
+          {materialPer1000 != null && <span><strong>Material today: {formatMoney(Math.round(materialPer1000))} per 1,000 sq ft</strong></span>}
+          {catalog.data && !catalog.data.length && <span className="muted">Add products on the Products page first.</span>}
+        </div>
+      </fieldset>
       <fieldset className="contacts">
         <legend>Time estimate <span className="muted">(for the waiting list until a property has its own history)</span></legend>
         <div className="formgrid">
           <label>Setup minutes<input inputMode="numeric" value={setupMin} onChange={(e) => setSetupMin(e.target.value.replace(/\D/g, "").slice(0, 3))} placeholder="e.g. 5" /></label>
           <label>Minutes per 1,000 sq ft<input inputMode="decimal" value={per1000} onChange={(e) => setPer1000(e.target.value)} placeholder="e.g. 3" /></label>
         </div>
+        <div className="formgrid">
+          <label>Target $ per man-hour<input inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="optional, e.g. 180" /></label>
+        </div>
         {(setupMin || per1000) && <p className="muted" style={{ margin: 0 }}>A 10,000 sq ft lawn ≈ {Math.round((Number(setupMin) || 0) + (Number(per1000) || 0) * 10)} min.</p>}
       </fieldset>
       <label>Description (optional)<input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
       <label className="check"><input type="checkbox" checked={chemical} onChange={(e) => setChemical(e.target.checked)} /> Chemical application <span className="muted">(record the weather when it&apos;s completed; see Field → Weather)</span></label>
+      {chemical && <label>Site where applied <span className="muted">(on chemical records, e.g. Turf – front and back lawn)</span><input value={site} onChange={(e) => setSite(e.target.value)} /></label>}
       <label className="check"><input type="checkbox" checked={taxable} onChange={(e) => setTaxable(e.target.checked)} /> This is taxable <span className="muted">(gets the sales tax rate on work orders and invoices once sales tax is on)</span></label>
       {service && <label className="check"><input type="checkbox" checked={!active} onChange={(e) => setActive(!e.target.checked)} /> Retired (kept on past invoices, not offered for new ones)</label>}
       <ErrorBox error={error} />
@@ -135,3 +251,37 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
     </form>
   );
 }
+
+const PREVIEW_SIZES = [2000, 3000, 4000, 5000, 6000, 7500, 10000, 12500, 15000, 20000, 25000];
+
+/** What the rate card charges at a range of lawn sizes, and how each compares with the hourly target. */
+function RatePreview({ service, setupMinutes, minutesPer1000, targetCents, materialPer1000Cents }: { service: PricedService; setupMinutes: number | null; minutesPer1000: number | null; targetCents: number | null; materialPer1000Cents: number | null }) {
+  if (!service.tiers?.length) return null;
+  const timed = setupMinutes != null || minutesPer1000 != null;
+  return (
+    <div className="tablewrap">
+      <table>
+        <thead><tr><th>Lawn (sq ft)</th><th>Price</th><th>Per 1,000</th>{materialPer1000Cents != null && <th>Material</th>}{materialPer1000Cents != null && <th>After material</th>}{timed && <th>Minutes</th>}{timed && <th>Per man-hour</th>}</tr></thead>
+        <tbody>{PREVIEW_SIZES.map((sqFt) => {
+          const price = priceFor(service, sqFt);
+          const min = timed ? sizeMinutes({ setupMinutes, minutesPer1000 }, sqFt) : null;
+          const perHour = price != null && min ? Math.round((price * 60) / min) : null;
+          const low = perHour != null && targetCents != null && perHour < targetCents;
+          return (
+            <tr key={sqFt}>
+              <td>{sqFt.toLocaleString("en-US")}</td>
+              <td>{price == null ? <span className="muted">priced by hand</span> : formatMoney(price)}</td>
+              <td>{price == null ? "" : formatMoney(Math.round((price * 1000) / sqFt))}</td>
+              {materialPer1000Cents != null && <td>{formatMoney(Math.round((materialPer1000Cents * sqFt) / 1000))}</td>}
+              {materialPer1000Cents != null && <td>{price == null ? "" : `${formatMoney(price - Math.round((materialPer1000Cents * sqFt) / 1000))} (${Math.round(((price - (materialPer1000Cents * sqFt) / 1000) / price) * 100)}%)`}</td>}
+              {timed && <td>{min ?? ""}</td>}
+              {timed && <td>{perHour == null ? "" : low ? <span className="badge warn">{formatMoney(perHour)} below target</span> : formatMoney(perHour)}</td>}
+            </tr>
+          );
+        })}</tbody>
+      </table>
+    </div>
+  );
+}
+
+interface CatalogProduct { id: string; name: string; useUnit: string; purchaseUnitSize: number | null; currentCost: { costPerPurchaseUnitCents: number } | null; rates: { id: string; name: string; amountPer1000: number }[] }

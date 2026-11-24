@@ -14,9 +14,9 @@ export { formatMoney };
 
 /* ───────────── Price list ───────────── */
 
-export const PRICING_KINDS = ["flat", "per_thousand", "bracket"] as const;
+export const PRICING_KINDS = ["flat", "per_thousand", "bracket", "tiered"] as const;
 export type PricingKind = (typeof PRICING_KINDS)[number];
-export const PRICING_LABELS: Record<PricingKind, string> = { flat: "Flat price", per_thousand: "Per 1,000 sq ft", bracket: "By lawn size" };
+export const PRICING_LABELS: Record<PricingKind, string> = { flat: "Flat price", per_thousand: "Per 1,000 sq ft", bracket: "By lawn size", tiered: "Per 1,000 sq ft with volume discount" };
 
 /** Income accounts a service can post to (codes in the books; the same in the real and test books). */
 export const INCOME_ACCOUNTS = [
@@ -35,6 +35,19 @@ export const bracketSchema = z.object({
 });
 export type Bracket = z.infer<typeof bracketSchema>;
 
+/**
+ * Volume-discount tier: square feet from `fromSqFt` up to the next tier's start are charged
+ * `ratePer1000Cents` per 1,000 sq ft, like tax brackets. The minimum covers lawns up to the first tier.
+ */
+export const tierSchema = z.object({
+  fromSqFt: z.number().int().positive().max(10_000_000),
+  ratePer1000Cents: cents,
+});
+export type Tier = z.infer<typeof tierSchema>;
+
+/** Where in a size band the band is priced: its start, middle or end. */
+export const BAND_PRICE_POINTS = [0, 0.5, 1] as const;
+
 export const serviceTypeSchema = z.object({
   name: z.string().trim().min(1, "Enter the service name").max(120),
   description: z.string().trim().max(1000).optional().transform((v) => v || undefined),
@@ -44,6 +57,18 @@ export const serviceTypeSchema = z.object({
   /** Per 1,000 sq ft: never less than this. */
   minimumCents: cents.default(0),
   brackets: z.array(bracketSchema).max(30).default([]),
+  /** Volume discount: tiers after the minimum, in order, each rate no higher than the one before. */
+  tiers: z.array(tierSchema).max(20).default([]),
+  /** Volume discount: price in steps of this many sq ft (null = exact price for every square foot). */
+  bandSizeSqFt: z.number().int().min(10).max(100_000).nullable().default(null),
+  /** Volume discount: price each band at its start (0), middle (0.5) or end (1). */
+  bandPricePoint: z.union([z.literal(0), z.literal(0.5), z.literal(1)]).default(0.5),
+  /** Volume discount: round prices to this many cents (50 = nearest $0.50; 1 = to the cent). */
+  roundToCents: z.number().int().min(1).max(10_000).default(50),
+  /** Volume discount: lawns bigger than this need a price typed in (null = no limit). */
+  maxAutoSqFt: z.number().int().positive().max(10_000_000).nullable().default(null),
+  /** Profit check: target revenue per man-hour, in cents (null = none). */
+  targetCentsPerHour: cents.nullable().default(null),
   incomeAccountCode: z.string().trim().regex(/^\d{3,6}$/, "Choose an income account").default("4000"),
   /** Homeworks' "This is Taxable": lines with it get the sales tax rate (once sales tax is on). */
   taxable: z.boolean().default(false),
@@ -52,6 +77,8 @@ export const serviceTypeSchema = z.object({
   setupMinutes: z.preprocess((v) => (v === "" ? null : v), z.coerce.number().int().min(0).max(600).nullable()).optional(),
   /** A chemical application: work orders with it get the weather recorded when completed. */
   chemical: z.boolean().optional(),
+  /** Chemical records: where it's applied (ODAFF item 16), e.g. "Turf – front and back lawn". */
+  applicationSite: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), z.string().trim().max(200).nullable()).optional(),
   minutesPer1000: z.preprocess((v) => (v === "" ? null : v), z.coerce.number().min(0).max(120).nullable()).optional(),
 }).superRefine((s, ctx) => {
   if (s.pricing === "bracket") {
@@ -62,10 +89,75 @@ export const serviceTypeSchema = z.object({
       if (i > 0 && v != null && sizes[i - 1] != null && v <= (sizes[i - 1] as number)) ctx.addIssue({ code: "custom", path: ["brackets", i, "upToSqFt"], message: "Each bracket must be bigger than the one before" });
     });
   }
+  if (s.pricing === "tiered") {
+    if (!s.tiers.length) ctx.addIssue({ code: "custom", path: ["tiers"], message: "Add at least one tier after the minimum" });
+    s.tiers.forEach((t, i) => {
+      const prev = s.tiers[i - 1];
+      if (prev && t.fromSqFt <= prev.fromSqFt) ctx.addIssue({ code: "custom", path: ["tiers", i, "fromSqFt"], message: "Each tier must start after the one before" });
+      if (prev && t.ratePer1000Cents > prev.ratePer1000Cents) ctx.addIssue({ code: "custom", path: ["tiers", i, "ratePer1000Cents"], message: "A bigger tier can't cost more per 1,000 than the one before" });
+    });
+    if (s.maxAutoSqFt != null && s.tiers[0] && s.maxAutoSqFt <= s.tiers[0].fromSqFt) ctx.addIssue({ code: "custom", path: ["maxAutoSqFt"], message: "Must be bigger than the size the minimum covers" });
+  }
 });
 export type ServiceTypeInput = z.infer<typeof serviceTypeSchema>;
 
-export interface PricedService { pricing: string; priceCents: number; minimumCents: number; brackets: Bracket[] }
+export interface PricedService {
+  pricing: string; priceCents: number; minimumCents: number; brackets: Bracket[];
+  tiers?: Tier[]; bandSizeSqFt?: number | null; bandPricePoint?: number; roundToCents?: number; maxAutoSqFt?: number | null;
+}
+
+export interface TierPart { fromSqFt: number; toSqFt: number | null; sqFt: number; ratePer1000Cents: number; cents: number }
+export interface TieredBreakdown {
+  /** The size the price was worked out at (the band's price point in band mode). */
+  pricedAtSqFt: number;
+  /** The size band the lawn falls in (band mode, above the minimum), else null. */
+  band: { fromSqFt: number; toSqFt: number } | null;
+  minimumCents: number;
+  /** Tiers the lawn reaches, with the square feet charged in each. */
+  parts: TierPart[];
+  /** Before rounding, in cents (can have fractions). */
+  exactCents: number;
+  priceCents: number;
+}
+
+/**
+ * Volume-discount price, step by step: the minimum covers lawns up to the first tier, then each
+ * tier's rate applies only to the square feet inside it, so a bigger lawn never costs less.
+ * Null when the size is unknown, or bigger than the service prices on its own.
+ */
+export function tieredBreakdown(s: PricedService, sqFt: number | null | undefined): TieredBreakdown | null {
+  const tiers = s.tiers ?? [];
+  if (!tiers.length || sqFt == null || !Number.isFinite(sqFt) || sqFt <= 0) return null;
+  const size = Math.round(sqFt);
+  if (s.maxAutoSqFt != null && size > s.maxAutoSqFt) return null;
+  const covers = tiers[0].fromSqFt;
+  let pricedAt = size;
+  let band: TieredBreakdown["band"] = null;
+  const step = s.bandSizeSqFt ?? null;
+  if (step && size > covers) {
+    // Bands run covers+1 … covers+step, then the next step, closed at both ends (3,001–3,500, 3,501–4,000 …).
+    const from = covers + Math.floor((size - covers - 1) / step) * step + 1;
+    const to = from + step - 1;
+    band = { fromSqFt: from, toSqFt: to };
+    pricedAt = from + (s.bandPricePoint ?? 0.5) * (to - from);
+  } else if (step) {
+    band = { fromSqFt: 0, toSqFt: covers };
+  }
+  const parts: TierPart[] = [];
+  let exact = s.minimumCents;
+  tiers.forEach((t, i) => {
+    const end = tiers[i + 1]?.fromSqFt ?? null;
+    const inTier = Math.max(0, (end == null ? pricedAt : Math.min(pricedAt, end)) - t.fromSqFt);
+    if (inTier <= 0) return;
+    const c = (t.ratePer1000Cents * inTier) / 1000;
+    parts.push({ fromSqFt: t.fromSqFt, toSqFt: end, sqFt: inTier, ratePer1000Cents: t.ratePer1000Cents, cents: c });
+    exact += c;
+  });
+  const r = Math.max(1, s.roundToCents ?? 50);
+  // Round to the cent first so float dust (6549.999…) can't tip a value across a rounding step.
+  const price = Math.round(Math.round(exact) / r) * r;
+  return { pricedAtSqFt: pricedAt, band, minimumCents: s.minimumCents, parts, exactCents: exact, priceCents: price };
+}
 
 /**
  * The price of one visit of a service for a lawn of `sqFt` (null when the size is unknown and the
@@ -75,6 +167,7 @@ export function priceFor(s: PricedService, sqFt: number | null | undefined): num
   if (s.pricing === "flat") return s.priceCents;
   if (sqFt == null || !Number.isFinite(sqFt) || sqFt <= 0) return null;
   if (s.pricing === "per_thousand") return Math.max(Math.round((s.priceCents * sqFt) / 1000), s.minimumCents);
+  if (s.pricing === "tiered") return tieredBreakdown(s, sqFt)?.priceCents ?? null;
   const hit = s.brackets.find((b) => b.upToSqFt == null || sqFt <= b.upToSqFt);
   return hit ? hit.priceCents : null;
 }
@@ -84,6 +177,16 @@ export function priceFor(s: PricedService, sqFt: number | null | undefined): num
 export function describePricing(s: PricedService): string {
   if (s.pricing === "flat") return formatMoney(s.priceCents);
   if (s.pricing === "per_thousand") return `${formatMoney(s.priceCents)} per 1,000 sq ft${s.minimumCents ? ` (min ${formatMoney(s.minimumCents)})` : ""}`;
+  if (s.pricing === "tiered") {
+    const tiers = s.tiers ?? [];
+    if (!tiers.length) return formatMoney(s.minimumCents);
+    const sq = (n: number) => n.toLocaleString("en-US");
+    const steps = tiers.map((t, i) => {
+      const next = tiers[i + 1];
+      return `${formatMoney(t.ratePer1000Cents)} per 1,000 ${next ? `to ${sq(next.fromSqFt)}` : "after that"}`;
+    });
+    return `${formatMoney(s.minimumCents)} up to ${sq(tiers[0].fromSqFt)} sq ft, then ${steps.join(" · ")}`;
+  }
   return s.brackets.map((b) => (b.upToSqFt == null ? `larger ${formatMoney(b.priceCents)}` : `up to ${b.upToSqFt.toLocaleString("en-US")} sq ft ${formatMoney(b.priceCents)}`)).join(" · ");
 }
 

@@ -63,6 +63,8 @@ import crewRoutes from "./routes/crews";
 import packageRoutes from "./routes/packages";
 import { flushBillingSync } from "./lib/billingSync";
 import serviceTypeRoutes from "./routes/serviceTypes";
+import productRoutes from "./routes/products";
+import chemicalRecordRoutes from "./routes/chemicalRecords";
 import invoiceRoutes from "./routes/invoices";
 import creditRoutes from "./routes/credits";
 import prepaymentRoutes, { prepayLinkRoutes } from "./routes/prepayments";
@@ -176,6 +178,8 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(crewRoutes, { prefix: "/crews" });
   await app.register(packageRoutes, { prefix: "/packages" });
   await app.register(serviceTypeRoutes, { prefix: "/service-types" });
+  await app.register(productRoutes, { prefix: "/products" });
+  await app.register(chemicalRecordRoutes, { prefix: "/chemical-records" });
   await app.register(invoiceRoutes, { prefix: "/invoices" });
   await app.register(creditRoutes, { prefix: "/credits" });
   await app.register(prepaymentRoutes, { prefix: "/prepayments" });

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
-  ESTIMATE_STATUS_LABELS, INCOME_ACCOUNTS, depositCents, describeDepositRule, describePricing, estimateLineAmount, estimateTotals, formatMoney, lineTaxRate, priceFor, taxRateFor, type EstimateStatus as Status,
+  ESTIMATE_STATUS_LABELS, INCOME_ACCOUNTS, depositCents, describeDepositRule, describePricing, estimateLineAmount, estimateTotals, formatMoney, lineMaterialCents, lineTaxRate, priceFor, taxRateFor, type EstimateStatus as Status,
 } from "@crewdesk/shared";
 import { api, fmtDate, today } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
@@ -86,7 +86,12 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
     const s = services.data?.find((x) => x.id === id);
     if (!s) return;
     const price = priceFor(s, lawnFor(lines[i]));
-    setLine(i, { serviceTypeId: s.id, description: lines[i].description || s.name, price: price != null ? dollars(price) : lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)) });
+    // Our cost (each): the service's products for this lawn, at today's prices.
+    const material = lineMaterialCents(s, lawnFor(lines[i]));
+    setLine(i, {
+      serviceTypeId: s.id, description: lines[i].description || s.name, price: price != null ? dollars(price) : lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)),
+      cost: material != null ? dollars(material) : lines[i].cost,
+    });
   };
   const addPackage = (id: string) => {
     const p = pkgs.data?.find((x) => x.id === id);
@@ -94,7 +99,8 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
     const added = p.lines.map((l: any) => {
       const s = services.data?.find((x) => x.id === l.serviceTypeId);
       const price = l.unitPriceCents ?? (s ? priceFor(s, property?.lawnSqFt ?? null) : null);
-      return { ...blankLine(), serviceTypeId: l.serviceTypeId ?? null, description: l.description ?? s?.name ?? "", quantity: String(l.quantity ?? 1), price: price != null ? dollars(price) : "", incomeAccountCode: s?.incomeAccountCode ?? "4000", tax: taxText(lineTaxRate(s?.taxable, rate)), hours: l.budgetedHours != null ? String(l.budgetedHours) : "" };
+      const material = s ? lineMaterialCents(s, property?.lawnSqFt ?? null) : null;
+      return { ...blankLine(), serviceTypeId: l.serviceTypeId ?? null, description: l.description ?? s?.name ?? "", quantity: String(l.quantity ?? 1), price: price != null ? dollars(price) : "", incomeAccountCode: s?.incomeAccountCode ?? "4000", tax: taxText(lineTaxRate(s?.taxable, rate)), hours: l.budgetedHours != null ? String(l.budgetedHours) : "", cost: material != null ? dollars(material) : "" };
     });
     setLines((ls) => [...ls.filter((l) => l.description.trim() || l.price), ...added]);
   };

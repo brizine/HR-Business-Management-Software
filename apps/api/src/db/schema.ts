@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { AutomationStep, CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings, WeatherSettings } from "@crewdesk/shared";
+import type { AutomationStep, CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings, WeatherSettings } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -42,6 +42,8 @@ export const companies = pgTable("companies", {
   billing: jsonb("billing").$type<Partial<BillingSettings>>(),
   /** Weather on chemical applications: automatic, manual or off. */
   weather: jsonb("weather").$type<WeatherSettings>(),
+  /** Chemical application records: the company's pesticide license number (on every record). */
+  pesticideLicenseNo: text("pesticide_license_no"),
   /** Set on a test company: the real company it's a sandbox for (sample customers, test mode payments). */
   testOfCompanyId: uuid("test_of_company_id").references((): AnyPgColumn => companies.id, { onDelete: "cascade" }),
   timezone: text("timezone").notNull().default("America/Chicago"),
@@ -1056,6 +1058,123 @@ export const mixProducts = pgTable("mix_products", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
+/** Products: chemicals and fertilizers, each listed once, for budgeting and chemical records. */
+export const products = pgTable(
+  "products",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    manufacturer: text("manufacturer"),
+    productType: text("product_type").notNull().default("other"),
+    formulation: text("formulation"),
+    activeIngredients: jsonb("active_ingredients").$type<ActiveIngredient[]>().notNull().default([]),
+    epaRegNo: text("epa_reg_no"),
+    restrictedUse: boolean("restricted_use").notNull().default(false),
+    signalWord: text("signal_word").notNull().default("none"),
+    reiHours: doublePrecision("rei_hours"),
+    targets: text("targets"),
+    /** Rates, costs and amounts used are kept in this unit (one of MIX_UNITS). */
+    useUnit: text("use_unit").notNull(),
+    purchaseUnitName: text("purchase_unit_name"),
+    /** How many use units one purchase unit holds. */
+    purchaseUnitSize: doublePrecision("purchase_unit_size"),
+    labelMaxPer1000: doublePrecision("label_max_per_1000"),
+    labelMaxPerYearPer1000: doublePrecision("label_max_per_year_per_1000"),
+    labelInstructions: text("label_instructions"),
+    customerNote: text("customer_note"),
+    incomeAccountCode: text("income_account_code"),
+    cogsAccountCode: text("cogs_account_code"),
+    taxable: boolean("taxable").notNull().default(false),
+    trackRecords: boolean("track_records").notNull().default(true),
+    /** When the label requires a specific adjuvant or drift agent (ODAFF items 13–14), its name. */
+    requiredAdjuvant: text("required_adjuvant"),
+    requiredDriftAgent: text("required_drift_agent"),
+    active: boolean("active").notNull().default(true),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("products_company_idx").on(t.companyId, t.name)],
+);
+
+/** Named application rates of a product (Low / Med / High, Round 1 …), per 1,000 sq ft in its use unit. */
+export const productRates = pgTable(
+  "product_rates",
+  {
+    id: id(),
+    productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    amountPer1000: doublePrecision("amount_per_1000").notNull(),
+    method: text("method").notNull().default("truck_spray"),
+    carrierGalPer1000: doublePrecision("carrier_gal_per_1000"),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("product_rates_product_idx").on(t.productId)],
+);
+
+/** What a product costs, from a date on; the latest on or before a day is the cost that day. */
+export const productCosts = pgTable(
+  "product_costs",
+  {
+    id: id(),
+    productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+    costPerPurchaseUnitCents: integer("cost_per_purchase_unit_cents").notNull(),
+    vendor: text("vendor"),
+    effectiveFrom: date("effective_from").notNull(),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("product_costs_product_idx").on(t.productId, t.effectiveFrom)],
+);
+
+/** Products a service applies, at one of their rates; budgets material and, on completion, what a visit used. */
+export const serviceProducts = pgTable(
+  "service_products",
+  {
+    id: id(),
+    serviceTypeId: uuid("service_type_id").notNull().references(() => serviceTypes.id, { onDelete: "cascade" }),
+    productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+    productRateId: uuid("product_rate_id").notNull().references(() => productRates.id, { onDelete: "restrict" }),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("service_products_service_idx").on(t.serviceTypeId), index("service_products_rate_idx").on(t.productRateId)],
+);
+
+/**
+ * What a completed visit applied, with its cost saved at completion so reports never change when a
+ * price does: the amount, the cost per use unit in force on the visit's day, and which cost that was.
+ */
+export const visitProducts = pgTable(
+  "visit_products",
+  {
+    id: id(),
+    companyId: companyId(),
+    visitId: uuid("visit_id").notNull().references(() => visits.id, { onDelete: "cascade" }),
+    serviceTypeId: uuid("service_type_id").references(() => serviceTypes.id, { onDelete: "set null" }),
+    productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+    productRateId: uuid("product_rate_id").references(() => productRates.id, { onDelete: "set null" }),
+    productCostId: uuid("product_cost_id").references(() => productCosts.id, { onDelete: "restrict" }),
+    /** As they were at completion. */
+    productName: text("product_name").notNull(),
+    epaRegNo: text("epa_reg_no"),
+    rateName: text("rate_name"),
+    amountPer1000: doublePrecision("amount_per_1000").notNull(),
+    areaSqFt: doublePrecision("area_sq_ft").notNull(),
+    amount: doublePrecision("amount").notNull(),
+    unit: text("unit").notNull(),
+    /** Null when the product had no cost on that day. */
+    costPerUseUnitCents: doublePrecision("cost_per_use_unit_cents"),
+    costCents: integer("cost_cents"),
+    costDate: date("cost_date").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("visit_products_visit_idx").on(t.visitId), index("visit_products_company_product_idx").on(t.companyId, t.productId), index("visit_products_cost_idx").on(t.productCostId)],
+);
+
 /** Employees chosen by an admin to edit mix sheets (admins can always edit). */
 export const mixEditors = pgTable(
   "mix_editors",
@@ -1608,6 +1727,18 @@ export const serviceTypes = pgTable(
     priceCents: integer("price_cents").notNull().default(0),
     minimumCents: integer("minimum_cents").notNull().default(0),
     brackets: jsonb("brackets").$type<Bracket[]>().notNull().default([]),
+    /** "tiered": volume-discount tiers after the minimum (the minimum covers lawns up to the first tier). */
+    tiers: jsonb("tiers").$type<Tier[]>().notNull().default([]),
+    /** "tiered": price in size bands of this many sq ft (null = exact price for every square foot). */
+    bandSizeSqFt: integer("band_size_sq_ft"),
+    /** "tiered": price each band at its start (0), middle (0.5) or end (1). */
+    bandPricePoint: doublePrecision("band_price_point").notNull().default(0.5),
+    /** "tiered": round to this many cents (50 = nearest $0.50). */
+    roundToCents: integer("round_to_cents").notNull().default(50),
+    /** "tiered": bigger lawns need a price typed in. */
+    maxAutoSqFt: integer("max_auto_sq_ft"),
+    /** Profit check: target revenue per man-hour, in cents. */
+    targetCentsPerHour: integer("target_cents_per_hour"),
     /** The income account's code in the books (4000, 4100, 4200…), so it works in real and test books alike. */
     incomeAccountCode: text("income_account_code").notNull().default("4000"),
     /** Time estimate: setup minutes plus minutes per 1,000 sq ft. */
@@ -1617,6 +1748,8 @@ export const serviceTypes = pgTable(
     taxable: boolean("taxable").notNull().default(false),
     /** A chemical application: work orders with it get the weather recorded when completed. */
     chemical: boolean("chemical").notNull().default(false),
+    /** Chemical records: where it's applied (ODAFF item 16), e.g. "Turf – front and back lawn". */
+    applicationSite: text("application_site"),
     active: boolean("active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: createdAt(),
@@ -2463,4 +2596,126 @@ export const weatherDays = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("weather_days_company_date_idx").on(t.companyId, t.date)],
+);
+
+/** A product's label (PDF or photo), kept by upload date so each record links the label in force that day (ODAFF item 19). */
+export const productLabels = pgTable(
+  "product_labels",
+  {
+    id: id(),
+    companyId: companyId(),
+    productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    storageKey: text("storage_key").notNull(),
+    caption: text("caption"),
+    uploadedById: uuid("uploaded_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("product_labels_product_idx").on(t.productId, t.createdAt)],
+);
+
+/** An employee's pesticide applicator certification (ODAFF item 4). */
+export const applicatorCerts = pgTable("applicator_certs", {
+  employeeId: uuid("employee_id").primaryKey().references(() => employees.id, { onDelete: "cascade" }),
+  companyId: companyId(),
+  certNo: text("cert_no").notNull(),
+  expiresOn: date("expires_on").notNull(),
+  categories: text("categories"),
+  updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * A chemical application record, made when a work order applying tracked products is completed:
+ * everything OAC 35:30-17-21(a) asks for, copied as it was that day. Never deleted: a reopened work
+ * order voids its record (a new one is made when it's completed again); corrections are logged.
+ */
+export const applicationRecords = pgTable(
+  "application_records",
+  {
+    id: id(),
+    companyId: companyId(),
+    /** Kept if the work order is later deleted (records outlive it). */
+    visitId: uuid("visit_id").references(() => visits.id, { onDelete: "set null" }),
+    visitNumber: integer("visit_number"),
+    /** 3: the company. */
+    companyName: text("company_name").notNull(),
+    companyAddress: text("company_address"),
+    companyLicenseNo: text("company_license_no"),
+    /** 4: the certified applicator who made it. */
+    applicatorId: uuid("applicator_id").references(() => employees.id, { onDelete: "set null" }),
+    applicatorName: text("applicator_name").notNull(),
+    applicatorCertNo: text("applicator_cert_no"),
+    applicatorCertExpires: date("applicator_cert_expires"),
+    /** 5: for whom. 6: where (street address). */
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    customerName: text("customer_name").notNull(),
+    customerAddress: text("customer_address"),
+    propertyId: uuid("property_id").references(() => properties.id, { onDelete: "set null" }),
+    siteAddress: text("site_address"),
+    /** 7: date. 1: start and stop. */
+    appliedOn: date("applied_on").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    stoppedAt: timestamp("stopped_at", { withTimezone: true }),
+    /** 16: site. 17: area. 10: tank mix used (gallons; null when nothing was mixed). */
+    site: text("site"),
+    areaSqFt: doublePrecision("area_sq_ft"),
+    tankMixGal: doublePrecision("tank_mix_gal"),
+    /** Where the phone was at completion, when location was allowed. */
+    lat: doublePrecision("lat"),
+    lng: doublePrecision("lng"),
+    /** What's missing or wrong, for the office to fix (empty = complete). */
+    issues: jsonb("issues").$type<string[]>().notNull().default([]),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidReason: text("void_reason"),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("application_records_company_date_idx").on(t.companyId, t.appliedOn), index("application_records_visit_idx").on(t.visitId)],
+);
+
+/** Each product on a record: 2 amount, 8 rate, 9 dilution, 11 trade name, 12 EPA #, 13–14 adjuvants, 15 target, 18 REI, 19 label. */
+export const applicationRecordProducts = pgTable(
+  "application_record_products",
+  {
+    id: id(),
+    recordId: uuid("record_id").notNull().references(() => applicationRecords.id, { onDelete: "cascade" }),
+    productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+    tradeName: text("trade_name").notNull(),
+    epaRegNo: text("epa_reg_no"),
+    productType: text("product_type"),
+    restrictedUse: boolean("restricted_use").notNull().default(false),
+    rateName: text("rate_name"),
+    ratePer1000: doublePrecision("rate_per_1000").notNull(),
+    unit: text("unit").notNull(),
+    /** Product per gallon of spray; null for products applied dry. */
+    dilutionPerGal: doublePrecision("dilution_per_gal"),
+    carrierGalPer1000: doublePrecision("carrier_gal_per_1000"),
+    amount: doublePrecision("amount").notNull(),
+    targets: text("targets"),
+    reiHours: doublePrecision("rei_hours"),
+    labelId: uuid("label_id").references(() => productLabels.id, { onDelete: "set null" }),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("application_record_products_record_idx").on(t.recordId)],
+);
+
+/** Corrections to a record: who changed what, from what, and why. */
+export const applicationRecordChanges = pgTable(
+  "application_record_changes",
+  {
+    id: id(),
+    recordId: uuid("record_id").notNull().references(() => applicationRecords.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    field: text("field").notNull(),
+    oldValue: text("old_value"),
+    newValue: text("new_value"),
+    reason: text("reason").notNull(),
+    /** Order within the record's log (changes saved together share a time). */
+    seq: integer("seq").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("application_record_changes_record_idx").on(t.recordId, t.seq)],
 );
