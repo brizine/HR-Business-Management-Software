@@ -575,6 +575,13 @@
       "when": 1795480682503,
       "tag": "0081_email_log",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1795485186220,
+      "tag": "0082_waiting_list",
+      "breakpoints": true
     }
   ]
 }

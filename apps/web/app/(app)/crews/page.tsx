@@ -8,7 +8,7 @@ import { useAction, useApi, useNewForm } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
 
 interface Crew {
-  id: string; name: string; color: string; leadId: string | null; assetId: string | null; assetName: string | null; notes: string | null; active: boolean;
+  id: string; name: string; color: string; leadId: string | null; assetId: string | null; assetName: string | null; notes: string | null; active: boolean; dailyHours?: number;
   members: { id: string; firstName: string; lastName: string; title: string | null; status: string }[]; memberIds: string[];
 }
 
@@ -69,6 +69,7 @@ function CrewForm({ crew, onSaved, onCancel, onDeleted }: { crew: Crew | null; o
   const [assetId, setAssetId] = useState(crew?.assetId ?? "");
   const [notes, setNotes] = useState(crew?.notes ?? "");
   const [active, setActive] = useState(crew?.active ?? true);
+  const [dailyHours, setDailyHours] = useState(String(crew?.dailyHours ?? 8));
   const [updateOpen, setUpdateOpen] = useState(true);
   const staff = useApi<any[]>("/employees");
   const assets = useApi<any[]>("/assets");
@@ -80,7 +81,7 @@ function CrewForm({ crew, onSaved, onCancel, onDeleted }: { crew: Crew | null; o
     <form className="card stack todo-form" onSubmit={(e) => {
       e.preventDefault();
       save.run(async () => {
-        const body = { name, color, leadId: leadId || null, memberIds: members, assetId: assetId || null, notes, active, updateOpenWorkOrders: !!changedPeople && updateOpen };
+        const body = { name, color, leadId: leadId || null, memberIds: members, assetId: assetId || null, notes, active, dailyHours: Number(dailyHours) || 8, updateOpenWorkOrders: !!changedPeople && updateOpen };
         const r = crew ? await api<Crew & { workOrdersUpdated?: number }>(`/crews/${crew.id}`, { method: "PUT", body }) : await api<Crew & { workOrdersUpdated?: number }>("/crews", { body });
         onSaved(r, r.workOrdersUpdated ?? 0);
       });
@@ -100,6 +101,7 @@ function CrewForm({ crew, onSaved, onCancel, onDeleted }: { crew: Crew | null; o
             {(assets.data ?? []).map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         </label>
+        <label>Hours per day<input inputMode="decimal" required value={dailyHours} onChange={(e) => setDailyHours(e.target.value)} /><span className="muted field-hint">On the waiting list&apos;s workload strip</span></label>
       </div>
       <div className="stack" style={{ gap: 4 }}>
         <span className="todo-label">Color (on the calendar and work orders)</span>

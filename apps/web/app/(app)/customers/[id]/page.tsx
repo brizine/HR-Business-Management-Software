@@ -21,6 +21,7 @@ import { Popover } from "@/components/customer-list";
 import { VisitFiles } from "@/components/visit-files";
 import { CustomerTexts } from "@/components/texting";
 import { RunHistory } from "@/components/automations";
+import { CustomerSchedulingPrefs } from "@/components/waitlist";
 import { AccountBox, CallNotes, CustomerNotesBox, DeliveryBox, InvoiceDefaultsBox, JobsBox, PayPicker, PaymentsBox, PortalBox, StatsBox, Timeline } from "@/components/customer-page";
 
 /**
@@ -195,6 +196,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
             <CustomerBilling customerId={id} key={`billing-${creditVersion}`} hideSummary />
             <PaymentsBox customerId={id} key={`pays-${creditVersion}`} />
             <DeliveryBox customer={c} onSaved={reload} />
+            <div className="card"><h2 className="cp-h">Scheduling</h2><CustomerSchedulingPrefs customer={c} onSaved={reload} /></div>
             <CustomFieldsCard target="customer" id={id} canEdit values={c.custom ?? {}} onSaved={() => customer.reload()} />
             <StatsBox customerId={id} />
             <LinkedTodos customerId={id} customer={{ id, name: customerName(c) }} />

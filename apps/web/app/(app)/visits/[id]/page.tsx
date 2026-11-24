@@ -2,8 +2,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
-import { VISIT_BILLING_LABELS, formatMoney, formatTaxRate, taxFor, visitNumber } from "@crewdesk/shared";
-import { api, fmtDateTime } from "@/lib/api";
+import { PRIORITY_LABELS, VISIT_BILLING_LABELS, formatMoney, formatTaxRate, taxFor, visitNumber } from "@crewdesk/shared";
+import { api, fmtDate, fmtDateTime } from "@/lib/api";
+import { BackToWaitlist, windowText } from "@/components/waitlist";
 import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead } from "@/components/ui";
 import { CrewButtons, VisitForm, VisitStatus, VisitTags, crewNames, trackedLabel, visitWhen, type Visit } from "@/components/visits";
@@ -57,9 +58,18 @@ export default function WorkOrder({ params }: { params: Promise<{ id: string }> 
               <dt>When</dt><dd>{visitWhen(v)}</dd>
               <dt>Crew</dt><dd>{v.crew && <span className="visit-dot" style={{ background: v.crew.color }} />}{crewNames(v) || "No crew yet"}</dd>
               {v.budgetedHours != null && <><dt>Budgeted</dt><dd>{v.budgetedHours} hour{v.budgetedHours === 1 ? "" : "s"}</dd></>}
+              {v.releaseOn && <><dt>Eligible from</dt><dd>{fmtDate(v.releaseOn)}</dd></>}
+              {v.dueBy && <><dt>Due by</dt><dd>{fmtDate(v.dueBy)}</dd></>}
+              {v.minDaysAfterLast && <><dt>Minimum gap</dt><dd>{v.minDaysAfterLast} days after the last service</dd></>}
+              {v.priority && v.priority !== "normal" && <><dt>Priority</dt><dd>{PRIORITY_LABELS[v.priority]}</dd></>}
+              {v.windowStart && <><dt>Appointment</dt><dd>{windowText(v.windowStart, v.windowEnd ?? null)}</dd></>}
+              {v.earlyReason && <><dt>Scheduled early</dt><dd>{v.earlyReason}</dd></>}
+              {v.backReason && !v.date && <><dt>Back on the waiting list</dt><dd>{v.backReason}</dd></>}
               {v.notes && <><dt>Notes</dt><dd style={{ whiteSpace: "pre-wrap" }}>{v.notes}</dd></>}
             </dl>
             {(v.canManage || v.isCrew) && <CrewButtons v={v} onChange={update} />}
+            {v.canManage && v.date && (v.status === "open" || v.status === "on_site") && <BackToWaitlist visitId={v.id} onDone={data.reload} />}
+            {v.canManage && !v.date && v.status === "open" && <p className="muted" style={{ margin: 0 }}>No date yet: it&apos;s on the <Link href="/waitlist">waiting list</Link>.</p>}
           </div>
           <div className="card stack">
             <h2 style={{ margin: 0 }}>Work and billing</h2>

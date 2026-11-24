@@ -128,6 +128,9 @@ const fields = (b: VisitUpdate) => ({
   startTime: b.startTime ?? null, endTime: b.startTime ? b.endTime ?? null : null, notes: b.notes ?? null,
   budgetedHours: b.budgetedHours ?? (b.lines.length ? visitLineHours(b.lines) || null : null),
   totalCents: visitTotal(b.lines),
+  // The waiting list window.
+  releaseOn: b.releaseOn ?? null, dueBy: b.dueBy ?? null, minDaysAfterLast: b.minDaysAfterLast ?? null, priority: b.priority ?? "normal",
+  windowStart: b.windowStart ?? null, windowEnd: b.windowStart ? b.windowEnd ?? null : null,
 });
 const lineRows = (visitId: string, b: VisitUpdate) => b.lines.map((l, i) => ({
   visitId, serviceTypeId: l.serviceTypeId ?? null, description: l.description, quantity: l.quantity, budgetedHours: l.budgetedHours ?? null,
@@ -255,7 +258,7 @@ const routes: FastifyPluginAsync = async (app) => {
       const rows: Visit[] = [];
       for (const date of dates) {
         const [v] = await tx.insert(visits).values({
-          ...fields(body), custom, companyId, number: number++, date, endDate: !series && body.endDate && body.endDate !== body.date ? body.endDate : null,
+          ...fields(body), custom, companyId, number: number++, date, endDate: !series && body.endDate && body.endDate !== body.date ? body.endDate : null, waitingSince: date ? null : new Date(),
           repeatLabel: series ? describeRepeat(body.repeatUnit, body.repeatEvery, body.offMonths) : null, createdById: me,
         }).returning();
         rows.push(v);
@@ -303,7 +306,9 @@ const routes: FastifyPluginAsync = async (app) => {
       for (const row of targets) {
         const date = row.id === v.id ? body.date ?? null : row.date ? addDays(row.date, shift) : null;
         const endDate = row.id === v.id ? (body.endDate && body.endDate !== body.date ? body.endDate : null) : row.endDate;
-        await tx.update(visits).set({ ...fields(body), ...(custom ? { custom } : {}), date, endDate, updatedAt: new Date() }).where(eq(visits.id, row.id));
+        // Taken off its date: it's waiting again from now.
+        const backOnList = !date && row.date ? { waitingSince: new Date() } : {};
+        await tx.update(visits).set({ ...fields(body), ...(custom ? { custom } : {}), ...backOnList, date, endDate, updatedAt: new Date() }).where(eq(visits.id, row.id));
         await tx.delete(visitLines).where(eq(visitLines.visitId, row.id));
         const ls = lineRows(row.id, body);
         if (ls.length) await tx.insert(visitLines).values(ls);

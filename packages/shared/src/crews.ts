@@ -14,6 +14,8 @@ export const crewSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Pick a color").default("#2563eb"),
   leadId: z.preprocess(blankToNull, z.string().uuid().nullable()).optional(),
   memberIds: z.array(z.string().uuid()).max(50).default([]),
+  /** Hours a day it can work (the waiting list's workload strip). */
+  dailyHours: z.coerce.number().min(1).max(24).default(8),
   /** The truck or equipment the crew takes. */
   assetId: z.preprocess(blankToNull, z.string().uuid().nullable()).optional(),
   notes: z.preprocess(blankToNull, z.string().trim().max(1000).nullable()).optional(),

@@ -694,13 +694,65 @@ are numbered **WO-1001**, **WO-1002** and so on. Open them from **Schedule → W
   The waitlist (hourglass) lists work orders with no date: drag one onto a day. **+** on a day asks **Work order**
   or **To-do**.
 
+## Waiting list
+
+**Schedule → Waiting list** (Customers & billing managers) holds every work order that needs doing but has no
+date yet: one-time services, callbacks, accepted estimates and anything put **On the waitlist**. It's one page:
+the views and filters on top, then the map, the week's workload, and the list. Select work orders on the map or
+the list, then **Edit work orders** to schedule them.
+
+- **The window on each work order** (on the work order form, under **Window, priority and appointment time**):
+  - **Eligible from:** its release date. Until then it's hidden (choose **Include not released yet** to see them).
+  - **Due by:** when its window closes. It's flagged **Closing** 7 days before, and **Missed** after.
+  - **Minimum days since the last service** (e.g. 21 between rounds): the list shows the first date it may be done.
+    Scheduling it sooner asks for a reason, which is kept on the work order (**Scheduled early**).
+  - **Priority** (low, normal or high) and an **appointment window** ("after 1 pm", or 9 am to 12 pm).
+- **Badges** (the **Badges** button explains each): **Missed**, **Closing**, **Too early**, **Needs card**,
+  **High priority**, **Dog** (from the property's pets), **Text ahead** and **Call ahead**.
+- **Filters** show as chips (✕ removes one): service, **Map Code starts with** (80 matches 801 and 802), city, ZIP,
+  priority, badge, preferred crew (or none), **within X miles of a property**, due by and eligible by, plus the
+  search box. Several of one kind match any of them (Round 3 or Round 4). They apply to the map and the list.
+- **Views:** ready-made ones (Closing or missed, High priority, Needs a card, Back from the schedule, Coming up)
+  and your own: **Save view** keeps the filters, columns and sort, just for you or **shared with everyone**.
+- **The map:** a pin per work order, colored by service, with a **red ring** when it's closing or missed. Nearby pins
+  group into numbered circles (click one to zoom in). Click pins to select them, or **Draw a box** and drag around
+  a neighborhood. It zooms to whatever the filters show. Drag its bottom edge to resize it, use **Full screen**
+  (Esc leaves) or **Hide map**; it remembers your choice. Properties without a map location are counted above it.
+- **Workload:** each crew's booked hours for each day of the week against its **hours per day** (set on the crew),
+  with holidays marked. With work orders selected, click a day (or a crew's day) to schedule them into it.
+- **The list:** **Columns** picks and orders them (Property stays first; **Reset** puts back service, MC,
+  eligible from, due by, est. hours, sq ft, price and badges); click a heading to sort. The top row totals what's
+  shown; the bar above adds up what's selected, with **By crew and service**. **Export** downloads the shown (or
+  selected) rows as a spreadsheet.
+- **Estimated hours** fill themselves in. Hover them to see where they came from:
+  - **~0.6** (with ~): from the lawn size, using the service's **setup minutes** and **minutes per 1,000 sq ft**
+    (set them on the price list, e.g. 5 + 3, so a 10,000 sq ft lawn is about 35 minutes).
+  - **0.7**: from the property's own visits of that service (Arrived to Completed), recent ones counting more. One
+    or two visits are blended with the size estimate; from three on, the history takes over. A visit far off the
+    usual (a breakdown, a Completed tapped hours late) is left out and marked **!**.
+  - **0.5 🔒**: the work order's own budgeted hours.
+- **Edit work orders** schedules the selection in one step: the **date**, **crew** and **appointment window**. It shows
+  what it adds to that crew's day ("from 5.1 to 7.5 of 8 h") and warns about holidays, missed windows and
+  ones that aren't eligible yet (those need a reason). Options: **Make the crew the preferred crew** for those
+  properties, and **Notify customers by their preference** (a text to those who want one, when texting is
+  connected; the ones to call are listed for you). The crew's people are put on any work order with nobody on it.
+- **More (on a selection):** set the **priority**, **Skip** (with why), or **Delete** (admins; ones on an invoice stay).
+- **Back to waiting list:** on a scheduled work order, choose why (rain, wind, no access, customer asked, other) with
+  a note. It goes back with its date cleared, and the reason shows on the list.
+- **Card on file** (Settings → Customers & billing, off to start): when it's on, work orders for customers with no
+  card or bank account on file (expired cards don't count) show **Needs card** and can't be scheduled. Turn it off
+  for one customer or one property, with why (net 30, pays by check), in the **Scheduling** box on their page.
+- **Scheduling preferences:** on a customer's page, **Before a visit**: no notice, text ahead or call ahead. On a
+  property's page, its **preferred crew** and its own notice (or the same as the customer's).
+
 ## Crews
 
 **Team → People → Crews** (Customers & billing managers), like Homeworks' crews: the teams you send out, such as
 "Spray crew" or "Mowing 1".
 
 - **Add crew:** a **name**, a **color** (it shows on work orders), the **crew lead**, the **members** and the
-  **truck or equipment** they take (from Fleet), plus notes.
+  **truck or equipment** they take (from Fleet), plus notes and **hours per day** (8 to start; the waiting list's
+  workload strip measures their day against it).
 - **On work orders:** pick the crew on the work order form and its people are filled in. The crew shows on the
   work order, the Work orders list (with a **Crew** filter), the calendar (a **Crew** filter, and the crew's name on
   each card) and the crew's phones.

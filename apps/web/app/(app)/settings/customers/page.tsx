@@ -8,6 +8,7 @@ import { Empty, ErrorBox, PageHead } from "@/components/ui";
 import { SettingsTabs } from "@/components/settings-tabs";
 import { TagChip, useTags, type Tag } from "@/components/customers";
 import { AutoSendCard, EstimateDepositCard, LateFeesCard } from "@/components/billing-rules";
+import { CardOnFileCard } from "@/components/waitlist";
 
 /** Customer settings (admins in Customers & billing): the tag list and the cancellation reasons. */
 export default function CustomerSettings() {
@@ -15,10 +16,16 @@ export default function CustomerSettings() {
   return (
     <>
       <SettingsTabs />
-      <PageHead title="Customers & billing" sub="Invoice numbering and terms, late fees, auto-sending, estimate deposits, tags and cancellation reasons." />
-      {can("admin", "customers") ? <><BillingCard /><LateFeesCard /><AutoSendCard /><EstimateDepositCard /><TagsCard /><ReasonsCard /></> : <p className="muted">Only admins in Customers &amp; billing can change these.</p>}
+      <PageHead title="Customers & billing" sub="Invoice numbering and terms, late fees, auto-sending, estimate deposits, card on file, tags and cancellation reasons." />
+      {can("admin", "customers") ? <><BillingCard /><LateFeesCard /><AutoSendCard /><EstimateDepositCard /><CardRule /><TagsCard /><ReasonsCard /></> : <p className="muted">Only admins in Customers &amp; billing can change these.</p>}
     </>
   );
+}
+
+function CardRule() {
+  const settings = useApi<{ requireCardOnFile?: boolean }>("/invoices/settings");
+  if (!settings.data) return null;
+  return <CardOnFileCard value={!!settings.data.requireCardOnFile} onSaved={(v) => settings.setData({ ...settings.data, requireCardOnFile: v })} />;
 }
 
 function TagsCard() {

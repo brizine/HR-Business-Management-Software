@@ -1212,6 +1212,12 @@ export const customers = pgTable(
     bigcapitalCustomerId: integer("bigcapital_customer_id"),
     /** When they used the unsubscribe link in an email sent to many customers (invoices and receipts still go). */
     emailOptOutAt: timestamp("email_opt_out_at", { withTimezone: true }),
+    /** Before a visit: "none", "text" (text ahead) or "call" (call ahead). */
+    notifyBefore: text("notify_before").notNull().default("none"),
+    /** Card on file not required for any of their properties: why, who, when. */
+    cardExemptReason: text("card_exempt_reason"),
+    cardExemptById: uuid("card_exempt_by_id"),
+    cardExemptAt: timestamp("card_exempt_at", { withTimezone: true }),
     /** Charge their default card or bank account on file when an invoice is sent. */
     autopay: boolean("autopay").notNull().default(false),
     /** Mr., Mrs., Dr. ... (shown with their name on letters). */
@@ -1282,6 +1288,14 @@ export const properties = pgTable(
     /** Sales tax rate where the property is (null: the customer's, else the company default). */
     taxRate: doublePrecision("tax_rate"),
     pets: text("pets"),
+    /** "Always assign to …" (the crew or truck). */
+    preferredCrewId: uuid("preferred_crew_id"),
+    /** Overrides the customer's: "none", "text" or "call". */
+    notifyBefore: text("notify_before"),
+    /** Card on file not required for this property: why, who, when. */
+    cardExemptReason: text("card_exempt_reason"),
+    cardExemptById: uuid("card_exempt_by_id"),
+    cardExemptAt: timestamp("card_exempt_at", { withTimezone: true }),
     accessNotes: text("access_notes"),
     notes: text("notes"),
     /** "active" or "cancelled". */
@@ -1595,6 +1609,9 @@ export const serviceTypes = pgTable(
     /** The income account's code in the books (4000, 4100, 4200…), so it works in real and test books alike. */
     incomeAccountCode: text("income_account_code").notNull().default("4000"),
     /** Homeworks' "This is Taxable": its lines get the sales tax rate once sales tax is on. */
+    /** Time estimate: setup minutes plus minutes per 1,000 sq ft. */
+    setupMinutes: integer("setup_minutes"),
+    minutesPer1000: doublePrecision("minutes_per_1000"),
     taxable: boolean("taxable").notNull().default(false),
     active: boolean("active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
@@ -2112,6 +2129,22 @@ export const visits = pgTable(
     /** From crm_tags (the company's one tag list). */
     tagIds: uuid("tag_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
     /** The crew it went to (its members were copied to visit_assignees). */
+    /** Waiting list window: eligible from (release date), due by, minimum days since the property's last service. */
+    releaseOn: date("release_on"),
+    dueBy: date("due_by"),
+    minDaysAfterLast: integer("min_days_after_last"),
+    /** Scheduled before it was eligible: why, who and when (the recorded override). */
+    earlyReason: text("early_reason"),
+    earlyById: uuid("early_by_id").references((): AnyPgColumn => employees.id, { onDelete: "set null" }),
+    earlyAt: timestamp("early_at", { withTimezone: true }),
+    /** "low", "normal" or "high". */
+    priority: text("priority").notNull().default("normal"),
+    /** Appointment window (HH:MM), e.g. after 13:00. */
+    windowStart: text("window_start"),
+    windowEnd: text("window_end"),
+    /** On the waiting list since (set again when it's sent back), and why it was sent back. */
+    waitingSince: timestamp("waiting_since", { withTimezone: true }),
+    backReason: text("back_reason"),
     crewId: uuid("crew_id").references((): AnyPgColumn => crews.id, { onDelete: "set null" }),
     /** "Every 6 weeks (not Dec, Jan, Feb)" for a series. */
     repeatLabel: text("repeat_label"),
@@ -2170,6 +2203,8 @@ export const crews = pgTable(
     leadId: uuid("lead_id").references(() => employees.id, { onDelete: "set null" }),
     assetId: uuid("asset_id").references(() => assets.id, { onDelete: "set null" }),
     notes: text("notes"),
+    /** Hours a day it can work (for the waiting list's workload strip). */
+    dailyHours: doublePrecision("daily_hours").notNull().default(8),
     active: boolean("active").notNull().default(true),
     createdAt: createdAt(),
   },
@@ -2353,4 +2388,20 @@ export const emailLog = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("email_log_to_idx").on(t.to, t.createdAt), index("email_log_created_idx").on(t.createdAt)],
+);
+
+/** Saved views of a list (filters, columns, sort): shared with everyone, or one person's. */
+export const savedViews = pgTable(
+  "saved_views",
+  {
+    id: id(),
+    companyId: companyId(),
+    page: text("page").notNull(),
+    name: text("name").notNull(),
+    /** Null: shared with everyone. */
+    ownerId: uuid("owner_id").references(() => employees.id, { onDelete: "cascade" }),
+    config: jsonb("config").$type<{ filters: { key: string; value: string }[]; columns: string[]; sort: { key: string; dir: "asc" | "desc" } | null }>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("saved_views_company_page_idx").on(t.companyId, t.page)],
 );

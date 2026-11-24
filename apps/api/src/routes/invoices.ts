@@ -243,9 +243,9 @@ const routes: FastifyPluginAsync = async (app) => {
     const body = parse(billingSettingsSchema, req.body);
     const [{ max }] = await db.select({ max: sql<number | null>`max(${invoices.number})` }).from(invoices).where(eq(invoices.companyId, req.user.companyId));
     if (max != null && body.nextInvoiceNumber <= max) throw new HttpError(400, `Invoice ${max} has already been used; the next number must be higher`);
-    // Late fees and auto-sending are saved from their own cards; keep them.
+    // Late fees, auto-sending, deposits and the card rule are saved from their own cards; keep them.
     const current = await billingSettings(req.user.companyId);
-    const next = { ...body, lateFees: body.lateFees ?? current.lateFees, autoSend: body.autoSend ?? current.autoSend, estimateDeposit: body.estimateDeposit ?? current.estimateDeposit };
+    const next = { ...body, lateFees: body.lateFees ?? current.lateFees, autoSend: body.autoSend ?? current.autoSend, estimateDeposit: body.estimateDeposit ?? current.estimateDeposit, requireCardOnFile: body.requireCardOnFile ?? current.requireCardOnFile };
     await db.update(companies).set({ billing: next }).where(eq(companies.id, req.user.companyId));
     return next;
   });

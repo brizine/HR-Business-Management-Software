@@ -48,6 +48,9 @@ export const serviceTypeSchema = z.object({
   /** Homeworks' "This is Taxable": lines with it get the sales tax rate (once sales tax is on). */
   taxable: z.boolean().default(false),
   active: z.boolean().default(true),
+  /** Time estimate for the waiting list: setup minutes plus minutes per 1,000 sq ft. */
+  setupMinutes: z.preprocess((v) => (v === "" ? null : v), z.coerce.number().int().min(0).max(600).nullable()).optional(),
+  minutesPer1000: z.preprocess((v) => (v === "" ? null : v), z.coerce.number().min(0).max(120).nullable()).optional(),
 }).superRefine((s, ctx) => {
   if (s.pricing === "bracket") {
     if (!s.brackets.length) ctx.addIssue({ code: "custom", path: ["brackets"], message: "Add at least one lawn-size bracket" });
@@ -191,6 +194,8 @@ export const billingSettingsSchema = z.object({
   lateFees: lateFeeSettingsSchema.optional(),
   autoSend: autoSendSettingsSchema.optional(),
   estimateDeposit: estimateDepositSettingsSchema.optional(),
+  /** Card on file required before scheduling (properties without one wait on the waiting list as "Needs card"). */
+  requireCardOnFile: z.boolean().optional(),
 });
 export type BillingSettings = z.infer<typeof billingSettingsSchema>;
 export const DEFAULT_BILLING_SETTINGS: BillingSettings = {
@@ -198,6 +203,7 @@ export const DEFAULT_BILLING_SETTINGS: BillingSettings = {
   lateFees: { enabled: false, rules: [], emailCustomer: true },
   autoSend: { enabled: false, schedule: DEFAULT_SEND_SCHEDULE, hour: 8, invoiceWorkOrders: true },
   estimateDeposit: DEFAULT_ESTIMATE_DEPOSIT,
+  requireCardOnFile: false,
 };
 
 export function termsLabel(days: number) {

@@ -12,6 +12,7 @@ import { Badge, ErrorBox, PageHead } from "@/components/ui";
 import { CancelForm, CustomerPicker, PropertyFields, TagChips, propertyBody, propertyFormValue, useTags } from "@/components/customers";
 import { CreditForm } from "@/components/credits";
 import { CustomFieldsCard } from "@/components/custom-fields";
+import { PropertySchedulingPrefs } from "@/components/waitlist";
 
 export default function PropertyDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -73,6 +74,8 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
             </dl>
             {p.accessNotes && <><h3 style={{ fontSize: 14, marginBottom: 4 }}>Access notes</h3><p style={{ whiteSpace: "pre-wrap", marginTop: 0 }}>{p.accessNotes}</p></>}
             {p.notes && <><h3 style={{ fontSize: 14, marginBottom: 4 }}>Notes</h3><p style={{ whiteSpace: "pre-wrap", marginTop: 0 }}>{p.notes}</p></>}
+            <h3 style={{ fontSize: 14, marginBottom: 4 }}>Scheduling</h3>
+            <PropertySchedulingPrefs property={p} onSaved={property.reload} />
           </div>
           <div className="card">
             <div className="row" style={{ justifyContent: "space-between" }}>

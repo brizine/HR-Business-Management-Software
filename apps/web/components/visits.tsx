@@ -2,9 +2,9 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
-  DEFAULT_TODO_COLOR, MONTH_SHORT, REPEAT_UNITS, TODO_COLORS, VISIT_BILLING, VISIT_BILLING_LABELS, VISIT_SCHEDULING, VISIT_SCHEDULING_LABELS,
+  DEFAULT_TODO_COLOR, MONTH_SHORT, PRIORITIES, PRIORITY_LABELS, REPEAT_UNITS, TODO_COLORS, VISIT_BILLING, VISIT_BILLING_LABELS, VISIT_SCHEDULING, VISIT_SCHEDULING_LABELS,
   describePricing, formatMoney, formatTodoTime, isInactive, lineAmount, lineTaxRate, packageToLines, priceFor, taxFor as taxForLines, taxRateFor, visitDates, visitLineHours, visitNumber,
-  type CustomValues, type RepeatUnit, type VisitBilling, type VisitScheduling,
+  type CustomValues, type Priority, type RepeatUnit, type VisitBilling, type VisitScheduling,
 } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -29,6 +29,9 @@ export interface Visit {
   invoice: { id: string; number: number | null; status: string } | null;
   lines: VisitLine[]; assignees: { id: string; firstName: string; lastName: string }[];
   finishedBy: string | null; createdBy: string | null;
+  /** The waiting-list window (see the Waiting list page). */
+  releaseOn?: string | null; dueBy?: string | null; minDaysAfterLast?: number | null; priority?: Priority; windowStart?: string | null; windowEnd?: string | null;
+  earlyReason?: string | null; backReason?: string | null;
 }
 
 export const dayLabel = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
@@ -120,6 +123,12 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
   const [notes, setNotes] = useState(visit?.notes ?? preset?.notes ?? "");
   const [custom, setCustom] = useState<CustomValues>(visit?.custom ?? {});
   const [applyTo, setApplyTo] = useState<"one" | "following">("one");
+  const [releaseOn, setReleaseOn] = useState(visit?.releaseOn ?? "");
+  const [dueBy, setDueBy] = useState(visit?.dueBy ?? "");
+  const [minDays, setMinDays] = useState(visit?.minDaysAfterLast != null ? String(visit.minDaysAfterLast) : "");
+  const [priority, setPriority] = useState<Priority>(visit?.priority ?? "normal");
+  const [windowStart, setWindowStart] = useState(visit?.windowStart ?? "");
+  const [windowEnd, setWindowEnd] = useState(visit?.windowEnd ?? "");
   const save = useAction();
   const services = useApi<any[]>("/service-types");
   const detail = useApi<any>(customer ? `/customers/${customer.id}` : null);
@@ -176,6 +185,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
         date: scheduling === "waitlist" ? null : date, endDate: multi && scheduling === "single" ? endDate : null,
         startTime: timed && scheduling !== "waitlist" ? startTime : null, endTime: timed && scheduling !== "waitlist" ? endTime || null : null,
         budgetedHours: hours.trim() === "" ? null : Number(hours), assigneeIds: crew, crewId: crewId || null, tagIds, custom,
+        releaseOn: releaseOn || null, dueBy: dueBy || null, minDaysAfterLast: minDays ? Number(minDays) : null, priority, windowStart: windowStart || null, windowEnd: windowStart ? windowEnd || null : null,
         ...(visit ? {} : { scheduling, repeatEvery: Number(every) || 1, repeatUnit: unit, repeatUntil: scheduling === "repeat" ? until : null, offMonths, estimateId: preset?.estimateId }),
       };
       const r = visit
@@ -303,6 +313,17 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
           <label>End time (optional)<input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} /></label>
         </div>
       )}
+      <details className="visit-window" open={!!(releaseOn || dueBy || minDays || windowStart || priority !== "normal") || undefined}>
+        <summary>Window, priority and appointment time{scheduling === "waitlist" ? " (for the waiting list)" : ""}</summary>
+        <div className="formgrid">
+          {scheduling === "waitlist" && <label>Eligible from<input type="date" value={releaseOn} onChange={(e) => setReleaseOn(e.target.value)} /><span className="muted field-hint">Its release date; empty means now</span></label>}
+          <label>Due by<input type="date" min={releaseOn || undefined} value={dueBy} onChange={(e) => setDueBy(e.target.value)} /><span className="muted field-hint">Flagged as closing 7 days before</span></label>
+          <label>Minimum days since the last service<input inputMode="numeric" value={minDays} onChange={(e) => setMinDays(e.target.value.replace(/\D/g, "").slice(0, 3))} placeholder="e.g. 21" /><span className="muted field-hint">Warns before anyone schedules it sooner</span></label>
+          <label>Priority<select value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>{PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}</select></label>
+          <label>Appointment window from<input type="time" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} /><span className="muted field-hint">e.g. 13:00 for "after 1 pm"</span></label>
+          {windowStart && <label>Until (optional)<input type="time" min={windowStart} value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} /></label>}
+        </div>
+      </details>
       {scheduling === "repeat" && (
         <div className="visit-repeat stack">
           <div className="formgrid">

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { taxRateSchema } from "./tax";
 import { lineAmount } from "./billing";
 import { DEFAULT_TODO_COLOR } from "./todos";
+import { checkWaitWindow, waitWindowFields } from "./waitlist";
 
 /**
  * Work orders: scheduled jobs at a customer's property (Homeworks calls them visits). Each has the
@@ -77,12 +78,15 @@ const visitFields = z.object({
   repeatUntil: z.preprocess(blankToNull, isoDate.nullable()).optional(),
   /** Months with no work (the off-season): repeats that land in them are left out. */
   offMonths: z.array(z.number().int().min(1).max(12)).max(11).default([]),
+  // The waiting list window: eligible from, due by, minimum days since the last service, priority, appointment window.
+  ...waitWindowFields,
 });
 type VisitFields = z.infer<typeof visitFields>;
 
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 
 function checkVisit(v: Partial<VisitFields>, ctx: z.RefinementCtx) {
+  checkWaitWindow(v, (path, message) => ctx.addIssue({ code: "custom", path: [path], message }));
   const waitlist = v.scheduling === "waitlist";
   if (!waitlist && !v.date) ctx.addIssue({ code: "custom", path: ["date"], message: "Pick the date (or add it to the waitlist)" });
   if (v.endDate && v.date && v.endDate < v.date) ctx.addIssue({ code: "custom", path: ["endDate"], message: "The last day can't be before the first" });

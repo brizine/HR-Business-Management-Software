@@ -51,7 +51,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const body = parse(crewSchema, req.body);
     const people = await checkPeople(req.user.companyId, body);
     const crew = await db.transaction(async (tx) => {
-      const [c] = await tx.insert(crews).values({ companyId: req.user.companyId, name: body.name, color: body.color, leadId: body.leadId ?? null, assetId: body.assetId ?? null, notes: body.notes ?? null, active: body.active }).returning();
+      const [c] = await tx.insert(crews).values({ companyId: req.user.companyId, name: body.name, color: body.color, leadId: body.leadId ?? null, assetId: body.assetId ?? null, notes: body.notes ?? null, active: body.active, dailyHours: body.dailyHours }).returning();
       if (people.length) await tx.insert(crewMembers).values(people.map((employeeId) => ({ crewId: c.id, employeeId })));
       return c;
     });
@@ -66,7 +66,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const people = await checkPeople(companyId, body);
     let updated = 0;
     await db.transaction(async (tx) => {
-      await tx.update(crews).set({ name: body.name, color: body.color, leadId: body.leadId ?? null, assetId: body.assetId ?? null, notes: body.notes ?? null, active: body.active }).where(eq(crews.id, crew.id));
+      await tx.update(crews).set({ name: body.name, color: body.color, leadId: body.leadId ?? null, assetId: body.assetId ?? null, notes: body.notes ?? null, active: body.active, dailyHours: body.dailyHours }).where(eq(crews.id, crew.id));
       await tx.delete(crewMembers).where(eq(crewMembers.crewId, crew.id));
       if (people.length) await tx.insert(crewMembers).values(people.map((employeeId) => ({ crewId: crew.id, employeeId })));
       if (body.updateOpenWorkOrders) {

@@ -71,11 +71,13 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
   const [incomeAccountCode, setIncome] = useState(service?.incomeAccountCode ?? "4000");
   const [active, setActive] = useState(service?.active ?? true);
   const [taxable, setTaxable] = useState(service?.taxable ?? false);
+  const [setupMin, setSetupMin] = useState(service?.setupMinutes != null ? String(service.setupMinutes) : "");
+  const [per1000, setPer1000] = useState(service?.minutesPer1000 != null ? String(service.minutesPer1000) : "");
   const { busy, error, run, setError } = useAction();
   return (
     <form className="card stack" onSubmit={(e) => {
       e.preventDefault();
-      const body: Record<string, unknown> = { name, description: description || undefined, pricing, incomeAccountCode, active, taxable, priceCents: 0, minimumCents: 0, brackets: [] };
+      const body: Record<string, unknown> = { name, description: description || undefined, pricing, incomeAccountCode, active, taxable, priceCents: 0, minimumCents: 0, brackets: [], setupMinutes: setupMin.trim() === "" ? null : Number(setupMin), minutesPer1000: per1000.trim() === "" ? null : Number(per1000) };
       if (pricing !== "bracket") {
         const p = toCents(price);
         if (!Number.isFinite(p) || p < 0) return setError("Enter the price");
@@ -115,6 +117,14 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
           <div><button type="button" className="btn" onClick={() => setBrackets([...brackets, { upTo: "", price: "" }])}>Add a size</button></div>
         </fieldset>
       )}
+      <fieldset className="contacts">
+        <legend>Time estimate <span className="muted">(for the waiting list until a property has its own history)</span></legend>
+        <div className="formgrid">
+          <label>Setup minutes<input inputMode="numeric" value={setupMin} onChange={(e) => setSetupMin(e.target.value.replace(/\D/g, "").slice(0, 3))} placeholder="e.g. 5" /></label>
+          <label>Minutes per 1,000 sq ft<input inputMode="decimal" value={per1000} onChange={(e) => setPer1000(e.target.value)} placeholder="e.g. 3" /></label>
+        </div>
+        {(setupMin || per1000) && <p className="muted" style={{ margin: 0 }}>A 10,000 sq ft lawn ≈ {Math.round((Number(setupMin) || 0) + (Number(per1000) || 0) * 10)} min.</p>}
+      </fieldset>
       <label>Description (optional)<input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
       <label className="check"><input type="checkbox" checked={taxable} onChange={(e) => setTaxable(e.target.checked)} /> This is taxable <span className="muted">(gets the sales tax rate on work orders and invoices once sales tax is on)</span></label>
       {service && <label className="check"><input type="checkbox" checked={!active} onChange={(e) => setActive(!e.target.checked)} /> Retired (kept on past invoices, not offered for new ones)</label>}
