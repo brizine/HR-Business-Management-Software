@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
-import { and, asc, desc, eq, ilike, inArray, notInArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, notInArray, or, sql } from "drizzle-orm";
 import { costOn, costPerUseUnitCents, productCostSchema, productSchema, type ProductInput } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, productCosts, productRates, products } from "../db/schema";
+import { companies, productCosts, productRates, products, serviceProducts, serviceTypes, visitProducts } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { localDate } from "../lib/tz";
@@ -14,6 +14,11 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 /** Saves a product's rates as the set sent: kept ids are updated, new ones added, missing ones removed. */
 async function saveRates(tx: Tx, productId: string, rates: ProductInput["rates"]) {
   const keep = rates.map((r) => r.id).filter((x): x is string => !!x);
+  const used = await tx.select({ rate: productRates.name, service: serviceTypes.name }).from(serviceProducts)
+    .innerJoin(productRates, eq(productRates.id, serviceProducts.productRateId))
+    .innerJoin(serviceTypes, eq(serviceTypes.id, serviceProducts.serviceTypeId))
+    .where(and(eq(productRates.productId, productId), keep.length ? notInArray(productRates.id, keep) : undefined));
+  if (used.length) throw new HttpError(400, `The ${used[0].rate} rate is used by ${used[0].service}; take it off that service first`);
   await tx.delete(productRates).where(and(eq(productRates.productId, productId), keep.length ? notInArray(productRates.id, keep) : undefined));
   for (const [i, r] of rates.entries()) {
     const values = { name: r.name, amountPer1000: r.amountPer1000, method: r.method, carrierGalPer1000: r.carrierGalPer1000, sortOrder: i };
@@ -112,6 +117,8 @@ const routes: FastifyPluginAsync = async (app) => {
   /** Removes a cost entered by mistake. */
   app.delete<{ Params: { id: string; costId: string } }>("/:id/costs/:costId", admin, async (req) => {
     await one(req.user.companyId, req.params.id);
+    const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(visitProducts).where(eq(visitProducts.productCostId, req.params.costId));
+    if (n) throw new HttpError(400, `${n} completed work order${n === 1 ? "" : "s"} used this cost, so it stays for their records. Add a new cost instead.`);
     const gone = await db.delete(productCosts).where(and(eq(productCosts.id, req.params.costId), eq(productCosts.productId, req.params.id))).returning({ id: productCosts.id });
     if (!gone.length) throw new HttpError(404, "Cost not found");
     return one(req.user.companyId, req.params.id);

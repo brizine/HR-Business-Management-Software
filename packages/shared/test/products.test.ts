@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { costOn, costPerUseUnitCents, formatRateAmount, productSchema, rateCostPer1000Cents } from "../src";
+import { appliesOn, costOn, costPerUseUnitCents, formatRateAmount, lineMaterialCents, productSchema, rateCostPer1000Cents } from "../src";
 
 describe("product costs", () => {
   const costs = [{ effectiveFrom: "2025-01-15", c: 1 }, { effectiveFrom: "2026-02-01", c: 2 }, { effectiveFrom: "2099-01-01", c: 3 }];
@@ -31,5 +31,23 @@ describe("product costs", () => {
     expect(productSchema.safeParse({ name: "X" }).success).toBe(false);
     const p = productSchema.parse({ name: "X", useUnit: "ounces liquid", manufacturer: "  ", epaRegNo: "" });
     expect(p).toMatchObject({ manufacturer: null, epaRegNo: null, productType: "other", trackRecords: true, rates: [] });
+  });
+});
+
+describe("service product material", () => {
+  it("applies a product only between its dates", () => {
+    const summer = { startDate: "2026-06-01", endDate: "2026-09-30" };
+    expect(appliesOn(summer, "2026-05-31")).toBe(false);
+    expect(appliesOn(summer, "2026-06-01")).toBe(true);
+    expect(appliesOn(summer, "2026-09-30")).toBe(true);
+    expect(appliesOn({ startDate: null, endDate: null }, "2030-01-01")).toBe(true);
+  });
+
+  it("budgets material for a lawn", () => {
+    // 60¢ of product per 1,000 sq ft.
+    expect(lineMaterialCents({ materialPer1000Cents: 60 }, 7250)).toBe(435);
+    expect(lineMaterialCents({ materialPer1000Cents: 60 }, 7250, 2)).toBe(870);
+    expect(lineMaterialCents({ materialPer1000Cents: 60 }, null)).toBeNull();
+    expect(lineMaterialCents({ materialPer1000Cents: null }, 7250)).toBeNull();
   });
 });

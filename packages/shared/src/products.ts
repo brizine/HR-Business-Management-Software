@@ -132,3 +132,29 @@ export function formatRateAmount(n: number, unit: string) {
   const short = unit.replace(/^ounces/, "oz").replace(/^pounds/, "lb").replace(/^gallons$/, "gal").replace(/^quarts$/, "qt").replace(/^pints$/, "pt").replace(/^grams$/, "g").replace(/^milliliters$/, "mL");
   return `${n.toLocaleString("en-US", { maximumFractionDigits: 3 })} ${short}`;
 }
+
+/** A product a service applies, at one of its rates, optionally only between two dates (a seasonal swap). */
+export const serviceProductSchema = z
+  .object({
+    productId: z.string().uuid(),
+    productRateId: z.string().uuid(),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
+  })
+  .refine((s) => !s.startDate || !s.endDate || s.startDate <= s.endDate, { message: "The end date is before the start date", path: ["endDate"] });
+export const serviceProductsSchema = z.object({ products: z.array(serviceProductSchema).max(30) });
+export type ServiceProductInput = z.infer<typeof serviceProductSchema>;
+
+/** Whether a service's product applies on a day (no dates = always). */
+export const appliesOn = (s: { startDate: string | null; endDate: string | null }, day: string) =>
+  (!s.startDate || s.startDate <= day) && (!s.endDate || day <= s.endDate);
+
+/**
+ * Budgeted material (product cost) for a line, from the service's products and the lawn, rounded to
+ * the cent; null when the service has no products or the lawn has no size. Budgeted hours are not
+ * worked out here: they come from the service and the property's own clock history (waiting list).
+ */
+export function lineMaterialCents(s: { materialPer1000Cents?: number | null }, sqFt: number | null | undefined, quantity = 1) {
+  const size = sqFt != null && Number.isFinite(sqFt) && sqFt > 0 ? sqFt : null;
+  return size != null && s.materialPer1000Cents != null ? Math.round((s.materialPer1000Cents * size * quantity) / 1000) : null;
+}

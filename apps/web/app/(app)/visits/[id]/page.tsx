@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
-import { PRIORITY_LABELS, VISIT_BILLING_LABELS, formatMoney, formatTaxRate, taxFor, visitNumber } from "@crewdesk/shared";
+import { PRIORITY_LABELS, VISIT_BILLING_LABELS, formatMoney, formatRateAmount, formatTaxRate, taxFor, visitNumber } from "@crewdesk/shared";
 import { api, fmtDate, fmtDateTime } from "@/lib/api";
 import { BackToWaitlist, windowText } from "@/components/waitlist";
 import { useAction, useApi } from "@/lib/hooks";
@@ -111,8 +111,38 @@ export default function WorkOrder({ params }: { params: Promise<{ id: string }> 
           </div>
         </div>
       )}
+      {!editing && v.status === "completed" && <VisitProducts visitId={v.id} completedAt={v.completedAt} />}
       {!editing && <div style={{ marginTop: 16 }}><CustomFieldsCard target="workorder" id={v.id} canEdit={v.canManage || v.isCrew} values={v.custom ?? {}} onSaved={(custom) => update({ ...v, custom })} /></div>}
       {!editing && <div style={{ marginTop: 16 }}><VisitFiles visitId={v.id} canAdd={v.canManage || v.isCrew} canManage={v.canManage} meId={me?.user.id} /></div>}
     </>
+  );
+}
+
+interface AppliedProduct { id: string; productName: string; epaRegNo: string | null; rateName: string | null; amountPer1000: number; areaSqFt: number; amount: number; unit: string; costCents?: number | null; costDate: string }
+
+/** What the work order applied, saved when it was completed, with its cost on that day (office only). */
+function VisitProducts({ visitId, completedAt }: { visitId: string; completedAt: string | null }) {
+  const rows = useApi<AppliedProduct[]>(`/visits/${visitId}/products?c=${completedAt ?? ""}`);
+  const list = rows.data ?? [];
+  if (!list.length) return null;
+  const showCost = list.some((r) => "costCents" in r);
+  const total = list.reduce((s, r) => s + (r.costCents ?? 0), 0);
+  return (
+    <div className="card tablewrap" style={{ marginTop: 16 }}>
+      <h3 style={{ marginTop: 0 }}>Products applied</h3>
+      <table>
+        <thead><tr><th>Product</th><th>Rate</th><th>Area</th><th>Amount</th>{showCost && <th>Cost</th>}</tr></thead>
+        <tbody>{list.map((r) => (
+          <tr key={r.id}>
+            <td>{r.productName}{r.epaRegNo && <div className="muted">EPA {r.epaRegNo}</div>}</td>
+            <td>{r.rateName ? `${r.rateName}: ` : ""}{formatRateAmount(r.amountPer1000, r.unit)} / 1,000</td>
+            <td>{Math.round(r.areaSqFt).toLocaleString("en-US")} sq ft</td>
+            <td>{formatRateAmount(r.amount, r.unit)}</td>
+            {showCost && <td>{r.costCents == null ? <span className="muted">no cost on {r.costDate}</span> : formatMoney(r.costCents)}</td>}
+          </tr>
+        ))}</tbody>
+        {showCost && <tfoot><tr><td colSpan={4}><strong>Material</strong> <span className="muted">(prices on {list[0].costDate})</span></td><td><strong>{formatMoney(total)}</strong></td></tr></tfoot>}
+      </table>
+    </div>
   );
 }

@@ -1,9 +1,9 @@
 "use client";
 import { useState } from "react";
-import { INCOME_ACCOUNTS, PRICING_KINDS, PRICING_LABELS, describePricing, formatMoney, priceFor, sizeMinutes, type PricedService, type PricingKind } from "@crewdesk/shared";
+import { INCOME_ACCOUNTS, PRICING_KINDS, PRICING_LABELS, appliesOn, costPerUseUnitCents, describePricing, formatMoney, formatRateAmount, priceFor, sizeMinutes, type PricedService, type PricingKind } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useAction, useNewForm } from "@/lib/hooks";
+import { useAction, useApi, useNewForm } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
 import { dollars, toCents, useServices, type ServiceType } from "@/components/invoices";
 import { PackagesCard } from "@/components/packages";
@@ -79,9 +79,22 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
   const [roundTo, setRoundTo] = useState(String(service?.roundToCents ?? 50));
   const [maxAuto, setMaxAuto] = useState(service?.maxAutoSqFt != null ? String(service.maxAutoSqFt) : "");
   const [target, setTarget] = useState(service?.targetCentsPerHour != null ? dollars(service.targetCentsPerHour) : "");
+  const [links, setLinks] = useState<{ productId: string; productRateId: string; startDate: string; endDate: string }[]>(
+    (service?.products ?? []).map((l) => ({ productId: l.productId, productRateId: l.productRateId, startDate: l.startDate ?? "", endDate: l.endDate ?? "" })),
+  );
+  const catalog = useApi<CatalogProduct[]>("/products");
   const [setupMin, setSetupMin] = useState(service?.setupMinutes != null ? String(service.setupMinutes) : "");
   const [per1000, setPer1000] = useState(service?.minutesPer1000 != null ? String(service.minutesPer1000) : "");
   const { busy, error, run, setError } = useAction();
+  const today = new Date().toISOString().slice(0, 10);
+  const linkCost = (l: { productId: string; productRateId: string }) => {
+    const p = catalog.data?.find((x) => x.id === l.productId);
+    const r = p?.rates.find((x) => x.id === l.productRateId);
+    const perUse = p ? costPerUseUnitCents(p.currentCost?.costPerPurchaseUnitCents, p.purchaseUnitSize) : null;
+    return { p, r, cost: r && perUse != null ? r.amountPer1000 * perUse : null };
+  };
+  const applying = links.filter((l) => l.productRateId && appliesOn({ startDate: l.startDate || null, endDate: l.endDate || null }, today));
+  const materialPer1000 = applying.length ? applying.reduce((s, l) => s + (linkCost(l).cost ?? 0), 0) : null;
   const num = (v: string) => Number(v.replace(/[,\s]/g, ""));
   /** The volume-discount fields as the API takes them, from what's typed so far. */
   const tieredDraft = () => {
@@ -116,7 +129,14 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
         const list = brackets.filter((b) => b.price.trim());
         body.brackets = list.map((b, i) => ({ upToSqFt: i === list.length - 1 && !b.upTo.trim() ? null : Number(b.upTo.replace(/,/g, "")), priceCents: toCents(b.price) }));
       }
-      run(async () => { await api(service ? `/service-types/${service.id}` : "/service-types", { method: service ? "PUT" : "POST", body }); onDone(); });
+      run(async () => {
+        const saved = await api<{ id: string }>(service ? `/service-types/${service.id}` : "/service-types", { method: service ? "PUT" : "POST", body });
+        const used = links.filter((l) => l.productId && l.productRateId);
+        if (service || used.length) {
+          await api(`/service-types/${saved.id}/products`, { method: "PUT", body: { products: used.map((l) => ({ ...l, startDate: l.startDate || null, endDate: l.endDate || null })) } });
+        }
+        onDone();
+      });
     }}>
       <h2 style={{ fontSize: 16, margin: 0 }}>{service ? "Edit service" : "New service"}</h2>
       <div className="formgrid">
@@ -172,10 +192,42 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
             </div>
             <RatePreview service={{ pricing: "tiered", priceCents: 0, brackets: [], ...draft, minimumCents: draft.minimumCents ?? 0 }}
               setupMinutes={setupMin.trim() === "" ? null : Number(setupMin)} minutesPer1000={per1000.trim() === "" ? null : Number(per1000)}
-              targetCents={target.trim() ? toCents(target) : null} />
+              targetCents={target.trim() ? toCents(target) : null} materialPer1000Cents={materialPer1000} />
           </fieldset>
         );
       })()}
+      <fieldset className="contacts">
+        <legend>Products applied <span className="muted">(budgets material cost; saved on each completed work order at that day's price)</span></legend>
+        {links.map((l, i) => {
+          const { p, cost } = linkCost(l);
+          const upd = (patch: Partial<typeof l>) => setLinks(links.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+          return (
+            <div key={i} className="row">
+              <label style={{ flex: 1, minWidth: 200 }}>Product
+                <select value={l.productId} onChange={(e) => { const np = catalog.data?.find((x) => x.id === e.target.value); upd({ productId: e.target.value, productRateId: np?.rates[0]?.id ?? "" }); }}>
+                  <option value="">Pick a product…</option>
+                  {catalog.data?.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                </select>
+              </label>
+              <label style={{ width: 200 }}>Rate per 1,000 sq ft
+                <select value={l.productRateId} onChange={(e) => upd({ productRateId: e.target.value })} disabled={!p}>
+                  {!p?.rates.length && <option value="">No rates yet</option>}
+                  {p?.rates.map((r) => <option key={r.id} value={r.id}>{r.name}: {formatRateAmount(r.amountPer1000, p.useUnit)}</option>)}
+                </select>
+              </label>
+              <label style={{ width: 150 }}>From <span className="muted">(optional)</span><input type="date" value={l.startDate} onChange={(e) => upd({ startDate: e.target.value })} /></label>
+              <label style={{ width: 150 }}>Until <span className="muted">(optional)</span><input type="date" value={l.endDate} onChange={(e) => upd({ endDate: e.target.value })} /></label>
+              <div className="muted" style={{ alignSelf: "flex-end", minWidth: 110 }}>{p && l.productRateId ? (cost == null ? "no cost yet" : `${formatMoney(Math.round(cost))} / 1,000`) : ""}</div>
+              <button type="button" className="btn" style={{ alignSelf: "flex-end" }} onClick={() => setLinks(links.filter((_, j) => j !== i))}>Remove</button>
+            </div>
+          );
+        })}
+        <div className="row">
+          <button type="button" className="btn" onClick={() => setLinks([...links, { productId: "", productRateId: "", startDate: "", endDate: "" }])}>Add a product</button>
+          {materialPer1000 != null && <span><strong>Material today: {formatMoney(Math.round(materialPer1000))} per 1,000 sq ft</strong></span>}
+          {catalog.data && !catalog.data.length && <span className="muted">Add products on the Products page first.</span>}
+        </div>
+      </fieldset>
       <fieldset className="contacts">
         <legend>Time estimate <span className="muted">(for the waiting list until a property has its own history)</span></legend>
         <div className="formgrid">
@@ -199,13 +251,13 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
 const PREVIEW_SIZES = [2000, 3000, 4000, 5000, 6000, 7500, 10000, 12500, 15000, 20000, 25000];
 
 /** What the rate card charges at a range of lawn sizes, and how each compares with the hourly target. */
-function RatePreview({ service, setupMinutes, minutesPer1000, targetCents }: { service: PricedService; setupMinutes: number | null; minutesPer1000: number | null; targetCents: number | null }) {
+function RatePreview({ service, setupMinutes, minutesPer1000, targetCents, materialPer1000Cents }: { service: PricedService; setupMinutes: number | null; minutesPer1000: number | null; targetCents: number | null; materialPer1000Cents: number | null }) {
   if (!service.tiers?.length) return null;
   const timed = setupMinutes != null || minutesPer1000 != null;
   return (
     <div className="tablewrap">
       <table>
-        <thead><tr><th>Lawn (sq ft)</th><th>Price</th><th>Per 1,000</th>{timed && <th>Minutes</th>}{timed && <th>Per man-hour</th>}</tr></thead>
+        <thead><tr><th>Lawn (sq ft)</th><th>Price</th><th>Per 1,000</th>{materialPer1000Cents != null && <th>Material</th>}{materialPer1000Cents != null && <th>After material</th>}{timed && <th>Minutes</th>}{timed && <th>Per man-hour</th>}</tr></thead>
         <tbody>{PREVIEW_SIZES.map((sqFt) => {
           const price = priceFor(service, sqFt);
           const min = timed ? sizeMinutes({ setupMinutes, minutesPer1000 }, sqFt) : null;
@@ -216,6 +268,8 @@ function RatePreview({ service, setupMinutes, minutesPer1000, targetCents }: { s
               <td>{sqFt.toLocaleString("en-US")}</td>
               <td>{price == null ? <span className="muted">priced by hand</span> : formatMoney(price)}</td>
               <td>{price == null ? "" : formatMoney(Math.round((price * 1000) / sqFt))}</td>
+              {materialPer1000Cents != null && <td>{formatMoney(Math.round((materialPer1000Cents * sqFt) / 1000))}</td>}
+              {materialPer1000Cents != null && <td>{price == null ? "" : `${formatMoney(price - Math.round((materialPer1000Cents * sqFt) / 1000))} (${Math.round(((price - (materialPer1000Cents * sqFt) / 1000) / price) * 100)}%)`}</td>}
               {timed && <td>{min ?? ""}</td>}
               {timed && <td>{perHour == null ? "" : low ? <span className="badge warn">{formatMoney(perHour)} below target</span> : formatMoney(perHour)}</td>}
             </tr>
@@ -225,3 +279,5 @@ function RatePreview({ service, setupMinutes, minutesPer1000, targetCents }: { s
     </div>
   );
 }
+
+interface CatalogProduct { id: string; name: string; useUnit: string; purchaseUnitSize: number | null; currentCost: { costPerPurchaseUnitCents: number } | null; rates: { id: string; name: string; amountPer1000: number }[] }
