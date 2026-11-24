@@ -603,6 +603,13 @@
       "when": 1795530804446,
       "tag": "0085_products",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1795530825678,
+      "tag": "0086_service_products",
+      "breakpoints": true
     }
   ]
 }

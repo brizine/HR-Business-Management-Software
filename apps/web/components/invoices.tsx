@@ -9,7 +9,10 @@ import { useApi } from "@/lib/hooks";
 import { ErrorBox } from "@/components/ui";
 import { CustomerPicker } from "@/components/customers";
 
-export interface ServiceType { id: string; name: string; description: string | null; pricing: string; priceCents: number; minimumCents: number; brackets: { upToSqFt: number | null; priceCents: number }[]; incomeAccountCode: string; active: boolean; taxable?: boolean; setupMinutes?: number | null; minutesPer1000?: number | null; tiers?: { fromSqFt: number; ratePer1000Cents: number }[]; bandSizeSqFt?: number | null; bandPricePoint?: number; roundToCents?: number; maxAutoSqFt?: number | null; targetCentsPerHour?: number | null; chemical?: boolean }
+export interface ServiceType { id: string; name: string; description: string | null; pricing: string; priceCents: number; minimumCents: number; brackets: { upToSqFt: number | null; priceCents: number }[]; incomeAccountCode: string; active: boolean; taxable?: boolean; setupMinutes?: number | null; minutesPer1000?: number | null; tiers?: { fromSqFt: number; ratePer1000Cents: number }[]; bandSizeSqFt?: number | null; bandPricePoint?: number; roundToCents?: number; maxAutoSqFt?: number | null; targetCentsPerHour?: number | null; chemical?: boolean;
+  /** Products it applies, and their cost per 1,000 sq ft today (null: no products). */
+  products?: ServiceProductLink[]; materialPer1000Cents?: number | null; materialMissingCost?: number }
+export interface ServiceProductLink { id: string; productId: string; productRateId: string; startDate: string | null; endDate: string | null; productName: string; rateName: string; amountPer1000: number; unit: string; costPer1000Cents: number | null; applies: boolean }
 
 /** Unpaid, Overdue, Partly paid, Paid, Draft or Void, colored. */
 export function InvoiceStatus({ status, overdue }: { status: string; overdue?: boolean }) {

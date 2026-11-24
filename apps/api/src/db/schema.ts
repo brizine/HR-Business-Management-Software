@@ -1123,6 +1123,53 @@ export const productCosts = pgTable(
   (t) => [index("product_costs_product_idx").on(t.productId, t.effectiveFrom)],
 );
 
+/** Products a service applies, at one of their rates; budgets material and, on completion, what a visit used. */
+export const serviceProducts = pgTable(
+  "service_products",
+  {
+    id: id(),
+    serviceTypeId: uuid("service_type_id").notNull().references(() => serviceTypes.id, { onDelete: "cascade" }),
+    productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+    productRateId: uuid("product_rate_id").notNull().references(() => productRates.id, { onDelete: "restrict" }),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("service_products_service_idx").on(t.serviceTypeId), index("service_products_rate_idx").on(t.productRateId)],
+);
+
+/**
+ * What a completed visit applied, with its cost saved at completion so reports never change when a
+ * price does: the amount, the cost per use unit in force on the visit's day, and which cost that was.
+ */
+export const visitProducts = pgTable(
+  "visit_products",
+  {
+    id: id(),
+    companyId: companyId(),
+    visitId: uuid("visit_id").notNull().references(() => visits.id, { onDelete: "cascade" }),
+    serviceTypeId: uuid("service_type_id").references(() => serviceTypes.id, { onDelete: "set null" }),
+    productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+    productRateId: uuid("product_rate_id").references(() => productRates.id, { onDelete: "set null" }),
+    productCostId: uuid("product_cost_id").references(() => productCosts.id, { onDelete: "restrict" }),
+    /** As they were at completion. */
+    productName: text("product_name").notNull(),
+    epaRegNo: text("epa_reg_no"),
+    rateName: text("rate_name"),
+    amountPer1000: doublePrecision("amount_per_1000").notNull(),
+    areaSqFt: doublePrecision("area_sq_ft").notNull(),
+    amount: doublePrecision("amount").notNull(),
+    unit: text("unit").notNull(),
+    /** Null when the product had no cost on that day. */
+    costPerUseUnitCents: doublePrecision("cost_per_use_unit_cents"),
+    costCents: integer("cost_cents"),
+    costDate: date("cost_date").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("visit_products_visit_idx").on(t.visitId), index("visit_products_company_product_idx").on(t.companyId, t.productId), index("visit_products_cost_idx").on(t.productCostId)],
+);
+
 /** Employees chosen by an admin to edit mix sheets (admins can always edit). */
 export const mixEditors = pgTable(
   "mix_editors",
