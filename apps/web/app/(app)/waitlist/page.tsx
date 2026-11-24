@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Popover, readLocal, writeLocal } from "@/components/customer-list";
 import { Icon } from "@/components/icons";
+import { useTags } from "@/components/customers";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
 import {
   AddFilter, BUILT_IN_WAIT_VIEWS, BulkMenu, Columns, DEFAULT_WL_COLUMNS, EditWorkOrders, SaveView, SelectionBreakdown, WaitMap, WaitTable, WorkloadStrip,
@@ -64,6 +65,8 @@ export default function WaitingListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shown]);
   const colors = useMemo(() => serviceColors(all), [all]);
+  const { tags } = useTags();
+  const tagNames = useMemo(() => new Map(tags.map((t) => [t.id, t.name])), [tags]);
   const services = useMemo(() => new Map(all.map((r) => [r.service.id ?? `name:${r.service.name}`, r.service.name])), [all]);
   const picked = shown.filter((r) => selected.has(r.id));
   const pickedTotals = totalsOf(picked);
@@ -124,7 +127,7 @@ export default function WaitingListPage() {
           </div>
         </Popover>
         <input type="search" className="wl-search" placeholder="Search customer, address, service, WO-…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search the waiting list" />
-        <AddFilter rows={all} crews={crews} onAdd={(f: Filter) => setView({ ...view, filters: [...view.filters, f] })} />
+        <AddFilter rows={all} crews={crews} tags={tags} onAdd={(fs: Filter[]) => setView({ ...view, filters: [...view.filters, ...fs.filter((f) => !view.filters.some((x) => x.key === f.key && x.value === f.value))] })} />
         {!upcoming && <button type="button" className="btn" onClick={() => setView({ ...view, filters: [...view.filters, { key: "upcoming", value: "1" }] })} title="Also show work orders whose release date hasn't come yet">Include not released yet</button>}
         <SaveView open={saveOpen} setOpen={setSaveOpen} onSave={saveView} busy={act.busy} />
         <span style={{ marginLeft: "auto" }} />
@@ -134,7 +137,7 @@ export default function WaitingListPage() {
         <div className="cl-chips" aria-label="Filters in use" style={{ marginBottom: 10 }}>
           {view.filters.map((f, i) => (
             <span key={`${f.key}-${f.value}-${i}`} className="cl-chip">
-              <span className="cl-chip-text">{describeFilter(f, { services, crews })}</span>
+              <span className="cl-chip-text">{describeFilter(f, { services, crews, tags: tagNames })}</span>
               <button type="button" className="cl-chip-x" aria-label="Remove this filter" onClick={() => removeFilter(i)}>✕</button>
             </span>
           ))}

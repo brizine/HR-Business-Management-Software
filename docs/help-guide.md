@@ -709,9 +709,13 @@ the list, then **Edit work orders** to schedule them.
   - **Priority** (low, normal or high) and an **appointment window** ("after 1 pm", or 9 am to 12 pm).
 - **Badges** (the **Badges** button explains each): **Missed**, **Closing**, **Too early**, **Needs card**,
   **High priority**, **Dog** (from the property's pets), **Text ahead** and **Call ahead**.
-- **Filters** show as chips (✕ removes one): service, **Map Code starts with** (80 matches 801 and 802), city, ZIP,
-  priority, badge, preferred crew (or none), **within X miles of a property**, due by and eligible by, plus the
-  search box. Several of one kind match any of them (Round 3 or Round 4). They apply to the map and the list.
+- **Filters** show as chips (✕ removes one): service, **tag**, **Map Code**, city, ZIP, priority, badge, preferred
+  crew (or none), **within X miles of a property**, due by and eligible by, plus the search box. Several of one kind
+  match any of them (Round 3 or Round 4). They apply to the map and the list.
+  - **Tag:** search the list and tick one or more tags (the number is how many on the list have it). It matches
+    tags on the work order, the customer or the property.
+  - **Map Code:** **is** for exact codes, or **starts with** (80 matches 801 and 802). Type several with commas
+    between them, e.g. **801, 802, 805**.
 - **Views:** ready-made ones (Closing or missed, High priority, Needs a card, Back from the schedule, Coming up)
   and your own: **Save view** keeps the filters, columns and sort, just for you or **shared with everyone**.
 - **The map:** a pin per work order, colored by service, with a **red ring** when it's closing or missed. Nearby pins

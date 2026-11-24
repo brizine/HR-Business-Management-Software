@@ -9,6 +9,7 @@ import {
 import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { Popover, readLocal, writeLocal } from "./customer-list";
+import { TagChip, type Tag } from "./customers";
 import { Icon } from "./icons";
 import { ErrorBox } from "./ui";
 
@@ -75,16 +76,21 @@ function EstHours({ r }: { r: WaitRow }) {
 /* ───────────── Filters ───────────── */
 
 export const FILTER_KINDS: { key: string; label: string }[] = [
-  { key: "service", label: "Service" }, { key: "mc", label: "Map Code starts with" }, { key: "city", label: "City" }, { key: "zip", label: "ZIP" },
+  { key: "service", label: "Service" }, { key: "tag", label: "Tag" }, { key: "mc", label: "Map Code" }, { key: "city", label: "City" }, { key: "zip", label: "ZIP" },
   { key: "priority", label: "Priority" }, { key: "badge", label: "Badge" }, { key: "crew", label: "Preferred crew" }, { key: "near", label: "Within miles of a property" },
   { key: "due", label: "Due by on or before" }, { key: "eligible", label: "Eligible by" },
 ];
 
-export function describeFilter(f: Filter, ctx: { services: Map<string, string>; crews: Crew[] }) {
+/** Map Codes typed with commas between them ("801, 802, 805"). */
+export const mapCodeList = (v: string) => v.split(",").map((x) => x.trim()).filter(Boolean);
+
+export function describeFilter(f: Filter, ctx: { services: Map<string, string>; crews: Crew[]; tags?: Map<string, string> }) {
   switch (f.key) {
     case "q": return `Search: ${f.value}`;
     case "service": return `Service: ${ctx.services.get(f.value) ?? "a removed service"}`;
-    case "mc": return `MC starts with ${f.value}`;
+    case "mc": return `MC starts with ${mapCodeList(f.value).join(" or ")}`;
+    case "mcIs": return `MC ${mapCodeList(f.value).join(", ")}`;
+    case "tag": return `Tag: ${ctx.tags?.get(f.value) ?? "a removed tag"}`;
     case "city": return `City: ${f.value}`;
     case "zip": return `ZIP: ${f.value}`;
     case "priority": return `Priority: ${PRIORITY_LABELS[f.value as Priority] ?? f.value}`;
@@ -103,7 +109,9 @@ function matches(r: WaitRow, f: Filter): boolean {
   switch (f.key) {
     case "q": return `${r.customer.name} ${r.property.address} ${r.title} ${r.service.name} ${visitNumber(r.number)}`.toLowerCase().includes(v);
     case "service": return r.serviceTypeIds.includes(f.value) || serviceKey(r) === f.value;
-    case "mc": return (r.property.mapCode ?? "").toLowerCase().startsWith(v);
+    case "mc": { const mc = (r.property.mapCode ?? "").toLowerCase(); return !!mc && mapCodeList(v).some((c) => mc.startsWith(c)); }
+    case "mcIs": { const mc = (r.property.mapCode ?? "").toLowerCase(); return !!mc && mapCodeList(v).includes(mc); }
+    case "tag": return r.tagIds.includes(f.value) || r.customer.tagIds.includes(f.value) || r.property.tagIds.includes(f.value);
     case "city": return (r.property.city ?? "").toLowerCase() === v;
     case "zip": return (r.property.zip ?? "").startsWith(v);
     case "priority": return r.priority === f.value;
@@ -126,26 +134,41 @@ export function applyFilters(rows: WaitRow[], filters: Filter[]) {
 }
 
 /** Adds one filter: pick the kind, then its value (choices come from what's on the list). */
-export function AddFilter({ rows, crews, onAdd }: { rows: WaitRow[]; crews: Crew[]; onAdd: (f: Filter) => void }) {
+export function AddFilter({ rows, crews, tags, onAdd }: { rows: WaitRow[]; crews: Crew[]; tags: Tag[]; onAdd: (fs: Filter[]) => void }) {
   const [open, setOpen] = useState(false);
   const [key, setKey] = useState("service");
   const [value, setValue] = useState("");
   const [mi, setMi] = useState("2");
+  const [mcOp, setMcOp] = useState<"is" | "starts">("is");
+  const [tagQ, setTagQ] = useState("");
+  const [tagPicks, setTagPicks] = useState<string[]>([]);
   const opts = useMemo(() => {
     const uniq = (xs: (string | null)[]) => [...new Set(xs.filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     return {
       service: [...new Map(rows.map((r) => [serviceKey(r), r.service.name])).entries()].sort((a, b) => a[1].localeCompare(b[1])),
       city: uniq(rows.map((r) => r.property.city)),
+      // How many on the list carry each tag (on the work order, customer or property).
+      tagCounts: rows.reduce((m, r) => { for (const id of new Set([...r.tagIds, ...r.customer.tagIds, ...r.property.tagIds])) m.set(id, (m.get(id) ?? 0) + 1); return m; }, new Map<string, number>()),
       near: rows.filter((r) => r.property.lat != null).map((r) => [r.property.id, r.property.street, r.property.lat, r.property.lng] as const).filter((x, i, a) => a.findIndex((y) => y[0] === x[0]) === i).sort((a, b) => a[1].localeCompare(b[1])),
     };
   }, [rows]);
   const add = () => {
+    if (key === "tag") {
+      if (!tagPicks.length) return;
+      onAdd(tagPicks.map((id) => ({ key: "tag", value: id })));
+      setTagPicks([]); setTagQ(""); setOpen(false);
+      return;
+    }
     let v = value.trim();
+    let k = key;
     if (key === "near") { const p = opts.near.find((x) => x[0] === value); if (!p || !(Number(mi) > 0)) return; v = `${p[2]},${p[3]},${Number(mi)},${p[1]}`; }
+    if (key === "mc") { v = mapCodeList(v).join(", "); k = mcOp === "is" ? "mcIs" : "mc"; }
     if (!v) return;
-    onAdd({ key, value: v });
+    onAdd([{ key: k, value: v }]);
     setValue(""); setOpen(false);
   };
+  const shownTags = tags.filter((t) => (!t.archived || tagPicks.includes(t.id)) && (!tagQ.trim() || t.name.toLowerCase().includes(tagQ.trim().toLowerCase())))
+    .sort((a, b) => (opts.tagCounts.get(b.id) ? 1 : 0) - (opts.tagCounts.get(a.id) ? 1 : 0) || a.name.localeCompare(b.name));
   let input: ReactNode;
   switch (key) {
     case "service": input = <select aria-label="Service" value={value} onChange={(e) => setValue(e.target.value)}><option value="">Pick a service</option>{opts.service.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select>; break;
@@ -160,7 +183,33 @@ export function AddFilter({ rows, crews, onAdd }: { rows: WaitRow[]; crews: Crew
       </div>
     ); break;
     case "due": case "eligible": input = <input aria-label="Date" type="date" value={value} onChange={(e) => setValue(e.target.value)} />; break;
-    default: input = <input aria-label="Value" value={value} onChange={(e) => setValue(e.target.value)} placeholder={key === "mc" ? "e.g. 80 (matches 801, 802…)" : ""} />;
+    case "mc": input = (
+      <div className="stack" style={{ gap: 6 }}>
+        <div className="cl-editor-row">
+          <select aria-label="Map Code comparison" value={mcOp} onChange={(e) => setMcOp(e.target.value as "is" | "starts")}>
+            <option value="is">is</option><option value="starts">starts with</option>
+          </select>
+          <input aria-label="Map Codes" autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder={mcOp === "is" ? "801, 802, 805" : "80, 81"} />
+        </div>
+        <span className="muted" style={{ fontSize: 12 }}>Separate several with commas. {mcOp === "is" ? "Matches those exact Map Codes." : "80 matches 801, 802 and so on."}</span>
+      </div>
+    ); break;
+    case "tag": input = (
+      <div className="stack" style={{ gap: 6 }}>
+        <input type="search" aria-label="Search tags" autoFocus value={tagQ} onChange={(e) => setTagQ(e.target.value)} placeholder="Search tags" />
+        <div className="wl-tag-list" role="group" aria-label="Tags">
+          {shownTags.map((t) => (
+            <label key={t.id} className="check">
+              <input type="checkbox" checked={tagPicks.includes(t.id)} onChange={(e) => setTagPicks(e.target.checked ? [...tagPicks, t.id] : tagPicks.filter((x) => x !== t.id))} />
+              <TagChip tag={t} /> <span className="muted">{opts.tagCounts.get(t.id) ?? 0}</span>
+            </label>
+          ))}
+          {!shownTags.length && <p className="muted" style={{ margin: 0 }}>{tags.length ? "No tags match." : "No tags yet (Settings → Customers & billing)."}</p>}
+        </div>
+        <span className="muted" style={{ fontSize: 12 }}>Shows work orders with any ticked tag, on the work order, the customer or the property.</span>
+      </div>
+    ); break;
+    default: input = <input aria-label="Value" value={value} onChange={(e) => setValue(e.target.value)} />;
   }
   return (
     <Popover open={open} setOpen={setOpen} label={<><Icon name="sliders" size={14} /> Filter</>} className="cl-pop-wide">
@@ -169,7 +218,7 @@ export function AddFilter({ rows, crews, onAdd }: { rows: WaitRow[]; crews: Crew
           {FILTER_KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
         </select>
         {input}
-        <div className="row"><button className="btn primary">Apply filter</button><button type="button" className="btn" onClick={() => setOpen(false)}>Cancel</button></div>
+        <div className="row"><button className="btn primary" disabled={key === "tag" && !tagPicks.length}>Apply filter{key === "tag" && tagPicks.length > 1 ? ` (${tagPicks.length} tags)` : ""}</button><button type="button" className="btn" onClick={() => setOpen(false)}>Cancel</button></div>
       </form>
     </Popover>
   );

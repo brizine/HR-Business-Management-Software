@@ -1601,3 +1601,5 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .wl-legend-list { display: grid; gap: 6px; font-size: 13px; }
 .wl-adds { font-size: 13px; }
 @media (max-width: 700px) { .wl-search { width: 100%; } .wl-table-wrap { max-height: none; } .wl-map-bar .row { margin-left: 0 !important; } }
+.wl-tag-list { display: grid; gap: 4px; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
+.wl-tag-list .check { display: flex; align-items: center; gap: 6px; }
