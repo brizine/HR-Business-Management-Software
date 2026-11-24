@@ -57,6 +57,9 @@ beforeAll(async () => {
     ID[who] = (await call("POST", "/employees", "owner", { firstName: who, lastName: "Person", email: email(who), password: "password123", role })).body.id;
     T[who] = (await app.inject({ method: "POST", url: "/auth/login", payload: { email: email(who), password: "password123" } })).json().token;
   }
+  // Chemical Tracking: admins always; the office manager is added to the access list.
+  const officeId = (await call("GET", "/chemical-tracking/access", "owner")).body.people.find((p: { name: string }) => p.name === "office Person").id;
+  await call("PUT", `/chemical-tracking/access/${officeId}`, "owner");
   await call("POST", "/crm/sample-customers", "owner", {});
   ID.jane = (await call("GET", "/customers?q=jane", "office")).body.rows[0].id;
   ID.janeProp = (await call("GET", `/customers/${ID.jane}`, "office")).body.properties[0].id;
@@ -77,8 +80,9 @@ beforeAll(async () => {
     rates: [{ name: "Standard", amountPer1000: 0.25, method: "truck_spray", carrierGalPer1000: 2 }],
   })).body;
   ID.surf = surf.id;
-  ID.round = (await call("POST", "/service-types", "owner", { name: "Round 1", pricing: "flat", priceCents: 6500, incomeAccountCode: "4000", chemical: true, applicationSite: "Turf – front and back lawn" })).body.id;
-  await call("PUT", `/service-types/${ID.round}/products`, "owner", { products: [{ productId: herb.id, productRateId: herb.rates[0].id }, { productId: surf.id, productRateId: surf.rates[0].id }] });
+  ID.round = (await call("POST", "/service-types", "owner", { name: "Round 1", pricing: "flat", priceCents: 6500, incomeAccountCode: "4000", chemical: true })).body.id;
+  await call("PUT", `/chemical-tracking/services/${ID.round}`, "owner", { applicationSite: "Turf – front and back lawn" });
+  await call("PUT", `/chemical-tracking/services/${ID.round}/products`, "owner", { products: [{ productId: herb.id, productRateId: herb.rates[0].id }, { productId: surf.id, productRateId: surf.rates[0].id }] });
 });
 
 afterAll(async () => {
@@ -98,7 +102,7 @@ describe("chemical application records", () => {
   });
 
   it("records every ODAFF item for a completed application", async () => {
-    expect((await call("PUT", "/chemical-records/settings", "office", { pesticideLicenseNo: "X" })).status).toBe(403);
+    expect((await call("PUT", "/chemical-records/settings", "tech", { pesticideLicenseNo: "X" })).status).toBe(403);
     await call("PUT", "/chemical-records/settings", "owner", { pesticideLicenseNo: "OK-12345" });
     expect((await call("PUT", `/chemical-records/applicators/${ID.tech}`, "owner", { certNo: "C-998877", expiresOn: "2099-12-31", categories: "3A" })).status).toBe(200);
     expect((await uploadLabel(ID.herb)).status).toBe(200);
@@ -138,7 +142,7 @@ describe("chemical application records", () => {
   });
 
   it("flags a missing required adjuvant, an expired certification and a PO Box", async () => {
-    await call("PUT", `/service-types/${ID.round}/products`, "owner", { products: [{ productId: ID.herb, productRateId: (await call("GET", `/products/${ID.herb}`, "owner")).body.rates[0].id }] });
+    await call("PUT", `/chemical-tracking/services/${ID.round}/products`, "owner", { products: [{ productId: ID.herb, productRateId: (await call("GET", `/products/${ID.herb}`, "owner")).body.rates[0].id }] });
     await call("PUT", `/chemical-records/applicators/${ID.tech}`, "owner", { certNo: "C-998877", expiresOn: "2020-01-31" });
     const prop = Object.fromEntries(Object.entries((await call("GET", `/properties/${ID.janeProp}`, "office")).body).filter(([, v]) => v != null));
     expect((await call("PUT", `/properties/${ID.janeProp}`, "office", { ...prop, street: "PO Box 55" })).status).toBe(200);

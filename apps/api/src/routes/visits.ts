@@ -1,3 +1,4 @@
+import { hasChemicalAccess } from "../lib/chemicalAccess";
 import { randomUUID } from "node:crypto";
 import { fileView, sendStored, storeUpload } from "../lib/attachments";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
@@ -394,8 +395,8 @@ const routes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { id: string } }>("/:id/products", async (req) => {
     const v = await findVisit(req, req.params.id);
     const rows = await visitProductRows(v.id);
-    // Crews see what was applied; costs are for the office.
-    return canManageVisits(req) ? rows : rows.map(({ costPerUseUnitCents: _c, costCents: _t, productCostId: _p, ...r }) => r);
+    // Crews see what was applied; costs only for Chemical Tracking (admins and the people they add).
+    return (await hasChemicalAccess(req)) ? rows : rows.map(({ costPerUseUnitCents: _c, costCents: _t, productCostId: _p, ...r }) => r);
   });
 
   /** A draft invoice from this work order. */

@@ -1,7 +1,8 @@
 /**
  * The tech's chemicals step: products prefilled from the service with how they're usually applied
- * (a Spray Mix sheet), rates from the sheet's linked rows, products marked not used, spot
- * treatments added, and the area / site; all of it on the chemical record.
+ * (a Chemical Tracking application method) and the product's rate for that method, products marked
+ * not used, spot treatments added, and the area / site; all of it on the chemical record. Nothing
+ * reads the Spray Mix Calculator, where any tech can change a rate.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
@@ -46,23 +47,32 @@ beforeAll(async () => {
   today = (await call("GET", "/todos?limit=1", "owner")).body.today;
   await call("PUT", "/weather/settings", "owner", { mode: "off" });
 
-  const pre = (await call("POST", "/products", "owner", { name: "Sample Pre-Emergent", productType: "herbicide", epaRegNo: "0000-1", useUnit: "ounces liquid", rates: [{ name: "High", amountPer1000: 0.57, method: "truck_spray", carrierGalPer1000: 2 }] })).body;
-  const fert = (await call("POST", "/products", "owner", { name: "Sample Fertilizer", productType: "fertilizer", useUnit: "pounds dry", trackRecords: true, rates: [{ name: "Spring", amountPer1000: 3, method: "push_spreader" }] })).body;
-  const spot = (await call("POST", "/products", "owner", { name: "Sample Spot Herbicide", productType: "herbicide", epaRegNo: "0000-2", useUnit: "ounces liquid", rates: [{ name: "Spot", amountPer1000: 1.5, method: "backpack", carrierGalPer1000: 1 }] })).body;
+  // The starting application methods, added the first time Chemical Tracking is opened.
+  const methods = (await call("GET", "/chemical-tracking/methods", "owner")).body as { id: string; name: string; galPer1000: number | null }[];
+  expect(methods.map((m) => [m.name, m.galPer1000])).toEqual([
+    ["Truck 2gal/1000ft", 2], ["Truck 1.5gal/1000ft", 1.5], ["Backpack 1gal/1000ft", 1], ["ZSpray (Green Tips)", 0.2548], ["Spreader (not mixed)", null],
+  ]);
+  ID.truck = methods[0].id; ID.pack = methods[2].id; ID.dry = methods[4].id;
+  expect((await call("GET", "/chemical-tracking/methods", "tech")).status).toBe(403);
+
+  // Each product has a rate for each way it's applied.
+  const pre = (await call("POST", "/products", "owner", { name: "Sample Pre-Emergent", productType: "herbicide", epaRegNo: "0000-1", useUnit: "ounces liquid",
+    rates: [{ name: "Truck", amountPer1000: 0.6, applicationMethodId: ID.truck }, { name: "Backpack", amountPer1000: 0.7, applicationMethodId: ID.pack }] })).body;
+  expect(pre.rates.map((r: any) => [r.name, r.carrierGalPer1000, r.applicationMethodId])).toEqual([["Truck", 2, ID.truck], ["Backpack", 1, ID.pack]]);
+  const fert = (await call("POST", "/products", "owner", { name: "Sample Fertilizer", productType: "fertilizer", useUnit: "pounds dry", trackRecords: true, rates: [{ name: "Spring", amountPer1000: 3, applicationMethodId: ID.dry }] })).body;
+  const spot = (await call("POST", "/products", "owner", { name: "Sample Spot Herbicide", productType: "herbicide", epaRegNo: "0000-2", useUnit: "ounces liquid", rates: [{ name: "Spot", amountPer1000: 1.5, applicationMethodId: ID.pack }] })).body;
   ID.pre = pre.id; ID.fert = fert.id; ID.spot = spot.id;
   ID.other = (await call("POST", "/products", "other", { name: "Theirs", useUnit: "ounces liquid" })).body.id;
+  ID.otherMethod = (await call("GET", "/chemical-tracking/methods", "other")).body[0].id;
+  expect((await call("POST", "/products", "owner", { name: "Bad", useUnit: "ounces liquid", rates: [{ name: "X", amountPer1000: 1, applicationMethodId: ID.otherMethod }] })).status).toBe(400);
 
-  // Spray Mix sheets: Truck 2 gal/1,000 (87.12 gal/acre) and Backpack 1 gal/1,000 (43.56).
-  ID.truck = (await call("POST", "/spray-mixes", "owner", { name: "Truck 2gal/1000ft", gallonsPerAcre: 87.12, defaultTankGallons: 75 })).body.id;
-  ID.pack = (await call("POST", "/spray-mixes", "owner", { name: "Backpack 1gal/1000ft", gallonsPerAcre: 43.56, defaultTankGallons: 4 })).body.id;
-  const truckRow = (await call("POST", `/spray-mixes/${ID.truck}/products`, "owner", { name: "Pre-Emergent", ratePerAcre: 26.136, unit: "ounces liquid" })).body;
-  const packRow = (await call("POST", `/spray-mixes/${ID.pack}/products`, "owner", { name: "Pre-Emergent", ratePerAcre: 30.492, unit: "ounces liquid" })).body;
-  expect((await call("PUT", `/spray-mixes/products/${truckRow.id}/catalog`, "owner", { catalogId: pre.id })).status).toBe(200);
-  expect((await call("PUT", `/spray-mixes/products/${packRow.id}/catalog`, "owner", { catalogId: pre.id })).status).toBe(200);
-  expect((await call("PUT", `/spray-mixes/products/${packRow.id}/catalog`, "other", { catalogId: pre.id })).status).toBe(404);
+  // A Spray Mix sheet with a different rate changes nothing here.
+  const sheet = (await call("POST", "/spray-mixes", "owner", { name: "Truck 2gal/1000ft", gallonsPerAcre: 87.12, defaultTankGallons: 75 })).body.id;
+  await call("POST", `/spray-mixes/${sheet}/products`, "owner", { name: "Sample Pre-Emergent", ratePerAcre: 99, unit: "ounces liquid" });
 
-  ID.round = (await call("POST", "/service-types", "owner", { name: "Round 1", pricing: "flat", priceCents: 6500, incomeAccountCode: "4000", chemical: true, applicationSite: "Turf – front and back lawn" })).body.id;
-  await call("PUT", `/service-types/${ID.round}/products`, "owner", { products: [{ productId: pre.id, productRateId: pre.rates[0].id }, { productId: fert.id, productRateId: fert.rates[0].id }] });
+  ID.round = (await call("POST", "/service-types", "owner", { name: "Round 1", pricing: "flat", priceCents: 6500, incomeAccountCode: "4000", chemical: true })).body.id;
+  await call("PUT", `/chemical-tracking/services/${ID.round}`, "owner", { applicationSite: "Turf – front and back lawn" });
+  await call("PUT", `/chemical-tracking/services/${ID.round}/products`, "owner", { products: [{ productId: pre.id, productRateId: pre.rates[0].id }, { productId: fert.id, productRateId: fert.rates[0].id }] });
   ID.mow = (await call("POST", "/service-types", "owner", { name: "Mowing", pricing: "flat", priceCents: 4000, incomeAccountCode: "4000" })).body.id;
 });
 
@@ -73,20 +83,21 @@ afterAll(async () => {
 });
 
 describe("the tech's chemicals step", () => {
-  it("prefills the service's products with the matching Spray Mix sheet and its linked rate", async () => {
+  it("prefills the service's products with their usual method and the rate for it", async () => {
     ID.wo = (await call("POST", "/visits", "owner", workOrder(ID.round))).body.id;
     const o = (await call("GET", `/visits/${ID.wo}/chemicals`, "tech")).body;
     expect(o.chemical).toBe(true);
     expect(o.site).toBe("Turf – front and back lawn");
-    expect(o.methods.map((m: any) => m.name)).toEqual(["Truck 2gal/1000ft", "Backpack 1gal/1000ft", "Spreader (not mixed)"]);
+    expect(o.methods.map((m: any) => m.name)).toEqual(["Truck 2gal/1000ft", "Truck 1.5gal/1000ft", "Backpack 1gal/1000ft", "ZSpray (Green Tips)", "Spreader (not mixed)"]);
     const lawn = o.areaSqFt;
     expect(o.items.map((i: any) => [i.productName, i.methodId, Math.round(i.ratePer1000 * 1000) / 1000])).toEqual([
-      ["Sample Pre-Emergent", ID.truck, 0.6], // 26.136 oz/acre on the truck sheet
-      ["Sample Fertilizer", "dry", 3],
+      ["Sample Pre-Emergent", ID.truck, 0.6], // not the Spray Mix sheet's 99 oz/acre
+      ["Sample Fertilizer", ID.dry, 3],
     ]);
     expect(o.items[0].amount).toBeCloseTo((0.6 * lawn) / 1000, 6);
     const pre = o.products.find((p: any) => p.id === ID.pre);
-    expect(pre.bySheet[ID.pack]).toBeCloseTo(0.7, 6); // 30.492 oz/acre on the backpack sheet
+    expect(pre.byMethod[ID.pack]).toBe(0.7);
+    expect(pre.byMethod[ID.dry]).toBe(0.6); // no rate for that method: its first rate
     expect(o.products.some((p: any) => p.id === ID.other)).toBe(false);
     expect(JSON.stringify(o)).not.toMatch(/cost/i);
   });
@@ -99,7 +110,7 @@ describe("the tech's chemicals step", () => {
         areaSqFt: 6000, site: "Turf – front lawn",
         items: [
           { productId: ID.pre, used: true, methodId: ID.pack, ratePer1000: 0.7, amount: 4.2 },
-          { productId: ID.fert, used: false, methodId: "dry", ratePer1000: 3, amount: 18 },
+          { productId: ID.fert, used: false, methodId: ID.dry, ratePer1000: 3, amount: 18 },
           { productId: ID.spot, used: true, methodId: ID.pack, ratePer1000: 1.5, amount: 0.75 },
         ],
       },
@@ -120,18 +131,18 @@ describe("the tech's chemicals step", () => {
   it("records dry products as not mixed", async () => {
     const wo = (await call("POST", "/visits", "owner", workOrder(ID.round))).body.id;
     await call("POST", `/visits/${wo}/start`, "tech", {});
-    await call("POST", `/visits/${wo}/complete`, "tech", { chemicals: { items: [{ productId: ID.fert, used: true, methodId: "dry", ratePer1000: 3, amount: 30 }] } });
+    await call("POST", `/visits/${wo}/complete`, "tech", { chemicals: { items: [{ productId: ID.fert, used: true, methodId: ID.dry, ratePer1000: 3, amount: 30 }] } });
     const r = await recordFor(wo);
     expect(r.tankMixGal).toBeNull();
     expect(r.products[0]).toMatchObject({ tradeName: "Sample Fertilizer", methodName: "Spreader (not mixed)", dilutionPerGal: null, amount: 30 });
   });
 
-  it("refuses another company's product or a method that isn't a Spray Mix sheet", async () => {
+  it("refuses another company's product or method", async () => {
     const wo = (await call("POST", "/visits", "owner", workOrder(ID.round))).body.id;
-    const theirs = await call("POST", `/visits/${wo}/complete`, "tech", { chemicals: { items: [{ productId: ID.other, used: true, methodId: "dry", ratePer1000: 1, amount: 1 }] } });
+    const theirs = await call("POST", `/visits/${wo}/complete`, "tech", { chemicals: { items: [{ productId: ID.other, used: true, methodId: ID.dry, ratePer1000: 1, amount: 1 }] } });
     expect(theirs.status).toBe(400);
-    const noSheet = await call("POST", `/visits/${wo}/complete`, "tech", { chemicals: { items: [{ productId: ID.pre, used: true, methodId: "00000000-0000-4000-8000-000000000000", ratePer1000: 1, amount: 1 }] } });
-    expect(noSheet.status).toBe(400);
+    const notOurs = await call("POST", `/visits/${wo}/complete`, "tech", { chemicals: { items: [{ productId: ID.pre, used: true, methodId: ID.otherMethod, ratePer1000: 1, amount: 1 }] } });
+    expect(notOurs.status).toBe(400);
     expect((await call("GET", `/visits/${wo}`, "owner")).body.status).not.toBe("completed");
   });
 
@@ -141,9 +152,27 @@ describe("the tech's chemicals step", () => {
     await call("POST", `/visits/${wo}/complete`, "tech", {});
     const r = await recordFor(wo);
     expect(r.products.map((p: any) => [p.tradeName, p.methodName, p.carrierGalPer1000])).toEqual([
-      ["Sample Pre-Emergent", "Spray – truck", 2],
-      ["Sample Fertilizer", "Spreader – push", null],
+      ["Sample Pre-Emergent", "Truck 2gal/1000ft", 2],
+      ["Sample Fertilizer", "Spreader (not mixed)", null],
     ]);
+  });
+
+  it("changing a method's spray volume updates its rates; records already made keep theirs", async () => {
+    const methods = (await call("GET", "/chemical-tracking/methods", "owner")).body as any[];
+    const pack = methods.find((m) => m.id === ID.pack);
+    expect(pack.timesUsed).toBeGreaterThan(0);
+    expect((await call("DELETE", `/chemical-tracking/methods/${ID.pack}`, "owner")).status).toBe(409);
+    expect((await call("PUT", `/chemical-tracking/methods/${ID.pack}`, "owner", { name: "Backpack 1.25gal/1000ft", galPer1000: 1.25, active: true })).status).toBe(200);
+    const spot = (await call("GET", `/products/${ID.spot}`, "owner")).body;
+    expect(spot.rates[0].carrierGalPer1000).toBe(1.25);
+    const r = await recordFor(ID.wo);
+    expect(r.products[0]).toMatchObject({ methodName: "Backpack 1gal/1000ft", carrierGalPer1000: 1 });
+    // An unused method can be removed; turning one off hides it from techs.
+    const zspray = methods.find((m) => m.name === "ZSpray (Green Tips)");
+    expect((await call("PUT", `/chemical-tracking/methods/${zspray.id}`, "owner", { name: zspray.name, galPer1000: zspray.galPer1000, active: false })).status).toBe(200);
+    const wo = (await call("POST", "/visits", "owner", workOrder(ID.round))).body.id;
+    expect((await call("GET", `/visits/${wo}/chemicals`, "tech")).body.methods.map((m: any) => m.name)).not.toContain("ZSpray (Green Tips)");
+    expect((await call("DELETE", `/chemical-tracking/methods/${zspray.id}`, "owner")).status).toBe(200);
   });
 
   it("doesn't ask for chemicals on a work order without chemical services", async () => {

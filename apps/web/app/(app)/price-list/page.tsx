@@ -1,6 +1,7 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
-import { INCOME_ACCOUNTS, PRICING_KINDS, PRICING_LABELS, appliesOn, costPerUseUnitCents, describePricing, formatMoney, formatRateAmount, priceFor, sizeMinutes, type PricedService, type PricingKind } from "@crewdesk/shared";
+import { INCOME_ACCOUNTS, PRICING_KINDS, PRICING_LABELS, describePricing, formatMoney, formatRateAmount, priceFor, sizeMinutes, type PricedService, type PricingKind } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi, useNewForm } from "@/lib/hooks";
@@ -72,7 +73,6 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
   const [active, setActive] = useState(service?.active ?? true);
   const [taxable, setTaxable] = useState(service?.taxable ?? false);
   const [chemical, setChemical] = useState(service?.chemical ?? false);
-  const [site, setSite] = useState(service?.applicationSite ?? "Turf");
   const [tiers, setTiers] = useState<{ from: string; rate: string }[]>(
     service?.tiers?.length ? service.tiers.map((t) => ({ from: String(t.fromSqFt), rate: dollars(t.ratePer1000Cents) })) : [{ from: "3000", rate: "" }, { from: "6000", rate: "" }, { from: "10000", rate: "" }],
   );
@@ -81,22 +81,12 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
   const [roundTo, setRoundTo] = useState(String(service?.roundToCents ?? 50));
   const [maxAuto, setMaxAuto] = useState(service?.maxAutoSqFt != null ? String(service.maxAutoSqFt) : "");
   const [target, setTarget] = useState(service?.targetCentsPerHour != null ? dollars(service.targetCentsPerHour) : "");
-  const [links, setLinks] = useState<{ productId: string; productRateId: string; startDate: string; endDate: string }[]>(
-    (service?.products ?? []).map((l) => ({ productId: l.productId, productRateId: l.productRateId, startDate: l.startDate ?? "", endDate: l.endDate ?? "" })),
-  );
-  const catalog = useApi<CatalogProduct[]>("/products");
   const [setupMin, setSetupMin] = useState(service?.setupMinutes != null ? String(service.setupMinutes) : "");
   const [per1000, setPer1000] = useState(service?.minutesPer1000 != null ? String(service.minutesPer1000) : "");
   const { busy, error, run, setError } = useAction();
   const today = new Date().toISOString().slice(0, 10);
-  const linkCost = (l: { productId: string; productRateId: string }) => {
-    const p = catalog.data?.find((x) => x.id === l.productId);
-    const r = p?.rates.find((x) => x.id === l.productRateId);
-    const perUse = p ? costPerUseUnitCents(p.currentCost?.costPerPurchaseUnitCents, p.purchaseUnitSize) : null;
-    return { p, r, cost: r && perUse != null ? r.amountPer1000 * perUse : null };
-  };
-  const applying = links.filter((l) => l.productRateId && appliesOn({ startDate: l.startDate || null, endDate: l.endDate || null }, today));
-  const materialPer1000 = applying.length ? applying.reduce((s, l) => s + (linkCost(l).cost ?? 0), 0) : null;
+  // Material comes from Chemical Tracking (the service's products and today's costs); read-only here.
+  const materialPer1000 = service?.materialPer1000Cents ?? null;
   const num = (v: string) => Number(v.replace(/[,\s]/g, ""));
   /** The volume-discount fields as the API takes them, from what's typed so far. */
   const tieredDraft = () => {
@@ -114,7 +104,7 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
     <form className="card stack" onSubmit={(e) => {
       e.preventDefault();
       const body: Record<string, unknown> = {
-        name, description: description || undefined, pricing, incomeAccountCode, active, taxable, chemical, applicationSite: chemical ? site : null, priceCents: 0, minimumCents: 0, brackets: [],
+        name, description: description || undefined, pricing, incomeAccountCode, active, taxable, chemical, priceCents: 0, minimumCents: 0, brackets: [],
         setupMinutes: setupMin.trim() === "" ? null : Number(setupMin), minutesPer1000: per1000.trim() === "" ? null : Number(per1000),
         targetCentsPerHour: target.trim() ? toCents(target) : null,
       };
@@ -132,11 +122,7 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
         body.brackets = list.map((b, i) => ({ upToSqFt: i === list.length - 1 && !b.upTo.trim() ? null : Number(b.upTo.replace(/,/g, "")), priceCents: toCents(b.price) }));
       }
       run(async () => {
-        const saved = await api<{ id: string }>(service ? `/service-types/${service.id}` : "/service-types", { method: service ? "PUT" : "POST", body });
-        const used = links.filter((l) => l.productId && l.productRateId);
-        if (service || used.length) {
-          await api(`/service-types/${saved.id}/products`, { method: "PUT", body: { products: used.map((l) => ({ ...l, startDate: l.startDate || null, endDate: l.endDate || null })) } });
-        }
+        await api<{ id: string }>(service ? `/service-types/${service.id}` : "/service-types", { method: service ? "PUT" : "POST", body });
         onDone();
       });
     }}>
@@ -198,38 +184,7 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
           </fieldset>
         );
       })()}
-      <fieldset className="contacts">
-        <legend>Products applied <span className="muted">(budgets material cost; saved on each completed work order at that day's price)</span></legend>
-        {links.map((l, i) => {
-          const { p, cost } = linkCost(l);
-          const upd = (patch: Partial<typeof l>) => setLinks(links.map((x, j) => (j === i ? { ...x, ...patch } : x)));
-          return (
-            <div key={i} className="row">
-              <label style={{ flex: 1, minWidth: 200 }}>Product
-                <select value={l.productId} onChange={(e) => { const np = catalog.data?.find((x) => x.id === e.target.value); upd({ productId: e.target.value, productRateId: np?.rates[0]?.id ?? "" }); }}>
-                  <option value="">Pick a product…</option>
-                  {catalog.data?.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-                </select>
-              </label>
-              <label style={{ width: 200 }}>Rate per 1,000 sq ft
-                <select value={l.productRateId} onChange={(e) => upd({ productRateId: e.target.value })} disabled={!p}>
-                  {!p?.rates.length && <option value="">No rates yet</option>}
-                  {p?.rates.map((r) => <option key={r.id} value={r.id}>{r.name}: {formatRateAmount(r.amountPer1000, p.useUnit)}</option>)}
-                </select>
-              </label>
-              <label style={{ width: 150 }}>From <span className="muted">(optional)</span><input type="date" value={l.startDate} onChange={(e) => upd({ startDate: e.target.value })} /></label>
-              <label style={{ width: 150 }}>Until <span className="muted">(optional)</span><input type="date" value={l.endDate} onChange={(e) => upd({ endDate: e.target.value })} /></label>
-              <div className="muted" style={{ alignSelf: "flex-end", minWidth: 110 }}>{p && l.productRateId ? (cost == null ? "no cost yet" : `${formatMoney(Math.round(cost))} / 1,000`) : ""}</div>
-              <button type="button" className="btn" style={{ alignSelf: "flex-end" }} onClick={() => setLinks(links.filter((_, j) => j !== i))}>Remove</button>
-            </div>
-          );
-        })}
-        <div className="row">
-          <button type="button" className="btn" onClick={() => setLinks([...links, { productId: "", productRateId: "", startDate: "", endDate: "" }])}>Add a product</button>
-          {materialPer1000 != null && <span><strong>Material today: {formatMoney(Math.round(materialPer1000))} per 1,000 sq ft</strong></span>}
-          {catalog.data && !catalog.data.length && <span className="muted">Add products on the Products page first.</span>}
-        </div>
-      </fieldset>
+      <MaterialSummary service={service} />
       <fieldset className="contacts">
         <legend>Time estimate <span className="muted">(for the waiting list until a property has its own history)</span></legend>
         <div className="formgrid">
@@ -243,7 +198,6 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
       </fieldset>
       <label>Description (optional)<input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
       <label className="check"><input type="checkbox" checked={chemical} onChange={(e) => setChemical(e.target.checked)} /> Chemical application <span className="muted">(record the weather when it&apos;s completed; see Field → Weather)</span></label>
-      {chemical && <label>Site where applied <span className="muted">(on chemical records, e.g. Turf – front and back lawn)</span><input value={site} onChange={(e) => setSite(e.target.value)} /></label>}
       <label className="check"><input type="checkbox" checked={taxable} onChange={(e) => setTaxable(e.target.checked)} /> This is taxable <span className="muted">(gets the sales tax rate on work orders and invoices once sales tax is on)</span></label>
       {service && <label className="check"><input type="checkbox" checked={!active} onChange={(e) => setActive(!e.target.checked)} /> Retired (kept on past invoices, not offered for new ones)</label>}
       <ErrorBox error={error} />
@@ -284,4 +238,21 @@ function RatePreview({ service, setupMinutes, minutesPer1000, targetCents, mater
   );
 }
 
-interface CatalogProduct { id: string; name: string; useUnit: string; purchaseUnitSize: number | null; currentCost: { costPerPurchaseUnitCents: number } | null; rates: { id: string; name: string; amountPer1000: number }[] }
+/** The service's products and material cost, kept in Chemical Tracking (restricted); shown here read-only. */
+function MaterialSummary({ service }: { service: ServiceType | null }) {
+  const { me } = useAuth();
+  const lines = (service?.products ?? []).filter((l) => l.applies);
+  const link = me?.access?.chemicalTracking ? <> Change them in <Link href="/chemical-tracking/services">Chemical Tracking → Services</Link>.</> : " Set in Chemical Tracking.";
+  return (
+    <fieldset className="contacts">
+      <legend>Products applied <span className="muted">(budgets material cost)</span></legend>
+      {lines.length ? (
+        <>
+          {lines.map((l) => <div key={l.id}>{l.productName} <span className="muted">{l.rateName}: {formatRateAmount(l.amountPer1000, l.unit)} / 1,000 sq ft</span></div>)}
+          {service?.materialPer1000Cents != null && <div><strong>Material today: {formatMoney(Math.round(service.materialPer1000Cents))} per 1,000 sq ft</strong>{service.materialMissingCost ? <span className="muted"> ({service.materialMissingCost} without a cost yet)</span> : null}</div>}
+        </>
+      ) : <span className="muted">No products on this service.</span>}
+      <p className="muted" style={{ margin: 0 }}>{link}</p>
+    </fieldset>
+  );
+}

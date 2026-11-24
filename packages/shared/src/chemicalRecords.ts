@@ -126,6 +126,21 @@ export function csvCell(v: unknown) {
 }
 export const csvRow = (cells: unknown[]) => cells.map(csvCell).join(",");
 
+/** An application method (Chemical Tracking): its name and spray volume; no volume = applied dry. */
+export const applicationMethodSchema = z.object({
+  name: z.string().trim().min(1, "Name the method").max(80),
+  galPer1000: z.number().positive().max(1000).nullable(),
+  active: z.boolean().default(true),
+});
+/** A starting list, like the Spray Mix Calculator's sheets, plus a spreader for dry products. */
+export const DEFAULT_APPLICATION_METHODS: { name: string; galPer1000: number | null }[] = [
+  { name: "Truck 2gal/1000ft", galPer1000: 2 },
+  { name: "Truck 1.5gal/1000ft", galPer1000: 1.5 },
+  { name: "Backpack 1gal/1000ft", galPer1000: 1 },
+  { name: "ZSpray (Green Tips)", galPer1000: 0.2548 },
+  { name: "Spreader (not mixed)", galPer1000: null },
+];
+
 /** "How it was applied" for a dry product: no spray mix. */
 export const DRY_METHOD = "dry";
 export const DRY_METHOD_LABEL = "Spreader (not mixed)";
@@ -146,7 +161,7 @@ export const chemicalCompletionSchema = z.object({
   items: z.array(z.object({
     productId: z.string().uuid(),
     used: z.boolean().default(true),
-    methodId: z.string().trim().min(1).max(40),
+    methodId: z.string().uuid("Pick how it was applied"),
     ratePer1000: z.number().nonnegative().max(1_000_000),
     amount: z.number().nonnegative().max(1_000_000),
   })).max(40),

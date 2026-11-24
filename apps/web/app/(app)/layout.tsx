@@ -85,6 +85,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const visibleItems = (items: NavItem[]) => items
     .map((i) => (i.href === "/payroll" && !can("admin", "payroll") && payApprovals?.isApprover ? { ...i, href: "/pay-periods", min: undefined } : i))
     .filter((i) => !i.min || can(i.min, i.area))
+    .filter((i) => i.gate !== "chemical" || !!me?.access?.chemicalTracking)
     // Payroll admins reach Pay & Tax Forms from a button on the Payroll page.
     .filter((i) => !(i.href === "/tax-forms" && can("admin", "payroll")));
   const groupsFor = (s: Side): NavGroup[] => NAV[s].map((g) => ({ ...g, items: visibleItems(g.items) })).filter((g) => g.items.length);

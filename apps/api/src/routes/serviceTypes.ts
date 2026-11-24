@@ -1,9 +1,9 @@
 import type { FastifyPluginAsync } from "fastify";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { serviceProductsSchema, serviceTypeSchema } from "@crewdesk/shared";
+import { serviceTypeSchema } from "@crewdesk/shared";
 import { db } from "../db";
-import { productRates, products, serviceProducts, serviceTypes } from "../db/schema";
+import { serviceTypes } from "../db/schema";
 import { companyToday, materialSummary, serviceProductLines } from "../lib/productCosts";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
@@ -32,36 +32,16 @@ const routes: FastifyPluginAsync = async (app) => {
     }));
   });
 
-  /** Sets the products a service applies (the list sent replaces the one before). */
-  app.put<{ Params: { id: string } }>("/:id/products", admin, async (req) => {
-    const { products: links } = parse(serviceProductsSchema, req.body);
-    const [svc] = await db.select({ id: serviceTypes.id }).from(serviceTypes).where(and(eq(serviceTypes.id, req.params.id), eq(serviceTypes.companyId, req.user.companyId)));
-    if (!svc) throw new HttpError(404, "Service not found");
-    const rateIds = [...new Set(links.map((l) => l.productRateId))];
-    const found = rateIds.length
-      ? await db.select({ rateId: productRates.id, productId: productRates.productId }).from(productRates)
-        .innerJoin(products, eq(products.id, productRates.productId))
-        .where(and(inArray(productRates.id, rateIds), eq(products.companyId, req.user.companyId)))
-      : [];
-    for (const l of links) {
-      if (!found.some((f) => f.rateId === l.productRateId && f.productId === l.productId)) throw new HttpError(400, "Pick one of the product's own rates");
-    }
-    await db.transaction(async (tx) => {
-      await tx.delete(serviceProducts).where(eq(serviceProducts.serviceTypeId, svc.id));
-      if (links.length) await tx.insert(serviceProducts).values(links.map((l, i) => ({ ...l, serviceTypeId: svc.id, sortOrder: i })));
-    });
-    return { ok: true };
-  });
-
   app.post("/", admin, async (req) => {
-    const body = parse(serviceTypeSchema, req.body);
+    // The application site is set in Chemical Tracking, not on the price list.
+    const { applicationSite: _site, ...body } = parse(serviceTypeSchema, req.body);
     const [{ n }] = await db.select({ n: sql<number>`coalesce(max(${serviceTypes.sortOrder}), -1)::int` }).from(serviceTypes).where(eq(serviceTypes.companyId, req.user.companyId));
     const [row] = await db.insert(serviceTypes).values({ ...body, companyId: req.user.companyId, sortOrder: n + 1 }).returning();
     return row;
   });
 
   app.put<{ Params: { id: string } }>("/:id", admin, async (req) => {
-    const body = parse(serviceTypeSchema, req.body);
+    const { applicationSite: _site, ...body } = parse(serviceTypeSchema, req.body);
     const [row] = await db.update(serviceTypes).set(body).where(and(eq(serviceTypes.id, req.params.id), eq(serviceTypes.companyId, req.user.companyId))).returning();
     if (!row) throw new HttpError(404, "Service not found");
     return row;

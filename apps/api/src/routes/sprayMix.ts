@@ -3,7 +3,7 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { SPRAY_MIX_TEMPLATE, hasRole, mixProductSchema, mixSheetSchema, type Role } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
-import { employees, mixChanges, mixEditors, mixProducts, mixSheets, products } from "../db/schema";
+import { employees, mixChanges, mixEditors, mixProducts, mixSheets } from "../db/schema";
 import { authenticate, requireRole, roleIn } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 
@@ -219,29 +219,6 @@ const routes: FastifyPluginAsync = async (app) => {
     const names = new Map(current.map((p) => [p.id, p.name]));
     await log(req, sheet.id, `Reordered products: ${productIds.map((id) => names.get(id)).join(", ")}`.slice(0, 500));
     return { ok: true };
-  });
-
-  /** The Products page list (names and units only), for linking rows. */
-  app.get("/catalog", async (req) => {
-    await requireEditor(req);
-    return db.select({ id: products.id, name: products.name, unit: products.useUnit }).from(products)
-      .where(and(eq(products.companyId, req.user.companyId), eq(products.active, true))).orderBy(asc(products.name));
-  });
-
-  /** Links a sheet's row to a product on the Products page (null unlinks), so techs applying it with this sheet get this rate. */
-  app.put<{ Params: { productId: string } }>("/products/:productId/catalog", async (req) => {
-    await requireEditor(req);
-    const { catalogId } = parse(z.object({ catalogId: z.string().uuid().nullable() }), req.body);
-    const { product } = await loadProduct(req, req.params.productId);
-    let name: string | null = null;
-    if (catalogId) {
-      const [c] = await db.select({ name: products.name }).from(products).where(and(eq(products.id, catalogId), eq(products.companyId, req.user.companyId)));
-      if (!c) notFound("Product");
-      name = c.name;
-    }
-    const [row] = await db.update(mixProducts).set({ productId: catalogId }).where(eq(mixProducts.id, product.id)).returning();
-    await log(req, product.sheetId, name ? `${product.name}: linked to ${name} (Products)` : `${product.name}: unlinked from Products`);
-    return row;
   });
 
   app.patch<{ Params: { productId: string } }>("/products/:productId", async (req) => {

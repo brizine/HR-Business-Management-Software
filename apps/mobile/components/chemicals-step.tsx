@@ -10,8 +10,8 @@ export interface ChemicalOptions {
   areaSqFt: number | null;
   site: string | null;
   methods: { id: string; name: string; galPer1000: number | null }[];
-  items: { productId: string; productName: string; unit: string; used: boolean; methodId: string; ratePer1000: number; amount: number | null }[];
-  products: { id: string; name: string; unit: string; ratePer1000: number | null; defaultMethodId: string; bySheet: Record<string, number | null> }[];
+  items: { productId: string; productName: string; unit: string; used: boolean; methodId: string | null; ratePer1000: number; amount: number | null }[];
+  products: { id: string; name: string; unit: string; ratePer1000: number | null; defaultMethodId: string | null; byMethod: Record<string, number | null> }[];
 }
 interface Item { productId: string; name: string; unit: string; used: boolean; methodId: string; rate: string; amount: string; edited: boolean }
 
@@ -33,13 +33,13 @@ export function ChemicalsStep({ options, busy, onSave, onCancel }: {
   const [site, setSite] = useState(options.site ?? "");
   const [notes, setNotes] = useState("");
   const [search, setSearch] = useState("");
-  const rateFor = (productId: string, methodId: string, fallback: number | null) => {
+  const rateFor = (productId: string, methodId: string | null, fallback: number | null) => {
     const p = options.products.find((x) => x.id === productId);
-    return (p?.bySheet[methodId] ?? p?.ratePer1000 ?? fallback) ?? 0;
+    return ((methodId ? p?.byMethod[methodId] : null) ?? p?.ratePer1000 ?? fallback) ?? 0;
   };
   const amountFor = (rate: number, a: string) => (Number.isFinite(num(a)) ? (rate * num(a)) / 1000 : NaN);
   const [items, setItems] = useState<Item[]>(options.items.map((i) => ({
-    productId: i.productId, name: i.productName, unit: i.unit, used: true, methodId: i.methodId,
+    productId: i.productId, name: i.productName, unit: i.unit, used: true, methodId: i.methodId ?? options.methods[0]?.id ?? "",
     rate: fmt(i.ratePer1000), amount: fmt(i.amount ?? amountFor(i.ratePer1000, fmt(options.areaSqFt, 0))), edited: false,
   })));
   const update = (n: number, patch: Partial<Item>) => setItems((list) => list.map((x, j) => (j === n ? { ...x, ...patch } : x)));
@@ -55,13 +55,13 @@ export function ChemicalsStep({ options, busy, onSave, onCancel }: {
   const add = (id: string) => {
     const p = options.products.find((x) => x.id === id)!;
     const rate = rateFor(id, p.defaultMethodId, p.ratePer1000);
-    setItems((list) => [...list, { productId: id, name: p.name, unit: p.unit, used: true, methodId: p.defaultMethodId, rate: fmt(rate), amount: fmt(amountFor(rate, area)), edited: false }]);
+    setItems((list) => [...list, { productId: id, name: p.name, unit: p.unit, used: true, methodId: p.defaultMethodId ?? options.methods[0]?.id ?? "", rate: fmt(rate), amount: fmt(amountFor(rate, area)), edited: false }]);
     setSearch("");
   };
   const matches = search.trim().length >= 2
     ? options.products.filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()) && !items.some((i) => i.productId === p.id)).slice(0, 6)
     : [];
-  const bad = items.some((i) => i.used && (!Number.isFinite(num(i.amount)) || !Number.isFinite(num(i.rate))));
+  const bad = items.some((i) => i.used && (!i.methodId || !Number.isFinite(num(i.amount)) || !Number.isFinite(num(i.rate))));
   const methodOptions = options.methods.map((m) => ({ value: m.id, label: m.name }));
 
   return (
@@ -111,7 +111,7 @@ export function ChemicalsStep({ options, busy, onSave, onCancel }: {
           })} /></View>
         <View style={{ flex: 1 }}><Button title="Cancel" kind="secondary" onPress={onCancel} /></View>
       </Row>
-      {bad ? <Txt muted>Enter the rate and amount for each product used.</Txt> : null}
+      {bad ? <Txt muted>Pick how each product was applied and enter its rate and amount.</Txt> : null}
     </View>
   );
 }

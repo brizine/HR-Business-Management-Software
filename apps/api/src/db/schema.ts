@@ -1055,8 +1055,6 @@ export const mixProducts = pgTable("mix_products", {
   name: text("name").notNull(),
   ratePerAcre: doublePrecision("rate_per_acre").notNull(),
   unit: text("unit").notNull(),
-  /** The catalog product this row is (its rate is used when a tech applies it with this sheet). */
-  productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
@@ -1110,6 +1108,8 @@ export const productRates = pgTable(
     amountPer1000: doublePrecision("amount_per_1000").notNull(),
     method: text("method").notNull().default("truck_spray"),
     carrierGalPer1000: doublePrecision("carrier_gal_per_1000"),
+    /** The application method this rate is for (Chemical Tracking); its spray volume is the carrier. */
+    applicationMethodId: uuid("application_method_id").references(() => applicationMethods.id, { onDelete: "set null" }),
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (t) => [index("product_rates_product_idx").on(t.productId)],
@@ -1171,8 +1171,8 @@ export const visitProducts = pgTable(
     costPerUseUnitCents: doublePrecision("cost_per_use_unit_cents"),
     costCents: integer("cost_cents"),
     costDate: date("cost_date").notNull(),
-    /** How it was applied: a Spray Mix sheet (its spray volume), or null with "Spreader (not mixed)". */
-    mixSheetId: uuid("mix_sheet_id").references(() => mixSheets.id, { onDelete: "set null" }),
+    /** How it was applied: one of Chemical Tracking's application methods (its spray volume, or dry). */
+    applicationMethodId: uuid("application_method_id").references(() => applicationMethods.id, { onDelete: "set null" }),
     methodName: text("method_name"),
     carrierGalPer1000: doublePrecision("carrier_gal_per_1000"),
     sortOrder: integer("sort_order").notNull().default(0),
@@ -2727,3 +2727,32 @@ export const applicationRecordChanges = pgTable(
   },
   (t) => [index("application_record_changes_record_idx").on(t.recordId, t.seq)],
 );
+
+/**
+ * How products are applied (Chemical Tracking): Truck 2 gal / 1,000, Backpack 1 gal / 1,000, a
+ * spreader … Kept apart from the Spray Mix Calculator so only Chemical Tracking users change rates.
+ */
+export const applicationMethods = pgTable(
+  "application_methods",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    /** Gallons of spray per 1,000 sq ft; null for products applied dry (not mixed). */
+    galPer1000: doublePrecision("gal_per_1000"),
+    active: boolean("active").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("application_methods_company_idx").on(t.companyId, t.sortOrder)],
+);
+
+/** People an admin lets into Chemical Tracking (admins always can). */
+export const chemicalAccess = pgTable("chemical_access", {
+  employeeId: uuid("employee_id").primaryKey().references(() => employees.id, { onDelete: "cascade" }),
+  companyId: companyId(),
+  addedById: uuid("added_by_id").references(() => employees.id, { onDelete: "set null" }),
+  createdAt: createdAt(),
+});

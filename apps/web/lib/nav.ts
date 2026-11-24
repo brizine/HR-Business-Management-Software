@@ -8,7 +8,8 @@ import type { PermissionArea, Role } from "@crewdesk/shared";
 export type Side = "operations" | "team";
 export const SIDES: { key: Side; label: string }[] = [{ key: "operations", label: "Operations" }, { key: "team", label: "Team" }];
 
-export type NavItem = { href: string; label: string; min?: Role; area?: PermissionArea };
+/** `gate: "chemical"`: only admins and the people they add to Chemical Tracking see it. */
+export type NavItem = { href: string; label: string; min?: Role; area?: PermissionArea; gate?: "chemical" };
 export type NavGroup = { key: string; label: string; icon: string; items: NavItem[] };
 
 export const NAV: Record<Side, NavGroup[]> = {
@@ -45,7 +46,7 @@ export const NAV: Record<Side, NavGroup[]> = {
       key: "resources", label: "Resources", icon: "layers",
       items: [
         { href: "/price-list", label: "Items & services", min: "manager", area: "customers" },
-        { href: "/products", label: "Products", min: "manager", area: "customers" },
+        { href: "/chemical-tracking", label: "Chemical Tracking", gate: "chemical" },
         { href: "/custom-fields", label: "Custom fields", min: "admin" },
         { href: "/settings/customers", label: "Tags", min: "admin", area: "customers" },
       ],
@@ -56,7 +57,6 @@ export const NAV: Record<Side, NavGroup[]> = {
         { href: "/measure", label: "Property Measure" },
         { href: "/spray-mix", label: "Spray Mix Calculator" },
         { href: "/weather", label: "Weather", min: "manager", area: "customers" },
-        { href: "/chemical-records", label: "Chemical records", min: "manager", area: "customers" },
       ],
     },
     {
