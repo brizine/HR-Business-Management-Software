@@ -45,8 +45,31 @@ class SmtpEmail implements EmailTransport {
 
 let email: EmailTransport | null = process.env.SMTP_URL ? new SmtpEmail() : null;
 
-/** Null when email isn't configured; callers skip the channel. */
-export const emailTransport = () => email;
+/** Notes each email in email_log (sent, or refused with the reason) for Email deliverability; never stops a send. */
+async function logEmail(to: string, subject: string, error: unknown) {
+  try {
+    const { db } = await import("../db");
+    const { emailLog } = await import("../db/schema");
+    await db.insert(emailLog).values({ to: to.trim().toLowerCase().slice(0, 320), subject: subject.slice(0, 300), status: error ? "failed" : "sent", error: error ? String((error as Error).message ?? error).slice(0, 500) : null });
+  } catch { /* the log is a nicety */ }
+}
+function logged(t: EmailTransport): EmailTransport {
+  return {
+    async send(msg) {
+      if (isUndeliverable(msg.to)) return t.send(msg);
+      try { await t.send(msg); } catch (e) { await logEmail(msg.to, msg.subject, e); throw e; }
+      await logEmail(msg.to, msg.subject, null);
+    },
+  };
+}
+let wrapped: { of: EmailTransport; as: EmailTransport } | null = null;
+
+/** Null when email isn't configured; callers skip the channel. Sends are noted in email_log. */
+export const emailTransport = () => {
+  if (!email) return null;
+  if (wrapped?.of !== email) wrapped = { of: email, as: logged(email) };
+  return wrapped.as;
+};
 export function setEmailTransport(t: EmailTransport | null) {
   email = t;
 }
@@ -57,7 +80,7 @@ export async function sendSystemEmail(to: string, subject: string, text: string,
     console.warn(`Email isn't configured (SMTP_URL); couldn't send "${subject}" to ${to}`);
     return false;
   }
-  await email.send({ to, subject, text, html });
+  await emailTransport()!.send({ to, subject, text, html });
   return true;
 }
 

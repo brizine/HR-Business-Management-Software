@@ -9,6 +9,7 @@ import {
 import { authenticate, requireRole } from "../lib/auth";
 import { parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
+import { emailHealth } from "../lib/emailHealth";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const name = (c: { kind: string; firstName: string | null; lastName: string | null; companyName: string | null } | null) => (c ? customerName(c) : "—");
@@ -75,6 +76,14 @@ const routes: FastifyPluginAsync = async (app) => {
     const estRows = await db.select({ id: estimates.id, number: estimates.number, title: estimates.title, status: estimates.status, totalCents: estimates.totalCents, validUntil: estimates.validUntil, updatedAt: estimates.updatedAt, c: cust })
       .from(estimates).leftJoin(customers, eq(customers.id, estimates.customerId)).where(eq(estimates.companyId, companyId)).orderBy(desc(estimates.updatedAt)).limit(6);
 
+    // Estimates waiting on an answer: how many and what they come to; the ones that run out soonest (or were sent longest ago).
+    const pending = and(eq(estimates.companyId, companyId), inArray(estimates.status, ["sent", "changes"]), sql`(${estimates.validUntil} is null or ${estimates.validUntil} >= ${today})`);
+    const [w] = await db.select({ n: sql<number>`count(*)::int`, cents: sql<number>`coalesce(sum(${estimates.totalCents}), 0)::int`, unseen: sql<number>`count(*) filter (where ${estimates.viewedAt} is null)::int`,
+      soon: sql<number>`count(*) filter (where ${estimates.validUntil} <= ${addDays(today, 7)})::int` }).from(estimates).where(pending);
+    const waitRows = await db.select({ id: estimates.id, number: estimates.number, title: estimates.title, status: estimates.status, totalCents: estimates.totalCents, validUntil: estimates.validUntil, sentAt: estimates.sentAt, viewedAt: estimates.viewedAt, c: cust })
+      .from(estimates).leftJoin(customers, eq(customers.id, estimates.customerId)).where(pending)
+      .orderBy(sql`${estimates.validUntil} asc nulls last`, asc(estimates.sentAt)).limit(6);
+
     const [{ unreadTexts }] = await db.select({ unreadTexts: sql<number>`count(*)::int` }).from(customerTexts)
       .where(and(eq(customerTexts.companyId, companyId), eq(customerTexts.direction, "in"), isNull(customerTexts.readAt)));
 
@@ -88,9 +97,19 @@ const routes: FastifyPluginAsync = async (app) => {
       payments: payRows.map((p) => ({ id: p.id, amountCents: p.amountCents, method: p.method, methodDetail: p.methodDetail, receivedOn: p.receivedOn, status: p.status, invoiceId: p.invoiceId, invoiceNumber: p.number, customer: p.c?.id ? { id: p.c.id, name: name(p.c) } : null })),
       invoices: invRows.map(({ inv, c }) => ({ id: inv.id, number: inv.number, status: inv.status, totalCents: inv.totalCents, balanceCents: invoiceBalance(inv), dueDate: inv.dueDate, overdue: isOverdue(inv, today), customer: c?.id ? { id: c.id, name: name(c) } : null })),
       estimates: estRows.map((e) => ({ id: e.id, number: e.number, title: e.title, status: e.status, totalCents: e.totalCents, expired: !!e.validUntil && e.validUntil < today && (e.status === "sent" || e.status === "changes"), customer: e.c?.id ? { id: e.c.id, name: name(e.c) } : null })),
+      waiting: {
+        count: w.n, totalCents: w.cents, notSeen: w.unseen, expiringSoon: w.soon,
+        rows: waitRows.map((e) => ({ id: e.id, number: e.number, title: e.title, status: e.status, totalCents: e.totalCents, validUntil: e.validUntil, sentAt: e.sentAt, seen: !!e.viewedAt,
+          daysLeft: e.validUntil ? Math.round((Date.parse(`${e.validUntil}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86_400_000) : null, customer: e.c?.id ? { id: e.c.id, name: name(e.c) } : null })),
+      },
       unreadTexts,
     };
   });
+
+  /** Email deliverability: sending setup (SPF, DKIM, DMARC), what went out to customers, and addresses that can't get email. */
+  app.get("/email", async (req) => emailHealth(req.user.companyId));
 };
+
+const addDays = (ymd: string, n: number) => new Date(Date.parse(`${ymd}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
 export default routes;

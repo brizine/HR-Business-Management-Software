@@ -138,6 +138,31 @@ Homeworks' My Day.
 - **Lists:** automations waiting in review, upcoming to-dos (with how many are overdue), today's work orders, recent
   payments, invoices and estimates, each with a link to see all. Unread texts from customers show at the top right
   when there are any.
+- **Estimates waiting on an answer:** how many are sent (or have changes asked for) and not yet answered or expired,
+  what they come to, how many run out this week and how many haven't been opened. The list shows the ones that run
+  out soonest first, with days left.
+
+### Email deliverability
+
+The **Email deliverability** box on My Day shows whether your email is set up to land in inboxes rather than spam,
+and which customers can't get it.
+
+- **Sending setup:** the address mail is sent from and the mail service it goes through. Then three DNS records on
+  the sending domain (the part after @), which inboxes like Gmail and Yahoo check:
+  - **SPF** lists the servers allowed to send for the domain. There must be exactly one SPF record. Your mail service
+    gives the line to add, e.g. `v=spf1 include:<your mail service> ~all`.
+  - **DKIM** is a signing key your mail service gives you to publish. Crewdesk looks under the usual names; if yours
+    uses another, it can be added to the server settings (DKIM_SELECTOR).
+  - **DMARC** tells inboxes what to do with mail that fails the checks. Start with
+    `v=DMARC1; p=none; rua=mailto:<your address>`, then move to `p=quarantine` once everything passes.
+  - These are added where the domain's DNS is managed (for prospray.net, wherever the domain was bought or hosted).
+    Changes can take a few hours to show; the box checks again every hour.
+- **Last 30 days:** emails to customers (and their contacts) that the mail service took, and any it refused, with
+  the reason. "Took" means it left Crewdesk; a mailbox can still bounce it later.
+- **Customer addresses:** active customers' addresses that can't get email: not a complete address, an obvious slip
+  (e.g. @gmial.com), or a domain that takes no email. Click a name to fix it. Also how many unsubscribed (they still
+  get invoices and receipts) and how many get invoices by email but have no address.
+- Crewdesk keeps a log of what it sends (who to, the subject, and whether it went) for six months for this box.
 
 ## Dashboard
 

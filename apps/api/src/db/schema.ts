@@ -2338,3 +2338,19 @@ export const automationRuns = pgTable(
     index("automation_runs_customer_idx").on(t.customerId, t.createdAt),
   ],
 );
+
+/** Every email the server hands to the mail service: who to, the subject, and whether it went (for Email deliverability). */
+export const emailLog = pgTable(
+  "email_log",
+  {
+    id: id(),
+    /** Lower-cased recipient. */
+    to: text("to").notNull(),
+    subject: text("subject").notNull(),
+    /** "sent" (the mail service took it) or "failed" (it refused it, with the error). */
+    status: text("status").notNull(),
+    error: text("error"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("email_log_to_idx").on(t.to, t.createdAt), index("email_log_created_idx").on(t.createdAt)],
+);

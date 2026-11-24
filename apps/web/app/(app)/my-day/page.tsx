@@ -52,6 +52,10 @@ type Data = {
   invoices: { id: string; number: number | null; status: keyof typeof INVOICE_STATUS_LABELS; totalCents: number; balanceCents: number; dueDate: string; overdue: boolean; customer: Who }[];
   estimates: { id: string; number: number; title: string | null; status: keyof typeof ESTIMATE_STATUS_LABELS; totalCents: number; expired: boolean; customer: Who }[];
   unreadTexts: number;
+  waiting: {
+    count: number; totalCents: number; notSeen: number; expiringSoon: number;
+    rows: { id: string; number: number; title: string | null; status: string; totalCents: number; validUntil: string | null; sentAt: string | null; seen: boolean; daysLeft: number | null; customer: Who }[];
+  };
 };
 
 const time12 = (t: string | null) => { if (!t) return ""; const [h, m] = t.split(":").map(Number); return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
@@ -137,6 +141,19 @@ export default function MyDay() {
                   </li>
                 ))}
               </Box>
+              <Box title="Estimates waiting on an answer" more={["/estimates?status=open", "See all waiting"]} count={d.waiting.count}
+                note={d.waiting.count ? <span className="muted">{formatMoney(d.waiting.totalCents)}{d.waiting.expiringSoon ? <> · <span className="warn-text">{d.waiting.expiringSoon} run out this week</span></> : ""}{d.waiting.notSeen ? ` · ${d.waiting.notSeen} not opened yet` : ""}</span> : null}>
+                {d.waiting.rows.map((e) => (
+                  <li key={e.id}>
+                    <span><Link href={`/estimates/${e.id}`}><strong>Estimate {e.number}</strong></Link>{e.title ? ` · ${e.title}` : ""}{e.customer && <> · {e.customer.name}</>}</span>
+                    <span className="muted">
+                      {formatMoney(e.totalCents)}
+                      {e.daysLeft != null ? <> · <span className={e.daysLeft <= 7 ? "warn-text" : ""}>{e.daysLeft === 0 ? "runs out today" : `runs out in ${e.daysLeft} day${e.daysLeft === 1 ? "" : "s"}`}</span></> : e.sentAt ? ` · sent ${fmtDate(e.sentAt.slice(0, 10))}` : ""}
+                      {e.status === "changes" ? <> · <span className="badge warn">changes asked</span></> : !e.seen ? <> · <span className="badge">not opened</span></> : null}
+                    </span>
+                  </li>
+                ))}
+              </Box>
             </div>
             <div className="myday-col">
               {d.unreadTexts > 0 && <Link href="/texts" className="card myday-alert">💬 {d.unreadTexts} unread text{d.unreadTexts === 1 ? "" : "s"} from customers</Link>}
@@ -164,6 +181,7 @@ export default function MyDay() {
                   </li>
                 ))}
               </Box>
+              <EmailHealthBox />
             </div>
           </div>
         </>
@@ -191,6 +209,85 @@ function Box({ title, more, count, note, children }: { title: string; more: [str
         <Link href={more[0]}>{more[1]}</Link>
       </div>
       <div className="card myday-list">{items.length ? <ul className="plain-list">{items}</ul> : <p className="muted myday-empty">No records found</p>}</div>
+    </section>
+  );
+}
+
+type Health = {
+  setup: { configured: boolean; from: string | null; host: string | null; replyDomain: string | null; mismatch: boolean };
+  domain: null | {
+    domain: string;
+    spf: { status: "ok" | "missing" | "too_many" | "unknown"; record: string | null; softOnly: boolean };
+    dkim: { status: "ok" | "not_found" | "unknown"; selector: string | null };
+    dmarc: { status: "ok" | "missing" | "unknown"; policy: string | null; record: string | null };
+  };
+  last30: { sent: number; failed: number; failures: { email: string; error: string | null; at: string; subject: string; customer: Who }[] };
+  addresses: { customers: number; withEmail: number; noEmail: number; unsubscribed: number; problemCount: number; problems: { customerId: string; name: string; email: string; problem: string }[] };
+  status: "off" | "good" | "check" | "attention";
+  dnsChecked: boolean;
+};
+const HEALTH: Record<Health["status"], [string, string]> = { good: ["Looks good", "ok"], check: ["Worth a look", "warn"], attention: ["Needs attention", "bad"], off: ["Email isn't set up", "bad"] };
+
+/** Email deliverability: is mail set up to land in inboxes, did it go, and which customers can't get it. */
+function EmailHealthBox() {
+  const h = useApi<Health>("/my-day/email");
+  const [all, setAll] = useState(false);
+  const d = h.data;
+  const mark = (ok: boolean | null) => <span className={ok ? "ok-text" : ok === false ? "bad-text" : "muted"} aria-hidden>{ok ? "✓" : ok === false ? "✗" : "?"}</span>;
+  return (
+    <section className="myday-box">
+      <div className="row myday-boxhead">
+        <h2>Email deliverability{d && <span className={`badge ${HEALTH[d.status][1]}`} style={{ marginLeft: 6 }}>{HEALTH[d.status][0]}</span>}</h2>
+        <Link href="/help#email-deliverability">How to improve it</Link>
+      </div>
+      <div className="card myday-health">
+        {h.error && <ErrorBox error={h.error} />}
+        {!d && !h.error && <p className="muted" style={{ margin: 0 }}>Checking…</p>}
+        {d && (
+          <>
+            {d.setup.configured ? (
+              <p className="muted" style={{ margin: 0 }}>Sending from <strong>{d.setup.from ?? "?"}</strong>{d.setup.host ? <> through {d.setup.host}</> : null}.</p>
+            ) : <p className="bad-text" style={{ margin: 0 }}>Email isn&apos;t set up on the server, so nothing is being sent.</p>}
+            {!d.dnsChecked && <p className="warn-text" style={{ margin: 0, fontSize: 13 }}>The server couldn&apos;t look up DNS records just now, so the domain and address checks were skipped. They run again within the hour.</p>}
+            {d.domain && d.dnsChecked && (
+              <ul className="plain-list myday-checks">
+                <li>{mark(d.domain.spf.status === "ok" ? true : d.domain.spf.status === "unknown" ? null : false)} <strong>SPF</strong> <span className="muted">
+                  {d.domain.spf.status === "ok" ? `says which servers may send for ${d.domain.domain}${d.domain.spf.softOnly ? " (but doesn't end in ~all or -all)" : ""}`
+                    : d.domain.spf.status === "too_many" ? `${d.domain.domain} has more than one SPF record; there must be exactly one`
+                    : d.domain.spf.status === "missing" ? `${d.domain.domain} has no SPF record, so inboxes can't tell your mail is really yours`
+                    : "couldn't be checked right now"}</span></li>
+                <li>{mark(d.domain.dkim.status === "ok" ? true : d.domain.dkim.status === "unknown" ? null : false)} <strong>DKIM</strong> <span className="muted">
+                  {d.domain.dkim.status === "ok" ? `signing key found (${d.domain.dkim.selector})` : d.domain.dkim.status === "not_found" ? "no signing key found under the usual names; your mail service tells you the record to add" : "couldn't be checked right now"}</span></li>
+                <li>{mark(d.domain.dmarc.status === "ok" ? true : d.domain.dmarc.status === "unknown" ? null : false)} <strong>DMARC</strong> <span className="muted">
+                  {d.domain.dmarc.status === "ok" ? `policy: ${d.domain.dmarc.policy ?? "?"}${d.domain.dmarc.policy === "none" ? " (watching only)" : ""}` : d.domain.dmarc.status === "missing" ? "missing; Gmail and Yahoo expect it from businesses that email customers" : "couldn't be checked right now"}</span></li>
+              </ul>
+            )}
+            {d.setup.mismatch && <p className="warn-text" style={{ margin: 0, fontSize: 13 }}>Replies go to @{d.setup.replyDomain}, but mail is sent from @{d.domain?.domain}. That's fine, but the sending domain is the one that needs the records above.</p>}
+            <p style={{ margin: 0 }}><strong>Last 30 days:</strong> {d.last30.sent} email{d.last30.sent === 1 ? "" : "s"} to customers went out{d.last30.failed ? <>, <span className="bad-text">{d.last30.failed} didn&apos;t</span></> : ""}.</p>
+            {d.last30.failures.length > 0 && (
+              <ul className="plain-list myday-sub">
+                {d.last30.failures.map((f, i) => (
+                  <li key={i}>{f.customer ? <Link href={`/customers/${f.customer.id}`}>{f.customer.name}</Link> : f.email} <span className="muted">· {f.subject} · {fmtDate(f.at.slice(0, 10))} · {(f.error ?? "").slice(0, 120)}</span></li>
+                ))}
+              </ul>
+            )}
+            <p style={{ margin: 0 }}>
+              <strong>Customer addresses:</strong> {d.addresses.withEmail} of {d.addresses.customers} active customers have an email.
+              {d.addresses.problemCount ? <> <span className="bad-text">{d.addresses.problemCount} can&apos;t get email.</span></> : " None look wrong."}
+              {d.addresses.unsubscribed ? ` ${d.addresses.unsubscribed} unsubscribed (they still get invoices and receipts).` : ""}
+              {d.addresses.noEmail ? ` ${d.addresses.noEmail} get invoices by email but have no address.` : ""}
+            </p>
+            {d.addresses.problems.length > 0 && (
+              <ul className="plain-list myday-sub">
+                {(all ? d.addresses.problems : d.addresses.problems.slice(0, 5)).map((p) => (
+                  <li key={p.customerId}><Link href={`/customers/${p.customerId}`}>{p.name}</Link> <span className="muted">· {p.email} · {p.problem}</span></li>
+                ))}
+                {d.addresses.problems.length > 5 && <li><button type="button" className="linkbtn" onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${d.addresses.problems.length}`}</button></li>}
+              </ul>
+            )}
+          </>
+        )}
+      </div>
     </section>
   );
 }

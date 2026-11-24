@@ -1536,3 +1536,7 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .myday-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; }
 .myday-alert { display: block; padding: 10px 14px; margin: 0; text-decoration: none; color: var(--text); background: var(--warn-bg); }
 @media (max-width: 900px) { .myday-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .myday-cols { grid-template-columns: minmax(0, 1fr); } }
+.myday-health { display: grid; gap: 8px; padding: 12px 14px; margin: 0; font-size: 14px; }
+.myday-checks li { padding: 3px 0; }
+.myday-sub { font-size: 13px; padding-left: 10px; border-left: 2px solid var(--border); }
+.myday-sub li { padding: 2px 0; overflow-wrap: anywhere; }

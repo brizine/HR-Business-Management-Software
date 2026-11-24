@@ -5,6 +5,7 @@ import { buildApp } from "../src/app";
 import { pool } from "../src/db";
 import { flushNotifications, setPushTransport } from "../src/lib/notify";
 import { flushBillingSync } from "../src/lib/billingSync";
+import { setEmailTransport } from "../src/lib/channels";
 
 let app: FastifyInstance;
 const suffix = Date.now();
@@ -22,6 +23,7 @@ async function call(method: string, url: string, who: string, payload?: unknown)
 
 beforeAll(async () => {
   setPushTransport({ send: async (m) => m.map(() => ({ status: "ok" as const, id: "x" })) });
+  setEmailTransport({ send: async () => {} });
   app = await buildApp({ logger: false });
   T.owner = (await app.inject({ method: "POST", url: "/auth/signup", payload: { companyName: "Day Co", firstName: "Dee", lastName: "Owner", email: email("owner"), password: "password123" } })).json().token;
   await call("PUT", "/auth/policy", "owner", { twoFactorRequiredFor: "none" });
@@ -48,9 +50,15 @@ beforeAll(async () => {
   await call("POST", `/visits/${ID.v2}/complete`, "owner", {});
   await call("POST", "/todos", "owner", { title: "Call Mia back", date: today, customerId: ID.cust });
   await call("POST", "/estimates", "owner", { customerId: ID.cust, title: "Aeration", lines: [{ description: "Aeration", quantity: 1, unitPriceCents: 9000 }] });
+  // Two waiting on an answer: one runs out in 3 days.
+  for (const [title, validUntil] of [["Grub control", plus(today, 3)], ["Overseeding", null]] as const) {
+    const e = await call("POST", "/estimates", "owner", { customerId: ID.cust, title, validUntil, lines: [{ description: title, quantity: 1, unitPriceCents: 20000 }] });
+    await call("POST", `/estimates/${e.body.id}/send`, "owner", {});
+  }
 });
 
 afterAll(async () => {
+  setEmailTransport(null);
   await flushBillingSync();
   await app.close();
   await flushNotifications();
@@ -74,7 +82,9 @@ describe("My Day", () => {
     expect(d.todos.rows[0]).toMatchObject({ title: "Call Mia back", customer: { name: "Mia May" } });
     expect(d.payments[0]).toMatchObject({ amountCents: 2500, method: "check", customer: { name: "Mia May" } });
     expect(d.invoices.some((i: any) => i.id === ID.late && i.overdue)).toBe(true);
-    expect(d.estimates[0]).toMatchObject({ title: "Aeration", status: "draft" });
+    expect(d.estimates.some((e: any) => e.title === "Aeration" && e.status === "draft")).toBe(true);
+    expect(d.waiting).toMatchObject({ count: 2, totalCents: 40000, notSeen: 2, expiringSoon: 1 });
+    expect(d.waiting.rows.map((r: any) => [r.title, r.daysLeft])).toEqual([["Grub control", 3], ["Overseeding", null]]);
   });
 
   it("a date range for job stats and money in", async () => {
