@@ -40,7 +40,7 @@ export const companies = pgTable("companies", {
   stripeWebhookSecret: text("stripe_webhook_secret"),
   /** Invoice numbering, terms and the printed footer (Settings → Billing); defaults apply when unset. */
   billing: jsonb("billing").$type<Partial<BillingSettings>>(),
-  /** Weather on chemical applications: automatic, manual or off, and the wind (drift) limit. */
+  /** Weather on chemical applications: automatic, manual or off. */
   weather: jsonb("weather").$type<WeatherSettings>(),
   /** Set on a test company: the real company it's a sandbox for (sample customers, test mode payments). */
   testOfCompanyId: uuid("test_of_company_id").references((): AnyPgColumn => companies.id, { onDelete: "cascade" }),
@@ -2439,10 +2439,6 @@ export const visitWeather = pgTable(
     tries: integer("tries").notNull().default(0),
     lastTryAt: timestamp("last_try_at", { withTimezone: true }),
     lastError: text("last_error"),
-    /** Over the wind limit: reviewed by the office, with a note. */
-    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
-    reviewedById: uuid("reviewed_by_id").references(() => employees.id, { onDelete: "set null" }),
-    reviewNote: text("review_note"),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

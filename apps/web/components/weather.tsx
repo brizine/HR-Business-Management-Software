@@ -13,9 +13,8 @@ export type WeatherRecord = {
   gps: { lat: number; lng: number; accuracy: number | null } | null;
   weather: null | (Reading & {
     source: WeatherSource | null; observedAt: string | null; station: string | null; enteredBy: string | null; tries: number; lastError: string | null;
-    reviewedAt: string | null; reviewedBy: string | null; reviewNote: string | null;
   });
-  needsWeather: boolean; overLimit: boolean;
+  needsWeather: boolean;
 };
 export type WeatherDay = Reading & { id: string; date: string; enteredById: string | null; updatedAt: string };
 
@@ -74,37 +73,24 @@ export function WeatherFlags({ r }: { r: WeatherRecord }) {
   return (
     <span className="wl-badges">
       {r.needsWeather && <span className="wl-badge wl-b-early" title={r.weather?.lastError ?? "No weather yet"}>Needs weather</span>}
-      {r.overLimit && !r.weather?.reviewedAt && <span className="wl-badge wl-b-missed" title="Above the company's wind limit">Over wind limit</span>}
-      {r.overLimit && r.weather?.reviewedAt && <span className="wl-badge" title={`Reviewed by ${r.weather.reviewedBy ?? "the office"}: ${r.weather.reviewNote ?? ""}`}>Reviewed</span>}
     </span>
   );
 }
 
-/** Edit, look up again, or review one record (used on the Weather page and the work order page). */
+/** Edit or look up again one record (used on the Weather page and the work order page). */
 export function RecordActions({ r, onChange, compact }: { r: WeatherRecord; onChange: (r: WeatherRecord) => void; compact?: boolean }) {
-  const [mode, setMode] = useState<null | "edit" | "review">(null);
-  const [note, setNote] = useState("");
+  const [editing, setEditing] = useState(false);
   const act = useAction();
-  const run = (fn: () => Promise<WeatherRecord>) => act.run(async () => { onChange(await fn()); setMode(null); setNote(""); });
-  if (mode === "edit") {
-    return <WeatherForm initial={r.weather} submitLabel="Save weather" busy={act.busy} error={act.error} onCancel={() => setMode(null)}
+  const run = (fn: () => Promise<WeatherRecord>) => act.run(async () => { onChange(await fn()); setEditing(false); });
+  if (editing) {
+    return <WeatherForm initial={r.weather} submitLabel="Save weather" busy={act.busy} error={act.error} onCancel={() => setEditing(false)}
       onSubmit={(body) => run(() => api<WeatherRecord>(`/weather/records/${r.visitId}`, { method: "PUT", body }))} />;
-  }
-  if (mode === "review") {
-    return (
-      <form className="stack" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); run(() => api<WeatherRecord>(`/weather/records/${r.visitId}/review`, { method: "POST", body: { note } })); }}>
-        <label>What you found *<input autoFocus required maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Label allows 15 mph; used low-drift nozzles" /></label>
-        <ErrorBox error={act.error} />
-        <div className="row"><button className="btn primary" disabled={act.busy}>Mark reviewed</button><button type="button" className="btn" onClick={() => setMode(null)}>Cancel</button></div>
-      </form>
-    );
   }
   return (
     <div className="stack" style={{ gap: 4 }}>
       <div className="row" style={{ gap: 6 }}>
-        <button type="button" className={`btn${compact ? " sm" : ""}`} onClick={() => setMode("edit")}>{r.weather?.source ? "Edit" : "Enter weather"}</button>
+        <button type="button" className={`btn${compact ? " sm" : ""}`} onClick={() => setEditing(true)}>{r.weather?.source ? "Edit" : "Enter weather"}</button>
         <button type="button" className={`btn${compact ? " sm" : ""}`} disabled={act.busy} onClick={() => run(() => api<WeatherRecord>(`/weather/records/${r.visitId}/fetch`, { method: "POST" }))} title="Look it up from the National Weather Service for this property and time">Look up</button>
-        {r.overLimit && !r.weather?.reviewedAt && <button type="button" className={`btn${compact ? " sm" : ""}`} onClick={() => setMode("review")}>Review</button>}
       </div>
       <ErrorBox error={act.error} />
     </div>
@@ -125,12 +111,11 @@ export function WorkOrderWeather({ visitId }: { visitId: string }) {
       </div>
       {w?.source ? (
         <dl className="facts">
-          <dt>Wind</dt><dd>{windText(w) || "—"}{r.overLimit ? <span className="bad-text"> (limit {data.data!.settings.windLimitMph} mph)</span> : null}</dd>
+          <dt>Wind</dt><dd>{windText(w) || "—"}</dd>
           <dt>Temperature</dt><dd>{w.tempF != null ? `${Math.round(w.tempF)}°F` : "—"}</dd>
           <dt>Rain (24 h)</dt><dd>{w.rainIn != null ? `${w.rainIn.toFixed(2)} in` : "Not reported"}</dd>
           <dt>From</dt><dd>{sourceText(w)}</dd>
           {w.note && <><dt>Note</dt><dd>{w.note}</dd></>}
-          {w.reviewedAt && <><dt>Reviewed</dt><dd>{w.reviewedBy}: {w.reviewNote}</dd></>}
           {r.gps && <><dt>GPS</dt><dd><a href={`https://www.google.com/maps/search/?api=1&query=${r.gps.lat},${r.gps.lng}`} target="_blank" rel="noopener noreferrer">{r.gps.lat.toFixed(5)}, {r.gps.lng.toFixed(5)}</a>{r.gps.accuracy ? <span className="muted"> ±{Math.round(r.gps.accuracy)} m</span> : null} at {timeOf(r.completedAt)}</dd></>}
         </dl>
       ) : (
@@ -145,18 +130,17 @@ export function WorkOrderWeather({ visitId }: { visitId: string }) {
 export function WeatherSettingsCard({ settings, canEdit, onSaved }: { settings: WeatherSettings; canEdit: boolean; onSaved: (s: WeatherSettings) => void }) {
   const [editing, setEditing] = useState(false);
   const [mode, setMode] = useState<WeatherMode>(settings.mode);
-  const [limit, setLimit] = useState(String(settings.windLimitMph));
   const act = useAction();
   if (!editing) {
     return (
       <div className="card row wx-settings" style={{ justifyContent: "space-between" }}>
-        <span><strong>{WEATHER_MODE_LABELS[settings.mode]}</strong><span className="muted"> · wind limit {settings.windLimitMph} mph · on services marked chemical in the <Link href="/price-list">price list</Link></span></span>
+        <span><strong>{WEATHER_MODE_LABELS[settings.mode]}</strong><span className="muted"> · on services marked chemical in the <Link href="/price-list">price list</Link></span></span>
         {canEdit && <button type="button" className="btn sm" onClick={() => setEditing(true)}>Change</button>}
       </div>
     );
   }
   return (
-    <form className="card stack" onSubmit={(e) => { e.preventDefault(); act.run(async () => { const s = await api<WeatherSettings>("/weather/settings", { method: "PUT", body: { mode, windLimitMph: limit } }); onSaved(s); setEditing(false); }); }}>
+    <form className="card stack" onSubmit={(e) => { e.preventDefault(); act.run(async () => { const s = await api<WeatherSettings>("/weather/settings", { method: "PUT", body: { mode } }); onSaved(s); setEditing(false); }); }}>
       <h2 style={{ margin: 0 }}>Weather settings</h2>
       <div className="stack" style={{ gap: 4 }}>
         {WEATHER_MODES.map((m) => <label key={m} className="check"><input type="radio" name="wx-mode" checked={mode === m} onChange={() => setMode(m)} /> {WEATHER_MODE_LABELS[m]}</label>)}
@@ -164,7 +148,6 @@ export function WeatherSettingsCard({ settings, canEdit, onSaved }: { settings: 
       <p className="muted" style={{ margin: 0, fontSize: 13 }}>
         Automatic looks up wind, temperature and the last 24 hours&apos; rain from the nearest National Weather Service station for each property as it&apos;s completed. Manual uses the office&apos;s entry for the day. Either way, techs never enter weather.
       </p>
-      <label style={{ maxWidth: 260 }}>Wind (drift) limit, mph<input inputMode="decimal" required value={limit} onChange={(e) => setLimit(e.target.value)} /></label>
       <ErrorBox error={act.error} />
       <div className="row"><button className="btn primary" disabled={act.busy}>Save</button><button type="button" className="btn" onClick={() => setEditing(false)}>Cancel</button></div>
     </form>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compass, compassDeg, overWindLimit, readingAt, weatherReadingSchema, weatherSettingsSchema, windText, type Observation } from "../src";
+import { compass, compassDeg, readingAt, weatherReadingSchema, weatherSettingsSchema, windText, type Observation } from "../src";
 
 const obs = (at: string, o: Partial<Observation>): Observation => ({ at, tempC: null, windKmh: null, windDeg: null, gustKmh: null, precipLastHourMm: null, ...o });
 
@@ -30,16 +30,14 @@ describe("weather", () => {
     expect(readingAt([obs("2026-05-01T13:53:00Z", { tempC: 22 })], new Date("2026-05-01T14:00:00Z"))?.rainIn).toBeNull();
   });
 
-  it("the wind limit and how it reads", () => {
-    expect(overWindLimit({ windMph: 11 }, 10)).toBe(true);
-    expect(overWindLimit({ windMph: 10 }, 10)).toBe(false);
-    expect(overWindLimit(null, 10)).toBe(false);
+  it("how the wind reads", () => {
     expect(windText({ windMph: 8, windDeg: 200, gustMph: 15 })).toBe("8 mph SSW, gusts 15");
     expect(windText({ windMph: 0 })).toBe("0 mph");
   });
 
   it("settings and readings", () => {
-    expect(weatherSettingsSchema.safeParse({ mode: "auto", windLimitMph: 0 }).success).toBe(false);
+    expect(weatherSettingsSchema.safeParse({ mode: "sometimes" }).success).toBe(false);
+    expect(weatherSettingsSchema.parse({ mode: "manual", windLimitMph: 10 })).toEqual({ mode: "manual" });
     expect(weatherReadingSchema.safeParse({ windMph: "" }).success).toBe(false);
     expect(weatherReadingSchema.parse({ windMph: "7", windDeg: "", tempF: "68", rainIn: "" })).toMatchObject({ windMph: 7, windDeg: null, tempF: 68, rainIn: null });
   });

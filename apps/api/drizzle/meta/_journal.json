@@ -589,6 +589,13 @@
       "when": 1795529592025,
       "tag": "0083_weather",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1795554556219,
+      "tag": "0084_weather_no_wind_limit",
+      "breakpoints": true
     }
   ]
 }

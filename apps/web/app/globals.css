@@ -1609,7 +1609,6 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .wx-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 .wx-settings { flex-wrap: wrap; gap: 8px; padding: 10px 14px; }
 .wx-table td { vertical-align: top; }
-.wx-table tr.wx-over td { background: var(--bad-bg); }
 .wx-page > .card.stack { grid-template-columns: minmax(0, 1fr); }
 .wx-page .cal-seg { flex-wrap: wrap; }
 .wx-page .cal-seg button { white-space: nowrap; }
