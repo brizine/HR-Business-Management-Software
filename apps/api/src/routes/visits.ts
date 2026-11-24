@@ -1,3 +1,4 @@
+import { hasChemicalAccess } from "../lib/chemicalAccess";
 import { randomUUID } from "node:crypto";
 import { fileView, sendStored, storeUpload } from "../lib/attachments";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
@@ -18,6 +19,7 @@ import { jobSources, newRecordCustom, updatedCustom } from "../lib/customFields"
 import { companyToday } from "../lib/payRates";
 import { snapshotVisitProducts, visitProductRows } from "../lib/productCosts";
 import { createApplicationRecord, voidApplicationRecords } from "../lib/chemicalRecords";
+import { chemicalOptions, snapshotFromTech } from "../lib/techChemicals";
 import { except, notify } from "../lib/notify";
 import { weatherAfterComplete } from "../lib/weather";
 
@@ -344,15 +346,17 @@ const routes: FastifyPluginAsync = async (app) => {
   });
   app.post<{ Params: { id: string } }>("/:id/complete", async (req) => {
     const v = await crewAction(req, req.params.id);
-    const { notes, lat, lng, accuracy } = parse(visitCompleteSchema, req.body ?? {});
+    const { notes, lat, lng, accuracy, chemicals } = parse(visitCompleteSchema, req.body ?? {});
     if (v.status === "completed" || v.status === "skipped") throw new HttpError(400, `This work order is already ${VISIT_STATUS_LABELS[v.status as VisitStatus].toLowerCase()}`);
     const gps = lat != null && lng != null ? { completedLat: lat, completedLng: lng, completedAccuracy: accuracy ?? null } : { completedLat: null, completedLng: null, completedAccuracy: null };
     await db.transaction(async (tx) => {
       await tx.update(visits).set({ status: "completed", completedAt: new Date(), finishedById: req.user.sub, completionNotes: notes ?? null, ...gps, updatedAt: new Date() }).where(eq(visits.id, v.id));
       // What it applied, at the cost in force on its day (kept as is when prices change later).
-      await snapshotVisitProducts(tx, v.id, req.user.companyId);
+      // What the tech confirmed (how each product was applied, and amounts), or else the service's products.
+      if (chemicals) await snapshotFromTech(tx, v.id, req.user.companyId, chemicals);
+      else await snapshotVisitProducts(tx, v.id, req.user.companyId);
       // The chemical application record (ODAFF), from what it applied and who, where and when.
-      await createApplicationRecord(tx, v.id, req.user.companyId);
+      await createApplicationRecord(tx, v.id, req.user.companyId, chemicals?.site);
     });
     // Chemical applications get the weather (in the background).
     weatherAfterComplete(v.id, v.companyId);
@@ -381,12 +385,18 @@ const routes: FastifyPluginAsync = async (app) => {
     return reply(req, v.id);
   });
 
+  /** For the tech completing it: the products to confirm, how they can be applied, and any product to add. */
+  app.get<{ Params: { id: string } }>("/:id/chemicals", async (req) => {
+    const v = await findVisit(req, req.params.id);
+    return chemicalOptions(v.id, req.user.companyId);
+  });
+
   /** What a completed work order applied, and what it cost on its day. */
   app.get<{ Params: { id: string } }>("/:id/products", async (req) => {
     const v = await findVisit(req, req.params.id);
     const rows = await visitProductRows(v.id);
-    // Crews see what was applied; costs are for the office.
-    return canManageVisits(req) ? rows : rows.map(({ costPerUseUnitCents: _c, costCents: _t, productCostId: _p, ...r }) => r);
+    // Crews see what was applied; costs only for Chemical Tracking (admins and the people they add).
+    return (await hasChemicalAccess(req)) ? rows : rows.map(({ costPerUseUnitCents: _c, costCents: _t, productCostId: _p, ...r }) => r);
   });
 
   /** A draft invoice from this work order. */

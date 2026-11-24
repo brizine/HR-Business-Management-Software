@@ -3,7 +3,7 @@ import { customerName, dilutionPerGal, formatAddress, recordIssues, tankMixGallo
 import { localParts } from "./tz";
 import { db } from "../db";
 import {
-  applicationRecordProducts, applicationRecords, applicatorCerts, companies, customers, employees, productLabels, productRates, products,
+  applicationRecordProducts, applicationRecords, applicatorCerts, companies, customers, employees, productLabels, products,
   properties, serviceTypes, visitLines, visitProducts, visits,
 } from "../db/schema";
 
@@ -26,16 +26,15 @@ async function labelOn(tx: Tx, productId: string, day: string) {
  * records, or have a chemical service, get one. Called in the completion's transaction, after the
  * products are saved. Returns the record id, or null when none was needed.
  */
-export async function createApplicationRecord(tx: Tx, visitId: string, companyId: string) {
+export async function createApplicationRecord(tx: Tx, visitId: string, companyId: string, siteOverride?: string | null) {
   const [v] = await tx.select().from(visits).where(eq(visits.id, visitId));
   if (!v) return null;
   const lines = await tx.select({ chemical: serviceTypes.chemical, site: serviceTypes.applicationSite })
     .from(visitLines).innerJoin(serviceTypes, eq(serviceTypes.id, visitLines.serviceTypeId))
     .where(eq(visitLines.visitId, visitId)).orderBy(asc(visitLines.sortOrder));
-  const used = await tx.select({ vp: visitProducts, p: products, carrier: productRates.carrierGalPer1000 })
+  const used = await tx.select({ vp: visitProducts, p: products })
     .from(visitProducts)
     .innerJoin(products, eq(products.id, visitProducts.productId))
-    .leftJoin(productRates, eq(productRates.id, visitProducts.productRateId))
     .where(eq(visitProducts.visitId, visitId)).orderBy(asc(visitProducts.sortOrder));
   const kept = used.filter((u) => u.p.trackRecords || u.p.productType === "adjuvant");
   if (!kept.length && !lines.some((l) => l.chemical)) return null;
@@ -55,7 +54,7 @@ export async function createApplicationRecord(tx: Tx, visitId: string, companyId
     productRows.push({
       productId: u.p.id, tradeName: u.vp.productName, epaRegNo: u.vp.epaRegNo, productType: u.p.productType, restrictedUse: u.p.restrictedUse,
       rateName: u.vp.rateName, ratePer1000: u.vp.amountPer1000, unit: u.vp.unit,
-      dilutionPerGal: dilutionPerGal(u.vp.amountPer1000, u.carrier), carrierGalPer1000: u.carrier ?? null,
+      dilutionPerGal: dilutionPerGal(u.vp.amountPer1000, u.vp.carrierGalPer1000), carrierGalPer1000: u.vp.carrierGalPer1000 ?? null, methodName: u.vp.methodName,
       amount: u.vp.amount, targets: u.p.targets, reiHours: u.p.reiHours, labelId: await labelOn(tx, u.p.id, appliedOn), sortOrder: i,
       requiredAdjuvant: u.p.requiredAdjuvant, requiredDriftAgent: u.p.requiredDriftAgent,
     });
@@ -70,7 +69,7 @@ export async function createApplicationRecord(tx: Tx, visitId: string, companyId
     customerId: v.customerId, customerName: cust ? customerName(cust) : "Unknown", customerAddress: custAddress,
     propertyId: v.propertyId, siteAddress: prop ? formatAddress(prop) : null,
     appliedOn, startedAt: v.startedAt, stoppedAt: v.completedAt,
-    site: lines.find((l) => l.site)?.site ?? null, areaSqFt: area,
+    site: siteOverride ?? lines.find((l) => l.site)?.site ?? null, areaSqFt: area,
     tankMixGal: tankMixGallons(productRows, area), lat: v.completedLat, lng: v.completedLng,
   };
   const issues = recordIssues({ ...header, products: productRows });

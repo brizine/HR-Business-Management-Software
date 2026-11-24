@@ -6,6 +6,7 @@ import { hasRole, loginSchema, signupSchema, isInactive, type Role } from "@crew
 import { z } from "zod";
 import { db } from "../db";
 import { companies, employees, passwordResets, recoveryCodes } from "../db/schema";
+import { hasChemicalAccess } from "../lib/chemicalAccess";
 import {
   TWO_FACTOR_POLICIES,
   clearSessionCookie,
@@ -395,7 +396,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const [company] = await db.select().from(companies).where(eq(companies.id, user.companyId));
     // Access by area (Permissions page), so the website and app show only what this person can use.
     // Not for every signed-in person: the storage key, and the accounting connection (and its encrypted key).
-    return { user: publicEmployee(user), company: publicCompany(company), access: { areas: req.user.areas ?? {}, managesPermissions: !!req.user.managesPermissions } };
+    return { user: publicEmployee(user), company: publicCompany(company), access: { areas: req.user.areas ?? {}, managesPermissions: !!req.user.managesPermissions, chemicalTracking: await hasChemicalAccess(req) } };
   });
 
   /** What the Security settings page shows. */

@@ -3,6 +3,7 @@ import { taxRateSchema } from "./tax";
 import { lineAmount } from "./billing";
 import { DEFAULT_TODO_COLOR } from "./todos";
 import { checkWaitWindow, waitWindowFields } from "./waitlist";
+import { chemicalCompletionSchema } from "./chemicalRecords";
 
 /**
  * Work orders: scheduled jobs at a customer's property (Homeworks calls them visits). Each has the
@@ -118,6 +119,8 @@ export const visitCompleteSchema = z.object({
   lat: z.number().min(-90).max(90).nullable().optional(),
   lng: z.number().min(-180).max(180).nullable().optional(),
   accuracy: z.number().min(0).max(100_000).nullable().optional(),
+  /** Chemical work orders: what the tech confirms was applied, and how (see chemicalCompletionSchema). */
+  chemicals: chemicalCompletionSchema.optional(),
 });
 export const visitSkipSchema = z.object({ reason: z.string().trim().min(1, "Say why it was skipped").max(500) });
 

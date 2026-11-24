@@ -53,6 +53,8 @@ export const productRateSchema = z.object({
   method: z.enum(APPLICATION_METHODS).default("truck_spray"),
   /** Spray volume (water + product) per 1,000 sq ft, in gallons; null for dry products. */
   carrierGalPer1000: amount.nullable().default(null),
+  /** The Chemical Tracking application method this rate is for (its spray volume becomes the carrier). */
+  applicationMethodId: z.string().uuid().nullable().default(null),
 });
 export type ProductRateInput = z.infer<typeof productRateSchema>;
 

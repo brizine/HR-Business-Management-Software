@@ -8,7 +8,7 @@ import { ErrorBox, PageHead } from "@/components/ui";
 
 interface RecProduct {
   id: string; tradeName: string; epaRegNo: string | null; productType: string | null; restrictedUse: boolean; rateName: string | null; ratePer1000: number; unit: string;
-  dilutionPerGal: number | null; carrierGalPer1000: number | null; amount: number; targets: string | null; reiHours: number | null; label: { id: string; fileName: string } | null;
+  dilutionPerGal: number | null; carrierGalPer1000: number | null; methodName: string | null; amount: number; targets: string | null; reiHours: number | null; label: { id: string; fileName: string } | null;
 }
 interface Rec {
   id: string; visitId: string | null; visitNumber: number | null; companyName: string; companyAddress: string | null; companyLicenseNo: string | null;
@@ -71,7 +71,7 @@ export default function ChemicalRecord({ params }: { params: Promise<{ id: strin
             <tr key={p.id}>
               <td><strong>{p.tradeName}</strong>{p.restrictedUse && <> <span className="badge bad">RUP</span></>}{p.productType === "adjuvant" && <> <span className="badge">adjuvant</span></>}<div className="muted">{p.epaRegNo ? `EPA ${p.epaRegNo}` : p.productType === "adjuvant" ? "" : "no EPA #"}</div></td>
               <td>{formatRateAmount(p.ratePer1000, p.unit)}{p.rateName ? <div className="muted">{p.rateName}</div> : null}</td>
-              <td>{p.dilutionPerGal != null ? `${formatRateAmount(p.dilutionPerGal, p.unit)} per gal` : "Not mixed"}{p.carrierGalPer1000 ? <div className="muted">{n(p.carrierGalPer1000)} gal spray / 1,000</div> : null}</td>
+              <td>{p.dilutionPerGal != null ? `${formatRateAmount(p.dilutionPerGal, p.unit)} per gal` : "Not mixed"}{p.methodName || p.carrierGalPer1000 ? <div className="muted">{[p.methodName, p.carrierGalPer1000 ? `${n(p.carrierGalPer1000)} gal spray / 1,000` : null].filter(Boolean).join(" · ")}</div> : null}</td>
               <td>{formatRateAmount(p.amount, p.unit)}</td>
               <td>{p.targets ?? "—"}</td>
               <td>{p.reiHours != null ? `${n(p.reiHours, 1)} h` : "—"}</td>

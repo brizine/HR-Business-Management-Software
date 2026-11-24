@@ -114,7 +114,7 @@ export default function WorkOrder({ params }: { params: Promise<{ id: string }> 
       )}
       {!editing && v.canManage && v.status === "completed" && <div style={{ marginTop: 16 }}><WorkOrderWeather visitId={v.id} /></div>}
       {!editing && v.status === "completed" && <VisitProducts visitId={v.id} completedAt={v.completedAt} />}
-      {!editing && v.canManage && v.status === "completed" && <ChemicalRecordLink visitId={v.id} completedAt={v.completedAt} />}
+      {!editing && me?.access?.chemicalTracking && v.status === "completed" && <ChemicalRecordLink visitId={v.id} completedAt={v.completedAt} />}
       {!editing && <div style={{ marginTop: 16 }}><CustomFieldsCard target="workorder" id={v.id} canEdit={v.canManage || v.isCrew} values={v.custom ?? {}} onSaved={(custom) => update({ ...v, custom })} /></div>}
       {!editing && <div style={{ marginTop: 16 }}><VisitFiles visitId={v.id} canAdd={v.canManage || v.isCrew} canManage={v.canManage} meId={me?.user.id} /></div>}
     </>
@@ -159,7 +159,7 @@ function ChemicalRecordLink({ visitId, completedAt }: { visitId: string; complet
     <div className="card" style={{ marginTop: 16 }}>
       <strong>Chemical application record</strong>{" "}
       {r.issues.length ? <span className="badge warn">{r.issues.length} missing</span> : <span className="badge ok">complete</span>}{" "}
-      <Link href={`/chemical-records/${r.id}`}>Open record</Link>
+      <Link href={`/chemical-tracking/records/${r.id}`}>Open record</Link>
     </div>
   );
 }

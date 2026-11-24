@@ -2,17 +2,20 @@ import type { FastifyPluginAsync } from "fastify";
 import { and, asc, desc, eq, ilike, inArray, notInArray, or, sql } from "drizzle-orm";
 import { costOn, costPerUseUnitCents, productCostSchema, productSchema, type ProductInput } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, productCosts, productRates, products, serviceProducts, serviceTypes, visitProducts } from "../db/schema";
-import { authenticate, requireRole } from "../lib/auth";
+import { applicationMethods, companies, productCosts, productRates, products, serviceProducts, serviceTypes, visitProducts } from "../db/schema";
+import { authenticate } from "../lib/auth";
+import { requireChemicalAccess } from "../lib/chemicalAccess";
 import { HttpError, parse } from "../lib/errors";
 import { localDate } from "../lib/tz";
 
-const AREA = "customers" as const;
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** Saves a product's rates as the set sent: kept ids are updated, new ones added, missing ones removed. */
-async function saveRates(tx: Tx, productId: string, rates: ProductInput["rates"]) {
+async function saveRates(tx: Tx, productId: string, companyId: string, rates: ProductInput["rates"]) {
+  const methodIds = [...new Set(rates.map((r) => r.applicationMethodId).filter((x): x is string => !!x))];
+  const methods = methodIds.length ? await tx.select().from(applicationMethods).where(and(inArray(applicationMethods.id, methodIds), eq(applicationMethods.companyId, companyId))) : [];
+  if (methods.length !== methodIds.length) throw new HttpError(400, "Pick one of your application methods");
   const keep = rates.map((r) => r.id).filter((x): x is string => !!x);
   const used = await tx.select({ rate: productRates.name, service: serviceTypes.name }).from(serviceProducts)
     .innerJoin(productRates, eq(productRates.id, serviceProducts.productRateId))
@@ -21,7 +24,13 @@ async function saveRates(tx: Tx, productId: string, rates: ProductInput["rates"]
   if (used.length) throw new HttpError(400, `The ${used[0].rate} rate is used by ${used[0].service}; take it off that service first`);
   await tx.delete(productRates).where(and(eq(productRates.productId, productId), keep.length ? notInArray(productRates.id, keep) : undefined));
   for (const [i, r] of rates.entries()) {
-    const values = { name: r.name, amountPer1000: r.amountPer1000, method: r.method, carrierGalPer1000: r.carrierGalPer1000, sortOrder: i };
+    // With a Chemical Tracking method, its spray volume is the rate's (dry methods: none).
+    const m = methods.find((x) => x.id === r.applicationMethodId);
+    const values = {
+      name: r.name, amountPer1000: r.amountPer1000, sortOrder: i, applicationMethodId: m?.id ?? null,
+      method: m ? (m.galPer1000 == null ? "push_spreader" : "truck_spray") : r.method,
+      carrierGalPer1000: m ? m.galPer1000 : r.carrierGalPer1000,
+    };
     if (r.id) {
       const [hit] = await tx.update(productRates).set(values).where(and(eq(productRates.id, r.id), eq(productRates.productId, productId))).returning({ id: productRates.id });
       if (!hit) throw new HttpError(400, "A rate belongs to another product");
@@ -38,12 +47,13 @@ async function today(companyId: string) {
 
 /**
  * The product list: chemicals and fertilizers with their rates and cost history, for budgeting
- * and chemical records. Managers in Customers & billing read it; admins change it.
+ * and chemical records. Part of Chemical Tracking: admins and the people they add.
  */
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
-  app.addHook("preHandler", requireRole("manager", AREA));
-  const admin = { preHandler: requireRole("admin", AREA) };
+  // Chemical Tracking only: admins and the people they add (see lib/chemicalAccess).
+  app.addHook("preHandler", requireChemicalAccess);
+  const admin = {};
 
   /** Products with their rates, the cost in force today, and that cost per use unit. */
   async function load(companyId: string, opts: { ids?: string[]; all?: boolean; q?: string }) {
@@ -89,7 +99,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const { rates, ...body } = parse(productSchema, req.body);
     const id = await db.transaction(async (tx) => {
       const [row] = await tx.insert(products).values({ ...body, companyId: req.user.companyId, updatedById: req.user.sub }).returning({ id: products.id });
-      await saveRates(tx, row.id, rates.map(({ id: _drop, ...r }) => r));
+      await saveRates(tx, row.id, req.user.companyId, rates.map(({ id: _drop, ...r }) => r));
       return row.id;
     });
     return one(req.user.companyId, id);
@@ -101,7 +111,7 @@ const routes: FastifyPluginAsync = async (app) => {
       const [row] = await tx.update(products).set({ ...body, updatedById: req.user.sub, updatedAt: new Date() })
         .where(and(eq(products.id, req.params.id), eq(products.companyId, req.user.companyId))).returning({ id: products.id });
       if (!row) throw new HttpError(404, "Product not found");
-      await saveRates(tx, row.id, rates);
+      await saveRates(tx, row.id, req.user.companyId, rates);
     });
     return one(req.user.companyId, req.params.id);
   });

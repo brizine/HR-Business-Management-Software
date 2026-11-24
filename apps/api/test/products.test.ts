@@ -47,10 +47,27 @@ const celsius = {
 describe("products", () => {
   let id = "";
 
-  it("lets admins add a product with its rates; managers read; techs can't", async () => {
-    expect((await call("POST", "/products", "office", celsius)).status).toBe(403);
+  it("is Chemical Tracking only: admins, and the people they add", async () => {
+    // A manager isn't in until an admin adds them; only admins change the list.
+    expect((await call("GET", "/products", "office")).status).toBe(403);
+    expect((await call("GET", "/auth/me", "office")).body.access.chemicalTracking).toBe(false);
+    expect((await call("GET", "/auth/me", "owner")).body.access.chemicalTracking).toBe(true);
+    const people = (await call("GET", "/chemical-tracking/access", "owner")).body.people as { id: string; name: string; access: boolean; admin: boolean }[];
+    const office = people.find((p) => p.name === "office Person")!;
+    const tech = people.find((p) => p.name === "tech Person")!;
+    expect(people.find((p) => p.admin)?.access).toBe(true);
+    expect(office.access).toBe(false);
+    expect((await call("PUT", `/chemical-tracking/access/${office.id}`, "owner")).status).toBe(200);
+    expect((await call("GET", "/auth/me", "office")).body.access.chemicalTracking).toBe(true);
+    expect((await call("PUT", `/chemical-tracking/access/${tech.id}`, "office")).status).toBe(403);
     expect((await call("GET", "/products", "tech")).status).toBe(403);
-    const made = await call("POST", "/products", "owner", celsius);
+    expect((await call("GET", "/chemical-tracking/methods", "tech")).status).toBe(403);
+    // The other company can't add someone from this one.
+    expect((await call("PUT", `/chemical-tracking/access/${tech.id}`, "other")).status).toBe(404);
+  });
+
+  it("lets Chemical Tracking users add a product with its rates", async () => {
+    const made = await call("POST", "/products", "office", celsius);
     expect(made.status).toBe(200);
     id = made.body.id;
     expect(made.body).toMatchObject({ name: "Testweed WG", epaRegNo: "0000-1111", useUnit: "ounces dry", trackRecords: true, currentCost: null, costPerUseUnitCents: null });
@@ -87,7 +104,7 @@ describe("products", () => {
     expect(future.body.currentCost.costPerPurchaseUnitCents).toBe(35000);
     expect(future.body.costs.map((c: { effectiveFrom: string }) => c.effectiveFrom)).toEqual(["2099-01-01", "2026-02-01", "2025-01-15"]);
     const wrong = future.body.costs[0];
-    expect((await call("DELETE", `/products/${id}/costs/${wrong.id}`, "office")).status).toBe(403);
+    expect((await call("DELETE", `/products/${id}/costs/${wrong.id}`, "tech")).status).toBe(403);
     expect((await call("DELETE", `/products/${id}/costs/${wrong.id}`, "owner")).body.costs).toHaveLength(2);
     expect((await call("POST", `/products/${id}/costs`, "owner", { costPerPurchaseUnitCents: 100, effectiveFrom: "Feb 1" })).status).toBe(400);
   });

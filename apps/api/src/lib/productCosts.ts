@@ -1,7 +1,7 @@
 import { asc, eq, inArray } from "drizzle-orm";
-import { appliesOn, costOn, costPerUseUnitCents } from "@crewdesk/shared";
+import { APPLICATION_METHOD_LABELS, appliesOn, costOn, costPerUseUnitCents, type ApplicationMethod } from "@crewdesk/shared";
 import { db } from "../db";
-import { productCosts, productRates, products, properties, serviceProducts, visitLines, visitProducts, visits } from "../db/schema";
+import { productCosts, productRates, products, properties, serviceProducts, visitLines, visitProducts, visits, applicationMethods } from "../db/schema";
 import { companyToday } from "./payRates";
 
 type Db = typeof db;
@@ -34,11 +34,13 @@ function load(serviceIds: string[], run: Db | Tx) {
       id: serviceProducts.id, serviceTypeId: serviceProducts.serviceTypeId, productId: serviceProducts.productId, productRateId: serviceProducts.productRateId,
       startDate: serviceProducts.startDate, endDate: serviceProducts.endDate,
       productName: products.name, epaRegNo: products.epaRegNo, unit: products.useUnit, purchaseUnitSize: products.purchaseUnitSize, trackRecords: products.trackRecords,
-      rateName: productRates.name, amountPer1000: productRates.amountPer1000,
+      rateName: productRates.name, amountPer1000: productRates.amountPer1000, carrierGalPer1000: productRates.carrierGalPer1000, method: productRates.method,
+      applicationMethodId: productRates.applicationMethodId, applicationMethodName: applicationMethods.name,
     })
     .from(serviceProducts)
     .innerJoin(products, eq(products.id, serviceProducts.productId))
     .innerJoin(productRates, eq(productRates.id, serviceProducts.productRateId))
+    .leftJoin(applicationMethods, eq(applicationMethods.id, productRates.applicationMethodId))
     .where(inArray(serviceProducts.serviceTypeId, serviceIds))
     .orderBy(asc(serviceProducts.sortOrder));
 }
@@ -79,6 +81,8 @@ export async function snapshotVisitProducts(tx: Tx, visitId: string, companyId: 
       companyId, visitId, serviceTypeId: l.serviceTypeId, productId: p.productId, productRateId: p.productRateId, productCostId: p.costId,
       productName: p.productName, epaRegNo: p.epaRegNo, rateName: p.rateName, amountPer1000: p.amountPer1000, areaSqFt: sqFt, amount, unit: p.unit,
       costPerUseUnitCents: p.costPerUseUnitCents, costCents: p.costPerUseUnitCents == null ? null : Math.round(amount * p.costPerUseUnitCents), costDate: day, sortOrder: li * 100 + pi,
+      applicationMethodId: p.applicationMethodId, carrierGalPer1000: p.carrierGalPer1000,
+      methodName: p.applicationMethodName ?? APPLICATION_METHOD_LABELS[p.method as ApplicationMethod] ?? null,
     };
   }));
   if (rows.length) await tx.insert(visitProducts).values(rows);

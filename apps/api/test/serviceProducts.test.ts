@@ -38,6 +38,9 @@ beforeAll(async () => {
     ID[who] = (await call("POST", "/employees", "owner", { firstName: who, lastName: "Person", email: email(who), password: "password123", role })).body.id;
     T[who] = (await app.inject({ method: "POST", url: "/auth/login", payload: { email: email(who), password: "password123" } })).json().token;
   }
+  // Chemical Tracking: admins always; the office manager is added to the access list.
+  const officeId = (await call("GET", "/chemical-tracking/access", "owner")).body.people.find((p: { name: string }) => p.name === "office Person").id;
+  await call("PUT", `/chemical-tracking/access/${officeId}`, "owner");
   await call("POST", "/crm/sample-customers", "owner");
   ID.jane = (await call("GET", "/customers?q=jane", "office")).body.rows[0].id;
   ID.janeProp = (await call("GET", `/customers/${ID.jane}`, "office")).body.properties[0].id;
@@ -64,12 +67,12 @@ afterAll(async () => {
 });
 
 describe("products on services", () => {
-  it("only admins set a service's products, and only with the product's own rates", async () => {
+  it("only Chemical Tracking users set a service's products, and only with the product's own rates", async () => {
     const links = { products: [{ productId: ID.liquid, productRateId: ID.liquidRate }, { productId: ID.granular, productRateId: ID.granularRate, startDate: "2026-06-01", endDate: "2026-09-30" }] };
-    expect((await call("PUT", `/service-types/${ID.round}/products`, "office", links)).status).toBe(403);
-    expect((await call("PUT", `/service-types/${ID.round}/products`, "owner", { products: [{ productId: ID.liquid, productRateId: ID.granularRate }] })).status).toBe(400);
-    expect((await call("PUT", `/service-types/${ID.round}/products`, "owner", { products: [{ ...links.products[1], startDate: "2026-09-30", endDate: "2026-06-01" }] })).status).toBe(400);
-    expect((await call("PUT", `/service-types/${ID.round}/products`, "owner", links)).status).toBe(200);
+    expect((await call("PUT", `/chemical-tracking/services/${ID.round}/products`, "tech", links)).status).toBe(403);
+    expect((await call("PUT", `/chemical-tracking/services/${ID.round}/products`, "owner", { products: [{ productId: ID.liquid, productRateId: ID.granularRate }] })).status).toBe(400);
+    expect((await call("PUT", `/chemical-tracking/services/${ID.round}/products`, "owner", { products: [{ ...links.products[1], startDate: "2026-09-30", endDate: "2026-06-01" }] })).status).toBe(400);
+    expect((await call("PUT", `/chemical-tracking/services/${ID.round}/products`, "owner", links)).status).toBe(200);
   });
 
   it("shows material per 1,000 sq ft from the products that apply today", async () => {

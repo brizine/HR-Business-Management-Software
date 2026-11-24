@@ -5,12 +5,12 @@ import { db } from "../db";
 import {
   applicationRecordChanges, applicationRecordProducts, applicationRecords, applicatorCerts, companies, employees, productLabels, products, visitWeather,
 } from "../db/schema";
-import { authenticate, requireRole } from "../lib/auth";
+import { authenticate } from "../lib/auth";
+import { requireChemicalAccess } from "../lib/chemicalAccess";
 import { fileView, sendStored, storeUpload } from "../lib/attachments";
 import { HttpError, parse } from "../lib/errors";
 import { refreshIssues } from "../lib/chemicalRecords";
 
-const AREA = "customers" as const;
 const isoDate = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
 
 type Q = { from?: string; to?: string; customerId?: string; productId?: string; applicatorId?: string; visitId?: string; status?: string };
@@ -45,12 +45,13 @@ async function withDetail(recordIds: string[]) {
 /**
  * Chemical application records (ODAFF, OAC 35:30-17-21): the log, each record, corrections, the
  * export for an inspection, and what they draw on (applicator certifications, the license number,
- * product labels). Managers in Customers & billing read and correct; admins set certifications.
+ * product labels). Part of Chemical Tracking: admins and the people they add.
  */
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
-  app.addHook("preHandler", requireRole("manager", AREA));
-  const admin = { preHandler: requireRole("admin", AREA) };
+  // Chemical Tracking only: admins and the people they add (see lib/chemicalAccess).
+  app.addHook("preHandler", requireChemicalAccess);
+  const admin = {};
 
   app.get<{ Querystring: Q & { limit?: string } }>("/", async (req) => {
     const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 1000);
@@ -132,7 +133,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const out = [csvRow([
       "Date", "Start", "Stop", "Work order", "Company", "Company address", "License #", "Applicator", "Cert #", "Cert expires",
       "Customer", "Customer address", "Site address", "Site", "Area (sq ft)", "Tank mix (gal)",
-      "Product (trade name)", "EPA reg #", "Rate per 1,000 sq ft", "Unit", "Dilution per gal", "Amount used", "Target pest", "REI (hours)",
+      "Product (trade name)", "EPA reg #", "Application method", "Rate per 1,000 sq ft", "Unit", "Dilution per gal", "Amount used", "Target pest", "REI (hours)",
       "Wind", "Temperature (°F)", "Issues",
     ])];
     for (const r of rows) {
@@ -144,7 +145,7 @@ const routes: FastifyPluginAsync = async (app) => {
           r.appliedOn, time(r.startedAt), time(r.stoppedAt), r.visitNumber ? `WO-${r.visitNumber}` : "", r.companyName, r.companyAddress, r.companyLicenseNo,
           r.applicatorName, r.applicatorCertNo, r.applicatorCertExpires, r.customerName, r.customerAddress, r.siteAddress, r.site,
           r.areaSqFt != null ? Math.round(r.areaSqFt) : "", r.tankMixGal != null ? Math.round(r.tankMixGal * 10) / 10 : "",
-          p?.tradeName, p?.epaRegNo, p?.ratePer1000, p?.unit, p?.dilutionPerGal != null ? Math.round(p.dilutionPerGal * 10000) / 10000 : (p ? "not mixed" : ""),
+          p?.tradeName, p?.epaRegNo, p?.methodName, p?.ratePer1000, p?.unit, p?.dilutionPerGal != null ? Math.round(p.dilutionPerGal * 10000) / 10000 : (p ? "not mixed" : ""),
           p ? Math.round(p.amount * 1000) / 1000 : "", p?.targets, p?.reiHours, wind, w?.tempF ?? "", r.issues.join("; "),
         ]));
       }
