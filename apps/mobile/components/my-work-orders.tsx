@@ -6,6 +6,7 @@ import { formatTodoTime } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { CustomLines, useCustomFieldDefs } from "./custom-values";
+import { ChemicalsStep, type ChemicalOptions } from "./chemicals-step";
 import { Badge, Button, Card, Divider, Input, Row, Txt, useTheme } from "./ui";
 
 const day = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
@@ -45,6 +46,20 @@ export function MyWorkOrdersCard({ refreshKey }: { refreshKey?: number }) {
   const list = useApi<{ today: string; items: any[] }>(`/visits?mine=true&status=active&to=${plusDays(new Date().toISOString().slice(0, 10), 8)}&r=${refreshKey ?? 0}`);
   const [busy, setBusy] = useState<string | null>(null);
   const [writing, setWriting] = useState<{ id: string; kind: "complete" | "skip"; text: string } | null>(null);
+  /** A chemical work order being completed: its chemicals step. */
+  const [chem, setChem] = useState<{ id: string; options: ChemicalOptions } | null>(null);
+
+  /** Completed: chemical work orders get the chemicals step; others just the notes. */
+  const startComplete = async (id: string) => {
+    setBusy(id);
+    try {
+      const options = await api<ChemicalOptions>(`/visits/${id}/chemicals`);
+      if (options.chemical) { setChem({ id, options }); setWriting(null); } else setWriting({ id, kind: "complete", text: "" });
+    } catch {
+      setWriting({ id, kind: "complete", text: "" });
+    }
+    setBusy(null);
+  };
   const today = list.data?.today ?? "";
   const items = (list.data?.items ?? []).filter((v) => !v.date || !today || v.date <= plusDays(today, 7));
 
@@ -78,7 +93,7 @@ export function MyWorkOrdersCard({ refreshKey }: { refreshKey?: number }) {
 
   const post = async (id: string, path: string, body: object = {}) => {
     setBusy(id);
-    try { await api(`/visits/${id}/${path}`, { method: "POST", body }); setWriting(null); await list.reload(); }
+    try { await api(`/visits/${id}/${path}`, { method: "POST", body }); setWriting(null); setChem(null); await list.reload(); }
     catch (e) { Alert.alert("Couldn't save that", (e as Error).message); }
     setBusy(null);
   };
@@ -118,7 +133,10 @@ export function MyWorkOrdersCard({ refreshKey }: { refreshKey?: number }) {
               {v.fileCount ? <Txt muted>📎 {v.fileCount} photo{v.fileCount === 1 ? "" : "s"} or document{v.fileCount === 1 ? "" : "s"}</Txt> : null}
             </View>
             <Button title={busy === v.id ? "Adding…" : "Add photo"} kind="secondary" busy={busy === v.id} onPress={() => addPhoto(v.id)} />
-            {w ? (
+            {chem && chem.id === v.id ? (
+              <ChemicalsStep options={chem.options} busy={busy === v.id} onCancel={() => setChem(null)}
+                onSave={async (notes, chemicals) => { setBusy(v.id); post(v.id, "complete", { notes, chemicals, ...(await completionSpot()) }); }} />
+            ) : w ? (
               <View style={{ gap: 6 }}>
                 <Input label={w.kind === "complete" ? "Notes about the work (optional)" : "Why was it skipped?"} value={w.text} multiline
                   onChangeText={(text) => setWriting({ ...w, text })} placeholder={w.kind === "complete" ? "Applied round 3; gate was open" : "Rain, locked gate…"} />
@@ -132,7 +150,7 @@ export function MyWorkOrdersCard({ refreshKey }: { refreshKey?: number }) {
             ) : (
               <Row>
                 {v.status === "open" && <View style={{ flex: 1 }}><Button title="Arrived" kind="secondary" busy={busy === v.id} onPress={() => post(v.id, "start")} /></View>}
-                <View style={{ flex: 1 }}><Button title="Completed" onPress={() => setWriting({ id: v.id, kind: "complete", text: "" })} /></View>
+                <View style={{ flex: 1 }}><Button title="Completed" busy={busy === v.id} onPress={() => startComplete(v.id)} /></View>
                 <View style={{ flex: 1 }}><Button title="Skip" kind="secondary" onPress={() => setWriting({ id: v.id, kind: "skip", text: "" })} /></View>
               </Row>
             )}

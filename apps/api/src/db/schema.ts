@@ -1055,6 +1055,8 @@ export const mixProducts = pgTable("mix_products", {
   name: text("name").notNull(),
   ratePerAcre: doublePrecision("rate_per_acre").notNull(),
   unit: text("unit").notNull(),
+  /** The catalog product this row is (its rate is used when a tech applies it with this sheet). */
+  productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
@@ -1169,6 +1171,10 @@ export const visitProducts = pgTable(
     costPerUseUnitCents: doublePrecision("cost_per_use_unit_cents"),
     costCents: integer("cost_cents"),
     costDate: date("cost_date").notNull(),
+    /** How it was applied: a Spray Mix sheet (its spray volume), or null with "Spreader (not mixed)". */
+    mixSheetId: uuid("mix_sheet_id").references(() => mixSheets.id, { onDelete: "set null" }),
+    methodName: text("method_name"),
+    carrierGalPer1000: doublePrecision("carrier_gal_per_1000"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: createdAt(),
   },
@@ -2697,6 +2703,8 @@ export const applicationRecordProducts = pgTable(
     targets: text("targets"),
     reiHours: doublePrecision("rei_hours"),
     labelId: uuid("label_id").references(() => productLabels.id, { onDelete: "set null" }),
+    /** How it was applied, e.g. "Truck 2gal/1000ft" or "Spreader (not mixed)". */
+    methodName: text("method_name"),
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (t) => [index("application_record_products_record_idx").on(t.recordId)],

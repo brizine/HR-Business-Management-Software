@@ -125,3 +125,30 @@ export function csvCell(v: unknown) {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 export const csvRow = (cells: unknown[]) => cells.map(csvCell).join(",");
+
+/** "How it was applied" for a dry product: no spray mix. */
+export const DRY_METHOD = "dry";
+export const DRY_METHOD_LABEL = "Spreader (not mixed)";
+
+/** Gallons of spray per 1,000 sq ft for a Spray Mix sheet's gallons per acre (87.12 → 2). */
+export const galPer1000FromAcre = (gallonsPerAcre: number) => gallonsPerAcre / 43.56;
+/** A Spray Mix sheet's product rate per acre as a rate per 1,000 sq ft. */
+export const per1000FromAcre = (ratePerAcre: number) => ratePerAcre / 43.56;
+
+/**
+ * What the tech confirms when completing a chemical work order: for each product, whether it was
+ * used, how it was applied (a Spray Mix sheet, or "dry"), the rate and the amount; and the area and
+ * site, when they differ from the property and the service.
+ */
+export const chemicalCompletionSchema = z.object({
+  areaSqFt: z.number().positive().max(100_000_000).nullable().optional(),
+  site: z.preprocess(blankToNull, z.string().trim().max(200).nullable()).optional(),
+  items: z.array(z.object({
+    productId: z.string().uuid(),
+    used: z.boolean().default(true),
+    methodId: z.string().trim().min(1).max(40),
+    ratePer1000: z.number().nonnegative().max(1_000_000),
+    amount: z.number().nonnegative().max(1_000_000),
+  })).max(40),
+});
+export type ChemicalCompletion = z.infer<typeof chemicalCompletionSchema>;

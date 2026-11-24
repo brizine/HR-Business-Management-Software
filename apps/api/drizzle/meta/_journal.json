@@ -603,6 +603,13 @@
       "when": 1795557579067,
       "tag": "0085_rate_matrix_products_chemical_records",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1795558240451,
+      "tag": "0086_tech_chemicals",
+      "breakpoints": true
     }
   ]
 }

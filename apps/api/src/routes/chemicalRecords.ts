@@ -132,7 +132,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const out = [csvRow([
       "Date", "Start", "Stop", "Work order", "Company", "Company address", "License #", "Applicator", "Cert #", "Cert expires",
       "Customer", "Customer address", "Site address", "Site", "Area (sq ft)", "Tank mix (gal)",
-      "Product (trade name)", "EPA reg #", "Rate per 1,000 sq ft", "Unit", "Dilution per gal", "Amount used", "Target pest", "REI (hours)",
+      "Product (trade name)", "EPA reg #", "Application method", "Rate per 1,000 sq ft", "Unit", "Dilution per gal", "Amount used", "Target pest", "REI (hours)",
       "Wind", "Temperature (°F)", "Issues",
     ])];
     for (const r of rows) {
@@ -144,7 +144,7 @@ const routes: FastifyPluginAsync = async (app) => {
           r.appliedOn, time(r.startedAt), time(r.stoppedAt), r.visitNumber ? `WO-${r.visitNumber}` : "", r.companyName, r.companyAddress, r.companyLicenseNo,
           r.applicatorName, r.applicatorCertNo, r.applicatorCertExpires, r.customerName, r.customerAddress, r.siteAddress, r.site,
           r.areaSqFt != null ? Math.round(r.areaSqFt) : "", r.tankMixGal != null ? Math.round(r.tankMixGal * 10) / 10 : "",
-          p?.tradeName, p?.epaRegNo, p?.ratePer1000, p?.unit, p?.dilutionPerGal != null ? Math.round(p.dilutionPerGal * 10000) / 10000 : (p ? "not mixed" : ""),
+          p?.tradeName, p?.epaRegNo, p?.methodName, p?.ratePer1000, p?.unit, p?.dilutionPerGal != null ? Math.round(p.dilutionPerGal * 10000) / 10000 : (p ? "not mixed" : ""),
           p ? Math.round(p.amount * 1000) / 1000 : "", p?.targets, p?.reiHours, wind, w?.tempF ?? "", r.issues.join("; "),
         ]));
       }

@@ -331,6 +331,8 @@ function Editor({ sheet, onChange }: { sheet: any; onChange: () => void }) {
   const num = (v: FormDataEntryValue | null) => Number(v);
   const mixUnits = useUnits();
   const unitOptions = (current: string) => [...new Set([...mixUnits, current])];
+  const catalog = useApi<{ id: string; name: string; unit: string }[]>("/spray-mixes/catalog");
+  const link = (rowId: string, catalogId: string) => run(async () => { await api(`/spray-mixes/products/${rowId}/catalog`, { method: "PUT", body: { catalogId: catalogId || null } }); onChange(); });
 
   return (
     <div className="card stack noprint">
@@ -353,6 +355,7 @@ function Editor({ sheet, onChange }: { sheet: any; onChange: () => void }) {
       <table>
         <thead><tr><th>Product</th><th>Rate per acre</th><th>Measurement</th><th /></tr></thead>
         <tbody>
+          <tr><td colSpan={4} className="muted">Link each row to its product on the Products page: when a tech records that product applied with this mix, this mix&apos;s rate and water are used on the chemical record.</td></tr>
           {sheet.products.map((p: any, i: number) => (
             <tr key={p.id}>
               <td colSpan={4}>
@@ -365,6 +368,11 @@ function Editor({ sheet, onChange }: { sheet: any; onChange: () => void }) {
                   <input name="ratePerAcre" type="number" step="any" min="0" defaultValue={p.ratePerAcre} aria-label={`${p.name} rate per acre`} required style={{ width: 110 }} />
                   <select name="unit" defaultValue={p.unit} aria-label={`${p.name} measurement`} style={{ width: 150 }}>{unitOptions(p.unit).map((u) => <option key={u}>{u}</option>)}</select>
                   <button className="btn sm" disabled={busy}>Save</button>
+                  <select value={p.productId ?? ""} aria-label={`${p.name}: product on the Products page`} title="When a tech records this product applied with this mix, this rate is used" disabled={busy}
+                    onChange={(e) => link(p.id, e.target.value)} style={{ width: 200 }}>
+                    <option value="">Not linked to Products</option>
+                    {(catalog.data ?? []).map((c) => <option key={c.id} value={c.id} disabled={c.unit !== p.unit}>{c.name}{c.unit !== p.unit ? ` (${c.unit})` : ""}</option>)}
+                  </select>
                   <button type="button" className="btn sm" aria-label={`Move ${p.name} up`} disabled={busy || i === 0} onClick={() => run(async () => {
                     const prev = sheet.products[i - 1];
                     await api(`/spray-mixes/products/${p.id}`, { method: "PATCH", body: { sortOrder: i - 1 } });
