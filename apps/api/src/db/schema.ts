@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { AutomationStep, CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
+import type { AutomationStep, CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -1053,6 +1053,73 @@ export const mixProducts = pgTable("mix_products", {
   unit: text("unit").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
 });
+
+/** Products: chemicals and fertilizers, each listed once, for budgeting and chemical records. */
+export const products = pgTable(
+  "products",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    manufacturer: text("manufacturer"),
+    productType: text("product_type").notNull().default("other"),
+    formulation: text("formulation"),
+    activeIngredients: jsonb("active_ingredients").$type<ActiveIngredient[]>().notNull().default([]),
+    epaRegNo: text("epa_reg_no"),
+    restrictedUse: boolean("restricted_use").notNull().default(false),
+    signalWord: text("signal_word").notNull().default("none"),
+    reiHours: doublePrecision("rei_hours"),
+    targets: text("targets"),
+    /** Rates, costs and amounts used are kept in this unit (one of MIX_UNITS). */
+    useUnit: text("use_unit").notNull(),
+    purchaseUnitName: text("purchase_unit_name"),
+    /** How many use units one purchase unit holds. */
+    purchaseUnitSize: doublePrecision("purchase_unit_size"),
+    labelMaxPer1000: doublePrecision("label_max_per_1000"),
+    labelMaxPerYearPer1000: doublePrecision("label_max_per_year_per_1000"),
+    labelInstructions: text("label_instructions"),
+    customerNote: text("customer_note"),
+    incomeAccountCode: text("income_account_code"),
+    cogsAccountCode: text("cogs_account_code"),
+    taxable: boolean("taxable").notNull().default(false),
+    trackRecords: boolean("track_records").notNull().default(true),
+    active: boolean("active").notNull().default(true),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("products_company_idx").on(t.companyId, t.name)],
+);
+
+/** Named application rates of a product (Low / Med / High, Round 1 …), per 1,000 sq ft in its use unit. */
+export const productRates = pgTable(
+  "product_rates",
+  {
+    id: id(),
+    productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    amountPer1000: doublePrecision("amount_per_1000").notNull(),
+    method: text("method").notNull().default("truck_spray"),
+    carrierGalPer1000: doublePrecision("carrier_gal_per_1000"),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("product_rates_product_idx").on(t.productId)],
+);
+
+/** What a product costs, from a date on; the latest on or before a day is the cost that day. */
+export const productCosts = pgTable(
+  "product_costs",
+  {
+    id: id(),
+    productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+    costPerPurchaseUnitCents: integer("cost_per_purchase_unit_cents").notNull(),
+    vendor: text("vendor"),
+    effectiveFrom: date("effective_from").notNull(),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("product_costs_product_idx").on(t.productId, t.effectiveFrom)],
+);
 
 /** Employees chosen by an admin to edit mix sheets (admins can always edit). */
 export const mixEditors = pgTable(

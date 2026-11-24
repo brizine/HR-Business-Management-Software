@@ -589,6 +589,13 @@
       "when": 1795497851891,
       "tag": "0083_tiered_pricing",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1795523116982,
+      "tag": "0084_products",
+      "breakpoints": true
     }
   ]
 }

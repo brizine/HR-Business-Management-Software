@@ -43,3 +43,4 @@ export * from "./deposits";
 export * from "./texting";
 export * from "./automations";
 export * from "./waitlist";
+export * from "./products";
