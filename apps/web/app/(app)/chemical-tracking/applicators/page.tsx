@@ -6,7 +6,8 @@ import { ErrorBox, PageHead } from "@/components/ui";
 
 interface Applicator { id: string; name: string; certNo: string | null; expiresOn: string | null; categories: string | null }
 
-const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
+/** A local date n days back (not UTC, so evenings stay on today). */
+const daysAgo = (n: number) => { const d = new Date(Date.now() - n * 86_400_000); return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 10); };
 
 /** What every record draws on: the company license number and each applicator's certification. */
 export default function Applicators() {

@@ -74,11 +74,11 @@ beforeAll(async () => {
   await call("PUT", `/chemical-tracking/services/${ID.round}/products`, "owner", { products: [{ productId: pre.id, productRateId: pre.rates[0].id }, { productId: fert.id, productRateId: fert.rates[0].id }] });
 
   // Three customers, each with a property: 10,000, 6,000 and one with no lawn size.
-  const cust = async (key: string, first: string, sqFt: number | null, extra: Record<string, unknown> = {}) => {
+  const cust = async (key: string, first: string, sqFt: number | null, extra: Record<string, unknown> = {}, propExtra: Record<string, unknown> = {}) => {
     ID[key] = (await call("POST", "/customers", "owner", { firstName: first, lastName: "Example", email: email(key), phone: "(405) 555-01" + String(10 + Object.keys(ID).length).slice(-2), ...extra })).body.id;
-    ID[`${key}Prop`] = (await call("POST", "/properties", "owner", { street: `${first} St 1`, city: "Norman", zip: "73069", ...(sqFt ? { lawnSqFt: sqFt } : {}), billToCustomerId: ID[key] })).body.id;
+    ID[`${key}Prop`] = (await call("POST", "/properties", "owner", { street: `${first} St 1`, city: "Norman", zip: "73069", ...(sqFt ? { lawnSqFt: sqFt } : {}), billToCustomerId: ID[key], ...propExtra })).body.id;
   };
-  await cust("amy", "Amy", 10000); await cust("bob", "Bob", 6000); await cust("cal", "Cal", null);
+  await cust("amy", "Amy", 10000); await cust("bob", "Bob", 6000, {}, { mapCode: "N12", mapCodeManual: true }); await cust("cal", "Cal", null);
   ID.woAmy = (await call("POST", "/visits", "owner", workOrder(ID.amyProp, ID.amy, ID.leo, ID.crew))).body.id;
   ID.woBob = (await call("POST", "/visits", "owner", workOrder(ID.bobProp, ID.bob, ID.leo, ID.crew))).body.id;
   ID.woCal = (await call("POST", "/visits", "owner", workOrder(ID.calProp, ID.cal, ID.ana))).body.id;
@@ -271,6 +271,41 @@ describe("mixes on services", () => {
     // Off the service, the mix can be removed.
     await call("PUT", `/chemical-tracking/services/${ID.svc2}/mixes`, "owner", { mixes: [] });
     expect((await call("DELETE", `/chemical-tracking/mixes/${mix.id}`, "owner")).status).toBe(200);
+  });
+});
+
+describe("record filters, monthly totals and exports", () => {
+  it("finds records by property, Map Code, product and applicator", async () => {
+    const ids = async (qs: string) => ((await call("GET", `/chemical-records?status=all&${qs}`, "owner")).body as any[]).map((r) => r.customerName).sort();
+    expect(await ids("q=bob")).toEqual(["Bob Example", "Bob Example"]);
+    expect(await ids("q=Cal%20St")).toEqual(["Cal Example"]);
+    expect(await ids("mapCode=n12")).toEqual(["Bob Example", "Bob Example"]);
+    expect(await ids(`applicatorId=${ID.ana}`)).toEqual(["Cal Example"]);
+    expect(await ids(`productId=${ID.surf}`)).toEqual(["Amy Example", "Bob Example"]); // both got the surfactant mix
+    expect(await ids("q=%25")).toEqual([]); // a literal %, not "anything"
+    expect((await call("GET", "/chemical-records/map-codes", "owner")).body).toEqual(["N12"]);
+  });
+
+  it("totals each product by month", async () => {
+    const m = (await call("GET", `/chemical-records/monthly?applicatorId=${ID.ana}`, "owner")).body;
+    expect(m).toEqual([]); // Ana's only record (Cal's lawn, no size yet) has no products on it
+    const all = (await call("GET", "/chemical-records/monthly", "owner")).body as any[];
+    const surf = all.find((r) => r.tradeName === "Sample Surfactant");
+    expect([surf.month, surf.unit, +surf.amount.toFixed(3), surf.applications]).toEqual([today.slice(0, 7), "ounces liquid", 3.7, 2]); // 2.5 + 1.2
+    const byLeo = (await call("GET", `/chemical-records/monthly?applicatorId=${ID.leo}&productId=${ID.surf}`, "owner")).body as any[];
+    expect(byLeo.map((r) => r.tradeName)).toEqual(["Sample Surfactant"]);
+    const csv = (await call("GET", "/chemical-records/monthly.csv", "owner")).body as string;
+    expect(csv).toContain("Month,Product (trade name),EPA reg #,Total applied,Unit,Applications");
+  });
+
+  it("exports PDFs of the records and the monthly totals", async () => {
+    for (const url of ["/chemical-records/export.pdf?q=bob", "/chemical-records/monthly.pdf", "/chemical-records/export.pdf?q=nobody"]) {
+      const res = await app.inject({ method: "GET", url, headers: { authorization: `Bearer ${T.owner}` } });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["content-type"]).toBe("application/pdf");
+      expect(res.rawPayload.subarray(0, 5).toString()).toBe("%PDF-");
+    }
+    expect((await app.inject({ method: "GET", url: "/chemical-records/export.pdf", headers: { authorization: `Bearer ${T.mgr}` } })).statusCode).toBe(403);
   });
 });
 

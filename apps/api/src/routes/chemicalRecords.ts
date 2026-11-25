@@ -1,19 +1,21 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
-import { and, asc, desc, eq, exists, gte, inArray, isNotNull, isNull, lte, sql, type SQL } from "drizzle-orm";
-import { applicatorCertSchema, chemicalSettingsSchema, csvRow, recordCorrectionSchema, windText } from "@crewdesk/shared";
+import { and, asc, desc, eq, exists, gte, ilike, inArray, isNotNull, isNull, lte, or, sql, type SQL } from "drizzle-orm";
+import { applicatorCertSchema, chemicalSettingsSchema, csvRow, formatRateAmount, recordCorrectionSchema, windText } from "@crewdesk/shared";
 import { db } from "../db";
 import {
-  applicationRecordChanges, applicationRecordProducts, applicationRecords, applicatorCerts, companies, employees, productLabels, products, visitWeather,
+  applicationRecordChanges, applicationRecordProducts, applicationRecords, applicatorCerts, companies, employees, productLabels, products, properties, visitWeather,
 } from "../db/schema";
 import { authenticate } from "../lib/auth";
 import { requireChemicalAccess } from "../lib/chemicalAccess";
 import { fileView, sendStored, storeUpload } from "../lib/attachments";
 import { HttpError, parse } from "../lib/errors";
 import { refreshIssues } from "../lib/chemicalRecords";
+import { companyToday } from "../lib/payRates";
+import { monthlyPdf, recordsPdf, type PdfMonthlyRow, type PdfRecordLine } from "../lib/recordsPdf";
 
 const isoDate = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
 
-type Q = { from?: string; to?: string; customerId?: string; productId?: string; applicatorId?: string; visitId?: string; status?: string };
+type Q = { from?: string; to?: string; customerId?: string; propertyId?: string; productId?: string; applicatorId?: string; mapCode?: string; q?: string; visitId?: string; status?: string };
 
 /** The filters the log and its export share. Voided records only when asked for (status=voided). */
 function filters(req: FastifyRequest<{ Querystring: Q }>) {
@@ -22,6 +24,16 @@ function filters(req: FastifyRequest<{ Querystring: Q }>) {
   if (isoDate(q.from)) where.push(gte(applicationRecords.appliedOn, q.from!));
   if (isoDate(q.to)) where.push(lte(applicationRecords.appliedOn, q.to!));
   if (q.customerId) where.push(eq(applicationRecords.customerId, q.customerId));
+  if (q.propertyId) where.push(eq(applicationRecords.propertyId, q.propertyId));
+  // Property search: the customer's name or the site's address, as on the record.
+  if (q.q?.trim()) {
+    const like = `%${q.q.trim().replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+    where.push(or(ilike(applicationRecords.customerName, like), ilike(applicationRecords.siteAddress, like))!);
+  }
+  // Map Code: the property's code now (records keep the address, not the code).
+  if (q.mapCode?.trim()) {
+    where.push(exists(db.select({ x: properties.id }).from(properties).where(and(eq(properties.id, applicationRecords.propertyId), sql`upper(${properties.mapCode}) = upper(${q.mapCode.trim()})`))));
+  }
   if (q.applicatorId) where.push(eq(applicationRecords.applicatorId, q.applicatorId));
   if (q.visitId) where.push(eq(applicationRecords.visitId, q.visitId));
   if (q.productId) where.push(exists(db.select({ x: applicationRecordProducts.id }).from(applicationRecordProducts).where(and(eq(applicationRecordProducts.recordId, applicationRecords.id), eq(applicationRecordProducts.productId, q.productId)))));
@@ -40,6 +52,37 @@ async function withDetail(recordIds: string[]) {
   const visitIds = recs.map((r) => r.visitId).filter((x): x is string => !!x);
   const weather = visitIds.length ? await db.select().from(visitWeather).where(inArray(visitWeather.visitId, visitIds)) : [];
   return { products: ps, weather };
+}
+
+const longDate = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+const monthLabel = (ym: string) => new Date(`${ym}-15T12:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+const fileName = (base: string, q: Q, ext: string) => `${base}${isoDate(q.from) ? `-${q.from}` : ""}${isoDate(q.to) ? `-to-${q.to}` : ""}.${ext}`;
+
+/** What the filters say, for the top of a PDF. */
+async function filterText(req: FastifyRequest<{ Querystring: Q }>) {
+  const q = req.query;
+  const parts = [isoDate(q.from) || isoDate(q.to) ? `${isoDate(q.from) ? longDate(q.from!) : "the start"} to ${isoDate(q.to) ? longDate(q.to!) : "today"}` : "All dates"];
+  if (q.q?.trim()) parts.push(`Property: "${q.q.trim()}"`);
+  if (q.mapCode?.trim()) parts.push(`Map Code ${q.mapCode.trim().toUpperCase()}`);
+  if (q.productId) { const [p] = await db.select({ n: products.name }).from(products).where(and(eq(products.id, q.productId), eq(products.companyId, req.user.companyId))); if (p) parts.push(`Product: ${p.n}`); }
+  if (q.applicatorId) { const [e] = await db.select({ f: employees.firstName, l: employees.lastName }).from(employees).where(and(eq(employees.id, q.applicatorId), eq(employees.companyId, req.user.companyId))); if (e) parts.push(`Applicator: ${e.f} ${e.l}`); }
+  if (q.status === "issues") parts.push("Only records with something missing");
+  if (q.status === "voided") parts.push("Voided records");
+  return parts.join(" · ");
+}
+
+/** Totals per month and product (for the filters), largest months last. */
+async function monthlyTotals(req: FastifyRequest<{ Querystring: Q }>) {
+  const month = sql<string>`to_char(${applicationRecords.appliedOn}, 'YYYY-MM')`;
+  const productKey = sql<string>`coalesce(${applicationRecordProducts.productId}::text, ${applicationRecordProducts.tradeName})`;
+  const rows = await db.select({
+    month, productId: applicationRecordProducts.productId, tradeName: sql<string>`max(${applicationRecordProducts.tradeName})`, epaRegNo: sql<string | null>`max(${applicationRecordProducts.epaRegNo})`,
+    unit: applicationRecordProducts.unit, amount: sql<number>`sum(${applicationRecordProducts.amount})::float8`, applications: sql<number>`count(distinct ${applicationRecords.id})::int`,
+  }).from(applicationRecordProducts).innerJoin(applicationRecords, eq(applicationRecords.id, applicationRecordProducts.recordId))
+    .where(and(filters(req), ...(req.query.productId ? [eq(applicationRecordProducts.productId, req.query.productId)] : [])))
+    .groupBy(month, productKey, applicationRecordProducts.productId, applicationRecordProducts.unit)
+    .orderBy(month, sql`max(${applicationRecordProducts.tradeName})`);
+  return rows;
 }
 
 /**
@@ -151,8 +194,74 @@ const routes: FastifyPluginAsync = async (app) => {
       }
     }
     reply.header("Content-Type", "text/csv; charset=utf-8");
-    reply.header("Content-Disposition", `attachment; filename="chemical-records${isoDate(req.query.from) ? `-${req.query.from}` : ""}${isoDate(req.query.to) ? `-to-${req.query.to}` : ""}.csv"`);
+    reply.header("Content-Disposition", `attachment; filename="${fileName("chemical-records", req.query, "csv")}"`);
     return `﻿${out.join("\r\n")}\r\n`;
+  });
+
+  /** The same rows as a PDF: one row per product applied, for an inspection or to keep. */
+  app.get<{ Querystring: Q }>("/export.pdf", async (req, reply) => {
+    const rows = await db.select().from(applicationRecords).where(filters(req)).orderBy(asc(applicationRecords.appliedOn), asc(applicationRecords.startedAt)).limit(5_000);
+    const { products: ps, weather } = await withDetail(rows.map((r) => r.id));
+    const [co] = await db.select({ tz: companies.timezone, name: companies.name, license: companies.pesticideLicenseNo }).from(companies).where(eq(companies.id, req.user.companyId));
+    const tz = co?.tz ?? "America/Chicago";
+    const time = (d: Date | null) => (d ? d.toLocaleTimeString("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }) : "");
+    const lines: PdfRecordLine[] = [];
+    for (const r of rows) {
+      const w = weather.find((x) => x.visitId === r.visitId);
+      const record = {
+        date: longDate(r.appliedOn), time: [time(r.startedAt), time(r.stoppedAt)].filter(Boolean).join("–") || "no times",
+        customer: r.customerName, site: [r.siteAddress, r.site].filter(Boolean).join("\n"),
+        applicator: `${r.applicatorName}${r.applicatorCertNo ? `\nCert ${r.applicatorCertNo}` : ""}`,
+        area: r.areaSqFt != null ? Math.round(r.areaSqFt).toLocaleString("en-US") : "",
+        weather: w ? [windText(w), w.tempF != null ? `${w.tempF}°F` : null].filter(Boolean).join(", ") : "not recorded",
+        voided: !!r.voidedAt, issues: r.issues.length,
+      };
+      const mine = ps.filter((p) => p.recordId === r.id);
+      if (!mine.length) lines.push({ record: { ...record, first: true }, product: "(no products)", epa: "", method: "", rate: "", amount: "" });
+      mine.forEach((p, i) => lines.push({
+        record: { ...record, first: i === 0 }, product: p.tradeName, epa: p.epaRegNo ?? "",
+        method: [p.methodName, p.mixName ? `Mix: ${p.mixName}` : null].filter(Boolean).join("\n"),
+        rate: formatRateAmount(Math.round(p.ratePer1000 * 1000) / 1000, p.unit), amount: formatRateAmount(Math.round(p.amount * 1000) / 1000, p.unit),
+      }));
+    }
+    const pdf = await recordsPdf({
+      title: `${co?.name ?? ""}: chemical application records`,
+      sub: [await filterText(req), `${rows.length} record${rows.length === 1 ? "" : "s"}${co?.license ? ` · Pesticide license ${co.license}` : ""} · Made ${longDate(await companyToday(req.user.companyId))}`, "Oklahoma Department of Agriculture, Food and Forestry, OAC 35:30-17-21"],
+      lines,
+    });
+    reply.header("Content-Type", "application/pdf");
+    reply.header("Content-Disposition", `attachment; filename="${fileName("chemical-records", req.query, "pdf")}"`);
+    return reply.send(Buffer.from(pdf));
+  });
+
+  /** Totals per month and product, for the same filters. */
+  app.get<{ Querystring: Q }>("/monthly", async (req) => monthlyTotals(req));
+  app.get<{ Querystring: Q }>("/monthly.csv", async (req, reply) => {
+    const rows = await monthlyTotals(req);
+    const out = [csvRow(["Month", "Product (trade name)", "EPA reg #", "Total applied", "Unit", "Applications"])];
+    for (const r of rows) out.push(csvRow([r.month, r.tradeName, r.epaRegNo, Math.round(r.amount * 1000) / 1000, r.unit, r.applications]));
+    reply.header("Content-Type", "text/csv; charset=utf-8");
+    reply.header("Content-Disposition", `attachment; filename="${fileName("chemical-monthly-totals", req.query, "csv")}"`);
+    return `\ufeff${out.join("\r\n")}\r\n`;
+  });
+  app.get<{ Querystring: Q }>("/monthly.pdf", async (req, reply) => {
+    const rows = await monthlyTotals(req);
+    const [co] = await db.select({ name: companies.name }).from(companies).where(eq(companies.id, req.user.companyId));
+    const out: PdfMonthlyRow[] = rows.map((r, i) => ({
+      month: monthLabel(r.month), first: i === 0 || rows[i - 1].month !== r.month, product: r.tradeName, epa: r.epaRegNo ?? "",
+      amount: formatRateAmount(Math.round(r.amount * 100) / 100, r.unit), applications: r.applications,
+    }));
+    const pdf = await monthlyPdf({ title: `${co?.name ?? ""}: monthly product totals`, sub: [await filterText(req), `Made ${longDate(await companyToday(req.user.companyId))}`], rows: out });
+    reply.header("Content-Type", "application/pdf");
+    reply.header("Content-Disposition", `attachment; filename="${fileName("chemical-monthly-totals", req.query, "pdf")}"`);
+    return reply.send(Buffer.from(pdf));
+  });
+
+  /** Map Codes of properties that have records, for the filter. */
+  app.get("/map-codes", async (req) => {
+    const rows = await db.selectDistinct({ code: properties.mapCode }).from(applicationRecords).innerJoin(properties, eq(properties.id, applicationRecords.propertyId))
+      .where(and(eq(applicationRecords.companyId, req.user.companyId), isNotNull(properties.mapCode))).orderBy(properties.mapCode);
+    return rows.map((r) => r.code).filter(Boolean);
   });
 
   /** The company's pesticide license number. */
