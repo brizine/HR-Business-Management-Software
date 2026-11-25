@@ -13,6 +13,7 @@ import { CustomerPicker, TagChip, TagPicker, useTags } from "./customers";
 import { Icon } from "./icons";
 import { useBillingSettings } from "./invoices";
 import { CustomFieldInputs } from "./custom-fields";
+import { ChemicalsStep, loadChemicalOptions, type ChemicalOptions } from "@/components/chemicals-step";
 import { ErrorBox } from "./ui";
 
 export interface VisitLine { id?: string; serviceTypeId: string | null; description: string; quantity: number; budgetedHours: number | null; unitPriceCents: number | null; amountCents: number | null; taxRate?: number }
@@ -56,7 +57,21 @@ export function CrewButtons({ v, onChange, compact }: { v: Visit; onChange: (v: 
   const act = useAction();
   const [mode, setMode] = useState<null | "complete" | "skip">(null);
   const [text, setText] = useState("");
-  const run = (path: string, body?: unknown) => act.run(async () => { onChange(await api<Visit>(`/visits/${v.id}/${path}`, { method: "POST", body: body ?? {} })); setMode(null); setText(""); });
+  const [chem, setChem] = useState<ChemicalOptions | null>(null);
+  const run = (path: string, body?: unknown) => act.run(async () => { onChange(await api<Visit>(`/visits/${v.id}/${path}`, { method: "POST", body: body ?? {} })); setMode(null); setText(""); setChem(null); });
+  // Completed: a chemical work order asks what was applied (the same step as the phone's).
+  const startComplete = () => act.run(async () => {
+    const o = await loadChemicalOptions(v.id);
+    setChem(o.chemical ? o : null);
+    setMode("complete");
+  });
+  if (mode === "complete" && chem) {
+    return (
+      <ChemicalsStep options={chem} busy={act.busy} error={act.error}
+        onSave={(notes, chemicals) => run("complete", { notes: notes.trim() || undefined, chemicals })}
+        onCancel={() => { setMode(null); setChem(null); }} />
+    );
+  }
   if (mode) {
     return (
       <div className="stack" style={{ gap: 6 }}>
@@ -74,7 +89,7 @@ export function CrewButtons({ v, onChange, compact }: { v: Visit; onChange: (v: 
   return (
     <div className="row" style={{ gap: 6 }}>
       {v.status === "open" && <button type="button" className={compact ? "btn" : "btn"} disabled={act.busy} onClick={() => run("start")}>Arrived (on site)</button>}
-      {(v.status === "open" || v.status === "on_site") && <button type="button" className="btn primary" disabled={act.busy} onClick={() => setMode("complete")}>Completed</button>}
+      {(v.status === "open" || v.status === "on_site") && <button type="button" className="btn primary" disabled={act.busy} onClick={startComplete}>Completed</button>}
       {(v.status === "open" || v.status === "on_site") && <button type="button" className="btn" disabled={act.busy} onClick={() => setMode("skip")}>Skip</button>}
       {(v.status === "completed" || v.status === "skipped") && !v.invoiced && <button type="button" className="btn" disabled={act.busy} onClick={() => run("reopen")}>Undo ({v.status === "completed" ? "not done" : "not skipped"})</button>}
       <ErrorBox error={act.error} />
