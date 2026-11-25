@@ -1,9 +1,9 @@
 import type { FastifyPluginAsync } from "fastify";
 import { and, asc, count, desc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { z } from "zod";
-import { applicationMethodSchema, hasRole, noticeSettings, noticeSettingsSchema, serviceProductsSchema, type Role } from "@crewdesk/shared";
+import { applicationMethodSchema, chemicalMixSchema, hasRole, type ChemicalMixInput, noticeSettings, noticeSettingsSchema, serviceProductsSchema, type Role } from "@crewdesk/shared";
 import { db } from "../db";
-import { applicationMethods, applicationRecords, applicatorCerts, chemicalAccess, chemicalNotices, companies, employees, productRates, products, serviceProducts, serviceTypes, visitProducts } from "../db/schema";
+import { applicationMethods, applicationRecords, applicatorCerts, chemicalAccess, chemicalMixItems, chemicalMixes, chemicalNotices, companies, employees, productRates, products, serviceProducts, serviceTypes, visitProducts } from "../db/schema";
 import { authenticate } from "../lib/auth";
 import { requireAdmin, requireChemicalAccess } from "../lib/chemicalAccess";
 import { HttpError, parse } from "../lib/errors";
@@ -69,6 +69,69 @@ const routes: FastifyPluginAsync = async (app) => {
     return { ok: true };
   });
 
+  // ---- Mixes: products that go in one tank together ----
+
+  const mixRows = async (companyId: string) => {
+    const mixes = await db.select({ m: chemicalMixes, methodName: applicationMethods.name }).from(chemicalMixes)
+      .leftJoin(applicationMethods, eq(applicationMethods.id, chemicalMixes.applicationMethodId))
+      .where(eq(chemicalMixes.companyId, companyId)).orderBy(asc(chemicalMixes.sortOrder), asc(chemicalMixes.name));
+    const items = mixes.length ? await db.select({ i: chemicalMixItems, name: products.name, unit: products.useUnit, active: products.active }).from(chemicalMixItems)
+      .innerJoin(products, eq(products.id, chemicalMixItems.productId)).where(inArray(chemicalMixItems.mixId, mixes.map((x) => x.m.id))).orderBy(asc(chemicalMixItems.sortOrder)) : [];
+    return mixes.map(({ m, methodName }) => ({
+      ...m, methodName,
+      items: items.filter((x) => x.i.mixId === m.id).map((x) => ({ productId: x.i.productId, productName: x.name, unit: x.unit, ratePer1000: x.i.ratePer1000, productActive: x.active })),
+    }));
+  };
+  /** Checks a mix's method and products are this company's, and the rates are within each label's maximum. */
+  const checkMix = async (companyId: string, body: ChemicalMixInput) => {
+    const [m] = await db.select({ id: applicationMethods.id }).from(applicationMethods).where(and(eq(applicationMethods.id, body.applicationMethodId), eq(applicationMethods.companyId, companyId)));
+    if (!m) throw new HttpError(400, "Pick one of your application methods");
+    const ids = body.items.map((i) => i.productId);
+    if (new Set(ids).size !== ids.length) throw new HttpError(400, "A product is in the mix twice");
+    const ps = await db.select().from(products).where(and(inArray(products.id, ids), eq(products.companyId, companyId)));
+    if (ps.length !== ids.length) throw new HttpError(400, "One of the products isn't in your product list");
+    for (const i of body.items) {
+      const p = ps.find((x) => x.id === i.productId)!;
+      if (p.labelMaxPer1000 != null && i.ratePer1000 > p.labelMaxPer1000) throw new HttpError(400, `${p.name}: ${i.ratePer1000} is more than the label allows (${p.labelMaxPer1000} per 1,000 sq ft)`);
+    }
+  };
+  const saveItems = async (tx: Parameters<Parameters<typeof db.transaction>[0]>[0], mixId: string, items: ChemicalMixInput["items"]) => {
+    await tx.delete(chemicalMixItems).where(eq(chemicalMixItems.mixId, mixId));
+    await tx.insert(chemicalMixItems).values(items.map((i, n) => ({ mixId, productId: i.productId, ratePer1000: i.ratePer1000, sortOrder: n })));
+  };
+
+  app.get("/mixes", async (req) => mixRows(req.user.companyId));
+  app.post("/mixes", async (req) => {
+    const body = parse(chemicalMixSchema, req.body);
+    await checkMix(req.user.companyId, body);
+    const [{ n }] = await db.select({ n: sql<number>`coalesce(max(${chemicalMixes.sortOrder}), -1)::int` }).from(chemicalMixes).where(eq(chemicalMixes.companyId, req.user.companyId));
+    const id = await db.transaction(async (tx) => {
+      const [row] = await tx.insert(chemicalMixes).values({ companyId: req.user.companyId, name: body.name, applicationMethodId: body.applicationMethodId, notes: body.notes ?? null, active: body.active, sortOrder: n + 1, updatedById: req.user.sub }).returning();
+      await saveItems(tx, row.id, body.items);
+      return row.id;
+    });
+    return (await mixRows(req.user.companyId)).find((m) => m.id === id);
+  });
+  app.put<{ Params: { id: string } }>("/mixes/:id", async (req) => {
+    const body = parse(chemicalMixSchema, req.body);
+    await checkMix(req.user.companyId, body);
+    const ok = await db.transaction(async (tx) => {
+      const [row] = await tx.update(chemicalMixes).set({ name: body.name, applicationMethodId: body.applicationMethodId, notes: body.notes ?? null, active: body.active, updatedById: req.user.sub, updatedAt: new Date() })
+        .where(and(eq(chemicalMixes.id, req.params.id), eq(chemicalMixes.companyId, req.user.companyId))).returning();
+      if (!row) return false;
+      await saveItems(tx, row.id, body.items);
+      return true;
+    });
+    if (!ok) throw new HttpError(404, "Mix not found");
+    return (await mixRows(req.user.companyId)).find((m) => m.id === req.params.id);
+  });
+  /** Mixes can be removed any time: records keep each product (and the mix's name) as applied. */
+  app.delete<{ Params: { id: string } }>("/mixes/:id", async (req) => {
+    const rows = await db.delete(chemicalMixes).where(and(eq(chemicalMixes.id, req.params.id), eq(chemicalMixes.companyId, req.user.companyId))).returning({ id: chemicalMixes.id });
+    if (!rows.length) throw new HttpError(404, "Mix not found");
+    return { ok: true };
+  });
+
   // ---- Services: where each is applied and the products it uses ----
 
   app.get("/services", async (req) => {
@@ -115,7 +178,7 @@ const routes: FastifyPluginAsync = async (app) => {
   // ---- Load sheet ----
 
   app.get<{ Querystring: { date?: string; by?: string } }>("/load-sheet", async (req) => {
-    const q = parse(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), by: z.enum(["tech", "truck"]).default("tech") }), req.query);
+    const q = parse(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), by: z.enum(["tech", "truck", "day"]).default("tech") }), req.query);
     return loadSheet(req.user.companyId, q.date ?? (await companyToday(req.user.companyId)), q.by);
   });
 

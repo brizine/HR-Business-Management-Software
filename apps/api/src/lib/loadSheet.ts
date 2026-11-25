@@ -9,7 +9,7 @@ import { serviceProductLines } from "./productCosts";
  * the services' products and rates (Chemical Tracking) and each lawn's size. Planned amounts only;
  * what was actually applied is on the records.
  */
-export type LoadBy = "tech" | "truck";
+export type LoadBy = "tech" | "truck" | "day";
 
 interface Item { productId: string; product: string; unit: string; amount: number; method: string | null; sprayGal: number | null }
 interface Stop {
@@ -59,7 +59,10 @@ export async function loadSheet(companyId: string, date: string, by: LoadBy) {
     if (!items.length && !vl.some((l) => l.chemical)) continue;
     const who = people.filter((p) => p.visitId === v.id).sort((a, b) => `${a.first} ${a.last}`.localeCompare(`${b.first} ${b.last}`));
     let key: string, label: string;
-    if (by === "tech") {
+    if (by === "day") {
+      // Everything for the day in one list: what to order or pull from the shop.
+      key = "day"; label = "All work orders";
+    } else if (by === "tech") {
       key = who.map((w) => w.id).join("+") || "none";
       label = who.map((w) => `${w.first} ${w.last}`.trim()).join(" & ") || "Not assigned";
     } else {

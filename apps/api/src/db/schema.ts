@@ -1177,6 +1177,8 @@ export const visitProducts = pgTable(
     applicationMethodId: uuid("application_method_id").references(() => applicationMethods.id, { onDelete: "set null" }),
     methodName: text("method_name"),
     carrierGalPer1000: doublePrecision("carrier_gal_per_1000"),
+    /** The mix it was applied as part of (Chemical Tracking → Mixes), if any. */
+    mixName: text("mix_name"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: createdAt(),
   },
@@ -2709,6 +2711,8 @@ export const applicationRecordProducts = pgTable(
     labelId: uuid("label_id").references(() => productLabels.id, { onDelete: "set null" }),
     /** How it was applied, e.g. "Truck 2gal/1000ft" or "Spreader (not mixed)". */
     methodName: text("method_name"),
+    /** The mix it was part of, if any. */
+    mixName: text("mix_name"),
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (t) => [index("application_record_products_record_idx").on(t.recordId)],
@@ -2788,4 +2792,39 @@ export const chemicalNotices = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("chemical_notices_company_idx").on(t.companyId, t.createdAt), index("chemical_notices_record_idx").on(t.recordId)],
+);
+
+/**
+ * Mixes (Chemical Tracking): products that go in one tank together, each at its rate, applied one
+ * way. A tech adds the whole mix in one tap instead of each product; the record still lists every
+ * product (with the mix's name).
+ */
+export const chemicalMixes = pgTable(
+  "chemical_mixes",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    applicationMethodId: uuid("application_method_id").references(() => applicationMethods.id, { onDelete: "set null" }),
+    notes: text("notes"),
+    active: boolean("active").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("chemical_mixes_company_idx").on(t.companyId, t.sortOrder)],
+);
+
+export const chemicalMixItems = pgTable(
+  "chemical_mix_items",
+  {
+    id: id(),
+    mixId: uuid("mix_id").notNull().references(() => chemicalMixes.id, { onDelete: "cascade" }),
+    productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+    /** Per 1,000 sq ft, in the product's unit. */
+    ratePer1000: doublePrecision("rate_per_1000").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("chemical_mix_items_mix_idx").on(t.mixId)],
 );

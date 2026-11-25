@@ -13,9 +13,11 @@ export interface ChemicalOptions {
   methods: { id: string; name: string; galPer1000: number | null }[];
   items: { productId: string; productName: string; unit: string; used: boolean; methodId: string | null; ratePer1000: number; amount: number | null }[];
   products: { id: string; name: string; unit: string; ratePer1000: number | null; defaultMethodId: string | null; byMethod: Record<string, number | null> }[];
+  /** Products that go in one tank together: added in one go. */
+  mixes?: { id: string; name: string; notes: string | null; methodId: string | null; items: { productId: string; ratePer1000: number }[] }[];
 }
-interface Item { productId: string; name: string; unit: string; used: boolean; methodId: string; rate: string; amount: string; edited: boolean }
-export interface ChemicalCompletion { areaSqFt: number | null; site: string | null; items: { productId: string; used: boolean; methodId: string; ratePer1000: number; amount: number }[] }
+interface Item { productId: string; name: string; unit: string; used: boolean; methodId: string; rate: string; amount: string; edited: boolean; mixName: string | null }
+export interface ChemicalCompletion { areaSqFt: number | null; site: string | null; items: { productId: string; used: boolean; methodId: string; ratePer1000: number; amount: number; mixName: string | null }[] }
 
 const num = (v: string) => (v.trim() === "" ? NaN : Number(v.replace(/,/g, "")));
 const fmt = (n: number | null | undefined, d = 3) => (n == null || !Number.isFinite(n) ? "" : String(Math.round(n * 10 ** d) / 10 ** d));
@@ -45,7 +47,7 @@ export function ChemicalsStep({ options, busy, error, onSave, onCancel }: {
   const amountFor = (rate: number, a: string) => (Number.isFinite(num(a)) ? (rate * num(a)) / 1000 : NaN);
   const [items, setItems] = useState<Item[]>(() => options.items.map((i) => ({
     productId: i.productId, name: i.productName, unit: i.unit, used: true, methodId: i.methodId ?? options.methods[0]?.id ?? "",
-    rate: fmt(i.ratePer1000), amount: fmt(i.amount ?? amountFor(i.ratePer1000, fmt(options.areaSqFt, 0))), edited: false,
+    rate: fmt(i.ratePer1000), amount: fmt(i.amount ?? amountFor(i.ratePer1000, fmt(options.areaSqFt, 0))), edited: false, mixName: null,
   })));
   const update = (n: number, patch: Partial<Item>) => setItems((list) => list.map((x, j) => (j === n ? { ...x, ...patch } : x)));
   const changeMethod = (n: number, methodId: string) => {
@@ -66,16 +68,62 @@ export function ChemicalsStep({ options, busy, error, onSave, onCancel }: {
     if (!p) return;
     const methodId = p.defaultMethodId ?? options.methods[0]?.id ?? "";
     const rate = rateFor(id, methodId, p.ratePer1000);
-    setItems((list) => [...list, { productId: id, name: p.name, unit: p.unit, used: true, methodId, rate: fmt(rate), amount: fmt(amountFor(rate, area)), edited: false }]);
+    setItems((list) => [...list, { productId: id, name: p.name, unit: p.unit, used: true, methodId, rate: fmt(rate), amount: fmt(amountFor(rate, area)), edited: false, mixName: null }]);
     setAdding("");
   };
+  /** A whole mix in one go: each product at the mix's rate, applied the mix's way (a product already listed takes the mix's). */
+  const addMix = (id: string) => {
+    const m = options.mixes?.find((x) => x.id === id);
+    if (!m) return;
+    setItems((list) => {
+      let next = [...list];
+      for (const mi of m.items) {
+        const p = options.products.find((x) => x.id === mi.productId);
+        if (!p) continue;
+        const methodId = m.methodId ?? p.defaultMethodId ?? options.methods[0]?.id ?? "";
+        const row: Item = { productId: p.id, name: p.name, unit: p.unit, used: true, methodId, rate: fmt(mi.ratePer1000), amount: fmt(amountFor(mi.ratePer1000, area)), edited: false, mixName: m.name };
+        const at = next.findIndex((x) => x.productId === p.id);
+        next = at >= 0 ? next.map((x, j) => (j === at ? row : x)) : [...next, row];
+      }
+      return next;
+    });
+    setAddingMix("");
+  };
+  const [addingMix, setAddingMix] = useState("");
+  const setMixUsed = (mixName: string, used: boolean) => setItems((list) => list.map((x) => (x.mixName === mixName ? { ...x, used } : x)));
+  const removeMix = (mixName: string) => setItems((list) => list.filter((x) => x.mixName !== mixName));
   const addable = useMemo(() => options.products.filter((p) => !items.some((i) => i.productId === p.id)), [options.products, items]);
   const bad = items.some((i) => i.used && (!i.methodId || !Number.isFinite(num(i.amount)) || !Number.isFinite(num(i.rate))));
   const save = () => onSave(notes, {
     areaSqFt: Number.isFinite(num(area)) && num(area) > 0 ? num(area) : null,
     site: site.trim() || null,
-    items: items.map((i) => ({ productId: i.productId, used: i.used, methodId: i.methodId, ratePer1000: i.used ? num(i.rate) : 0, amount: i.used ? num(i.amount) : 0 })),
+    items: items.map((i) => ({ productId: i.productId, used: i.used, methodId: i.methodId, ratePer1000: i.used ? num(i.rate) : 0, amount: i.used ? num(i.amount) : 0, mixName: i.mixName })),
   });
+
+  const productRow = (it: Item, n: number) => {
+    const unit = formatRateAmount(1, it.unit).replace(/^1 /, "");
+    return (
+      <fieldset key={`${it.productId}-${n}`} className="contacts" style={{ opacity: it.used ? 1 : 0.6 }}>
+        <legend>
+          <label className="check" style={{ fontWeight: 600 }}>
+            <input type="checkbox" checked={it.used} onChange={(e) => update(n, { used: e.target.checked })} /> {it.name}
+          </label>
+        </legend>
+        {it.used ? (
+          <div className="formgrid">
+            <label>How it was applied
+              <select value={it.methodId} onChange={(e) => changeMethod(n, e.target.value)}>
+                {!it.methodId && <option value="">Pick a method…</option>}
+                {options.methods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </label>
+            <label>Rate ({unit} / 1,000 sq ft)<input inputMode="decimal" value={it.rate} onChange={(e) => changeRate(n, e.target.value)} /></label>
+            <label>Amount used ({unit})<input inputMode="decimal" value={it.amount} onChange={(e) => update(n, { amount: e.target.value, edited: true })} /></label>
+          </div>
+        ) : <p className="muted" style={{ margin: 0 }}>Not used</p>}
+      </fieldset>
+    );
+  };
 
   return (
     <div className="stack chem-step">
@@ -84,30 +132,32 @@ export function ChemicalsStep({ options, busy, error, onSave, onCancel }: {
         <p className="muted" style={{ margin: "2px 0 0" }}>Check what went down. This goes on the state record.</p>
       </div>
       {items.length === 0 && <p className="muted" style={{ margin: 0 }}>No products on this service. Add what was applied below.</p>}
-      {items.map((it, n) => {
-        const unit = formatRateAmount(1, it.unit).replace(/^1 /, "");
+      {items.map((it, n) => (it.mixName ? null : productRow(it, n)))}
+      {[...new Set(items.filter((i) => i.mixName).map((i) => i.mixName!))].map((mixName) => {
+        const rows = items.map((it, n) => [it, n] as const).filter(([it]) => it.mixName === mixName);
+        const used = rows.some(([it]) => it.used);
+        const notes = options.mixes?.find((m) => m.name === mixName)?.notes;
         return (
-          <fieldset key={`${it.productId}-${n}`} className="contacts" style={{ opacity: it.used ? 1 : 0.6 }}>
+          <fieldset key={mixName} className="contacts chem-mix">
             <legend>
               <label className="check" style={{ fontWeight: 600 }}>
-                <input type="checkbox" checked={it.used} onChange={(e) => update(n, { used: e.target.checked })} /> {it.name}
+                <input type="checkbox" checked={used} onChange={(e) => setMixUsed(mixName, e.target.checked)} /> Mix: {mixName}
               </label>
             </legend>
-            {it.used ? (
-              <div className="formgrid">
-                <label>How it was applied
-                  <select value={it.methodId} onChange={(e) => changeMethod(n, e.target.value)}>
-                    {!it.methodId && <option value="">Pick a method…</option>}
-                    {options.methods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </label>
-                <label>Rate ({unit} / 1,000 sq ft)<input inputMode="decimal" value={it.rate} onChange={(e) => changeRate(n, e.target.value)} /></label>
-                <label>Amount used ({unit})<input inputMode="decimal" value={it.amount} onChange={(e) => update(n, { amount: e.target.value, edited: true })} /></label>
-              </div>
-            ) : <p className="muted" style={{ margin: 0 }}>Not used</p>}
+            {notes && <p className="muted" style={{ margin: 0 }}>{notes}</p>}
+            {rows.map(([it, n]) => productRow(it, n))}
+            <div><button type="button" className="linkbtn" onClick={() => removeMix(mixName)}>Remove this mix</button></div>
           </fieldset>
         );
       })}
+      {(options.mixes?.length ?? 0) > 0 && (
+        <label style={{ maxWidth: 360 }}>Add a mix <span className="muted">(every product in it, at its rate)</span>
+          <select value={addingMix} onChange={(e) => addMix(e.target.value)}>
+            <option value="">Pick a mix…</option>
+            {options.mixes!.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        </label>
+      )}
       {addable.length > 0 && (
         <label style={{ maxWidth: 360 }}>Add a product <span className="muted">(spot treatment, anything else applied)</span>
           <select value={adding} onChange={(e) => add(e.target.value)}>

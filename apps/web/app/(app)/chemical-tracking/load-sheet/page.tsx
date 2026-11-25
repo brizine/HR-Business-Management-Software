@@ -25,7 +25,7 @@ const time12 = (t: string | null) => { if (!t) return ""; const [h, m] = t.split
  */
 export default function LoadSheet() {
   const [date, setDate] = useState(today());
-  const [by, setBy] = useState<"tech" | "truck">("tech");
+  const [by, setBy] = useState<"tech" | "truck" | "day">("tech");
   const data = useApi<{ groups: Group[] }>(`/chemical-tracking/load-sheet?date=${date}&by=${by}`);
   const groups = data.data?.groups ?? [];
   return (
@@ -38,14 +38,15 @@ export default function LoadSheet() {
         <div className="row" role="group" aria-label="Group by" style={{ gap: 6 }}>
           <button className={`btn ${by === "tech" ? "primary" : ""}`} onClick={() => setBy("tech")}>By tech</button>
           <button className={`btn ${by === "truck" ? "primary" : ""}`} onClick={() => setBy("truck")}>By truck</button>
+          <button className={`btn ${by === "day" ? "primary" : ""}`} onClick={() => setBy("day")}>By day</button>
         </div>
       </div>
-      <p className="printonly" style={{ margin: "0 0 8px" }}><strong>{fmtDate(date)}</strong> · by {by}</p>
+      <p className="printonly" style={{ margin: "0 0 8px" }}><strong>{fmtDate(date)}</strong>{by === "day" ? "" : ` · by ${by}`}</p>
       <ErrorBox error={data.error} />
       {groups.length ? groups.map((g) => (
         <section key={g.key} className="card stack loadsheet-group" style={{ marginBottom: 16, breakInside: "avoid" }}>
           <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
-            <h2 style={{ margin: 0 }}>{g.label}</h2>
+            <h2 style={{ margin: 0 }}>{by === "day" ? `Everything for ${fmtDate(date)}` : g.label}</h2>
             <span className="muted">{g.stops.length} stop{g.stops.length === 1 ? "" : "s"}{g.missingSize ? <> · <span className="badge warn">{g.missingSize} without a lawn size</span></> : null}</span>
           </div>
           {g.spray.length > 0 && (

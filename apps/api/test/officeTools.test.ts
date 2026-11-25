@@ -51,7 +51,7 @@ beforeAll(async () => {
   await call("PUT", "/company", "owner", { name: "Office Tools Co", addressLine1: "100 Main St", city: "Norman", state: "OK", zip: "73069", email: "office@office-tools.test", phone: "(405) 555-0100", timezone: "America/Chicago" });
   today = (await call("GET", "/todos?limit=1", "owner")).body.today;
   await call("PUT", "/weather/settings", "owner", { mode: "off" });
-  await call("PUT", "/texting/settings", "owner", { apiKey: "key-123456", fromNumber: "405-555-0199" });
+  await call("PUT", "/texting/settings", "owner", { apiKey: "key-123456", fromNumber: "405-555-0188" });
   for (const [who, first] of [["leo", "Leo"], ["ana", "Ana"]] as const) {
     ID[who] = (await call("POST", "/employees", "owner", { firstName: first, lastName: "Tech", email: email(who), password: "password123", role: "employee" })).body.id;
     T[who] = (await app.inject({ method: "POST", url: "/auth/login", payload: { email: email(who), password: "password123" } })).json().token;
@@ -85,6 +85,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Disconnect texting again: other test files poll every connected company for replies.
+  await call("DELETE", "/texting/settings", "owner");
   setEmailTransport(null); setTextingProvider(null);
   await app.close();
   await flushNotifications();
@@ -102,6 +104,12 @@ describe("load sheet", () => {
       ["Sample Pre-Emergent", "Truck 2gal/1000ft", 8, 2], // 0.5 oz × 16
     ]);
     expect(leo.spray).toEqual([{ method: "Truck 2gal/1000ft", gal: 32 }]); // 2 gal × 16
+  });
+
+  it("puts the whole day in one list", async () => {
+    const s = (await call("GET", `/chemical-tracking/load-sheet?date=${today}&by=day`, "owner")).body;
+    expect(s.groups.map((g: any) => [g.label, g.stops.length, g.missingSize])).toEqual([["All work orders", 3, 1]]);
+    expect(s.groups[0].totals.map((t: any) => [t.product, +t.amount.toFixed(3)])).toEqual([["Sample Fertilizer", 48], ["Sample Pre-Emergent", 8]]);
   });
 
   it("groups by truck: the crew's truck, else the truck assigned to the tech", async () => {
@@ -169,6 +177,50 @@ describe("customer notices", () => {
     await complete(wo);
     const problems = (await call("GET", "/chemical-tracking/notices?status=problems", "owner")).body;
     expect(problems.map((n: any) => [n.customerName, n.status, n.detail])).toEqual([["Nia Nophone", "skipped", "Nia Nophone has no mobile number on file"]]);
+  });
+});
+
+describe("mixes", () => {
+  it("are kept in Chemical Tracking, within each label's maximum", async () => {
+    const methods = (await call("GET", "/chemical-tracking/methods", "owner")).body as { id: string; name: string }[];
+    const truck = methods.find((m) => m.name === "Truck 2gal/1000ft")!.id;
+    const products = (await call("GET", "/products", "owner")).body as { id: string; name: string }[];
+    ID.pre = products.find((p) => p.name === "Sample Pre-Emergent")!.id;
+    ID.surf = (await call("POST", "/products", "owner", { name: "Sample Surfactant", productType: "adjuvant", useUnit: "ounces liquid", labelMaxPer1000: 0.5, rates: [] })).body.id;
+    const mix = { name: "Pre-em + surfactant", applicationMethodId: truck, notes: "Surfactant last", items: [{ productId: ID.pre, ratePer1000: 0.55 }, { productId: ID.surf, ratePer1000: 0.25 }] };
+    expect((await call("POST", "/chemical-tracking/mixes", "mgr", mix)).status).toBe(403);
+    expect((await call("POST", "/chemical-tracking/mixes", "owner", { ...mix, items: [{ productId: ID.surf, ratePer1000: 0.9 }] })).status).toBe(400); // over the label
+    expect((await call("POST", "/chemical-tracking/mixes", "owner", { ...mix, items: [mix.items[0], mix.items[0]] })).status).toBe(400);
+    const made = await call("POST", "/chemical-tracking/mixes", "owner", mix);
+    expect(made.status).toBe(200);
+    expect(made.body).toMatchObject({ name: "Pre-em + surfactant", methodName: "Truck 2gal/1000ft" });
+    expect(made.body.items.map((i: any) => [i.productName, i.ratePer1000])).toEqual([["Sample Pre-Emergent", 0.55], ["Sample Surfactant", 0.25]]);
+    ID.mix = made.body.id; ID.truck = truck;
+  });
+
+  it("are offered to the tech, and the record keeps each product with the mix's name", async () => {
+    const wo = (await call("POST", "/visits", "owner", workOrder(ID.amyProp, ID.amy, ID.leo))).body.id;
+    const o = (await call("GET", `/visits/${wo}/chemicals`, "leo")).body;
+    expect(o.mixes).toEqual([{ id: ID.mix, name: "Pre-em + surfactant", notes: "Surfactant last", methodId: ID.truck, items: [{ productId: ID.pre, ratePer1000: 0.55 }, { productId: ID.surf, ratePer1000: 0.25 }] }]);
+    await call("POST", `/visits/${wo}/start`, "leo", {});
+    const done = await call("POST", `/visits/${wo}/complete`, "leo", { chemicals: { items: [
+      { productId: ID.pre, used: true, methodId: ID.truck, ratePer1000: 0.55, amount: 5.5, mixName: "Pre-em + surfactant" },
+      { productId: ID.surf, used: true, methodId: ID.truck, ratePer1000: 0.25, amount: 2.5, mixName: "Pre-em + surfactant" },
+    ] } });
+    expect(done.status).toBe(200);
+    const [r] = (await call("GET", `/chemical-records?visitId=${wo}`, "owner")).body;
+    const rec = (await call("GET", `/chemical-records/${r.id}`, "owner")).body;
+    expect(rec.products.map((p: any) => [p.tradeName, p.mixName, p.methodName, p.amount])).toEqual([
+      ["Sample Pre-Emergent", "Pre-em + surfactant", "Truck 2gal/1000ft", 5.5],
+      ["Sample Surfactant", "Pre-em + surfactant", "Truck 2gal/1000ft", 2.5],
+    ]);
+    const csv = (await call("GET", `/chemical-records/export.csv?from=${today}&to=${today}`, "owner")).body as string;
+    expect(csv.split("\n")[0]).toContain(",Mix,Application method,");
+    // Turned off: no longer offered; removed: records keep it.
+    await call("PUT", `/chemical-tracking/mixes/${ID.mix}`, "owner", { name: "Pre-em + surfactant", applicationMethodId: ID.truck, active: false, items: [{ productId: ID.pre, ratePer1000: 0.55 }] });
+    expect((await call("GET", `/visits/${ID.woAmy}/chemicals`, "leo")).body.mixes).toEqual([]);
+    expect((await call("DELETE", `/chemical-tracking/mixes/${ID.mix}`, "owner")).status).toBe(200);
+    expect((await call("GET", `/chemical-records/${r.id}`, "owner")).body.products[0].mixName).toBe("Pre-em + surfactant");
   });
 });
 

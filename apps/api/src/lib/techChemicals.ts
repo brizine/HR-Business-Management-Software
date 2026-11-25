@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { DEFAULT_APPLICATION_METHODS, costOn, costPerUseUnitCents, type ChemicalCompletion } from "@crewdesk/shared";
 import { db } from "../db";
-import { applicationMethods, productCosts, productRates, products, properties, serviceTypes, visitLines, visitProducts, visits } from "../db/schema";
+import { applicationMethods, chemicalMixItems, chemicalMixes, productCosts, productRates, products, properties, serviceTypes, visitLines, visitProducts, visits } from "../db/schema";
 import { HttpError } from "./errors";
 import { companyToday, serviceProductLines } from "./productCosts";
 
@@ -78,7 +78,16 @@ export async function chemicalOptions(visitId: string, companyId: string) {
       methodId: method?.id ?? null, ratePer1000, amount: area ? (ratePer1000 * area) / 1000 : null,
     };
   }));
+  // Mixes: add every product in one tap, each at the mix's rate, applied the mix's way.
+  const mixes = await db.select().from(chemicalMixes).where(and(eq(chemicalMixes.companyId, companyId), eq(chemicalMixes.active, true))).orderBy(asc(chemicalMixes.sortOrder), asc(chemicalMixes.name));
+  const mixItems = mixes.length ? await db.select().from(chemicalMixItems).where(inArray(chemicalMixItems.mixId, mixes.map((m) => m.id))).orderBy(asc(chemicalMixItems.sortOrder)) : [];
+  const mixList = mixes.map((m) => ({
+    id: m.id, name: m.name, notes: m.notes,
+    methodId: methods.some((x) => x.id === m.applicationMethodId) ? m.applicationMethodId : null,
+    items: mixItems.filter((i) => i.mixId === m.id && catalog.some((c) => c.id === i.productId)).map((i) => ({ productId: i.productId, ratePer1000: i.ratePer1000 })),
+  })).filter((m) => m.items.length);
   return {
+    mixes: mixList,
     chemical: lines.some((l) => l.chemical) || items.length > 0,
     areaSqFt: area,
     site: lines.find((l) => l.site)?.site ?? null,
@@ -122,7 +131,7 @@ export async function snapshotFromTech(tx: Tx, visitId: string, companyId: strin
       companyId, visitId, serviceTypeId: link?.serviceTypeId ?? null, productId: p.id, productRateId: link?.productRateId ?? null, productCostId: cost?.id ?? null,
       productName: p.name, epaRegNo: p.epaRegNo, rateName: link?.rateName ?? null, amountPer1000: i.ratePer1000, areaSqFt: area, amount: i.amount, unit: p.useUnit,
       costPerUseUnitCents: perUse, costCents: perUse == null ? null : Math.round(i.amount * perUse), costDate: day,
-      applicationMethodId: method.id, methodName: method.name, carrierGalPer1000: method.galPer1000, sortOrder: n,
+      applicationMethodId: method.id, methodName: method.name, carrierGalPer1000: method.galPer1000, mixName: i.mixName ?? null, sortOrder: n,
     };
   });
   await tx.insert(visitProducts).values(rows);
