@@ -666,6 +666,13 @@
       "when": 1795613528849,
       "tag": "0094_automations_like_homeworks",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1795623420188,
+      "tag": "0095_marketing_documents",
+      "breakpoints": true
     }
   ]
 }

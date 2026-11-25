@@ -2944,3 +2944,61 @@ export const templates = pgTable(
     uniqueIndex("templates_company_imported_idx").on(t.companyId, t.importedFrom),
   ],
 );
+
+/**
+ * Marketing → Documents (like Homeworks' Documents): letters, contracts and proposals with
+ * fill-ins such as {{CUSTOMER_NAME}}, emailed or printed for chosen customers. (Team → Documents,
+ * the `documents` table, is employees' paperwork; this is separate.) Document templates are the
+ * starting points.
+ */
+export const marketingDocTemplates = pgTable(
+  "marketing_doc_templates",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    /** Cleaned HTML. */
+    content: text("content").notNull(),
+    /** Brought in from another system, e.g. "homeworks:2885" (so importing twice doesn't double up). */
+    importedFrom: text("imported_from"),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("marketing_doc_templates_company_idx").on(t.companyId),
+    uniqueIndex("marketing_doc_templates_imported_idx").on(t.companyId, t.importedFrom),
+  ],
+);
+
+export const marketingDocs = pgTable(
+  "marketing_docs",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    /** Cleaned HTML. */
+    content: text("content").notNull(),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("marketing_docs_company_idx").on(t.companyId)],
+);
+
+/** What happened to a document: created, updated, emailed, printed (who and when). */
+export const marketingDocHistory = pgTable(
+  "marketing_doc_history",
+  {
+    id: id(),
+    companyId: companyId(),
+    docId: uuid("doc_id").notNull().references(() => marketingDocs.id, { onDelete: "cascade" }),
+    action: text("action").notNull(),
+    detail: jsonb("detail").$type<import("@crewdesk/shared").DocHistoryDetail>(),
+    byId: uuid("by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("marketing_doc_history_doc_idx").on(t.docId, t.createdAt)],
+);

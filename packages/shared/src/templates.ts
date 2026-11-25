@@ -74,9 +74,16 @@ const TAG = new Map(TEMPLATE_TAGS.map((t) => [t.tag, t]));
 export const templateTag = (tag: string) => TAG.get(tag);
 export const TAG_GROUPS = [...new Set(TEMPLATE_TAGS.map((t) => t.group))];
 
+/** Other names Homeworks uses for the same tag (its documents say CUSTOMER where its emails say CLIENT). */
+export const TAG_ALIASES: Record<string, string> = {
+  CUSTOMER_PORTAL_LINK: "CLIENT_PORTAL_LINK",
+  CUSTOMER_PORTAL_ADD_CREDIT_CARD_LINK: "CLIENT_PORTAL_ADD_CREDIT_CARD_LINK",
+};
+const canon = (t: string) => TAG_ALIASES[t] ?? t;
+
 const TAG_RE = /\{\{\s*([A-Z0-9_]+)\s*\}\}/g;
 /** Tags used in a template (subject and body). */
-export const usedTags = (...texts: (string | null | undefined)[]) => [...new Set(texts.flatMap((t) => [...(t ?? "").matchAll(TAG_RE)].map((m) => m[1])))];
+export const usedTags = (...texts: (string | null | undefined)[]) => [...new Set(texts.flatMap((t) => [...(t ?? "").matchAll(TAG_RE)].map((m) => canon(m[1]))))];
 /** {{WORDS}} that aren't tags (probably typos). */
 export const unknownTags = (...texts: (string | null | undefined)[]) => usedTags(...texts).filter((t) => !TAG.has(t));
 /** What the template needs to be sent with (an invoice, an estimate…). */
@@ -90,14 +97,15 @@ const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").re
  * friendly words ("View and pay your invoice"); a link tag used as an href gives the bare address.
  * Tags with no value (or unknown ones) become nothing.
  */
-export function fillTags(text: string, vars: TemplateVars, o: { html?: boolean } = {}): string {
-  if (!o.html) return text.replace(TAG_RE, (_, t: string) => vars[t] ?? "");
-  const hrefFilled = text.replace(/href=(["'])\s*\{\{\s*([A-Z0-9_]+)\s*\}\}\s*\1/g, (_, q: string, t: string) => `href=${q}${escHtml(vars[t] ?? "")}${q}`);
-  return hrefFilled.replace(TAG_RE, (_, t: string) => {
+export function fillTags(text: string, vars: TemplateVars, o: { html?: boolean; /** On paper a link is its address, not friendly words. */ plainLinks?: boolean } = {}): string {
+  if (!o.html) return text.replace(TAG_RE, (_, t: string) => vars[canon(t)] ?? "");
+  const hrefFilled = text.replace(/href=(["'])\s*\{\{\s*([A-Z0-9_]+)\s*\}\}\s*\1/g, (_, q: string, t: string) => `href=${q}${escHtml(vars[canon(t)] ?? "")}${q}`);
+  return hrefFilled.replace(TAG_RE, (_, raw: string) => {
+    const t = canon(raw);
     const v = vars[t];
     if (!v) return "";
     const def = TAG.get(t);
-    return def?.link && /^https?:\/\//.test(v) ? `<a href="${escHtml(v)}" data-cd-link="1">${escHtml(def.link)}</a>` : escHtml(v).replace(/\n/g, "<br>");
+    return def?.link && !o.plainLinks && /^https?:\/\//.test(v) ? `<a href="${escHtml(v)}" data-cd-link="1">${escHtml(def.link)}</a>` : escHtml(v).replace(/\n/g, "<br>");
   });
 }
 

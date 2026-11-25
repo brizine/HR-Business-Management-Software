@@ -56,7 +56,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   see Invoices, Estimates and Sales tax report, and click it again to fold it away. The section you're in starts
   open, and the menu remembers which ones you opened or closed.
 - **Operations:** **Customers** (Customers, Properties), **Schedule** (Calendar, Work orders, To-dos), **Billing** (Invoices,
-  Estimates, Sales tax report), **Marketing** (Templates, Automations, Texts), **Resources** (Products & services, Custom fields, Tags; like Homeworks' Resources), **Field**
+  Estimates, Sales tax report), **Marketing** (Templates, Automations, Documents, Texts), **Resources** (Products & services, Custom fields, Tags; like Homeworks' Resources), **Field**
   (Property Measure, Spray Mix Calculator), **Fleet** (Assets, Repair Orders, Inspections) and **Reports**
   (managers).
 - **Team:** **Dashboard** (managers), **People** (Team, Shifts, Crews, Time Clock, Attendance, Time Off, Reviews &
@@ -633,6 +633,42 @@ Customers & billing set them up; managers can see them and work Review Sequence.
   runs the rest). When a switch won't turn on, the reason shows under that automation's name. Importing the file
   again changes nothing already here.
 - Automations check every few minutes, so "Instantly" means within about five minutes.
+
+### Documents (letters, contracts, proposals)
+
+**Marketing → Documents** (Customers & billing managers) is where you write a letter, contract or proposal once
+and email or print it for the customers you pick, each one filled in with that customer's own details. It's laid
+out like Homeworks' Documents: the form on the left, the list on the right, and two tabs, **Documents** and
+**Document Templates**. (**Team → Documents** is a different page: employees' paperwork and signatures.)
+
+- **Document Templates** are the starting points (Thank You, Price Increase, Contract…). Give one a **Name** and
+  write the **Content**, then **Create Template**. The pencil changes one; the trash deletes it. Admins can bring
+  Homeworks' document templates in with **Import from Homeworks** under the list (choose the Homeworks documents
+  file Crewdesk made; importing again adds nothing twice).
+- **Documents:** pick a **Template** (it fills in the name and content; you're asked first if you'd already
+  written something), change what you like, and **Create Document**. Or write one from scratch.
+- **Content box:** **+** adds a heading, list, quote or line; **</>** shows the HTML; **¶** sets normal text or a
+  heading; then align, **B**old, *I*talic, underline, strikethrough and link. **Insert Customer / Company Info**
+  puts in a fill-in such as `{{CUSTOMER_NAME}}`, `{{CUSTOMER_ACCOUNT_BALANCE}}`, `{{COMPANY_PHONE}}` or `{{TODAY}}`
+  (the same names Homeworks uses). The word count is underneath. If you type a `{{NAME}}` that isn't a fill-in,
+  Crewdesk tells you when you save; it would come out blank.
+- **Header - Click to show** shows the letterhead every letter is printed on: your company name, address, phone,
+  email and website on the left and your logo on the right (from Settings → Company Info).
+- **Documents List:** search by name. Each document has **Send Email**, **Print**, **History**, **Edit** and
+  **Delete**.
+- **Send Email:** pick customers from **Select Customers** (search by name or email; click one to add it, × to
+  take it off; up to 200 at a time). With **Use The Selected Document As The Email Content**, the document is the
+  email, in your email letterhead with an Unsubscribe link; tick **Attach PDF of document to email** to add the
+  printed letter too. Or pick one of your **email templates** as the cover note, and the document goes as a PDF
+  attachment. Each customer gets their own email. Customers with no email address, ones who unsubscribed and
+  sample customers can't be picked. The emails also show on each customer's page and in Templates → Sent / History.
+- **Print:** pick customers, then **Print**: one PDF opens with a letter for each customer, on your letterhead,
+  addressed to their billing address (or their property when there's no billing address). It's laid out for a
+  standard #10 double-window envelope folded in thirds, like your invoices. Printed links show the web address.
+- **History** shows who created and changed a document and each time it was emailed (how many were sent, failed
+  or skipped) or printed.
+
+Homeworks' **Send By Regular Mail** (its paid stamps service) isn't in Crewdesk: print the letters and mail them.
 
 ### Online payments and the customer portal
 

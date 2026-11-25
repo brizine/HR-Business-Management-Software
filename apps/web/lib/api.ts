@@ -66,6 +66,16 @@ export async function download(path: string, filename?: string) {
   URL.revokeObjectURL(url);
 }
 
+/** A file the API makes on request (a PDF of letters), as a blob to open or save. */
+export async function apiBlob(path: string, body: unknown): Promise<{ blob: Blob; filename: string | null }> {
+  const res = await fetch(API_URL + path, { method: "POST", credentials: "include", headers: { ...CLIENT_HEADER, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, data.issues?.map((i: { message: string }) => i.message).join("; ") || data.error || res.statusText);
+  }
+  return { blob: await res.blob(), filename: res.headers.get("content-disposition")?.match(/filename="([^"]+)"/)?.[1] ?? null };
+}
+
 export const money = (cents: number | null | undefined) =>
   cents == null ? "—" : (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
