@@ -3,7 +3,7 @@ import { and, asc, count, desc, eq, inArray, isNull, lte, sql } from "drizzle-or
 import { z } from "zod";
 import { applicationMethodSchema, chemicalMixSchema, hasRole, type ChemicalMixInput, noticeSettings, noticeSettingsSchema, serviceProductsSchema, type Role } from "@crewdesk/shared";
 import { db } from "../db";
-import { applicationMethods, applicationRecords, applicatorCerts, chemicalAccess, chemicalMixItems, chemicalMixes, chemicalNotices, companies, employees, productRates, products, serviceProducts, serviceTypes, visitProducts } from "../db/schema";
+import { applicationMethods, applicationRecords, applicatorCerts, chemicalAccess, chemicalMixItems, chemicalMixes, serviceMixes, chemicalNotices, companies, employees, productRates, products, serviceProducts, serviceTypes, visitProducts } from "../db/schema";
 import { authenticate } from "../lib/auth";
 import { requireAdmin, requireChemicalAccess } from "../lib/chemicalAccess";
 import { HttpError, parse } from "../lib/errors";
@@ -125,8 +125,11 @@ const routes: FastifyPluginAsync = async (app) => {
     if (!ok) throw new HttpError(404, "Mix not found");
     return (await mixRows(req.user.companyId)).find((m) => m.id === req.params.id);
   });
-  /** Mixes can be removed any time: records keep each product (and the mix's name) as applied. */
+  /** Mixes can be removed once no service uses them: records keep each product (and the mix's name) as applied. */
   app.delete<{ Params: { id: string } }>("/mixes/:id", async (req) => {
+    const onServices = await db.select({ name: serviceTypes.name }).from(serviceMixes).innerJoin(serviceTypes, eq(serviceTypes.id, serviceMixes.serviceTypeId))
+      .where(and(eq(serviceMixes.mixId, req.params.id), eq(serviceTypes.companyId, req.user.companyId)));
+    if (onServices.length) throw new HttpError(409, `This mix is on ${onServices.map((x) => x.name).join(", ")}. Take it off the service first, or turn the mix off.`);
     const rows = await db.delete(chemicalMixes).where(and(eq(chemicalMixes.id, req.params.id), eq(chemicalMixes.companyId, req.user.companyId))).returning({ id: chemicalMixes.id });
     if (!rows.length) throw new HttpError(404, "Mix not found");
     return { ok: true };
@@ -137,9 +140,21 @@ const routes: FastifyPluginAsync = async (app) => {
   app.get("/services", async (req) => {
     const rows = await db.select().from(serviceTypes).where(eq(serviceTypes.companyId, req.user.companyId)).orderBy(asc(serviceTypes.sortOrder), asc(serviceTypes.name));
     const lines = await serviceProductLines(rows.map((r) => r.id), await companyToday(req.user.companyId));
+    const mixState = await db.select({ id: chemicalMixes.id, active: chemicalMixes.active }).from(chemicalMixes).where(eq(chemicalMixes.companyId, req.user.companyId));
     return rows.map((r) => ({
       id: r.id, name: r.name, active: r.active, chemical: r.chemical, applicationSite: r.applicationSite,
-      products: (lines.get(r.id) ?? []).map((l) => ({
+      // Mixes on the service: one entry each, with its products and today's cost.
+      mixes: [...new Set((lines.get(r.id) ?? []).filter((l) => l.serviceMixId).map((l) => l.serviceMixId!))].map((smId) => {
+        const ls = (lines.get(r.id) ?? []).filter((l) => l.serviceMixId === smId);
+        const f = ls[0];
+        return {
+          id: smId, mixId: f.mixId!, mixName: f.mixName!, methodName: f.applicationMethodName, startDate: f.startDate, endDate: f.endDate, applies: f.applies,
+          mixActive: mixState.find((m) => m.id === f.mixId)?.active ?? true,
+          costPer1000Cents: ls.some((l) => l.costPer1000Cents == null) ? null : ls.reduce((s, l) => s + (l.costPer1000Cents ?? 0), 0),
+          items: ls.map((l) => ({ productId: l.productId, productName: l.productName, amountPer1000: l.amountPer1000, unit: l.unit })),
+        };
+      }),
+      products: (lines.get(r.id) ?? []).filter((l) => !l.serviceMixId).map((l) => ({
         id: l.id, productId: l.productId, productRateId: l.productRateId, startDate: l.startDate, endDate: l.endDate,
         productName: l.productName, rateName: l.rateName, amountPer1000: l.amountPer1000, unit: l.unit, costPer1000Cents: l.costPer1000Cents, applies: l.applies,
         methodName: l.applicationMethodName,
@@ -171,6 +186,24 @@ const routes: FastifyPluginAsync = async (app) => {
     await db.transaction(async (tx) => {
       await tx.delete(serviceProducts).where(eq(serviceProducts.serviceTypeId, svc.id));
       if (links.length) await tx.insert(serviceProducts).values(links.map((l, i) => ({ ...l, serviceTypeId: svc.id, sortOrder: i })));
+    });
+    return { ok: true };
+  });
+
+  /** Sets the mixes a service applies (the list sent replaces the one before). */
+  app.put<{ Params: { id: string } }>("/services/:id/mixes", async (req) => {
+    const { mixes } = parse(z.object({ mixes: z.array(z.object({
+      mixId: z.string().uuid(), startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    })).max(20) }), req.body);
+    const [svc] = await db.select({ id: serviceTypes.id }).from(serviceTypes).where(and(eq(serviceTypes.id, req.params.id), eq(serviceTypes.companyId, req.user.companyId)));
+    if (!svc) throw new HttpError(404, "Service not found");
+    const ids = [...new Set(mixes.map((m) => m.mixId))];
+    const found = ids.length ? await db.select({ id: chemicalMixes.id }).from(chemicalMixes).where(and(inArray(chemicalMixes.id, ids), eq(chemicalMixes.companyId, req.user.companyId))) : [];
+    if (found.length !== ids.length) throw new HttpError(400, "Pick one of your mixes");
+    if (mixes.some((m) => m.startDate && m.endDate && m.endDate < m.startDate)) throw new HttpError(400, "The end date is before the start date");
+    await db.transaction(async (tx) => {
+      await tx.delete(serviceMixes).where(eq(serviceMixes.serviceTypeId, svc.id));
+      if (mixes.length) await tx.insert(serviceMixes).values(mixes.map((m, i) => ({ serviceTypeId: svc.id, mixId: m.mixId, startDate: m.startDate ?? null, endDate: m.endDate ?? null, sortOrder: i })));
     });
     return { ok: true };
   });

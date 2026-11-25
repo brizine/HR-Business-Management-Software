@@ -68,13 +68,21 @@ export async function chemicalOptions(visitId: string, companyId: string) {
     };
   });
   const items = lines.flatMap((l) => (l.serviceTypeId ? byService.get(l.serviceTypeId) ?? [] : []).filter((p) => p.applies).map((p) => {
+    // A mix on the service: the mix's rate and method, grouped under the mix's name.
+    if (p.mixId) {
+      const method = methods.find((m) => m.id === p.applicationMethodId) ?? defaultMethod(methods, { carrierGalPer1000: p.carrierGalPer1000 });
+      return {
+        productId: p.productId, productName: p.productName, unit: p.unit, fromService: true, used: true, mixName: p.mixName,
+        methodId: method?.id ?? null, ratePer1000: p.amountPer1000, amount: area ? (p.amountPer1000 * area) / 1000 : null,
+      };
+    }
     const rate = rates.find((r) => r.id === p.productRateId) ?? null;
     const method = defaultMethod(methods, rate ?? { carrierGalPer1000: p.carrierGalPer1000 });
     // The service's chosen rate, unless it's for another method and the product has one for this method.
     const forMethod = method ? rates.find((r) => r.productId === p.productId && r.applicationMethodId === method.id) : null;
     const ratePer1000 = rate?.applicationMethodId === method?.id ? p.amountPer1000 : forMethod?.amountPer1000 ?? p.amountPer1000;
     return {
-      productId: p.productId, productName: p.productName, unit: p.unit, fromService: true, used: true,
+      productId: p.productId, productName: p.productName, unit: p.unit, fromService: true, used: true, mixName: null as string | null,
       methodId: method?.id ?? null, ratePer1000, amount: area ? (ratePer1000 * area) / 1000 : null,
     };
   }));

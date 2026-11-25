@@ -224,6 +224,56 @@ describe("mixes", () => {
   });
 });
 
+describe("mixes on services", () => {
+  it("attach to a service; open work orders, the load sheet and material follow changes; completed ones keep theirs", async () => {
+    const methods = (await call("GET", "/chemical-tracking/methods", "owner")).body as { id: string; name: string }[];
+    const truck = methods.find((m) => m.name === "Truck 2gal/1000ft")!.id;
+    const pack = methods.find((m) => m.name === "Backpack 1gal/1000ft")!.id;
+    const fert = ((await call("GET", "/products", "owner")).body as { id: string; name: string; rates: { id: string }[] }[]).find((p) => p.name === "Sample Fertilizer")!;
+    const mix = (await call("POST", "/chemical-tracking/mixes", "owner", { name: "Spring tank", applicationMethodId: truck, items: [{ productId: ID.pre, ratePer1000: 0.5 }, { productId: ID.surf, ratePer1000: 0.2 }] })).body;
+    ID.svc2 = (await call("POST", "/service-types", "owner", { name: "Round 2", pricing: "flat", priceCents: 6500, incomeAccountCode: "4000", chemical: true })).body.id;
+    expect((await call("PUT", `/chemical-tracking/services/${ID.svc2}/mixes`, "mgr", { mixes: [{ mixId: mix.id }] })).status).toBe(403);
+    expect((await call("PUT", `/chemical-tracking/services/${ID.svc2}/mixes`, "owner", { mixes: [{ mixId: mix.id }] })).status).toBe(200);
+    await call("PUT", `/chemical-tracking/services/${ID.svc2}/products`, "owner", { products: [{ productId: fert.id, productRateId: fert.rates[0].id }] });
+    const svc = (await call("GET", "/chemical-tracking/services", "owner")).body.find((x: any) => x.id === ID.svc2);
+    expect(svc.products.map((p: any) => p.productName)).toEqual(["Sample Fertilizer"]);
+    expect(svc.mixes.map((m: any) => [m.mixName, m.methodName, m.items.map((i: any) => [i.productName, i.amountPer1000])])).toEqual([
+      ["Spring tank", "Truck 2gal/1000ft", [["Sample Pre-Emergent", 0.5], ["Sample Surfactant", 0.2]]],
+    ]);
+    expect((await call("DELETE", `/chemical-tracking/mixes/${mix.id}`, "owner")).status).toBe(409);
+
+    // A work order scheduled now, before the mix changes.
+    const wo = (await call("POST", "/visits", "owner", { ...workOrder(ID.bobProp, ID.bob, ID.leo), lines: [{ serviceTypeId: ID.svc2, description: "Round 2", quantity: 1, unitPriceCents: 6500 }] })).body.id;
+    let o = (await call("GET", `/visits/${wo}/chemicals`, "leo")).body;
+    expect(o.items.map((i: any) => [i.productName, i.mixName, i.ratePer1000, i.methodId === truck])).toEqual([
+      ["Sample Fertilizer", null, 3, false], ["Sample Pre-Emergent", "Spring tank", 0.5, true], ["Sample Surfactant", "Spring tank", 0.2, true],
+    ]);
+    // The mix changes: the scheduled work order, load sheet and material follow.
+    await call("PUT", `/chemical-tracking/mixes/${mix.id}`, "owner", { name: "Spring tank", applicationMethodId: pack, items: [{ productId: ID.pre, ratePer1000: 0.6 }, { productId: ID.surf, ratePer1000: 0.2 }] });
+    o = (await call("GET", `/visits/${wo}/chemicals`, "leo")).body;
+    expect(o.items.filter((i: any) => i.mixName).map((i: any) => [i.productName, i.ratePer1000, i.methodId === pack])).toEqual([["Sample Pre-Emergent", 0.6, true], ["Sample Surfactant", 0.2, true]]);
+    const sheet = (await call("GET", `/chemical-tracking/load-sheet?date=${today}&by=day`, "owner")).body;
+    const stop = sheet.groups[0].stops.find((x: any) => x.visitId === wo);
+    expect(stop.items.map((i: any) => [i.product, i.method, +i.amount.toFixed(3)])).toEqual([
+      ["Sample Fertilizer", "Spreader (not mixed)", 18], ["Sample Pre-Emergent", "Backpack 1gal/1000ft", 3.6], ["Sample Surfactant", "Backpack 1gal/1000ft", 1.2],
+    ]);
+    // Completed without the step (older phones): the record has the mix's products, rates and name as they are now.
+    await call("POST", `/visits/${wo}/start`, "leo", {});
+    await call("POST", `/visits/${wo}/complete`, "leo", {});
+    const [r] = (await call("GET", `/chemical-records?visitId=${wo}`, "owner")).body;
+    const rec = (await call("GET", `/chemical-records/${r.id}`, "owner")).body;
+    expect(rec.products.map((p: any) => [p.tradeName, p.mixName, p.ratePer1000, p.methodName])).toEqual([
+      ["Sample Fertilizer", null, 3, "Spreader (not mixed)"], ["Sample Pre-Emergent", "Spring tank", 0.6, "Backpack 1gal/1000ft"], ["Sample Surfactant", "Spring tank", 0.2, "Backpack 1gal/1000ft"],
+    ]);
+    // Later changes don't touch the completed one.
+    await call("PUT", `/chemical-tracking/mixes/${mix.id}`, "owner", { name: "Spring tank", applicationMethodId: pack, items: [{ productId: ID.pre, ratePer1000: 0.7 }] });
+    expect((await call("GET", `/chemical-records/${r.id}`, "owner")).body.products[1].ratePer1000).toBe(0.6);
+    // Off the service, the mix can be removed.
+    await call("PUT", `/chemical-tracking/services/${ID.svc2}/mixes`, "owner", { mixes: [] });
+    expect((await call("DELETE", `/chemical-tracking/mixes/${mix.id}`, "owner")).status).toBe(200);
+  });
+});
+
 describe("what needs attention", () => {
   it("counts records missing something, notices to print and certifications running out", async () => {
     const in30 = new Date(Date.parse(`${today}T12:00:00Z`) + 30 * 86_400_000).toISOString().slice(0, 10);

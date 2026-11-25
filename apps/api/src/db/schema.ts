@@ -2828,3 +2828,17 @@ export const chemicalMixItems = pgTable(
   },
   (t) => [index("chemical_mix_items_mix_idx").on(t.mixId)],
 );
+
+/** Mixes a service applies (alongside its single products), with optional dates like products. */
+export const serviceMixes = pgTable(
+  "service_mixes",
+  {
+    id: id(),
+    serviceTypeId: uuid("service_type_id").notNull().references(() => serviceTypes.id, { onDelete: "cascade" }),
+    mixId: uuid("mix_id").notNull().references(() => chemicalMixes.id, { onDelete: "restrict" }),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("service_mixes_service_idx").on(t.serviceTypeId), index("service_mixes_mix_idx").on(t.mixId)],
+);

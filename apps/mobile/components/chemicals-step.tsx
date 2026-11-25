@@ -10,7 +10,7 @@ export interface ChemicalOptions {
   areaSqFt: number | null;
   site: string | null;
   methods: { id: string; name: string; galPer1000: number | null }[];
-  items: { productId: string; productName: string; unit: string; used: boolean; methodId: string | null; ratePer1000: number; amount: number | null }[];
+  items: { productId: string; productName: string; unit: string; used: boolean; methodId: string | null; ratePer1000: number; amount: number | null; mixName?: string | null }[];
   products: { id: string; name: string; unit: string; ratePer1000: number | null; defaultMethodId: string | null; byMethod: Record<string, number | null> }[];
   /** Products that go in one tank together: added in one tap. */
   mixes?: { id: string; name: string; notes: string | null; methodId: string | null; items: { productId: string; ratePer1000: number }[] }[];
@@ -42,7 +42,7 @@ export function ChemicalsStep({ options, busy, onSave, onCancel }: {
   const amountFor = (rate: number, a: string) => (Number.isFinite(num(a)) ? (rate * num(a)) / 1000 : NaN);
   const [items, setItems] = useState<Item[]>(options.items.map((i) => ({
     productId: i.productId, name: i.productName, unit: i.unit, used: true, methodId: i.methodId ?? options.methods[0]?.id ?? "",
-    rate: fmt(i.ratePer1000), amount: fmt(i.amount ?? amountFor(i.ratePer1000, fmt(options.areaSqFt, 0))), edited: false, mixName: null,
+    rate: fmt(i.ratePer1000), amount: fmt(i.amount ?? amountFor(i.ratePer1000, fmt(options.areaSqFt, 0))), edited: false, mixName: i.mixName ?? null,
   })));
   const update = (n: number, patch: Partial<Item>) => setItems((list) => list.map((x, j) => (j === n ? { ...x, ...patch } : x)));
   const changeMethod = (n: number, methodId: string) => {

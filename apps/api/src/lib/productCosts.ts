@@ -1,7 +1,7 @@
 import { asc, eq, inArray } from "drizzle-orm";
 import { APPLICATION_METHOD_LABELS, appliesOn, costOn, costPerUseUnitCents, type ApplicationMethod } from "@crewdesk/shared";
 import { db } from "../db";
-import { productCosts, productRates, products, properties, serviceProducts, visitLines, visitProducts, visits, applicationMethods } from "../db/schema";
+import { applicationMethods, chemicalMixItems, chemicalMixes, productCosts, productRates, products, properties, serviceMixes, serviceProducts, visitLines, visitProducts, visits } from "../db/schema";
 import { companyToday } from "./payRates";
 
 type Db = typeof db;
@@ -9,14 +9,19 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export { companyToday };
 
-type LinkRow = Awaited<ReturnType<typeof load>>[number];
+type ProductLink = Awaited<ReturnType<typeof load>>[number];
+/** A service's product line: a single product at one of its rates, or one product of a mix at the mix's rate. */
+type LinkRow = Omit<ProductLink, "productRateId"> & { productRateId: string | null; mixId: string | null; mixName: string | null; serviceMixId: string | null };
 export type ServiceProductLine = LinkRow & { costId: string | null; costPerUseUnitCents: number | null; costPer1000Cents: number | null; applies: boolean };
 
 /** Each service's product links, with rate, unit and the cost per use unit in force on `day`. */
 export async function serviceProductLines(serviceIds: string[], day: string, run: Db | Tx = db) {
   const out = new Map<string, ServiceProductLine[]>();
   if (!serviceIds.length) return out;
-  const rows = await load(serviceIds, run);
+  const rows: LinkRow[] = [
+    ...(await load(serviceIds, run)).map((r) => ({ ...r, mixId: null, mixName: null, serviceMixId: null })),
+    ...(await loadMixes(serviceIds, run)),
+  ];
   const productIds = [...new Set(rows.map((r) => r.productId))];
   const costs = productIds.length ? await run.select().from(productCosts).where(inArray(productCosts.productId, productIds)) : [];
   for (const r of rows) {
@@ -26,6 +31,28 @@ export async function serviceProductLines(serviceIds: string[], day: string, run
     out.set(r.serviceTypeId, [...(out.get(r.serviceTypeId) ?? []), line]);
   }
   return out;
+}
+
+/** A service's mixes, one line per product in each mix (at the mix's rate, applied the mix's way). Always read live. */
+async function loadMixes(serviceIds: string[], run: Db | Tx): Promise<LinkRow[]> {
+  const rows = await run.select({
+    sm: serviceMixes, mixName: chemicalMixes.name, methodId: chemicalMixes.applicationMethodId, methodName: applicationMethods.name, gal: applicationMethods.galPer1000,
+    item: chemicalMixItems, p: { name: products.name, epaRegNo: products.epaRegNo, unit: products.useUnit, purchaseUnitSize: products.purchaseUnitSize, trackRecords: products.trackRecords },
+  }).from(serviceMixes)
+    .innerJoin(chemicalMixes, eq(chemicalMixes.id, serviceMixes.mixId))
+    .innerJoin(chemicalMixItems, eq(chemicalMixItems.mixId, chemicalMixes.id))
+    .innerJoin(products, eq(products.id, chemicalMixItems.productId))
+    .leftJoin(applicationMethods, eq(applicationMethods.id, chemicalMixes.applicationMethodId))
+    .where(inArray(serviceMixes.serviceTypeId, serviceIds))
+    .orderBy(asc(serviceMixes.sortOrder), asc(chemicalMixItems.sortOrder));
+  return rows.map((r) => ({
+    id: `${r.sm.id}:${r.item.productId}`, serviceTypeId: r.sm.serviceTypeId, productId: r.item.productId, productRateId: null,
+    startDate: r.sm.startDate, endDate: r.sm.endDate,
+    productName: r.p.name, epaRegNo: r.p.epaRegNo, unit: r.p.unit, purchaseUnitSize: r.p.purchaseUnitSize, trackRecords: r.p.trackRecords,
+    rateName: r.mixName, amountPer1000: r.item.ratePer1000, carrierGalPer1000: r.gal ?? null, method: r.gal == null ? "push_spreader" : "truck_spray",
+    applicationMethodId: r.methodId, applicationMethodName: r.methodName,
+    mixId: r.sm.mixId, mixName: r.mixName, serviceMixId: r.sm.id,
+  }));
 }
 
 function load(serviceIds: string[], run: Db | Tx) {
@@ -82,7 +109,7 @@ export async function snapshotVisitProducts(tx: Tx, visitId: string, companyId: 
       productName: p.productName, epaRegNo: p.epaRegNo, rateName: p.rateName, amountPer1000: p.amountPer1000, areaSqFt: sqFt, amount, unit: p.unit,
       costPerUseUnitCents: p.costPerUseUnitCents, costCents: p.costPerUseUnitCents == null ? null : Math.round(amount * p.costPerUseUnitCents), costDate: day, sortOrder: li * 100 + pi,
       applicationMethodId: p.applicationMethodId, carrierGalPer1000: p.carrierGalPer1000,
-      methodName: p.applicationMethodName ?? APPLICATION_METHOD_LABELS[p.method as ApplicationMethod] ?? null,
+      methodName: p.applicationMethodName ?? APPLICATION_METHOD_LABELS[p.method as ApplicationMethod] ?? null, mixName: p.mixName,
     };
   }));
   if (rows.length) await tx.insert(visitProducts).values(rows);
