@@ -24,7 +24,7 @@ import { HomeworksNotice } from "@/components/automations";
  */
 
 type Seq = Extract<AutomationDef, { kind: "sequence" }>;
-type ListData = { review: number; wasOnAndReady: number; automations: Automation[] };
+type ListData = { review: number; automations: Automation[] };
 
 /** The password for a protected sequence, asked once (the owner is never asked). */
 async function passwordFor(a: Automation): Promise<string | null | undefined> {

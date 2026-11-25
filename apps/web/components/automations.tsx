@@ -23,7 +23,7 @@ import {
  * Sequence Automations are in automation-sequences.tsx.
  */
 
-type ListData = { review: number; wasOnAndReady: number; automations: Automation[] };
+type ListData = { review: number; automations: Automation[] };
 type Simple = Extract<AutomationDef, { kind: "simple" }>;
 
 const COLUMNS = ["Id", "On - Off", "Automation Name", "Trigger Condition", "Run Time", "Action", "Sub Action", "Review", "Notes", "Tags", "Actions"] as const;
@@ -566,25 +566,6 @@ export function CustomerAutomations({ customerId, name }: { customerId: string; 
 /* ───────────── Bringing in Homeworks ───────────── */
 
 type ImportResult = { added: number; already: number; notes: string[]; tagsMade: number; missingTemplates: number; templatesAdded: number };
-type EnableResult = { turnedOn: string[]; left: { name: string; why: string }[] };
-
-/**
- * Where two or more of these would do the same thing for the same event (say, an automation and a
- * sequence both emailing the customer when a work order is completed), so someone gets it twice.
- */
-function doubles(list: Automation[]): { what: string; names: string[] }[] {
-  const groups = new Map<string, Set<string>>();
-  const add = (trigger: string, action: string, name: string) => {
-    const key = `${triggerLabel(trigger)} → ${actionLabel(action, true)}`;
-    groups.set(key, (groups.get(key) ?? new Set()).add(name));
-  };
-  for (const a of list) {
-    if (a.def.kind === "simple") add(a.def.trigger.key, a.def.action.action, a.name);
-    else a.def.blocks.forEach((b, i) => { if (!a.deadBlocks.some((d) => d.index === i)) for (const x of b.actions) add(b.trigger.key, x.action, a.name); });
-  }
-  return [...groups].filter(([, names]) => names.size > 1).map(([what, names]) => ({ what, names: [...names] }));
-}
-
 /** Picks the Homeworks file and brings it in. */
 function useHomeworksImport(onChanged: () => void) {
   const input = useRef<HTMLInputElement>(null);
@@ -606,7 +587,7 @@ function ImportSummary({ r }: { r: ImportResult }) {
     <div>
       <strong>
         {r.added > 0 ? `Imported ${r.added} automations and sequences${r.templatesAdded ? ` and ${r.templatesAdded} templates` : ""}, all turned off` : "Nothing new to import"}
-        {r.already ? ` (${r.already} were already here${r.added ? "" : "; their Ids, tags and whether they were on in Homeworks are up to date"})` : ""}.
+        {r.already ? ` (${r.already} were already here${r.added ? "" : "; their Homeworks Ids and tags are up to date"})` : ""}.
       </strong>
       {r.tagsMade > 0 && <> {r.tagsMade} customer tag{r.tagsMade === 1 ? " was" : "s were"} added.</>}
       {r.missingTemplates > 0 && <> {r.missingTemplates} template pick{r.missingTemplates === 1 ? "" : "s"} couldn&apos;t be matched.</>}
@@ -615,25 +596,17 @@ function ImportSummary({ r }: { r: ImportResult }) {
   );
 }
 
-/**
- * Shown to admins until Homeworks' automations are here: a button to bring in the file. Once they
- * are, and some that were on in Homeworks are still off, a button to turn those on together.
- */
+/** Shown to admins until Homeworks' automations are here: a button to bring in the file (everything comes in turned off). */
 export function HomeworksNotice({ data, onChanged }: { data: ListData; onChanged: () => void }) {
   const imp = useHomeworksImport(onChanged);
-  const [enabled, setEnabled] = useState<EnableResult | null>(null);
-  const [asking, setAsking] = useState(false);
-  const { busy, error, run } = useAction();
   const fromHomeworks = data.automations.filter((a) => a.imported === "homeworks");
-  // Brought in from the first file, which didn't say which were on in Homeworks or carry their Ids and tags.
+  // Brought in from the first file, which didn't carry their Homeworks Ids and tags.
   const older = fromHomeworks.some((a) => a.wasOn == null);
-  // What turning them on together would double up on (with what's already on).
-  const overlap = asking ? doubles(data.automations.filter((a) => a.enabled || (a.wasOn && !a.cannotTurnOn && !a.problems.length))) : [];
-  if (fromHomeworks.length > 0 && !older && !data.wasOnAndReady && !imp.imported && !enabled && !error && !imp.error) return null;
+  if (fromHomeworks.length > 0 && !older && !imp.imported && !imp.error) return null;
   return (
     <div className="card hw-notice" role="status">
       {imp.field}
-      <ErrorBox error={error ?? imp.error} />
+      <ErrorBox error={imp.error} />
       {fromHomeworks.length === 0 && !imp.imported && (
         <>
           <div><strong>Your Homeworks automations aren&apos;t here yet.</strong> Choose the Homeworks file Crewdesk made for you (templates, automations and sequences in one). Everything comes in turned off.</div>
@@ -642,38 +615,15 @@ export function HomeworksNotice({ data, onChanged }: { data: ListData; onChanged
       )}
       {older && !imp.imported && (
         <>
-          <div><strong>Your Homeworks automations came from an earlier file.</strong> Import the new Homeworks file to bring over their Homeworks Ids, their tags and which ones were on. Nothing you&apos;ve changed here is touched.</div>
+          <div><strong>Your Homeworks automations came from an earlier file.</strong> Import the new Homeworks file to bring over their Homeworks Ids and tags. Nothing you&apos;ve changed here is touched.</div>
           <button type="button" className="btn primary" disabled={imp.busy} onClick={imp.pick}>{imp.busy ? "Importing…" : "Import from Homeworks"}</button>
         </>
       )}
-      {imp.imported && <ImportSummary r={imp.imported} />}
-      {data.wasOnAndReady > 0 && !enabled && (
+      {imp.imported && (
         <>
-          <div><strong>{data.wasOnAndReady}</strong> automation{data.wasOnAndReady === 1 ? "" : "s"} and sequence{data.wasOnAndReady === 1 ? "" : "s"} that {data.wasOnAndReady === 1 ? "was" : "were"} on in Homeworks {data.wasOnAndReady === 1 ? "is" : "are"} off here.</div>
-          <button type="button" className="btn primary" disabled={busy} onClick={() => setAsking(true)}>Turn on what was on in Homeworks</button>
+          <ImportSummary r={imp.imported} />
+          <button type="button" className="btn sm hw-soft" onClick={imp.clear}>OK</button>
         </>
-      )}
-      {enabled && (
-        <div>
-          <strong>Turned on {enabled.turnedOn.length}.</strong>
-          {enabled.left.length > 0 && <> {enabled.left.length} stayed off:<ul>{enabled.left.map((l) => <li key={l.name}>{l.name}: {l.why}</li>)}</ul></>}
-          <button type="button" className="btn sm hw-soft" onClick={() => setEnabled(null)}>OK</button>
-        </div>
-      )}
-      {asking && (
-        <ConfirmDialog title="Turn On Automations" busy={busy} onNo={() => setAsking(false)}
-          message={(
-            <>
-              <p style={{ margin: 0 }}>Turn on the {data.wasOnAndReady} that were on in Homeworks? They start for things that happen from now on, and will email and text real customers.</p>
-              {overlap.length > 0 && (
-                <div className="hw-doubles">
-                  <strong>Heads up: these would message the same person more than once for the same event.</strong> In Homeworks an automation and a sequence are both on for it. Turn one of each off afterwards (or say No and turn on just the ones you want):
-                  <ul>{overlap.map((o) => <li key={o.what}><b>{o.what}:</b> {o.names.join(" and ")}</li>)}</ul>
-                </div>
-              )}
-            </>
-          )}
-          onYes={() => run(async () => { try { setEnabled(await api("/automations/enable-homeworks", { method: "POST" })); } finally { setAsking(false); } onChanged(); })} />
       )}
     </div>
   );

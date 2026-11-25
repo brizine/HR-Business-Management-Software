@@ -1828,8 +1828,6 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .hw-sep-pill { background: #fefce8; color: #b45309; border: 1px solid #fde68a; border-radius: 8px; font-size: 12px; font-weight: 700; padding: 5px 14px; }
 .hw-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; font-size: 14px; border-color: color-mix(in srgb, var(--primary) 35%, var(--border)); background: var(--info-bg); }
 .hw-notice ul { margin: 6px 0 0; padding-left: 18px; }
-.hw-doubles { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: var(--warn-bg); color: var(--text); font-size: 13px; max-height: 46vh; overflow-y: auto; }
-.hw-doubles ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 3px; }
 .hw-import-again { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: baseline; font-size: 12px; }
 @media (max-width: 900px) {
   .hw-filter-row, .hw-filter.inline .hw-filter-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }

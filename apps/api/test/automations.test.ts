@@ -4,7 +4,7 @@
  * of AND conditions (any one group), review before execution (approve / reject), turning one off for
  * a customer, running another automation, push reminders to whoever the work is given to, a
  * password on a sequence, the checks on saving and turning on, the Homeworks import (all off,
- * keeping their Ids and whether they were on) with "turn on what was on", and quiet hours for texts.
+ * keeping their Homeworks Ids and tags), and quiet hours for texts.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
@@ -426,15 +426,12 @@ describe("automations v2", () => {
     expect(slip.def.stops[0]).toMatchObject({ key: "tag_removed", tagIds: slip.def.blocks[0].trigger.tagIds });
     expect(slip.def.stopActions[0]).toMatchObject({ action: "email_admin", waitMinutes: 1440 });
     expect(slip.problems).toEqual([]);
-    // What was on in Homeworks and can run here: the visit one and the sequence.
-    expect(all.wasOnAndReady).toBe(2);
-    expect((await call("POST", "/automations/enable-homeworks", "office")).status).toBe(403);
-    const on = await call("POST", "/automations/enable-homeworks", "owner");
-    expect(on.body.turnedOn.sort()).toEqual(["Email me when a visit is complete", "Yellow Slip"]);
-    expect(on.body.left.map((x: any) => x.name).sort()).toEqual(["Internal: Estimate Accepted Notification", "Reminder of meeting"]);
-    expect(on.body.left.find((x: any) => x.name.startsWith("Internal")).why).toMatch(/choose the Email Template/);
-    expect((await call("GET", "/automations", "owner")).body.wasOnAndReady).toBe(0);
-    // One brought in by an earlier file (no Id, tags or "was on" kept) is brought up to date by importing again.
+    // Each is turned on by its own switch; one with nothing picked, or that Crewdesk can't run, says why.
+    expect((await call("POST", `/automations/${visit.id}/enabled`, "owner", { enabled: true })).body.enabled).toBe(true);
+    expect((await call("POST", `/automations/${slip.id}/enabled`, "owner", { enabled: true })).body.enabled).toBe(true);
+    expect((await call("POST", `/automations/${list.find((x: any) => x.name.startsWith("Internal")).id}/enabled`, "owner", { enabled: true })).body.error).toMatch(/choose the Email Template/);
+    expect((await call("POST", `/automations/${list.find((x: any) => x.name === "Reminder of meeting").id}/enabled`, "owner", { enabled: true })).body.error).toMatch(/meetings/);
+    // One brought in by an earlier file (no Homeworks Id or tags kept) is brought up to date by importing again.
     await db.update(automations).set({ number: 987_654, importedOn: null, labels: [] }).where(eq(automations.id, visit.id));
     // Imported again: nothing new, and what's been turned on stays on.
     expect((await call("POST", "/automations/import", "owner", file)).body).toMatchObject({ added: 0, already: 4, templatesAdded: 0 });

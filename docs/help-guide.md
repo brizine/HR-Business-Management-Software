@@ -627,11 +627,11 @@ Customers & billing set them up; managers can see them and work Review Sequence.
   coming up or an estimate already answered is skipped.
 - **Bringing in Homeworks:** **Import from Homeworks** (admins) takes the one Homeworks file Crewdesk made:
   templates first, then every automation and sequence, all **turned off**, each keeping its Homeworks Id, tags and
-  notes, and listed in Homeworks' order. Crewdesk remembers which were on in Homeworks; **Turn on what was on in
-  Homeworks** turns those on together and lists any it left off, with why. An automation Homeworks had no template
-  picked for needs one picked first; ones about meetings, reviews, work requests or tips can't run because Crewdesk
-  doesn't have those yet (a sequence with only some such parts still runs the rest). When a switch won't turn on,
-  the reason shows under that automation's name. Importing the file again changes nothing already here.
+  notes, and listed in Homeworks' order. Turn each one on with its own On / Off pill when you're ready. An
+  automation Homeworks had no template picked for needs one picked first; ones about meetings, reviews, work
+  requests or tips can't run because Crewdesk doesn't have those yet (a sequence with only some such parts still
+  runs the rest). When a switch won't turn on, the reason shows under that automation's name. Importing the file
+  again changes nothing already here.
 - Automations check every few minutes, so "Instantly" means within about five minutes.
 
 ### Online payments and the customer portal

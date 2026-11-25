@@ -148,8 +148,6 @@ const routes: FastifyPluginAsync = async (app) => {
     const of = (id: string, status: string) => runs.find((c) => c.id === id && c.status === status)?.n ?? 0;
     return {
       review: await reviewCount(companyId),
-      // Imported from Homeworks, on there, off here, and able to run: what "turn on what was on in Homeworks" would turn on.
-      wasOnAndReady: list.filter((a) => a.importedOn && !a.enabled && !notReady(a)).length,
       automations: list.map((a) => {
         const mine = runs.filter((r) => r.id === a.id && r.last);
         const lastAt = mine.length ? new Date(Math.max(...mine.map((r) => new Date(r.last!).getTime()))) : null;
@@ -235,24 +233,6 @@ const routes: FastifyPluginAsync = async (app) => {
     const old = await find(req.user.companyId, req.params.id);
     const [row] = await db.update(automations).set({ review, updatedById: req.user.sub, updatedAt: new Date() }).where(eq(automations.id, old.id)).returning();
     return view(row);
-  });
-
-  /**
-   * Turns on everything that was on in Homeworks and can run here. Ones that still need something
-   * picked, or that Crewdesk can't run, are left off and listed with why.
-   */
-  app.post("/enable-homeworks", admin, async (req) => {
-    const { companyId, sub } = req.user;
-    const list = await db.select().from(automations).where(and(eq(automations.companyId, companyId), eq(automations.importedOn, true), eq(automations.enabled, false))).orderBy(sql`lower(${automations.name})`);
-    const turnedOn: string[] = [];
-    const left: { name: string; why: string }[] = [];
-    for (const a of list) {
-      const no = notReady(a);
-      if (no) { left.push({ name: a.name, why: no }); continue; }
-      await db.update(automations).set({ enabled: true, enabledAt: new Date(), updatedById: sub, updatedAt: new Date() }).where(eq(automations.id, a.id));
-      turnedOn.push(a.name);
-    }
-    return { turnedOn, left };
   });
 
   app.delete<{ Params: { id: string } }>("/:id", admin, async (req) => {
