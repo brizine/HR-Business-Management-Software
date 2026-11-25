@@ -18,6 +18,7 @@ import { addDays, billingSettings } from "../lib/invoices";
 import { notify, staffWithRole } from "../lib/notify";
 import { companyToday } from "../lib/payRates";
 import { companyForPdf, sendPdf } from "./invoices";
+import { refreshEstimateCosts } from "../lib/estimateCosts";
 import { acceptAfterDeposit, chosenSet, depositNeeded, depositView, recordResponse, startDeposit, startDepositLink, updateTotals } from "../lib/estimateResponses";
 import { recordPaymentIntent, stripeConfig } from "../lib/stripe";
 import { sendPrepayLink, PREPAY_LINK_DAYS } from "./prepayments";
@@ -49,7 +50,7 @@ async function saveLines(tx: Tx, e: Estimate, body: EstimateInput) {
   const rows = body.lines.map((l, i) => ({
     ...(l.id && keep.has(l.id) ? { id: l.id } : {}), estimateId: e.id, serviceTypeId: l.serviceTypeId ?? null, propertyId: l.propertyId ?? null, description: l.description,
     quantity: l.quantity, unitPriceCents: l.unitPriceCents, visits: l.visits, taxRate: l.taxRate, incomeAccountCode: l.incomeAccountCode,
-    costCents: l.costCents ?? null, budgetedHours: l.budgetedHours ?? null, optional: l.optional, selected: l.optional ? l.selected : true, recommended: l.recommended,
+    costCents: l.costCents ?? null, costAuto: !!l.costAuto && !!l.serviceTypeId, budgetedHours: l.budgetedHours ?? null, optional: l.optional, selected: l.optional ? l.selected : true, recommended: l.recommended,
     amountCents: estimateLineAmount(l), sortOrder: i,
   }));
   const saved = rows.length ? await tx.insert(estimateLines).values(rows).returning() : [];
@@ -81,7 +82,7 @@ async function estimateView(e: Estimate, opts: { office: boolean }) {
       id: l.id, serviceTypeId: l.serviceTypeId, propertyId: l.propertyId, address: l.propertyId ? addr.get(l.propertyId) ?? null : null, description: l.description,
       quantity: l.quantity, unitPriceCents: l.unitPriceCents, visits: l.visits, taxRate: l.taxRate, amountCents: l.amountCents,
       optional: l.optional, selected: l.selected, recommended: l.recommended, included: lineIncluded(l, chosen),
-      ...(opts.office ? { incomeAccountCode: l.incomeAccountCode, costCents: l.costCents, budgetedHours: l.budgetedHours } : {}),
+      ...(opts.office ? { incomeAccountCode: l.incomeAccountCode, costCents: l.costCents, costAuto: l.costAuto, budgetedHours: l.budgetedHours } : {}),
     })),
   };
   if (!opts.office) return base;
@@ -188,7 +189,12 @@ const routes: FastifyPluginAsync = async (app) => {
     return e;
   };
 
-  app.get<{ Params: { id: string } }>("/:id", async (req) => estimateView(await find(req.user.companyId, req.params.id), { office: true }));
+  app.get<{ Params: { id: string } }>("/:id", async (req) => {
+    const e = await find(req.user.companyId, req.params.id);
+    // Open estimates: costs from the services' products follow product, rate and mix changes.
+    await refreshEstimateCosts(req.user.companyId, [e.id]);
+    return estimateView(e, { office: true });
+  });
 
   /** Changes it (not once it's been accepted or declined: copy it instead). A sent estimate's link shows the new version. */
   app.put<{ Params: { id: string } }>("/:id", async (req) => {

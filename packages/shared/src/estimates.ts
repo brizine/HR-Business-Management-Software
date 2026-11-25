@@ -39,6 +39,8 @@ export const estimateLineSchema = z.object({
   incomeAccountCode: z.string().trim().regex(/^\d{3,6}$/).default("4000"),
   /** Internal: what it costs us per unit, and the hours budgeted per visit (never shown to the customer). */
   costCents: z.preprocess(blankToNull, z.coerce.number().int().min(0).max(100_000_000).nullable()).optional(),
+  /** Cost from the service's products, kept current while the estimate is open (false when typed in). */
+  costAuto: z.boolean().default(false),
   budgetedHours: z.preprocess(blankToNull, z.coerce.number().min(0).max(999).nullable()).optional(),
   /** The customer chooses whether to include it; `selected` is whether it starts ticked. */
   optional: z.boolean().default(false),

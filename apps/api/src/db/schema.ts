@@ -1651,6 +1651,8 @@ export const estimateLines = pgTable(
     taxRate: doublePrecision("tax_rate").notNull().default(0),
     incomeAccountCode: text("income_account_code").notNull().default("4000"),
     costCents: integer("cost_cents"),
+    /** "Our cost" comes from the service's products (kept up to date while the estimate is open); false once typed in. */
+    costAuto: boolean("cost_auto").notNull().default(false),
     budgetedHours: doublePrecision("budgeted_hours"),
     optional: boolean("optional").notNull().default(false),
     selected: boolean("selected").notNull().default(true),
