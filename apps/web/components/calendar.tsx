@@ -77,7 +77,7 @@ export function useCalSettings(userId: string | undefined) {
 export type FilterKind = "status" | "recurring" | "person" | "crew" | "customer" | "tag" | "invoice" | "onsite" | "tracked" | "service";
 export type CalFilter = { kind: FilterKind; value: string; label: string };
 export const FILTER_LABELS: Record<FilterKind, string> = {
-  status: "Status", recurring: "Repeats", invoice: "Invoice", onsite: "On site", tracked: "Tracked time", crew: "Crew", person: "Person", customer: "Customer", service: "Item/Service", tag: "Tag",
+  status: "Status", recurring: "Repeats", invoice: "Invoice", onsite: "On site", tracked: "Tracked time", crew: "Crew", person: "Person", customer: "Customer", service: "Product/Service", tag: "Tag",
 };
 export function applyFilters(list: CalendarEvent[], filters: CalFilter[], search: string) {
   const q = search.trim().toLowerCase();

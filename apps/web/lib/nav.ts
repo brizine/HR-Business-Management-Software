@@ -45,7 +45,7 @@ export const NAV: Record<Side, NavGroup[]> = {
       // Like Homeworks' Resources: the lists the rest of the app draws on.
       key: "resources", label: "Resources", icon: "layers",
       items: [
-        { href: "/price-list", label: "Items & services", min: "manager", area: "customers" },
+        { href: "/price-list", label: "Products & services", min: "manager", area: "customers" },
         { href: "/chemical-tracking", label: "Chemical Tracking", gate: "chemical" },
         { href: "/custom-fields", label: "Custom fields", min: "admin" },
         { href: "/settings/customers", label: "Tags", min: "admin", area: "customers" },
@@ -121,7 +121,7 @@ export const NEW_MENU: { group: string; items: NewItem[] }[] = [
     items: [
       { label: "Employee", href: "/people?new=1", icon: "user", min: "admin", area: "people" },
       { label: "Time off request", href: "/time-off?new=1", icon: "calendar" },
-      { label: "Item & service", href: "/price-list?new=1", icon: "billing", min: "admin", area: "customers" },
+      { label: "Product & service", href: "/price-list?new=1", icon: "billing", min: "admin", area: "customers" },
       { label: "Equipment", href: "/fleet?new=1", icon: "truck", min: "manager", area: "fleet" },
     ],
   },

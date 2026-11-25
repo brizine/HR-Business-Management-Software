@@ -26,7 +26,7 @@ export default function PriceList() {
   const account = (code: string) => INCOME_ACCOUNTS.find((a) => a.code === code);
   return (
     <>
-      <PageHead title="Items & services"
+      <PageHead title="Products & services"
         sub="Your price list: the services you sell and how each is priced. Invoices, work orders and estimates fill in the price from the property's lawn size.">
         {admin && <button className="btn primary" onClick={() => setEditing("new")}>Add service</button>}
       </PageHead>

@@ -36,7 +36,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
 - **Notifications bell:** the red number is unread items. Click it to see your new notifications; click one to
   open what it's about (it's marked read). **Mark all as read** clears them; **View all** opens the full list.
 - **+ New:** everything you can add, in columns like Homeworks: **Team & Resources** (Employee, Time off request,
-  Item & service, Equipment), **Finance** (Invoice), **Events** (Work order, To-do, Repair order) and **Customer** (Customer,
+  Product & service, Equipment), **Finance** (Invoice), **Events** (Work order, To-do, Repair order) and **Customer** (Customer,
   Property). Each opens its page with the add form showing; you only see what your access allows.
 - **Your initials:** My profile, Company Wiki, Notification settings, Security, All settings, Help, **Open** the test
   company (or **Back to the real company** when you're in it) and **Sign out**.
@@ -56,7 +56,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   see Invoices, Estimates and Sales tax report, and click it again to fold it away. The section you're in starts
   open, and the menu remembers which ones you opened or closed.
 - **Operations:** **Customers** (Customers, Properties), **Schedule** (Calendar, Work orders, To-dos), **Billing** (Invoices,
-  Estimates, Sales tax report), **Resources** (Items & services, Custom fields, Tags; like Homeworks' Resources), **Field**
+  Estimates, Sales tax report), **Resources** (Products & services, Custom fields, Tags; like Homeworks' Resources), **Field**
   (Property Measure, Spray Mix Calculator), **Fleet** (Assets, Repair Orders, Inspections) and **Reports**
   (managers).
 - **Team:** **Dashboard** (managers), **People** (Team, Shifts, Crews, Time Clock, Attendance, Time Off, Reviews &
@@ -302,7 +302,7 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
 
 ### Billing: price list and invoices
 
-Operations → **Billing** has **Invoices**, and **Resources → Items & services** is the price list (managers in Customers &
+Operations → **Billing** has **Invoices**, and **Resources → Products & services** is the price list (managers in Customers &
 billing; admins change prices).
 
 - **Price list:** each service is priced one of three ways: a **flat price**, **per 1,000 sq ft** (with an optional
@@ -690,7 +690,7 @@ are numbered **WO-1001**, **WO-1002** and so on. Open them from **Schedule → W
   that aren't done; moving the date moves them all by as many days). Put it **On the waitlist** to take its date
   off. **Delete** (one, or this and later); work orders on an invoice stay.
 - **On the calendar** they show first, with their price (managers), the day's **$ total** and the range's total.
-  The **Invoice**, **On site**, **Tracked time**, **Crew** and **Item/Service** filters and the **Revenue** sorts work on them.
+  The **Invoice**, **On site**, **Tracked time**, **Crew** and **Product/Service** filters and the **Revenue** sorts work on them.
   The waitlist (hourglass) lists work orders with no date: drag one onto a day. **+** on a day asks **Work order**
   or **To-do**.
 
@@ -926,7 +926,7 @@ computer or a phone, or focus the handle and use the up and down arrow keys. The
 **Field → Weather** (Customers & billing managers) keeps the weather on chemical applications for the records, as
 the Crewdesk plan describes: the office handles it, and techs never see or enter it.
 
-- **Which work orders:** tick **Chemical application** on a service in the price list (Resources → Items &
+- **Which work orders:** tick **Chemical application** on a service in the price list (Resources → Products &
   services). Work orders with one of those services get the weather when they're completed. They show
   **chemical** in the price list.
 - **Settings** (admins; **Change** at the top of the page):
