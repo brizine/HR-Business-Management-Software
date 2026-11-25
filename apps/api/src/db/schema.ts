@@ -2942,6 +2942,8 @@ export const templates = pgTable(
     subject: text("subject"),
     /** Email: cleaned HTML. Text: plain text. */
     body: text("body").notNull(),
+    /** Email made in the builder: its rows, columns and blocks (`body` is that design as email HTML). */
+    design: jsonb("design").$type<import("@crewdesk/shared").EmailDesign>(),
     systemKey: text("system_key"),
     /** Brought in from another system, e.g. "homeworks:592671" (so importing twice doesn't double up). */
     importedFrom: text("imported_from"),
@@ -3013,4 +3015,20 @@ export const marketingDocHistory = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("marketing_doc_history_doc_idx").on(t.docId, t.createdAt)],
+);
+
+/** Pictures uploaded in the email template builder, served to whoever opens the email. */
+export const emailImages = pgTable(
+  "email_images",
+  {
+    id: id(),
+    companyId: companyId(),
+    key: text("key").notNull(),
+    contentType: text("content_type").notNull(),
+    bytes: integer("bytes").notNull(),
+    name: text("name"),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("email_images_company_idx").on(t.companyId, t.createdAt)],
 );

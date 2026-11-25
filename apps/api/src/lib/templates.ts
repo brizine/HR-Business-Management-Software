@@ -1,8 +1,9 @@
-import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import sanitizeHtml from "sanitize-html";
 import {
-  EMPTY_TEMPLATE_DEFAULTS, MESSAGE_KINDS, PAYMENT_METHOD_LABELS, SYSTEM_TEMPLATES, customerName, fillTags, formatAddress, formatMoney, formatPhone, htmlToText,
-  type MessageKind, type PaymentMethod, type TemplateDefaults, type TemplateVars,
+  DESIGN_CSS, EMPTY_TEMPLATE_DEFAULTS, MESSAGE_KINDS, PAYMENT_METHOD_LABELS, SYSTEM_TEMPLATES, beeToDesign, customerName, designHasContent, fillTags, formatAddress, formatMoney, formatPhone,
+  htmlToDesign, htmlToText, isDesignedBody, renderDesign,
+  type EmailDesign, type MessageKind, type PaymentMethod, type TemplateDefaults, type TemplateVars,
 } from "@crewdesk/shared";
 import { db } from "../db";
 import { assets, companies, customerNotes, customers, employees, estimates, invoicePayments, invoices, properties, propertyAssignments, templates, todos, visits, workOrders } from "../db/schema";
@@ -29,6 +30,55 @@ export function cleanEmailHtml(html: string): string {
     transformTags: { h1: "h2", b: "strong", i: "em" },
     exclusiveFilter: (f) => f.tag === "a" && !f.attribs.href,
   }).replace(/href="%7B%7B([A-Z0-9_]+)%7D%7D"/g, 'href="{{$1}}"').trim();
+}
+
+/* ───────────── Designs (emails made in the builder) ───────────── */
+
+const SAFE_COLOR = [/^#[0-9a-f]{3,8}$/i, /^rgba?\(\s*[\d.]+%?\s*,\s*[\d.]+%?\s*,\s*[\d.]+%?\s*(,\s*[\d.]+%?\s*)?\)$/, /^transparent$/];
+const tagHrefs = (html: string) => html.replace(/href="%7B%7B([A-Z0-9_]+)%7D%7D"/g, 'href="{{$1}}"');
+/** The words in a title, paragraph or list block: formatting, colours and links only. */
+function cleanBlockText(html: string): string {
+  return tagHrefs(sanitizeHtml(html, {
+    allowedTags: ["p", "br", "strong", "b", "em", "i", "u", "s", "strike", "sup", "sub", "span", "a", "ul", "ol", "li", "font"],
+    allowedAttributes: { a: ["href"], span: ["style"], p: ["style"], li: ["style"], font: ["color"] },
+    allowedStyles: { "*": {
+      color: SAFE_COLOR, "background-color": SAFE_COLOR, "font-weight": [/^(bold|normal|[1-9]00)$/], "font-style": [/^(italic|normal)$/], "font-size": [/^\d{1,2}px$/],
+      "text-decoration": [/^(underline|line-through|none)( (underline|line-through))?$/], "text-decoration-line": [/^(underline|line-through|none)( (underline|line-through))?$/], "text-align": [/^(left|right|center|justify)$/],
+    } },
+    allowedSchemes: ["http", "https", "mailto", "tel"], allowedSchemesAppliedToAttributes: ["href"],
+    exclusiveFilter: (f) => f.tag === "a" && !f.attribs.href,
+  })).trim();
+}
+/** An HTML block ("HTML experts only"): tables, pictures and inline styles are fine; anything that runs isn't. */
+function cleanRawHtml(html: string): string {
+  return tagHrefs(sanitizeHtml(html, {
+    allowedTags: [...sanitizeHtml.defaults.allowedTags, "img", "center", "font", "u", "s"],
+    allowedAttributes: {
+      "*": ["style", "align", "valign", "width", "height", "bgcolor", "dir"], a: ["href", "target", "title"], img: ["src", "alt", "width", "height", "border"],
+      table: ["cellpadding", "cellspacing", "border", "role"], td: ["colspan", "rowspan"], th: ["colspan", "rowspan"], font: ["color", "face", "size"],
+    },
+    allowedSchemes: ["http", "https", "mailto", "tel"], allowedSchemesByTag: { img: ["http", "https"] },
+  })).replace(/(position\s*:\s*(fixed|sticky|absolute)|expression\s*\(|behavior\s*:|javascript:|@import)/gi, "").trim();
+}
+/** A design as saved: every block's words cleaned (the settings are read safely when it's turned into an email). */
+export function cleanDesign(d: EmailDesign): EmailDesign {
+  return {
+    ...d,
+    rows: d.rows.map((r) => ({ ...r, columns: r.columns.map((c) => ({ ...c, blocks: c.blocks.map((b) => (typeof b.p.html === "string"
+      ? { ...b, p: { ...b.p, html: b.type === "html" ? cleanRawHtml(b.p.html) : b.type === "title" ? cleanBlockText(b.p.html).replace(/<\/?(p|ul|ol|li)[^>]*>/g, " ").trim() : cleanBlockText(b.p.html) } }
+      : b)) })) })),
+  };
+}
+/** What a template is saved as when it was made in the builder: the cleaned design, and the email HTML made from it. */
+export function designedTemplate(design: EmailDesign) {
+  const clean = cleanDesign(design);
+  return { design: clean, body: renderDesign(clean) };
+}
+/** A template's design for the builder: the one saved, or its plain wording turned into blocks (with the company's logo on top, as those emails were framed). */
+export async function templateDesign(t: { companyId: string; design: EmailDesign | null; body: string }): Promise<EmailDesign> {
+  if (t.design) return t.design;
+  const [co] = await db.select({ id: companies.id, logoKey: companies.logoKey }).from(companies).where(eq(companies.id, t.companyId));
+  return htmlToDesign(t.body, { logoUrl: co?.logoKey ? `${PUBLIC_API_URL}/public/company/${co.id}/logo` : null });
 }
 
 /* ───────────── Crewdesk's own templates and the chosen ones ───────────── */
@@ -214,6 +264,7 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 export async function renderTemplateEmail(companyId: string, tpl: { subject: string | null; body: string }, vars: TemplateVars, o: { unsubscribeCustomerId?: string | null } = {}) {
   const [co] = await db.select().from(companies).where(eq(companies.id, companyId));
   const subject = fillTags(tpl.subject ?? "", vars).replace(/\s+/g, " ").trim() || co.name;
+  if (isDesignedBody(tpl.body)) return renderDesignedEmail(co, subject, tpl.body, vars, o);
   const body = fillTags(tpl.body, vars, { html: true })
     .replace(/<p>(\s|<br>)*<\/p>/g, "")
     .replace(/<p([^>]*)>\s*<a href="([^"]+)" data-cd-link="1">([^<]*)<\/a>\s*<\/p>/g, (_, attrs: string, href: string, label: string) =>
@@ -230,6 +281,28 @@ ${body}
 <hr style="border:0;border-top:1px solid #eaecf0;margin:24px 0 12px">
 <p style="color:#667085;font-size:12px;margin:0">${esc(footer)}${unsubscribe ? `<br>Don't want these emails? <a href="${esc(unsubscribe)}" style="color:#667085">Unsubscribe</a>. You'll still get your invoices and receipts.` : ""}</p>
 </div></body></html>`;
+  const text = `${htmlToText(body)}\n\n--\n${footer}${unsubscribe ? `\nDon't want these emails? Unsubscribe: ${unsubscribe}` : ""}\n`;
+  const headers: Record<string, string> = token ? { "List-Unsubscribe": `<${PUBLIC_API_URL}/public/unsubscribe/customer?token=${encodeURIComponent(token)}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } : {};
+  return { subject, html, text, headers, fromName: co.name, replyTo: co.email ?? undefined };
+}
+
+/**
+ * An email made in the builder: sent as designed (no letter frame around it), with the company's
+ * details and the unsubscribe link underneath.
+ */
+function renderDesignedEmail(co: typeof companies.$inferSelect, subject: string, designed: string, vars: TemplateVars, o: { unsubscribeCustomerId?: string | null }) {
+  const body = fillTags(designed, vars, { html: true })
+    .replace(/<p([^>]*)>\s*<a href="([^"]+)" data-cd-link="1">([^<]*)<\/a>\s*<\/p>/g, (_, attrs: string, href: string, label: string) =>
+      `<p${attrs}><a href="${href}" style="display:inline-block;background:#1f7a3a;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600">${label}</a></p>`)
+    .replace(/ data-cd-link="1"/g, ' style="color:#0068a5;font-weight:600"');
+  const token = o.unsubscribeCustomerId ? customerUnsubscribeToken(o.unsubscribeCustomerId) : null;
+  const unsubscribe = token ? `${WEB_URL}/unsubscribe?customer=${encodeURIComponent(token)}` : null;
+  const footer = [co.name, vars.COMPANY_ADDRESS, vars.COMPANY_PHONE, co.website].filter(Boolean).join(" · ");
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${DESIGN_CSS}</style></head><body style="margin:0;padding:0">
+${body}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" style="padding:14px 12px 24px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:12px;line-height:1.5;color:#667085">
+${esc(footer)}${unsubscribe ? `<br>Don't want these emails? <a href="${esc(unsubscribe)}" style="color:#667085">Unsubscribe</a>. You'll still get your invoices and receipts.` : ""}
+</td></tr></table></body></html>`;
   const text = `${htmlToText(body)}\n\n--\n${footer}${unsubscribe ? `\nDon't want these emails? Unsubscribe: ${unsubscribe}` : ""}\n`;
   const headers: Record<string, string> = token ? { "List-Unsubscribe": `<${PUBLIC_API_URL}/public/unsubscribe/customer?token=${encodeURIComponent(token)}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } : {};
   return { subject, html, text, headers, fromName: co.name, replyTo: co.email ?? undefined };
@@ -281,20 +354,41 @@ async function customerFor(companyId: string, ctx: TemplateContext) {
 }
 
 /**
- * Brings in templates from another system (Homeworks). One with the same id there is left alone,
- * so importing again adds nothing; an empty one is skipped.
+ * Brings in templates from another system (Homeworks). An email that comes with its design from
+ * Homeworks' builder is saved as that design, so it opens as the same blocks. One already here from
+ * the same place is brought up to date when nobody has changed it in Crewdesk (so a newer file with
+ * the designs replaces the first, plain import) and left alone when someone has; an empty one is skipped.
  */
-export async function importTemplates(companyId: string, by: string, source: string, list: { channel: "email" | "text"; name: string; audience: "customer" | "internal"; subject?: string | null; body: string; homeworksId?: string | number | null }[]) {
-  let added = 0, skipped = 0;
+export async function importTemplates(companyId: string, by: string, source: string, list: { channel: "email" | "text"; name: string; audience: "customer" | "internal"; subject?: string | null; body?: string; bee?: unknown; homeworksId?: string | number | null }[]) {
+  const here = new Map((await db.select().from(templates).where(and(eq(templates.companyId, companyId), isNotNull(templates.importedFrom)))).map((t) => [t.importedFrom!, t]));
+  let added = 0, updated = 0, kept = 0, skipped = 0;
   for (const t of list) {
     const importedFrom = t.homeworksId != null ? `${source}:${t.homeworksId}` : null;
-    const body = t.channel === "email" ? cleanEmailHtml(t.body) : t.body.replace(/\r/g, "").trim();
-    if (!body.trim() || (t.channel === "email" && !htmlToText(body).trim())) { skipped++; continue; }
-    const [row] = await db.insert(templates).values({
-      companyId, channel: t.channel, audience: t.audience, name: t.name, subject: t.channel === "email" ? (t.subject?.trim() || t.name) : null, body, importedFrom,
-      createdById: by, updatedById: by,
-    }).onConflictDoNothing().returning({ id: templates.id });
-    if (row) added++; else skipped++;
+    let design: EmailDesign | null = null;
+    let body: string;
+    if (t.channel === "email" && t.bee) {
+      const made = designedTemplate(beeToDesign(typeof t.bee === "string" ? safeJson(t.bee) : t.bee).design);
+      if (!designHasContent(made.design)) { skipped++; continue; }
+      design = made.design; body = made.body;
+    } else {
+      body = t.channel === "email" ? cleanEmailHtml(t.body ?? "") : (t.body ?? "").replace(/\r/g, "").trim();
+      if (!body.trim() || (t.channel === "email" && !htmlToText(body).trim())) { skipped++; continue; }
+    }
+    const subject = t.channel === "email" ? (t.subject?.trim() || t.name) : null;
+    const have = importedFrom ? here.get(importedFrom) : undefined;
+    if (!have) {
+      const [row] = await db.insert(templates).values({ companyId, channel: t.channel, audience: t.audience, name: t.name, subject, body, design, importedFrom, createdById: by, updatedById: by })
+        .onConflictDoNothing().returning({ id: templates.id });
+      if (row) added++; else skipped++;
+    } else if (have.channel !== t.channel || (have.body === body && have.name === t.name && (have.subject ?? null) === subject)) skipped++;
+    else if (have.updatedAt.getTime() === have.createdAt.getTime()) {
+      // Never edited here: take the file's version (and keep it marked as not edited).
+      await db.update(templates).set({ name: t.name, subject, body, design }).where(eq(templates.id, have.id));
+      updated++;
+    } else kept++;
   }
-  return { added, skipped };
+  return { added, updated, kept, skipped };
+}
+function safeJson(s: string): unknown {
+  try { const v: unknown = JSON.parse(s); return typeof v === "string" ? JSON.parse(v) : v; } catch { return null; }
 }

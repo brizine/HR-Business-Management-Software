@@ -51,7 +51,7 @@ import automationRoutes from "./routes/automations";
 import myDayRoutes from "./routes/myDay";
 import waitlistRoutes from "./routes/waitlist";
 import weatherRoutes from "./routes/weather";
-import templateRoutes, { trackRoutes } from "./routes/templates";
+import templateRoutes, { emailImageRoutes, trackRoutes } from "./routes/templates";
 import docRoutes from "./routes/docs";
 import propertyRoutes from "./routes/properties";
 import crmSettingsRoutes from "./routes/crmSettings";
@@ -172,6 +172,7 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(templateRoutes, { prefix: "/templates" });
   await app.register(docRoutes, { prefix: "/docs" });
   await app.register(trackRoutes, { prefix: "/public/t" });
+  await app.register(emailImageRoutes, { prefix: "/public/email-image" });
   await app.register(publicEstimateRoutes, { prefix: "/public/estimates" });
   await app.register(propertyRoutes, { prefix: "/properties" });
   await app.register(crmSettingsRoutes, { prefix: "/crm" });

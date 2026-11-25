@@ -5,14 +5,16 @@ import { MESSAGE_KIND_LABELS, type TemplateChannel } from "@crewdesk/shared";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
-import { DefaultsTab, HistoryTab, ImportTemplates, TemplateEditor, useFilteredTemplates, type Template } from "@/components/templates";
+import { DefaultsTab, ImportTemplates, TemplateEditor, useFilteredTemplates, type Template } from "@/components/templates";
+import { EmailHistoryTab, EmailTemplatesTab } from "@/components/email-templates";
 
-const TABS = [["email", "Email templates"], ["text", "Text templates"], ["history", "Sent / History"], ["defaults", "Defaults"]] as const;
+/** Homeworks' two tabs first (Email Templates, Sent / History), then Crewdesk's own. */
+const TABS = [["email", "Email Templates"], ["history", "Sent / History"], ["text", "Text Templates"], ["defaults", "Defaults"]] as const;
 type Tab = (typeof TABS)[number][0];
 
 /**
- * Marketing → Templates (like Homeworks' Email Templates and Text Message Templates, with Sent /
- * History): the list on the left, the editor and a live preview on the right.
+ * Marketing → Templates. Email Templates and Sent / History are laid out like Homeworks, with its
+ * drag-and-drop builder; Text Templates keeps the list on the left and the editor on the right.
  */
 export default function TemplatesPage() {
   const { can } = useAuth();
@@ -31,7 +33,7 @@ export default function TemplatesPage() {
 
   // Open the first template when a list tab opens.
   useEffect(() => {
-    if ((tab === "email" || tab === "text") && list.data && (!selected || (selected !== "new" && !list.data.some((t) => t.id === selected && t.channel === channel)))) {
+    if (tab === "text" && list.data && (!selected || (selected !== "new" && !list.data.some((t) => t.id === selected && t.channel === channel)))) {
       setSelected(list.data.find((t) => t.channel === channel)?.id ?? "new");
     }
   }, [tab, list.data]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -41,17 +43,18 @@ export default function TemplatesPage() {
   const choose = (id: string | "new") => { if (id !== selected && leave()) { setDirty(false); setSelected(id); } };
 
   return (
-    <>
-      <PageHead title="Templates" sub="The emails and texts Crewdesk sends, with tags that fill in each customer's details.">
+    <div className="hw" data-lkeep="">
+      <PageHead title={tab === "text" ? "Text Templates" : tab === "defaults" ? "Templates" : "Email Templates"}>
         {isAdmin && <ImportTemplates onDone={list.reload} />}
       </PageHead>
-      <nav className="cal-seg text-tabs tpl-tabs" role="tablist" aria-label="Templates">
-        {TABS.map(([k, label]) => <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => go(k)}>{label}</button>)}
+      <nav className="hwd-tabs" aria-label="Templates">
+        {TABS.map(([k, label]) => <button key={k} type="button" aria-current={tab === k ? "page" : undefined} className={tab === k ? "active" : ""} onClick={() => go(k)}>{label}</button>)}
       </nav>
       <ErrorBox error={list.error} />
-      {tab === "history" && <HistoryTab />}
+      {tab === "email" && list.data && <EmailTemplatesTab list={list.data} reload={list.reload} />}
+      {tab === "history" && <EmailHistoryTab />}
       {tab === "defaults" && list.data && <DefaultsTab templates={list.data} canEdit={isAdmin} />}
-      {(tab === "email" || tab === "text") && list.data && (
+      {tab === "text" && list.data && (
         <div className="tpl-layout" data-lkeep="">
           <aside className="card tpl-list">
             <div className="stack" style={{ gap: 6 }}>
@@ -91,6 +94,6 @@ export default function TemplatesPage() {
           )}
         </div>
       )}
-    </>
+    </div>
   );
 }

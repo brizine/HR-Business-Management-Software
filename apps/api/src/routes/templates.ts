@@ -7,17 +7,28 @@ import {
   templateDefaultsSchema, templateImportSchema, templatePreviewSchema, templateSchema, unknownTags,
   type MessageKind, type TemplateChannel,
 } from "@crewdesk/shared";
+import { randomUUID } from "node:crypto";
 import { db } from "../db";
-import { automations, companies, customers, emailLog, employees, estimates, invoicePayments, invoices, templates, visits } from "../db/schema";
+import { automations, companies, customers, emailImages, emailLog, employees, estimates, invoicePayments, invoices, templates, visits } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
-import { emailTransport } from "../lib/channels";
+import { PUBLIC_API_URL, emailTransport } from "../lib/channels";
 import { HttpError, parse } from "../lib/errors";
-import { cleanEmailHtml, ensureSystemTemplates, importTemplates, renderTemplateEmail, templateDefaults, templateVars, type TemplateRow } from "../lib/templates";
+import { MAX_IMAGE_BYTES } from "../lib/images";
+import { storage } from "../lib/storage";
+import { cleanEmailHtml, designedTemplate, ensureSystemTemplates, importTemplates, renderTemplateEmail, templateDefaults, templateDesign, templateVars, type TemplateRow } from "../lib/templates";
+
+/** Pictures for emails: the kinds every email program shows (no WebP: Outlook can't). */
+function emailImageType(b: Buffer) {
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+  if (b.length > 6 && /^GIF8[79]a$/.test(b.toString("ascii", 0, 6))) return "image/gif";
+  return null;
+}
 
 const AREA = "customers" as const;
 const view = (t: TemplateRow, usedFor: MessageKind[] = []) => ({
   id: t.id, channel: t.channel as TemplateChannel, audience: t.audience, name: t.name, subject: t.subject, body: t.body,
-  system: !!t.systemKey, systemKey: t.systemKey, imported: t.importedFrom?.split(":")[0] ?? null, updatedAt: t.updatedAt,
+  system: !!t.systemKey, systemKey: t.systemKey, imported: t.importedFrom?.split(":")[0] ?? null, updatedAt: t.updatedAt, designed: !!t.design,
   needs: tagNeeds(t.subject, t.body), usedFor,
 });
 
@@ -47,13 +58,21 @@ const routes: FastifyPluginAsync = async (app) => {
     return rows.map((t) => view(t, used.get(t.id)));
   });
 
-  app.get<{ Params: { id: string } }>("/:id", async (req) => view(await find(req.user.companyId, req.params.id), (await usage(req.user.companyId)).get(req.params.id)));
+  /** One template; an email comes with its design for the builder (an earlier plain one is turned into blocks). */
+  app.get<{ Params: { id: string } }>("/:id", async (req) => {
+    const t = await find(req.user.companyId, req.params.id);
+    return { ...view(t, (await usage(req.user.companyId)).get(req.params.id)), design: t.channel === "email" ? await templateDesign(t) : null };
+  });
+
+  /** An email saved from the builder is kept as its design, with the email HTML made from it here (never taken from the browser). */
+  const content = (channel: TemplateChannel, b: { body: string; design?: Parameters<typeof designedTemplate>[0] | null }) =>
+    channel === "email" && b.design ? designedTemplate(b.design) : { design: null, body: cleanBody(channel, b.body) };
 
   app.post("/", async (req) => {
     const b = parse(templateSchema, req.body);
     const [t] = await db.insert(templates).values({
       companyId: req.user.companyId, channel: b.channel, audience: b.audience, name: b.name, subject: b.channel === "email" ? b.subject ?? null : null,
-      body: cleanBody(b.channel, b.body), createdById: req.user.sub, updatedById: req.user.sub,
+      ...content(b.channel, b), createdById: req.user.sub, updatedById: req.user.sub,
     }).returning();
     return view(t);
   });
@@ -63,7 +82,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const t = await find(req.user.companyId, req.params.id);
     if (b.channel !== t.channel) throw new HttpError(400, "A template can't change between email and text; make a new one");
     const [u] = await db.update(templates).set({
-      audience: b.audience, name: b.name, subject: t.channel === "email" ? b.subject ?? null : null, body: cleanBody(t.channel as TemplateChannel, b.body),
+      audience: b.audience, name: t.systemKey ? t.name : b.name, subject: t.channel === "email" ? b.subject ?? null : null, ...content(t.channel as TemplateChannel, b),
       updatedById: req.user.sub, updatedAt: new Date(),
     }).where(eq(templates.id, t.id)).returning();
     return view(u, (await usage(req.user.companyId)).get(u.id));
@@ -72,7 +91,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { id: string } }>("/:id/clone", async (req) => {
     const t = await find(req.user.companyId, req.params.id);
     const [c] = await db.insert(templates).values({
-      companyId: t.companyId, channel: t.channel, audience: t.audience, name: `Copy of ${t.name}`.slice(0, 120), subject: t.subject, body: t.body,
+      companyId: t.companyId, channel: t.channel, audience: t.audience, name: `Copy - ${t.name}`.slice(0, 120), subject: t.subject, body: t.body, design: t.design,
       createdById: req.user.sub, updatedById: req.user.sub,
     }).returning();
     return view(c);
@@ -83,7 +102,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const t = await find(req.user.companyId, req.params.id);
     const s = t.systemKey ? systemTemplate(t.systemKey) : null;
     if (!s) throw new HttpError(400, "Only Crewdesk's own templates can be reset");
-    const [u] = await db.update(templates).set({ name: s.name, subject: s.subject ?? null, body: s.body, updatedById: req.user.sub, updatedAt: new Date() }).where(eq(templates.id, t.id)).returning();
+    const [u] = await db.update(templates).set({ name: s.name, subject: s.subject ?? null, body: s.body, design: null, updatedById: req.user.sub, updatedAt: new Date() }).where(eq(templates.id, t.id)).returning();
     return view(u, (await usage(req.user.companyId)).get(u.id));
   });
 
@@ -112,8 +131,9 @@ const routes: FastifyPluginAsync = async (app) => {
       const text = fillTags(b.body, sample ? { ...vars, ...Object.fromEntries(Object.entries(SAMPLE_TEMPLATE_VARS).filter(([k]) => !vars[k])) } : vars).trim();
       return { channel: "text", text, segments: smsSegments(text), unknown: unknownTags(b.body), needs, missing: sample ? [] : missing, sample };
     }
-    const m = await renderTemplateEmail(companyId, { subject: b.subject ?? "", body: cleanEmailHtml(b.body) }, sample ? { ...SAMPLE_TEMPLATE_VARS, ...vars } : vars);
-    return { channel: "email", subject: m.subject, html: m.html, text: m.text, unknown: unknownTags(b.subject, b.body), needs, missing: sample ? [] : missing, sample };
+    const body = b.design ? designedTemplate(b.design).body : cleanEmailHtml(b.body);
+    const m = await renderTemplateEmail(companyId, { subject: b.subject ?? "", body }, sample ? { ...SAMPLE_TEMPLATE_VARS, ...vars } : vars);
+    return { channel: "email", subject: m.subject, html: m.html, text: m.text, unknown: unknownTags(b.subject, body), needs: tagNeeds(b.subject, body), missing: sample ? [] : tagNeeds(b.subject, body).filter((n) => !(n === "invoice" ? ctx.invoiceId : n === "estimate" ? ctx.estimateId : n === "visit" ? ctx.visitId : ctx.paymentId)), sample };
   });
 
   /** Sends the email to yourself, filled in like the preview. */
@@ -127,9 +147,24 @@ const routes: FastifyPluginAsync = async (app) => {
     const ctx = { customerId: b.customerId, invoiceId: b.invoiceId, estimateId: b.estimateId, visitId: b.visitId, paymentId: b.paymentId };
     const sample = !Object.values(ctx).some(Boolean);
     const vars = sample ? { ...SAMPLE_TEMPLATE_VARS, ...(await templateVars(companyId, {})) } : await templateVars(companyId, ctx);
-    const m = await renderTemplateEmail(companyId, { subject: b.subject ?? "", body: cleanEmailHtml(b.body) }, vars);
-    await transport.send({ to: me.email, subject: `[Test] ${m.subject}`, text: m.text, html: m.html, fromName: m.fromName, replyTo: m.replyTo });
-    return { to: me.email };
+    const m = await renderTemplateEmail(companyId, { subject: b.subject ?? "", body: b.design ? designedTemplate(b.design).body : cleanEmailHtml(b.body) }, vars);
+    const to = b.to ?? me.email;
+    await transport.send({ to, subject: `[Test] ${m.subject}`, text: m.text, html: m.html, fromName: m.fromName, replyTo: m.replyTo });
+    return { to };
+  });
+
+  /** A picture for an email (JPEG, PNG or GIF, up to 5 MB): saved, and served to whoever opens the email. */
+  app.post("/images", async (req) => {
+    const file = await req.file();
+    if (!file) throw new HttpError(400, "No picture uploaded");
+    const buf = await file.toBuffer();
+    if (buf.length > MAX_IMAGE_BYTES) throw new HttpError(400, "That picture is too large (5 MB max)");
+    const contentType = emailImageType(buf);
+    if (!contentType) throw new HttpError(400, "Use a JPEG, PNG or GIF picture (email programs don't all show other kinds)");
+    const key = `${req.user.companyId}/email-images/${randomUUID()}`;
+    await storage.put(key, buf);
+    const [row] = await db.insert(emailImages).values({ companyId: req.user.companyId, key, contentType, bytes: buf.length, name: file.filename?.slice(0, 200) ?? null, createdById: req.user.sub }).returning({ id: emailImages.id });
+    return { id: row.id, url: `${PUBLIC_API_URL}/public/email-image/${row.id}` };
   });
 
   /** For the preview: the customer's recent invoices, estimates, work orders and payments to fill tags from. */
@@ -209,6 +244,20 @@ const routes: FastifyPluginAsync = async (app) => {
     const [l] = await db.select().from(emailLog).where(and(eq(emailLog.id, req.params.id), eq(emailLog.companyId, req.user.companyId)));
     if (!l) throw new HttpError(404, "Email not found");
     return { id: l.id, to: l.to, subject: l.subject, body: l.body, status: l.status, error: l.error, sentAt: l.createdAt, openedAt: l.openedAt, openCount: l.openCount };
+  });
+};
+
+/** Pictures in emails (no sign-in: whoever gets the email sees them). */
+export const emailImageRoutes: FastifyPluginAsync = async (app) => {
+  app.get<{ Params: { id: string } }>("/:id", async (req, reply) => {
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return reply.code(404).send({ error: "Not found" });
+    const [img] = await db.select().from(emailImages).where(eq(emailImages.id, req.params.id));
+    if (!img) return reply.code(404).send({ error: "Not found" });
+    const buf = await storage.get(img.key);
+    reply.header("Content-Type", emailImageType(buf) ?? "application/octet-stream");
+    reply.header("Cache-Control", "public, max-age=31536000, immutable");
+    reply.header("X-Content-Type-Options", "nosniff");
+    return reply.send(buf);
   });
 };
 

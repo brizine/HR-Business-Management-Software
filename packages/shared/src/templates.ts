@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { designHasContent, emailDesignSchema } from "./emailDesign";
 
 /**
  * Message templates (Marketing → Templates), like Homeworks' email and text templates: one library
@@ -164,9 +165,15 @@ export const templateSchema = z.object({
   audience: z.enum(TEMPLATE_AUDIENCES).default("customer"),
   name: z.string().trim().min(1, "Name the template").max(120),
   subject: z.preprocess(blankToNull, z.string().trim().max(250).nullable()).optional(),
-  body: z.string().max(60_000),
+  body: z.string().max(400_000).default(""),
+  /** An email made in the builder: its rows, columns and blocks (the body is made from it). */
+  design: emailDesignSchema.nullable().optional(),
 }).superRefine((v, ctx) => {
   if (v.channel === "email" && !v.subject) ctx.addIssue({ code: "custom", path: ["subject"], message: "Enter the subject" });
+  if (v.channel === "email" && v.design) {
+    if (!designHasContent(v.design)) ctx.addIssue({ code: "custom", path: ["design"], message: "This template has no content. Add text or an image before saving." });
+    return;
+  }
   const empty = v.channel === "email" ? !htmlToText(v.body).trim() : !v.body.trim();
   if (empty) ctx.addIssue({ code: "custom", path: ["body"], message: "Write the message" });
   if (v.channel === "text" && v.body.length > TEMPLATE_TEXT_MAX) ctx.addIssue({ code: "custom", path: ["body"], message: `Keep texts under ${TEMPLATE_TEXT_MAX} characters` });
@@ -177,7 +184,11 @@ export type TemplateInput = z.infer<typeof templateSchema>;
 export const templatePreviewSchema = z.object({
   channel: z.enum(TEMPLATE_CHANNELS),
   subject: z.string().max(250).nullable().optional(),
-  body: z.string().max(60_000),
+  body: z.string().max(400_000).default(""),
+  /** An email being made in the builder (shown as designed). */
+  design: emailDesignSchema.nullable().optional(),
+  /** A test email: where to send it (yourself when left out). */
+  to: z.preprocess(blankToNull, z.string().trim().email("Invalid email format.").max(200).nullable()).optional(),
   customerId: z.string().uuid().nullable().optional(),
   invoiceId: z.string().uuid().nullable().optional(),
   estimateId: z.string().uuid().nullable().optional(),
@@ -208,7 +219,9 @@ export const templateImportSchema = z.object({
     name: z.string().trim().min(1).max(120),
     audience: z.enum(TEMPLATE_AUDIENCES).default("customer"),
     subject: z.string().max(250).nullable().optional(),
-    body: z.string().max(60_000),
+    body: z.string().max(400_000).default(""),
+    /** An email's design from Homeworks' builder, as Homeworks saved it. */
+    bee: z.unknown().optional(),
     system: z.boolean().optional(),
     homeworksId: z.union([z.number(), z.string()]).optional(),
   })).min(1, "The file has no templates").max(1000),

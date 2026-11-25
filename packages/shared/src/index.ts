@@ -49,3 +49,4 @@ export * from "./chemicalRecords";
 export * from "./chemicalNotices";
 export * from "./templates";
 export * from "./docs";
+export * from "./emailDesign";

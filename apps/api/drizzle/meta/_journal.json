@@ -680,6 +680,13 @@
       "when": 1795628850296,
       "tag": "0096_document_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1795633717070,
+      "tag": "0097_email_designs",
+      "breakpoints": true
     }
   ]
 }

@@ -11,11 +11,11 @@ import {
   MESSAGE_KINDS, MESSAGE_KIND_LABELS, MESSAGE_KIND_NEEDS, TAG_GROUPS, TEMPLATE_AUDIENCES, TEMPLATE_AUDIENCE_LABELS, TEMPLATE_TAGS, TEMPLATE_TEXT_MAX, smsSegments,
   type MessageKind, type TagNeeds, type TemplateAudience, type TemplateChannel, type TemplateDefaults,
 } from "@crewdesk/shared";
-import { api, fmtDateTime } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { CustomerPicker } from "./customers";
 import { Popover } from "./customer-list";
-import { Empty, ErrorBox } from "./ui";
+import { ErrorBox } from "./ui";
 
 export type Template = {
   id: string; channel: TemplateChannel; audience: TemplateAudience; name: string; subject: string | null; body: string;
@@ -320,66 +320,6 @@ export function DefaultsTab({ templates, canEdit }: { templates: Template[]; can
   );
 }
 
-/* ───────────── Sent / History ───────────── */
-
-type HistoryRow = { id: string; to: string; subject: string; status: string; error: string | null; sentAt: string; openedAt: string | null; lastOpenedAt: string | null; openCount: number; customer: { id: string; name: string } | null; template: { id: string; name: string } | null; hasBody: boolean };
-
-/** Every customer email Crewdesk sent: to whom, from which template, and whether it was opened. */
-export function HistoryTab() {
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState("");
-  const [rows, setRows] = useState<HistoryRow[]>([]);
-  const [more, setMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState<{ id: string; subject: string; body: string | null; to: string } | null>(null);
-  const load = (before?: string) => api<HistoryRow[]>(`/templates/history/list?q=${encodeURIComponent(q)}&status=${status}${before ? `&before=${encodeURIComponent(before)}` : ""}`)
-    .then((r) => { setRows((x) => (before ? [...x, ...r] : r)); setMore(r.length === 100); setError(null); }, (e) => setError((e as Error).message));
-  useEffect(() => { const t = setTimeout(() => load(), 250); return () => clearTimeout(t); }, [q, status]); // eslint-disable-line react-hooks/exhaustive-deps
-  return (
-    <div className="card stack">
-      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-        <input type="search" placeholder="Search address or subject" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: "min(320px, 100%)" }} aria-label="Search sent emails" />
-        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Show">
-          <option value="">All</option><option value="opened">Opened</option><option value="unopened">Not opened</option><option value="failed">Failed</option>
-        </select>
-        <span className="muted" style={{ fontSize: 13 }}>Opens come from a tiny image in the email; some mail apps (like Apple Mail) load it on their own, so treat opens as a hint.</span>
-      </div>
-      <ErrorBox error={error} />
-      {rows.length ? (
-        <div className="tablewrap">
-          <table className="cl-table">
-            <thead><tr><th>Sent</th><th>To</th><th>Subject</th><th>Template</th><th>Status</th><th>Opened</th></tr></thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="nowrap">{fmtDateTime(r.sentAt)}</td>
-                  <td>{r.customer ? <Link href={`/customers/${r.customer.id}`}>{r.customer.name}</Link> : null}<div className="muted wl-sub">{r.to}</div></td>
-                  <td>{r.hasBody ? <button type="button" className="linkbtn" style={{ textAlign: "left" }} onClick={() => api<any>(`/templates/history/${r.id}`).then((x) => setOpen({ id: r.id, subject: x.subject, body: x.body, to: x.to }))}>{r.subject}</button> : r.subject}</td>
-                  <td>{r.template?.name ?? <span className="muted">—</span>}</td>
-                  <td>{r.status === "failed" ? <span className="bad-text" title={r.error ?? ""}>Failed</span> : "Sent"}</td>
-                  <td className="nowrap">{r.openCount ? <>{fmtDateTime(r.openedAt)}{r.openCount > 1 ? <span className="muted"> · {r.openCount}×</span> : null}</> : <span className="muted">Not yet</span>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {more && <div className="cl-pager"><span /><button type="button" className="btn" onClick={() => load(rows.at(-1)!.sentAt)}>Show more</button></div>}
-        </div>
-      ) : <Empty>No emails sent yet{q || status ? " that match" : ""}. Invoices, estimates, receipts and template emails show here once they go out.</Empty>}
-      {open && (
-        <div className="cal-modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(null); }}>
-          <div className="cal-modal card stack" role="dialog" aria-label="Sent email">
-            <div className="row" style={{ justifyContent: "space-between" }}><h2 style={{ margin: 0 }}>{open.subject}</h2><button type="button" className="btn sm" onClick={() => setOpen(null)}>Close</button></div>
-            <p className="muted" style={{ margin: 0 }}>To {open.to}</p>
-            <pre className="tpl-sent-body">{open.body}</pre>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ───────────── Import ───────────── */
-
 /** Brings in the templates exported from Homeworks (a .json file); ones already brought in are skipped. */
 export function ImportTemplates({ onDone }: { onDone: () => void }) {
   const [open, setOpen] = useState(false);
@@ -389,15 +329,16 @@ export function ImportTemplates({ onDone }: { onDone: () => void }) {
   const run = (f: File) => act.run(async () => {
     let json: unknown;
     try { json = JSON.parse(await f.text()); } catch { throw new Error("That file isn't a templates file (.json)"); }
-    const r = await api<{ added: number; skipped: number }>("/templates/import", { method: "POST", body: json });
-    setMsg(`Added ${r.added} template${r.added === 1 ? "" : "s"}${r.skipped ? `; skipped ${r.skipped} (already here or empty)` : ""}.`);
+    const r = await api<{ added: number; updated: number; kept: number; skipped: number }>("/templates/import", { method: "POST", body: json });
+    const n = (c: number) => `${c} template${c === 1 ? "" : "s"}`;
+    setMsg([`Added ${n(r.added)}`, r.updated ? `brought ${n(r.updated)} up to date` : "", r.kept ? `left ${n(r.kept)} alone (changed here)` : "", r.skipped ? `skipped ${r.skipped} (already here or empty)` : ""].filter(Boolean).join("; ") + ".");
     onDone();
   });
   return (
     <Popover open={open} setOpen={setOpen} label="Import" align="right" className="cl-pop-wide">
       <div className="stack" style={{ gap: 8 }}>
         <strong>Import templates from Homeworks</strong>
-        <p className="muted" style={{ margin: 0, fontSize: 13 }}>Choose the templates file (.json). Each template comes in once; importing the same file again skips them.</p>
+        <p className="muted" style={{ margin: 0, fontSize: 13 }}>Choose the Homeworks file Crewdesk made (.json). Each template comes in once. A newer file brings a template up to date only if nobody has changed it here.</p>
         <input ref={file} type="file" accept=".json,application/json" onChange={(e) => { const f = e.target.files?.[0]; if (f) run(f); e.target.value = ""; }} />
         <ErrorBox error={act.error} />
         {msg && <p style={{ margin: 0 }}>{msg}</p>}

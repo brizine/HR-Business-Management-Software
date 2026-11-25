@@ -71,7 +71,7 @@ describe("templates", () => {
     ID.thanks = t.body.id;
     expect((await call("PUT", `/templates/${t.body.id}`, "mgr", { channel: "email", name: "x", subject: "x", body: "<p>x</p>" })).status).toBe(400);
     const c = await call("POST", `/templates/${t.body.id}/clone`, "mgr");
-    expect(c.body).toMatchObject({ name: "Copy of Thanks", channel: "text" });
+    expect(c.body).toMatchObject({ name: "Copy - Thanks", channel: "text" });
     expect((await call("DELETE", `/templates/${c.body.id}`, "mgr")).status).toBe(200);
   });
 
@@ -144,10 +144,116 @@ describe("templates", () => {
       ],
     };
     expect((await call("POST", "/templates/import", "mgr", file)).status).toBe(403);
-    expect((await call("POST", "/templates/import", "owner", file)).body).toEqual({ added: 2, skipped: 1 });
-    expect((await call("POST", "/templates/import", "owner", file)).body).toEqual({ added: 0, skipped: 3 });
+    expect((await call("POST", "/templates/import", "owner", file)).body).toEqual({ added: 2, updated: 0, kept: 0, skipped: 1 });
+    expect((await call("POST", "/templates/import", "owner", file)).body).toEqual({ added: 0, updated: 0, kept: 0, skipped: 3 });
     const list = (await call("GET", "/templates", "mgr")).body;
     expect(list.find((t: any) => t.name === "New Invoice v4")).toMatchObject({ imported: "homeworks", system: false, needs: ["invoice"] });
     expect(list.find((t: any) => t.name === "On Our Way (Customer)")).toMatchObject({ channel: "text", needs: ["visit"] });
+    ID.hwInvoice = list.find((t: any) => t.name === "New Invoice v4").id;
+  });
+
+  const block = (type: string, p: Record<string, unknown>, id = type) => ({ id, type, p });
+  const oneRow = (...blocks: unknown[]) => ({ v: 1, p: { width: 600, bg: "#eeeeee", contentBg: "#ffffff", font: "Georgia", linkColor: "#0068a5" }, rows: [{ id: "r1", p: { bg: "transparent" }, columns: [{ id: "c1", span: 12, p: { padTop: 10 }, blocks }] }] });
+
+  it("an email made in the builder is saved as its design; the email is made from it here, cleaned", async () => {
+    const design = oneRow(
+      block("title", { html: "Hi <b>{{CUSTOMER_FIRST_NAME}}</b><script>alert(1)</script>", level: "h1", size: 26, align: "center" }),
+      block("paragraph", { html: '<p onclick="x()">Thanks from <span style="color: #ff0000; position: fixed">{{COMPANY_NAME}}</span>.</p><iframe src="https://evil.test"></iframe>' }),
+      block("button", { text: "See your estimate", href: "{{ESTIMATE_LINK}}", bg: "#1f7a3a" }),
+      block("html", { html: '<table><tr><td style="color:red" onmouseover="x()">Raw</td></tr></table><script>bad()</script>' }),
+    );
+    expect((await call("POST", "/templates", "mgr", { channel: "email", name: "Built", subject: "Hello", design: oneRow(block("divider", {})) })).body.issues[0].message).toMatch(/has no content/);
+    const made = await call("POST", "/templates", "mgr", { channel: "email", name: "Built", subject: "Hello {{CUSTOMER_FIRST_NAME}}", body: "<p>ignored, the design is what counts</p>", design });
+    expect(made.status).toBe(200);
+    expect(made.body).toMatchObject({ designed: true, needs: ["estimate"] });
+    expect(made.body.body.startsWith("<!--crewdesk-design-->")).toBe(true);
+    expect(made.body.body).not.toMatch(/script|onclick|iframe|onmouseover|position|ignored/);
+    expect(made.body.body).toContain('<span style="color:#ff0000">{{COMPANY_NAME}}</span>');
+    expect(made.body.body).toContain('href="{{ESTIMATE_LINK}}"');
+    expect(made.body.body).toContain('width="600"');
+    ID.built = made.body.id;
+    const got = (await call("GET", `/templates/${ID.built}`, "mgr")).body;
+    expect(got.design.rows[0].columns[0].blocks.map((b: any) => b.type)).toEqual(["title", "paragraph", "button", "html"]);
+    expect(got.design.rows[0].columns[0].blocks[0].p.html).toBe("Hi <b>{{CUSTOMER_FIRST_NAME}}</b>");
+    // Changing it keeps it a design; a copy carries the design too.
+    design.rows[0].columns[0].blocks.push(block("paragraph", { html: "<p>PS: thank you.</p>" }, "ps"));
+    expect((await call("PUT", `/templates/${ID.built}`, "mgr", { channel: "email", name: "Built", subject: "Hello", design })).body.body).toContain("PS: thank you.");
+    const copy = (await call("POST", `/templates/${ID.built}/clone`, "mgr")).body;
+    expect(copy).toMatchObject({ name: "Copy - Built", designed: true });
+    expect((await call("GET", `/templates/${copy.id}`, "mgr")).body.design.rows[0].columns[0].blocks).toHaveLength(5);
+  });
+
+  it("a designed email goes out as designed, with the company's details and unsubscribe underneath", async () => {
+    const built = (await call("GET", `/templates/${ID.built}`, "mgr")).body;
+    const p = (await call("POST", "/templates/preview", "mgr", { channel: "email", subject: built.subject, design: built.design, customerId: ID.cust })).body;
+    expect(p.html).toContain("cd-design");
+    expect(p.html).toContain("Hi <b>Ann</b>");
+    expect(p.html).toContain("@media (max-width:620px)");
+    expect(p.html).toContain("Template Co · 1 Main, Norman, OK 73069");
+    expect(p.html).not.toContain("max-width:600px;margin:0 auto;background:#ffffff;border-radius:10px");
+    expect(p.missing).toEqual(["estimate"]);
+    // A test goes to the address typed (or to you).
+    sent.length = 0;
+    expect((await call("POST", "/templates/test", "mgr", { channel: "email", subject: "Hello", design: built.design, to: "not an email" })).body.issues[0].message).toBe("Invalid email format.");
+    expect((await call("POST", "/templates/test", "mgr", { channel: "email", subject: "Hello", design: built.design, to: email("elsewhere") })).body).toEqual({ to: email("elsewhere") });
+    expect(sent[sent.length - 1]).toMatchObject({ to: email("elsewhere"), subject: "[Test] Hello" });
+    expect(sent[sent.length - 1].html).toContain("Hi <b>Jane</b>");
+    expect((await call("POST", "/templates/test", "mgr", { channel: "email", subject: "Hello", design: built.design })).body).toEqual({ to: email("mgr") });
+  });
+
+  it("an earlier plain template opens in the builder as blocks, and Crewdesk's own can be reset", async () => {
+    const plain = (await call("POST", "/templates", "mgr", { channel: "email", name: "Plain", subject: "Hi", body: "<h2>Welcome</h2><p>One</p><p>Two</p><ul><li>A</li></ul>" })).body;
+    expect(plain.designed).toBe(false);
+    const d = (await call("GET", `/templates/${plain.id}`, "mgr")).body.design;
+    expect(d.p.width).toBe(600);
+    expect(d.rows[0].columns[0].blocks.map((b: any) => b.type)).toEqual(["title", "paragraph", "list"]);
+    // Crewdesk's invoice email: its name can't be changed, and Reset puts the plain wording back.
+    const own = await call("PUT", `/templates/${ID.sysInvoice}`, "mgr", { channel: "email", name: "Renamed", subject: "Your bill", design: d });
+    expect(own.body).toMatchObject({ name: "Invoice (Crewdesk)", designed: true, system: true });
+    expect((await call("POST", `/templates/${ID.sysInvoice}/reset`, "mgr")).body).toMatchObject({ designed: false });
+    const text = (await call("GET", "/templates", "mgr")).body.find((t: any) => t.channel === "text");
+    expect((await call("GET", `/templates/${text.id}`, "mgr")).body.design).toBeNull();
+  });
+
+  it("Homeworks' designs come in as designs; a newer file updates only templates nobody changed here", async () => {
+    const bee = (text: string) => ({ page: { body: { container: { style: { "background-color": "#FFFFFF" } }, content: { computedStyle: { messageWidth: "500px", linkColor: "#0068A5" }, style: { "font-family": "Arial, sans-serif" } } }, rows: [{ container: { style: {} }, content: { computedStyle: {}, style: {} }, columns: [{ "grid-columns": 12, style: {}, modules: [
+      { type: "mailup-bee-newsletter-modules-image", descriptor: { style: {}, computedStyle: { class: "center autowidth" }, image: { src: "https://img.test/invoice.png", alt: "" } } },
+      { type: "mailup-bee-newsletter-modules-paragraph", descriptor: { style: { "padding-top": "10px" }, paragraph: { html: `<p>Dear <code data-bee-type="mergetag" data-bee-name="CUSTOMER FIRST NAME">{{CUSTOMER_FIRST_NAME}}</code>, ${text}</p>`, style: { "font-size": "14px" } } } },
+    ] }] }] } });
+    const file = (text: string) => ({ source: "homeworks", templates: [
+      { channel: "email", name: "New Invoice v4", audience: "customer", subject: "Your Invoice is Ready!", bee: JSON.stringify(JSON.stringify(bee(text))), homeworksId: 592700 },
+      { channel: "email", name: "Brand new", audience: "customer", subject: "Hi", bee: bee("welcome."), homeworksId: 592999 },
+    ] });
+    // The first, plain import of "New Invoice v4" was never changed here, so the design replaces it.
+    expect((await call("POST", "/templates/import", "owner", file("your invoice is ready."))).body).toEqual({ added: 1, updated: 1, kept: 0, skipped: 0 });
+    const t = (await call("GET", `/templates/${ID.hwInvoice}`, "mgr")).body;
+    expect(t).toMatchObject({ designed: true, imported: "homeworks" });
+    expect(t.design.rows[0].columns[0].blocks.map((b: any) => [b.type, b.p.src ?? b.p.html])).toEqual([["image", "https://img.test/invoice.png"], ["paragraph", "<p>Dear {{CUSTOMER_FIRST_NAME}}, your invoice is ready.</p>"]]);
+    expect(t.body).toContain('<img src="https://img.test/invoice.png"');
+    expect((await call("POST", "/templates/import", "owner", file("your invoice is ready."))).body).toEqual({ added: 0, updated: 0, kept: 0, skipped: 2 });
+    // Once it's changed in Crewdesk, an import leaves it alone.
+    await call("PUT", `/templates/${ID.hwInvoice}`, "mgr", { channel: "email", name: "New Invoice v4", subject: "Ours now", design: t.design });
+    expect((await call("POST", "/templates/import", "owner", file("something else."))).body).toEqual({ added: 0, updated: 0, kept: 1, skipped: 1 });
+    expect((await call("GET", `/templates/${ID.hwInvoice}`, "mgr")).body.subject).toBe("Ours now");
+  });
+
+  it("pictures for emails are uploaded once and served to anyone who opens the email", async () => {
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+    const upload = async (buf: Buffer, name: string, who = "mgr") => {
+      const boundary = "----cdtest";
+      const payload = Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\nContent-Type: application/octet-stream\r\n\r\n`), buf, Buffer.from(`\r\n--${boundary}--\r\n`)]);
+      const res = await app.inject({ method: "POST", url: "/templates/images", payload, headers: { authorization: `Bearer ${T[who]}`, "content-type": `multipart/form-data; boundary=${boundary}` } });
+      return { status: res.statusCode, body: res.json() };
+    };
+    expect((await upload(Buffer.from("<svg onload=alert(1)>"), "x.svg")).body.error).toMatch(/JPEG, PNG or GIF/);
+    expect((await upload(png, "logo.png", "tech")).status).toBe(403);
+    const up = await upload(png, "logo.png");
+    expect(up.status).toBe(200);
+    expect(up.body.url).toMatch(/\/public\/email-image\/[0-9a-f-]{36}$/);
+    const img = await call("GET", `/public/email-image/${up.body.id}`, null);
+    expect(img.status).toBe(200);
+    expect(img.headers["content-type"]).toBe("image/png");
+    expect(String(img.headers["cache-control"])).toContain("immutable");
+    expect((await call("GET", "/public/email-image/00000000-0000-4000-8000-000000000000", null)).status).toBe(404);
   });
 });

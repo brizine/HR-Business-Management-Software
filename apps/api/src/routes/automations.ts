@@ -367,7 +367,7 @@ const routes: FastifyPluginAsync = async (app) => {
  * are left as they are (only their Id and "was on in Homeworks" are brought up to date).
  */
 export async function importHomeworks(companyId: string, by: string, b: AutomationImport) {
-  const tplResult = b.templates.length ? await importTemplates(companyId, by, "homeworks", b.templates) : { added: 0, skipped: 0 };
+  const tplResult = b.templates.length ? await importTemplates(companyId, by, "homeworks", b.templates) : { added: 0, updated: 0, kept: 0, skipped: 0 };
   const tpls = await db.select({ id: templates.id, channel: templates.channel, name: templates.name, importedFrom: templates.importedFrom }).from(templates).where(eq(templates.companyId, companyId));
   const tagRows = await db.select({ id: crmTags.id, name: crmTags.name }).from(crmTags).where(eq(crmTags.companyId, companyId));
   const tags = new Map(tagRows.map((t) => [t.name.trim().toLowerCase(), t.id]));
@@ -539,7 +539,7 @@ export async function importHomeworks(companyId: string, by: string, b: Automati
     const [row] = await db.select().from(automations).where(eq(automations.id, l.id));
     if (nextA && row.def.kind === "simple") await db.update(automations).set({ def: { ...row.def, subAutomationId: nextA.id } }).where(eq(automations.id, l.id));
   }
-  return { added, already, notes, tagsMade, missingTemplates, templatesAdded: tplResult.added };
+  return { added, already, notes, tagsMade, missingTemplates, templatesAdded: tplResult.added, templatesUpdated: tplResult.updated };
 }
 
 export default routes;

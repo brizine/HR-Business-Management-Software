@@ -565,7 +565,7 @@ export function CustomerAutomations({ customerId, name }: { customerId: string; 
 
 /* ───────────── Bringing in Homeworks ───────────── */
 
-type ImportResult = { added: number; already: number; notes: string[]; tagsMade: number; missingTemplates: number; templatesAdded: number };
+type ImportResult = { added: number; already: number; notes: string[]; tagsMade: number; missingTemplates: number; templatesAdded: number; templatesUpdated?: number };
 /** Picks the Homeworks file and brings it in. */
 function useHomeworksImport(onChanged: () => void) {
   const input = useRef<HTMLInputElement>(null);
@@ -586,7 +586,9 @@ function ImportSummary({ r }: { r: ImportResult }) {
   return (
     <div>
       <strong>
-        {r.added > 0 ? `Imported ${r.added} automations and sequences${r.templatesAdded ? ` and ${r.templatesAdded} templates` : ""}, all turned off` : "Nothing new to import"}
+        {r.added > 0 ? `Imported ${r.added} automations and sequences${r.templatesAdded ? ` and ${r.templatesAdded} templates` : ""}, all turned off` : r.templatesAdded || r.templatesUpdated ? "" : "Nothing new to import"}
+        {r.templatesUpdated ? ` ${r.templatesUpdated} email template${r.templatesUpdated === 1 ? "" : "s"} brought up to date with ${r.templatesUpdated === 1 ? "its" : "their"} Homeworks design.` : ""}
+        {!r.added && r.templatesAdded ? ` ${r.templatesAdded} templates added.` : ""}
         {r.already ? ` (${r.already} were already here${r.added ? "" : "; their Homeworks Ids and tags are up to date"})` : ""}.
       </strong>
       {r.tagsMade > 0 && <> {r.tagsMade} customer tag{r.tagsMade === 1 ? " was" : "s were"} added.</>}
