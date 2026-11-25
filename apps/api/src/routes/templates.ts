@@ -12,7 +12,7 @@ import { automations, companies, customers, emailLog, employees, estimates, invo
 import { authenticate, requireRole } from "../lib/auth";
 import { emailTransport } from "../lib/channels";
 import { HttpError, parse } from "../lib/errors";
-import { cleanEmailHtml, ensureSystemTemplates, renderTemplateEmail, templateDefaults, templateVars, type TemplateRow } from "../lib/templates";
+import { cleanEmailHtml, ensureSystemTemplates, importTemplates, renderTemplateEmail, templateDefaults, templateVars, type TemplateRow } from "../lib/templates";
 
 const AREA = "customers" as const;
 const view = (t: TemplateRow, usedFor: MessageKind[] = []) => ({
@@ -182,19 +182,7 @@ const routes: FastifyPluginAsync = async (app) => {
 
   app.post("/import", { preHandler: requireRole("admin", AREA), bodyLimit: 5 * 1024 * 1024 }, async (req) => {
     const b = parse(templateImportSchema, req.body);
-    const { companyId, sub } = req.user;
-    let added = 0, skipped = 0;
-    for (const t of b.templates) {
-      const importedFrom = t.homeworksId != null ? `${b.source}:${t.homeworksId}` : null;
-      const body = cleanBody(t.channel, t.body);
-      if (!body.trim() || (t.channel === "email" && !htmlToText(body).trim())) { skipped++; continue; }
-      const [row] = await db.insert(templates).values({
-        companyId, channel: t.channel, audience: t.audience, name: t.name, subject: t.channel === "email" ? (t.subject?.trim() || t.name) : null, body, importedFrom,
-        createdById: sub, updatedById: sub,
-      }).onConflictDoNothing().returning({ id: templates.id });
-      if (row) added++; else skipped++;
-    }
-    return { added, skipped };
+    return importTemplates(req.user.companyId, req.user.sub, b.source, b.templates);
   });
 
   /* ── Sent / History ── */

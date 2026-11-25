@@ -1,15 +1,17 @@
 /**
- * Automations v2 (like Homeworks): a sequence with timed actions that stops when the estimate is
- * answered (and does its stop actions), "before a work order" at 9 AM, ELSE blocks and AND
- * conditions, review before execution, turning one off for a customer, running another automation,
- * the checks on saving and turning on, the Homeworks import (all off), and quiet hours for texts.
+ * Automations (like Homeworks): a sequence with timed actions that stops when the estimate is
+ * answered (and does its timed stop actions), "before a work order" at 9 AM, ELSE blocks and groups
+ * of AND conditions (any one group), review before execution (approve / reject), turning one off for
+ * a customer, running another automation, push reminders to whoever the work is given to, a
+ * password on a sequence, the checks on saving and turning on, the Homeworks import (all off,
+ * keeping their Ids and whether they were on) with "turn on what was on", and quiet hours for texts.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { buildApp } from "../src/app";
 import { db, pool } from "../src/db";
-import { automationRuns, automationSteps, automations, customers, estimates, templates, todos } from "../src/db/schema";
+import { automationRuns, automationSteps, automations, customers, estimates, todos } from "../src/db/schema";
 import { setEmailTransport, type EmailMessage } from "../src/lib/channels";
 import { runAutomations, _test } from "../src/lib/automations";
 import { recordTagChanges } from "../src/lib/crm";
@@ -100,14 +102,21 @@ describe("automations v2", () => {
   it("checks on saving: templates, picks, triggers where they fit; only admins save", async () => {
     const base = { kind: "simple", name: "X", trigger: cond("complete_visit"), action: act("email_customer") };
     expect((await call("POST", "/automations", "office", { ...base, action: act("email_customer", { templateId: ID.tplFollow }) })).status).toBe(403);
-    expect((await call("POST", "/automations", "owner", base)).body.error).toMatch(/choose the email template/);
+    expect((await call("POST", "/automations", "owner", base)).body.error).toMatch(/choose the Email Template/);
     expect((await call("POST", "/automations", "owner", { ...base, action: act("email_customer", { templateId: ID.tplText }) })).body.error).toMatch(/choose an email template/);
     expect((await call("POST", "/automations", "owner", { ...base, trigger: cond("tag_added") , action: act("email_customer", { templateId: ID.tplFollow }) })).body.error).toMatch(/choose the tag/);
     expect((await call("POST", "/automations", "owner", { ...base, trigger: cond("add_maintenance"), action: act("email_customer", { templateId: ID.tplFollow }) })).body.error).toMatch(/no customer/);
     // A trigger Crewdesk doesn't have can be kept, but not turned on.
     const meet = await call("POST", "/automations", "owner", { ...base, trigger: cond("meeting_created"), action: act("email_admin", { templateId: ID.tplOwner }) });
     expect(meet.status).toBe(200);
+    expect(meet.body.enabled).toBe(false);
     expect(meet.body.cannotTurnOn).toMatch(/meetings/);
+    // A new one that can run is on, like Homeworks; the Review column's switch sets review.
+    const fresh = await call("POST", "/automations", "owner", { ...base, action: act("email_customer", { templateId: ID.tplFollow }) });
+    expect(fresh.body).toMatchObject({ enabled: true, review: false });
+    expect((await call("POST", `/automations/${fresh.body.id}/review`, "office", { review: true })).status).toBe(403);
+    expect((await call("POST", `/automations/${fresh.body.id}/review`, "owner", { review: true })).body.review).toBe(true);
+    expect((await call("DELETE", `/automations/${fresh.body.id}`, "owner")).status).toBe(200);
     expect((await call("POST", `/automations/${meet.body.id}/enabled`, "owner", { enabled: true })).body.error).toMatch(/meetings/);
     expect((await call("DELETE", `/automations/${meet.body.id}`, "owner")).status).toBe(200);
   });
@@ -128,7 +137,7 @@ describe("automations v2", () => {
         act("email_customer", { waitMinutes: 2 * 1440, templateId: ID.tplFollow }),
       ] }],
       stops: [cond("estimate_responded"), cond("estimate_changes")],
-      stopActions: [act("email_admin", { templateId: ID.tplOwner })],
+      stopActions: [act("email_admin", { templateId: ID.tplOwner }), act("email_customer", { waitMinutes: 60, templateId: ID.tplFollow })],
     });
     expect(seq.status).toBe(200);
     expect(seq.body.number).toBeGreaterThan(0);
@@ -162,17 +171,24 @@ describe("automations v2", () => {
     await runAutomations(at(6, "10:02"));
     const [after] = await runsFor(seq.body.id);
     expect(after.status).toBe("stopped");
-    expect(after.reason).toBe("Stopped: Estimate is accepted or declined");
+    expect(after.reason).toBe("Stopped: Estimate is Accepted or Declined");
     steps = await stepsFor(seq.body.id);
     expect(steps.find((s) => s.kind === "action" && s.idx === 2)).toMatchObject({ status: "stopped" });
-    expect(steps.find((s) => s.kind === "stop")).toMatchObject({ status: "done" });
+    // The first stop action goes right away; the second after its own waiting period (an hour).
+    expect(steps.filter((s) => s.kind === "stop").map((s) => s.status)).toEqual(["done", "waiting"]);
     expect(sent.map((m) => m.to)).toEqual([email("owner")]);
     expect(sent[0].subject).toMatch(/^Amy Aster: estimate \d+$/);
-    // History: the run with its actions; the automation history lists what was done.
-    const hist = (await call("GET", `/automations/runs?automationId=${seq.body.id}`, "office")).body;
-    expect(hist.runs[0].steps).toHaveLength(4);
+    sent.length = 0;
+    await runAutomations(at(6, "11:05"));
+    expect(sent.map((m) => m.to)).toEqual([email("amy")]);
+    // History: every action with when it was added, scheduled and executed; "done" leaves out what was stopped.
+    const hist = (await call("GET", `/automations/history?automationId=${seq.body.id}&show=all`, "office")).body;
+    expect(hist.rows).toHaveLength(5);
+    expect(hist).toMatchObject({ page: 1, pages: 1, total: 5 });
+    expect(hist.rows.every((r: any) => r.number > 0 && r.addedAt)).toBe(true);
     const done = (await call("GET", `/automations/history?automationId=${seq.body.id}`, "office")).body.rows;
-    expect(done.map((r: any) => r.status).sort()).toEqual(["done", "done", "skipped"]);
+    expect(done.map((r: any) => r.status).sort()).toEqual(["done", "done", "done", "skipped"]);
+    expect(done.find((r: any) => r.action === "email_customer" && r.kind === "action").detail).toMatch(/^Message sent to Amy Aster at .* successfully/);
   });
 
   it("before a work order: at 9 AM the set days before, once; skipped if the work order is done by then", async () => {
@@ -192,15 +208,16 @@ describe("automations v2", () => {
     expect(mail.html).toContain("2 Elm St");
     const hist = (await call("GET", `/automations/history?automationId=${a.body.id}`, "office")).body.rows;
     expect(hist).toHaveLength(1);
-    expect(hist[0].detail).toMatch(/^Emailed Bob Birch/);
+    expect(hist[0].detail).toMatch(/^Message sent to Bob Birch at /);
+    expect(hist[0]).toMatchObject({ actionLabel: "Email Customer", triggerKey: "before_visit" });
     await call("POST", `/automations/${a.body.id}/enabled`, "owner", { enabled: false });
   });
 
-  it("ELSE blocks and AND conditions: the first block that matches runs; none matching is kept as skipped", async () => {
+  it("ELSE blocks and groups of conditions: the first block that matches runs; none matching is kept as skipped", async () => {
     const seq = await call("POST", "/automations", "owner", {
       kind: "sequence", name: "Pulse check", enabled: true,
       blocks: [
-        { trigger: cond("complete_visit"), and: [cond("customer_does_not_have_tag", { tagIds: [ID.asked] }), cond("customer_has_tag", { tagIds: [ID.vip] })], actions: [act("add_tag", { tagId: ID.asked })] },
+        { trigger: cond("complete_visit"), when: [[cond("customer_does_not_have_tag", { tagIds: [ID.asked] }), cond("customer_has_tag", { tagIds: [ID.vip] })]], actions: [act("add_tag", { tagId: ID.asked })] },
         { trigger: cond("visit_skipped"), actions: [act("email_admin", { templateId: ID.tplOwner })] },
       ],
     });
@@ -218,10 +235,24 @@ describe("automations v2", () => {
     expect(runs.find((r) => r.customerId === ID.bob)).toMatchObject({ status: "skipped", reason: "Its conditions weren't met" });
     const [amy] = await db.select().from(customers).where(eq(customers.id, ID.amy));
     expect(amy.tagIds).toContain(ID.asked);
-    // Skipped runs only show when asked for.
-    expect((await call("GET", `/automations/runs?automationId=${seq.body.id}`, "office")).body.runs).toHaveLength(1);
-    expect((await call("GET", `/automations/runs?automationId=${seq.body.id}&skipped=1`, "office")).body.runs).toHaveLength(2);
     await call("POST", `/automations/${seq.body.id}/enabled`, "owner", { enabled: false });
+    // Another group of conditions (Homeworks' "OR Condition"): either group being true is enough.
+    const either = await call("POST", "/automations", "owner", {
+      kind: "sequence", name: "Either group",
+      blocks: [{ trigger: cond("visit_skipped"), when: [[cond("customer_has_tag", { tagIds: [ID.vip] })], [cond("customer_does_not_have_tag", { tagIds: [ID.vip] }), cond("customer_does_not_have_tag", { tagIds: [ID.asked] })]], actions: [act("add_tag", { tagId: ID.asked })] }],
+    });
+    expect(either.body.def.blocks[0].when).toHaveLength(2);
+    const skipA = (await call("POST", "/visits", "office", { title: "Round 4", customerId: ID.amy, propertyId: propA, date: today(), lines: [{ description: "Fert", quantity: 1, unitPriceCents: 5000 }] })).body.id;
+    const skipB = (await call("POST", "/visits", "office", { title: "Round 4", customerId: ID.bob, propertyId: propB, date: today(), lines: [{ description: "Fert", quantity: 1, unitPriceCents: 5000 }] })).body.id;
+    for (const id of [skipA, skipB]) expect((await call("POST", `/visits/${id}/skip`, "office", { reason: "Rain" })).status).toBe(200);
+    await runAutomations(new Date(Date.now() + 2 * 60_000));
+    const er = await runsFor(either.body.id);
+    // Amy has VIP (first group); Bob has neither tag (second group).
+    expect(er.map((r) => r.status).sort()).toEqual(["done", "done"]);
+    const [bob] = await db.select().from(customers).where(eq(customers.id, ID.bob));
+    expect(bob.tagIds).toContain(ID.asked);
+    await db.update(customers).set({ tagIds: bob.tagIds.filter((t) => t !== ID.asked) }).where(eq(customers.id, ID.bob));
+    await call("POST", `/automations/${either.body.id}/enabled`, "owner", { enabled: false });
   });
 
   it("review before execution: actions wait in Review; send, skip, or stop the run; managers can review", async () => {
@@ -254,7 +285,7 @@ describe("automations v2", () => {
   });
 
   it("turned off for a customer: their runs are skipped; then run another automation, and stop after running", async () => {
-    const second = await call("POST", "/automations", "owner", { kind: "simple", name: "Then a to-do-ish note", trigger: cond("customer_added"), action: act("email_admin", { templateId: ID.tplOwner }) });
+    const second = await call("POST", "/automations", "owner", { kind: "simple", name: "Then a to-do-ish note", enabled: false, trigger: cond("customer_added"), action: act("email_admin", { templateId: ID.tplOwner }) });
     const first = await call("POST", "/automations", "owner", {
       kind: "simple", name: "Welcome", enabled: true, trigger: cond("customer_added"), action: act("email_customer", { templateId: ID.tplFollow }),
       subAction: "run_automation", subAutomationId: second.body.id, subDelayMinutes: 15,
@@ -264,7 +295,7 @@ describe("automations v2", () => {
     const cara = (await call("POST", "/customers", "office", { firstName: "Cara", lastName: "Cole", email: email("cara") })).body.id;
     const dan = (await call("POST", "/customers", "office", { firstName: "Dan", lastName: "Dale", email: email("dan") })).body.id;
     const tab = (await call("GET", `/automations/customer/${dan}`, "office")).body.automations;
-    expect(tab.find((x: any) => x.id === first.body.id)).toMatchObject({ off: false });
+    expect(tab.find((x: any) => x.id === first.body.id)).toMatchObject({ off: false, enabled: true, name: "Welcome" });
     expect((await call("PUT", `/automations/customer/${dan}/${first.body.id}`, "office", { on: false })).body.off).toBe(true);
     sent.length = 0;
     const now = Date.now() + 60_000;
@@ -318,40 +349,98 @@ describe("automations v2", () => {
     expect((await call("DELETE", `/templates/${ID.tplFollow}`, "owner")).body.error).toMatch(/used by/);
   });
 
-  it("imports Homeworks automations and sequences, all off, with their templates, tags and stops", async () => {
-    // A template brought in from Homeworks earlier.
-    await db.insert(templates).values({ companyId, channel: "email", audience: "internal", name: "Yellow Slip (Internal)", subject: "Yellow slip", body: "<p>x</p>", importedFrom: "homeworks:592701" });
+  it("a push reminder goes to whoever the work order is given to; a sequence can be protected with a password", async () => {
+    const a = await call("POST", "/automations", "owner", { kind: "simple", name: "Heads up: job tomorrow", trigger: cond("add_visit"), action: act("push_notification") });
+    expect(a.body).toMatchObject({ enabled: true, problems: [] });
+    const prop = (await call("GET", `/customers/${ID.amy}`, "office")).body.properties[0].id;
+    const wo = await call("POST", "/visits", "office", { title: "Aeration", customerId: ID.amy, propertyId: prop, date: plus(today(), 3), assigneeIds: [ID.office], lines: [{ description: "Aerate", quantity: 1, unitPriceCents: 9000 }] });
+    expect(wo.status).toBe(200);
+    await runAutomations(new Date(Date.now() + 60_000));
+    await flushNotifications();
+    const items = (await call("GET", "/notifications", "office")).body;
+    expect((items.items ?? items).some((n: any) => n.title === "Heads up: job tomorrow" && /Aeration/.test(n.body))).toBe(true);
+    expect((await call("GET", `/automations/history?automationId=${a.body.id}`, "office")).body.rows[0].detail).toBe("Push notification sent to Olive Office");
+    await call("POST", `/automations/${a.body.id}/enabled`, "owner", { enabled: false });
+    // A password on a sequence: admins need it to change or delete it; the owner always can.
+    await call("PUT", `/employees/${ID.office}`, "owner", { role: "admin" }).catch(() => null);
+    await db.execute(sql`update employees set role = 'admin' where id = ${ID.office}`);
+    T.office = (await app.inject({ method: "POST", url: "/auth/login", payload: { email: email("office"), password: "password123" } })).json().token;
+    const body = { kind: "sequence", name: "Locked", enabled: false, password: "open sesame", blocks: [{ trigger: cond("estimate_sent"), actions: [act("email_admin", { templateId: ID.tplOwner })] }] };
+    const seq = await call("POST", "/automations", "office", body);
+    expect(seq.body.locked).toBe(true);
+    expect(JSON.stringify(seq.body)).not.toMatch(/sesame|passwordHash/);
+    const { password: _p, ...noPass } = body;
+    expect((await call("PUT", `/automations/${seq.body.id}`, "office", { ...noPass, name: "Changed" })).status).toBe(403);
+    expect((await call("POST", `/automations/${seq.body.id}/unlock`, "office", { password: "wrong" })).body.error).toMatch(/isn't the sequence's password/);
+    expect((await call("POST", `/automations/${seq.body.id}/unlock`, "office", { password: "open sesame" })).status).toBe(200);
+    const res = await app.inject({ method: "PUT", url: `/automations/${seq.body.id}`, payload: { ...noPass, name: "Changed" }, headers: { authorization: `Bearer ${T.office}`, "x-sequence-password": "open sesame" } });
+    expect(res.json()).toMatchObject({ name: "Changed", locked: true });
+    expect((await call("DELETE", `/automations/${seq.body.id}`, "office")).status).toBe(403);
+    // The owner takes the password off, then anyone with access can delete it.
+    expect((await call("PUT", `/automations/${seq.body.id}`, "owner", { ...noPass, name: "Changed", password: "" })).body.locked).toBe(false);
+    expect((await call("DELETE", `/automations/${seq.body.id}`, "office")).status).toBe(200);
+    await db.execute(sql`update employees set role = 'manager' where id = ${ID.office}`);
+    T.office = (await app.inject({ method: "POST", url: "/auth/login", payload: { email: email("office"), password: "password123" } })).json().token;
+  });
+
+  it("imports Homeworks automations and sequences (with the file's templates), all off, keeping their Ids and whether they were on", async () => {
     const file = {
       source: "homeworks",
+      templates: [{ channel: "email", audience: "internal", name: "Yellow Slip (Internal)", subject: "Yellow slip", body: "<p>{{CUSTOMER_NAME}} has a yellow slip.</p>", homeworksId: 592701 }],
       automations: [
-        { id: 1, on: true, review: false, title: "Email me when a visit is complete", trigger: { value: "complete_visit", text: "Visit is Completed" }, delay: { value: "900" }, action: { value: "email_admin" }, emailTemplate: { value: "592701", text: "Yellow Slip (Internal)" }, subAction: { value: "none" }, tags: ["Ops"] },
-        { id: 2, title: "Reminder of meeting", trigger: { value: "before_meeting" }, delay: { value: "86401" }, action: { value: "email_customer" }, emailTemplate: { value: "", text: "--- Please Select ---" } },
-        { id: 3, title: "Weird", trigger: { value: "nope" }, action: { value: "email_admin" } },
+        { id: 403716, on: true, review: false, title: "Email me when a visit is complete", trigger: { value: "complete_visit", text: "Visit is Completed" }, delay: { value: "900" }, action: { value: "email_admin" }, emailTemplate: { value: "592701", text: "Yellow Slip (Internal)" }, subAction: { value: "none" }, tags: ["Mike Andes Power Pack"] },
+        { id: 89749, on: true, title: "Reminder of meeting", trigger: { value: "before_meeting" }, delay: { value: "86401" }, action: { value: "email_customer" }, emailTemplate: { value: "", text: "--- Please Select ---" } },
+        { id: 96521, on: true, title: "Internal: Estimate Accepted Notification", trigger: { value: "estimate_accept" }, delay: { value: "1" }, action: { value: "email_admin" }, emailTemplate: { value: "", text: "--- Please Select ---" } },
+        { id: 99999, title: "Weird", trigger: { value: "nope" }, action: { value: "email_admin" } },
       ],
       sequences: [{
-        id: 16880, title: "Yellow Slip", description: "Tells the office", review: false,
-        blocks: [{ trigger: { value: "tag_added", text: "Tag has been Added", attrs: [`Yellow Slip ${suffix}`] }, when: [], actions: [{ instant: true, days: 0, hours: 0, minutes: 0, action: { value: "email_admin" }, email: { value: "592701", text: "Yellow Slip (Internal)" } }] }],
-        stops: [{ value: "tag_removed", text: "Tag has been Removed", attrs: [`Yellow Slip ${suffix}`] }], stopActions: [],
+        id: 16880, on: true, title: "Yellow Slip", description: "Tells the office", review: false,
+        blocks: [{ trigger: { value: "tag_added", text: "Tag has been Added", attrs: [`Yellow Slip ${suffix}`] }, when: [[{ value: "customer_does_not_have_tag", attrs: [`Review Asked ${suffix}`] }], [{ value: "customer_inactive", attrs: [] }]],
+          actions: [{ instant: true, days: 0, hours: 0, minutes: 0, action: { value: "email_admin" }, email: { value: "592701", text: "Yellow Slip (Internal)" } }] }],
+        stops: [{ value: "tag_removed", text: "Tag has been Removed", attrs: [`Yellow Slip ${suffix}`] }],
+        stopActions: [{ instant: false, days: 1, hours: 0, minutes: 0, action: { value: "email_admin" }, email: { value: "592701", text: "Yellow Slip (Internal)" } }],
       }],
     };
     expect((await call("POST", "/automations/import", "office", file)).status).toBe(403);
     const r = await call("POST", "/automations/import", "owner", file);
-    expect(r.body).toMatchObject({ added: 3, already: 0, tagsMade: 1 });
+    expect(r.body).toMatchObject({ added: 4, already: 0, tagsMade: 1, templatesAdded: 1, missingTemplates: 0 });
     expect(r.body.notes[0]).toMatch(/Weird/);
-    const list = (await call("GET", "/automations", "owner")).body.automations.filter((x: any) => x.imported === "homeworks");
-    expect(list).toHaveLength(3);
-    expect(list.every((x: any) => !x.enabled)).toBe(true);
+    const all = (await call("GET", "/automations", "owner")).body;
+    const list = all.automations.filter((x: any) => x.imported === "homeworks");
+    expect(list).toHaveLength(4);
+    expect(list.every((x: any) => !x.enabled && x.wasOn)).toBe(true);
+    // The list is in Homeworks' order: by its Tags box (none first), then name.
+    const keys = all.automations.map((x: any) => [x.labels.join(",").toLowerCase(), x.name.toLowerCase()]);
+    expect(keys).toEqual([...keys].sort((p: string[], q: string[]) => (p[0] < q[0] ? -1 : p[0] > q[0] ? 1 : p[1] < q[1] ? -1 : p[1] > q[1] ? 1 : 0)));
+    expect(keys.at(-1)).toEqual(["mike andes power pack", "email me when a visit is complete"]);
     const visit = list.find((x: any) => x.name === "Email me when a visit is complete");
-    expect(visit.def).toMatchObject({ kind: "simple", delayMinutes: 15, action: { action: "email_admin" } });
+    expect(visit).toMatchObject({ number: 403716, labels: ["Mike Andes Power Pack"] });
+    expect(visit.def).toMatchObject({ kind: "simple", delayMinutes: 15, daysBefore: null, action: { action: "email_admin" } });
     expect(visit.def.action.templateId).toBeTruthy();
-    expect(visit.labels).toEqual(["Ops"]);
+    expect(list.find((x: any) => x.name === "Reminder of meeting")).toMatchObject({ number: 89749, def: { daysBefore: 1 } });
     expect(list.find((x: any) => x.name === "Reminder of meeting").cannotTurnOn).toMatch(/meetings/);
     const slip = list.find((x: any) => x.kind === "sequence");
+    expect(slip.number).toBe(16880);
     expect(slip.def.blocks[0].trigger.tagIds).toHaveLength(1);
+    expect(slip.def.blocks[0].when.map((g: any[]) => g.map((c) => c.key))).toEqual([["customer_does_not_have_tag"], ["customer_inactive"]]);
     expect(slip.def.stops[0]).toMatchObject({ key: "tag_removed", tagIds: slip.def.blocks[0].trigger.tagIds });
+    expect(slip.def.stopActions[0]).toMatchObject({ action: "email_admin", waitMinutes: 1440 });
     expect(slip.problems).toEqual([]);
-    // Imported again: nothing new.
-    expect((await call("POST", "/automations/import", "owner", file)).body).toMatchObject({ added: 0, already: 3 });
+    // What was on in Homeworks and can run here: the visit one and the sequence.
+    expect(all.wasOnAndReady).toBe(2);
+    expect((await call("POST", "/automations/enable-homeworks", "office")).status).toBe(403);
+    const on = await call("POST", "/automations/enable-homeworks", "owner");
+    expect(on.body.turnedOn.sort()).toEqual(["Email me when a visit is complete", "Yellow Slip"]);
+    expect(on.body.left.map((x: any) => x.name).sort()).toEqual(["Internal: Estimate Accepted Notification", "Reminder of meeting"]);
+    expect(on.body.left.find((x: any) => x.name.startsWith("Internal")).why).toMatch(/choose the Email Template/);
+    expect((await call("GET", "/automations", "owner")).body.wasOnAndReady).toBe(0);
+    // One brought in by an earlier file (no Id, tags or "was on" kept) is brought up to date by importing again.
+    await db.update(automations).set({ number: 987_654, importedOn: null, labels: [] }).where(eq(automations.id, visit.id));
+    // Imported again: nothing new, and what's been turned on stays on.
+    expect((await call("POST", "/automations/import", "owner", file)).body).toMatchObject({ added: 0, already: 4, templatesAdded: 0 });
+    expect((await call("GET", "/automations", "owner")).body.automations.filter((x: any) => x.imported === "homeworks" && x.enabled)).toHaveLength(2);
+    expect((await call("GET", `/automations/${visit.id}`, "owner")).body).toMatchObject({ number: 403716, wasOn: true, labels: ["Mike Andes Power Pack"], enabled: true });
+    for (const x of list) await call("POST", `/automations/${x.id}/enabled`, "owner", { enabled: false });
   });
 
   it("texts wait for daytime (9 AM to 6 PM)", () => {

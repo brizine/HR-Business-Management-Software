@@ -22,7 +22,7 @@ export class ApiError extends Error {
  * Calls the API with the session cookie. `token` adds a bearer token instead
  * (the short-lived tokens used during two-factor sign-in).
  */
-export async function api<T = any>(path: string, init: { method?: string; body?: unknown; token?: string } = {}): Promise<T> {
+export async function api<T = any>(path: string, init: { method?: string; body?: unknown; token?: string; headers?: Record<string, string> } = {}): Promise<T> {
   const token = init.token;
   const isForm = typeof FormData !== "undefined" && init.body instanceof FormData;
   const res = await fetch(API_URL + path, {
@@ -32,6 +32,7 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
       ...CLIENT_HEADER,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init.body && !isForm ? { "Content-Type": "application/json" } : {}),
+      ...(init.headers ?? {}),
     },
     body: isForm ? (init.body as FormData) : init.body ? JSON.stringify(init.body) : undefined,
   });

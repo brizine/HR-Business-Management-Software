@@ -245,3 +245,22 @@ async function customerFor(companyId: string, ctx: TemplateContext) {
   if (ctx.todoId) return (await db.select({ c: todos.customerId }).from(todos).where(and(eq(todos.id, ctx.todoId), eq(todos.companyId, companyId))))[0]?.c ?? null;
   return null;
 }
+
+/**
+ * Brings in templates from another system (Homeworks). One with the same id there is left alone,
+ * so importing again adds nothing; an empty one is skipped.
+ */
+export async function importTemplates(companyId: string, by: string, source: string, list: { channel: "email" | "text"; name: string; audience: "customer" | "internal"; subject?: string | null; body: string; homeworksId?: string | number | null }[]) {
+  let added = 0, skipped = 0;
+  for (const t of list) {
+    const importedFrom = t.homeworksId != null ? `${source}:${t.homeworksId}` : null;
+    const body = t.channel === "email" ? cleanEmailHtml(t.body) : t.body.replace(/\r/g, "").trim();
+    if (!body.trim() || (t.channel === "email" && !htmlToText(body).trim())) { skipped++; continue; }
+    const [row] = await db.insert(templates).values({
+      companyId, channel: t.channel, audience: t.audience, name: t.name, subject: t.channel === "email" ? (t.subject?.trim() || t.name) : null, body, importedFrom,
+      createdById: by, updatedById: by,
+    }).onConflictDoNothing().returning({ id: templates.id });
+    if (row) added++; else skipped++;
+  }
+  return { added, skipped };
+}

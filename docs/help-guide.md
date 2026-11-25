@@ -573,50 +573,66 @@ Texts go from your **Talkroute number**, so customers keep texting the number th
 ### Automations
 
 **Marketing → Automations** sends emails and texts, adds or removes tags, and makes to-dos on its own when something
-happens, laid out like Homeworks: **Automations**, **Sequence Automations**, **Sequence History**, **Review**,
-**Automation History**, and links to the text and email templates (in **Templates**). Admins in Customers & billing
-set them up; managers can see them and work the Review list.
+happens. It's laid out and worded like Homeworks' Automations page, tab for tab: **Automations**, **Sequence
+Automations**, **Sequence History**, **Review Sequence**, **Text Message Templates**, **Email Templates** (these two
+open Marketing → Templates) and **Automation History**. A Homeworks "Visit" is a Crewdesk work order. Admins in
+Customers & billing set them up; managers can see them and work Review Sequence.
 
-- **Automations** (one trigger, one action): name it, pick the **trigger condition** (a work order is added,
-  completed, skipped, started or finished; before a work order, to-do or equipment maintenance (1, 2 or 3 days
-  before, at 9 AM); a to-do is added or done; repair orders; an estimate is created, sent, accepted, declined,
-  changes are asked for, or isn't answered 3 days after it's sent; an invoice is sent, past due, 1–30 days before
-  it's due, paid in full, partly paid or voided; a payment is made, declined or its receipt sent; a card or bank
-  account is added or removed; a new customer; a customer cancelled; a tag added or removed; or a set date and
-  time), the **run time** (instantly, 2 or 15 minutes, 1 hour, or 1–30 days after), and the **action**: text or
-  email the customer, the company owner or employees, a push notification, or add or remove a tag. **Sub action**
-  can then run another automation (after a wait) or turn this one off after it runs once.
-- **Sequence Automations:** **IF** a trigger happens (**OR** others), **AND** conditions are true (customer has or
-  doesn't have a tag, has no card on file, has no repeating service, is cancelled; the estimate is a draft or
-  includes a service; the to-do is in a category; the invoice is paid or partly paid), do the **actions**, each at
-  its own **waiting period** (instantly, or days, hours and minutes after the trigger). **Action** adds one; a
-  sequence can also **Create & assign a to-do** due 8 AM the next day. **ELSE trigger** adds another block; the
-  first block whose trigger and conditions match runs. **Stop when** ends it for that customer (e.g. the estimate is
-  accepted or declined, the invoice is paid in full, a tag is removed), and **Stop action** does something right
-  then (e.g. email the owner).
-- **Templates:** every message uses a template from **Templates**, so tags like {{CUSTOMER_FIRST_NAME}},
-  {{ESTIMATE_LINK}} or {{EVENT_DATE}} fill in for that customer, estimate, invoice or work order. A template an
-  automation uses can't be deleted. Team messages (owner and employee emails) have no unsubscribe link.
-- **Texts** only go out **9 AM to 6 PM** (company time); one due at night waits until 9 AM.
-- **Once each, from when it's on:** each runs once per thing that happened (one per estimate, invoice, work order,
-  tag change…), and only for things that happen after it's turned on. A repeating work order counts once. Turning
-  one off stops what's still waiting. Changes apply to new runs; ones already running keep their actions.
-- **Review before execution:** each action waits in **Review**, showing the message filled in for that customer.
-  **Send now**, **Skip** just that one, or **Stop for this customer**. My Day shows how many are waiting.
-- **For one customer:** their page's **Automations** tab turns any automation off (or back on) just for them, and
-  lists what's run for them, with **Stop** for one still running.
-- **History:** **Sequence History** lists each run (open **Details** for each action and when it's due or what it
-  did; tick **Show skipped** for ones whose conditions weren't met). **Automation History** lists every action done,
-  skipped or failed, with the reason (e.g. "Emailed Amy Aster", "Texting isn't connected", "They unsubscribed").
+- **Automations tab:** the five lists at the top (Trigger Condition, Run Time, Action, Sub Action, Status) and
+  **Filter** narrow the table. The table has Homeworks' columns: Id, On - Off, Automation Name, Trigger Condition,
+  Run Time, Action, Sub Action, Review, Notes, Tags and Actions (the pencil edits, the trash deletes after
+  "Are you sure you want to delete this Automation?"). The **On / Off** pill turns one on or off, and the
+  **Review** pill sets Review Before Execution. **11/11 Columns** picks which columns show.
+- **New Automation:** Automation Name, **Trigger Condition** (Homeworks' list, in its order), **Run Time**
+  (Instantly; 1, 2 or 3 Days Before The Event Happens; 2 or 15 Minutes, or 1, 3, 5, 7, 15 or 30 Days After Trigger
+  Condition), **Action** (Text or Email Company Owner, Customer or Employee; Push Notification Reminder; Add a Tag;
+  Remove a Tag) with its Text Template, Email Template, Employee or Tags, **Sub Action** (Nothing, Run Another
+  Automation with Next Automation and When To Run The Next Automation, or Stop Automation, which turns it off after
+  it runs once), Review Before Execution, Notes / Description and Tags (words to find it by). A new automation is
+  **on** as soon as it's added, as in Homeworks. "Days Before" run times go with the "Before…" triggers (they run at
+  9 AM that many days ahead); "Run at a Certain Time" asks for a date and time instead.
+- **Push Notification Reminder** goes to whoever the work order or to-do is given to (and the work order's crew);
+  to the owner when it's no one's.
+- **Sequence Automations:** a card per sequence with its title, description and Id, and its On / Off pill. Click
+  the title to read what it does ("This trigger sequence will kickstart when … wait for … then …"), with **Delete**
+  and **Edit**. **New Automation Sequence** opens the editor:
+  - **IF Trigger**, then **AND Condition** (all of these must be true: customer has or doesn't have a tag, has no
+    card on file, has no recurring service, is cancelled; estimate is a draft or has a service; to-do has a
+    category; invoice is paid or partly paid) and **OR Condition** (starts another group; either group is enough).
+  - **Action** adds a step with its **Waiting Period** (Instantly, or After so many Days, Hrs and Min, counted from
+    the trigger), the Action and its template, employee, tag or to-do title. A sequence can also **Create & assign
+    a to-do**, due 8 AM the day after its waiting period.
+  - **ELSE Trigger** adds another block for a different trigger; the first block whose trigger happened and whose
+    conditions are true runs.
+  - **Stop When** (and **OR Stop Condition**) ends it for that customer; **Stop Action** does something then, after
+    its own waiting period.
+  - **Review Before Execution**, and **protect the Sequence with a password**: after that, changing or deleting it
+    asks for the password (the owner is never asked, and can take the password off).
+- **Texts** only go out **9 AM to 6 PM**; one due at night waits until 9 AM.
+- **Once each, from when it's on:** each runs once per thing that happened (an estimate, an invoice, a work
+  order, a tag change…), and only for things that happen after it's turned on. A repeating work order counts once.
+  Turning one off stops what's still waiting.
+- **Review Sequence:** with Review Before Execution on, each action waits here. **View message** shows it filled
+  in for that customer; **Approve** sends it and **Reject** skips it (each asks "Do you really want to…?"). The tab
+  and My Day show how many are waiting.
+- **Automation History** lists what automations did: ID, Date, Trigger Condition, Action and Status Message
+  ("Message sent to Amy Aster at … successfully"), green when it went and red when it was skipped or failed, a page
+  at a time. **Sequence History** lists every action a sequence queued, with when it was Added, Scheduled and
+  Executed (PENDING until it runs); click those three headings to sort.
+- **For one customer:** their page's **Automations** tab has the same filters and table, where On / Off is for that
+  customer only (one that's off for everyone has to be turned on in Marketing → Automations first). Sequences are
+  listed under it, then what has run for them, with **Stop** for something still waiting.
 - **Leaves things alone:** emails skip customers who unsubscribed, texts skip ones who replied STOP, sample
-  customers are only used in the test company, and an action about an invoice that's been voided, a work order
-  that's no longer coming up or an estimate already answered is skipped.
-- **Import from Homeworks:** **Import from Homeworks** (admins) reads the automations file Crewdesk made from
-  Homeworks: all their automations and sequences come in **turned off**, matched to the Homeworks templates (import
-  those in Templates first), with any missing customer tags added. Ones marked **Needs attention** are missing a
-  template or tag (Homeworks had none picked); ones marked **Can't run in Crewdesk** use meetings, reviews, work
-  requests or tips, which Crewdesk doesn't have. A sequence with only some such blocks still runs the rest.
-- Automations check every few minutes, so "instantly" means within about five minutes.
+  customers are only used in the test company, and an action about a voided invoice, a work order that's no longer
+  coming up or an estimate already answered is skipped.
+- **Bringing in Homeworks:** **Import from Homeworks** (admins) takes the one Homeworks file Crewdesk made:
+  templates first, then every automation and sequence, all **turned off**, each keeping its Homeworks Id, tags and
+  notes, and listed in Homeworks' order. Crewdesk remembers which were on in Homeworks; **Turn on what was on in
+  Homeworks** turns those on together and lists any it left off, with why. An automation Homeworks had no template
+  picked for needs one picked first; ones about meetings, reviews, work requests or tips can't run because Crewdesk
+  doesn't have those yet (a sequence with only some such parts still runs the rest). When a switch won't turn on,
+  the reason shows under that automation's name. Importing the file again changes nothing already here.
+- Automations check every few minutes, so "Instantly" means within about five minutes.
 
 ### Online payments and the customer portal
 

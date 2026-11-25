@@ -1,12 +1,12 @@
 import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import {
-  AUTOMATION_ACTIONS, BEFORE_HOUR, NOT_ANSWERED_DAYS, TEXT_HOURS, TODO_DUE_TIME, customerName, fillTags, isInactive, triggerDef,
-  type AutomationAction, type AutomationCond, type AutomationDef, type AutomationSubject, type TriggerKey,
+  AUTOMATION_ACTIONS, BEFORE_HOUR, NOT_ANSWERED_DAYS, TEXT_HOURS, TODO_DUE_TIME, customerName, fillTags, isInactive, isTextAction, triggerDef, triggerLabel,
+  type ActionDef, type AutomationAction, type AutomationCond, type AutomationDef, type AutomationSubject, type TriggerKey,
 } from "@crewdesk/shared";
 import { db } from "../db";
 import {
   automationEvents, automationRuns, automationSteps, automations, cancellations, companies, customerPaymentMethods, customers, employees, estimateLines, estimates,
-  invoicePayments, invoices, tagEvents, templates, todoAssignees, todos, visits, workOrders,
+  crewMembers, invoicePayments, invoices, tagEvents, templates, todoAssignees, todos, visitAssignees, visits, workOrders,
 } from "../db/schema";
 import { emailTransport } from "./channels";
 import { recordTagChanges } from "./crm";
@@ -20,7 +20,8 @@ import { localParts, zonedTime } from "./tz";
  * scheduled checks:
  *  1. For each automation that's on, it looks for what has happened since it was turned on (at
  *     most a week back) and starts a run for each thing, once. A sequence runs the first block whose
- *     trigger and AND conditions match; when none match, the run is kept as "skipped".
+ *     trigger happened and whose conditions are true (any one group of AND conditions); when none
+ *     match, the run is kept as "skipped".
  *  2. Each run's actions are queued with their times. Due ones are done: texts wait for 9 AM–6 PM,
  *     "review before execution" holds them in Review, and a sequence stops (doing its stop actions)
  *     when any "stop when" happens.
@@ -287,7 +288,7 @@ async function stopReason(def: AutomationDef, run: Run, co: Co): Promise<string 
   if (def.kind !== "sequence" || !def.stops.length) return null;
   const since = run.createdAt;
   const sub = await subjectRow(run);
-  const said = (c: AutomationCond) => `Stopped: ${triggerDef(c.key)?.condLabel ?? triggerDef(c.key)?.label ?? c.key}`;
+  const said = (c: AutomationCond) => `Stopped: ${triggerLabel(c.key, "stop")}`;
   for (const c of def.stops) {
     const k = c.key as TriggerKey;
     let hit = false;
@@ -362,7 +363,7 @@ async function subjectProblem(run: Run): Promise<string | null> {
 /** Starts a run for each new thing an automation's triggers found (once each). */
 async function startRuns(a: Automation, co: Co, now: Date) {
   const def = a.def;
-  const triggers = def.kind === "simple" ? [def.trigger] : def.blocks.flatMap((b) => [b.trigger, ...b.or]);
+  const triggers = def.kind === "simple" ? [def.trigger] : def.blocks.map((b) => b.trigger);
   const found = new Map<string, Found & { via: Set<string> }>();
   for (const c of triggers) {
     const id = condId(c);
@@ -393,9 +394,14 @@ async function startRuns(a: Automation, co: Co, now: Date) {
     if (c?.off.includes(a.id)) reason = "Turned off for this customer";
     else if (def.kind === "sequence") {
       for (const [i, b] of def.blocks.entries()) {
-        if (![b.trigger, ...b.or].some((x) => f.via.has(condId(x)))) continue;
-        let ok = true;
-        for (const cond of b.and) if (!(await condTrue(cond, f, co))) { ok = false; break; }
+        if (!f.via.has(condId(b.trigger))) continue;
+        // No conditions: always. Otherwise any one group whose conditions are all true.
+        let ok = b.when.length === 0;
+        for (const group of b.when) {
+          let all = true;
+          for (const cond of group) if (!(await condTrue(cond, f, co))) { all = false; break; }
+          if (all) { ok = true; break; }
+        }
         if (ok) { blockIndex = i; break; }
       }
       if (blockIndex == null) reason = "Its conditions weren't met";
@@ -427,7 +433,7 @@ function textTime(now: Date, tz: string): Date | null {
   const day = l.minutes < TEXT_HOURS.start * 60 ? l.date : addDays(l.date, 1);
   return zonedTime(day, `${String(TEXT_HOURS.start).padStart(2, "0")}:00`, tz);
 }
-const isText = (act: AutomationAction) => ["text_admin", "text_customer", "text_employee"].includes(act.action);
+const isText = (act: AutomationAction) => isTextAction(act.action);
 
 /** What a run's messages fill in from. */
 async function contextFor(run: Run): Promise<TemplateContext> {
@@ -452,16 +458,31 @@ async function people(companyId: string, act: AutomationAction, to: "owner" | "e
     .from(employees).where(and(eq(employees.companyId, companyId), to === "owner" || !act.employeeIds.length ? eq(employees.role, "owner") : inArray(employees.id, act.employeeIds)));
   return rows.filter((p) => !isInactive(p.status));
 }
+
+/** Whoever a run's work order or to-do is given to (the work order's crew too); the owner when it's no one's. */
+async function assignedPeople(companyId: string, run: Run) {
+  let ids: string[] = [];
+  if (run.subjectType === "visit" && run.subjectId) {
+    const direct = await db.select({ id: visitAssignees.employeeId }).from(visitAssignees).where(eq(visitAssignees.visitId, run.subjectId));
+    const crew = await db.select({ id: crewMembers.employeeId }).from(visits).innerJoin(crewMembers, eq(crewMembers.crewId, visits.crewId)).where(eq(visits.id, run.subjectId));
+    ids = [...direct, ...crew].map((r) => r.id);
+  } else if (run.subjectType === "todo" && run.subjectId) {
+    ids = (await db.select({ id: todoAssignees.employeeId }).from(todoAssignees).where(eq(todoAssignees.todoId, run.subjectId))).map((r) => r.id);
+  }
+  const rows = await db.select({ id: employees.id, first: employees.firstName, last: employees.lastName, email: employees.email, phone: employees.phone, status: employees.status, role: employees.role })
+    .from(employees).where(and(eq(employees.companyId, companyId), ids.length ? inArray(employees.id, [...new Set(ids)]) : eq(employees.role, "owner")));
+  return rows.filter((p) => !isInactive(p.status));
+}
 const names = (ps: { first: string | null; last: string | null }[]) => ps.map((p) => [p.first, p.last].filter(Boolean).join(" ")).join(", ");
 
 type Outcome = { status: "done" | "skipped" | "failed"; detail: string };
 
 /** Does one action; says what happened. */
 export async function doAction(a: Automation, run: Run, act: AutomationAction, co: Co, at: Date): Promise<Outcome> {
-  const def = AUTOMATION_ACTIONS[act.action];
+  const def = AUTOMATION_ACTIONS[act.action] as ActionDef;
   const ctx = await contextFor(run);
   const [tpl] = act.templateId ? await db.select().from(templates).where(and(eq(templates.id, act.templateId), eq(templates.companyId, a.companyId))) : [];
-  if ("channel" in def) {
+  if (def.channel) {
     if (!tpl) return { status: "failed", detail: act.templateId ? "Its template was deleted" : "No template is chosen" };
     if (tpl.channel !== def.channel) return { status: "failed", detail: `"${tpl.name}" is ${tpl.channel === "email" ? "an email" : "a text"} template` };
   }
@@ -475,12 +496,12 @@ export async function doAction(a: Automation, run: Run, act: AutomationAction, c
         if (cust.emailOptOutAt) return { status: "skipped", detail: `${customerName(cust)} unsubscribed from emails` };
         if (!emailTransport()) return { status: "failed", detail: "Email isn't set up on this server" };
         const m = await sendTemplateEmail({ companyId: a.companyId, template: tpl, to: cust.email, ctx });
-        return { status: "done", detail: `Emailed ${customerName(cust)} (${cust.email}): "${m.subject}"` };
+        return { status: "done", detail: `Message sent to ${customerName(cust)} at ${cust.email} successfully ("${m.subject}")` };
       }
       case "text_customer": {
         const r = await sendTemplateText({ companyId: a.companyId, template: tpl, ctx, by: null, source: "automation" });
         if (r.skipped) return { status: "skipped", detail: r.skipped };
-        return r.sent ? { status: "done", detail: `Texted ${customerName(cust)}${r.phone ? ` (${r.phone})` : ""}` } : { status: "failed", detail: `Text didn't go: ${r.error ?? ""}` };
+        return r.sent ? { status: "done", detail: `Message sent to ${customerName(cust)}${r.phone ? ` at ${r.phone}` : ""} successfully` } : { status: "failed", detail: `Text didn't go: ${r.error ?? ""}` };
       }
       case "email_admin": case "email_employee": {
         if (!emailTransport()) return { status: "failed", detail: "Email isn't set up on this server" };
@@ -488,7 +509,7 @@ export async function doAction(a: Automation, run: Run, act: AutomationAction, c
         if (!to.length) return { status: "skipped", detail: "No one to email" };
         let subject = "";
         for (const p of to) subject = (await sendTemplateEmail({ companyId: a.companyId, template: tpl, to: p.email, ctx, internal: true })).subject;
-        return { status: "done", detail: `Emailed ${names(to)}: "${subject}"` };
+        return { status: "done", detail: `Message sent to ${to.map((p) => `${names([p])} at ${p.email}`).join(", ")} successfully ("${subject}")` };
       }
       case "text_admin": case "text_employee": {
         const to = (await people(a.companyId, act, def.to as "owner" | "employee")).filter((p) => p.phone);
@@ -497,16 +518,21 @@ export async function doAction(a: Automation, run: Run, act: AutomationAction, c
         const results = [];
         for (const p of to) results.push({ p, r: await sendStaffText(a.companyId, p.phone, body) });
         const sent = results.filter((x) => x.r.sent).map((x) => x.p);
-        if (sent.length) return { status: "done", detail: `Texted ${names(sent)}` };
+        if (sent.length) return { status: "done", detail: `Message sent to ${sent.map((p) => `${names([p])} at ${p.phone}`).join(", ")} successfully` };
         const why = results[0].r;
         return why.skipped ? { status: "skipped", detail: why.skipped } : { status: "failed", detail: `Text didn't go: ${why.error ?? ""}` };
       }
       case "push_notification": {
-        const to = await people(a.companyId, act, "employee");
+        // A reminder to whoever the work order or to-do is given to (its crew too); else the owner.
+        const to = await assignedPeople(a.companyId, run);
         if (!to.length) return { status: "skipped", detail: "No one to notify" };
-        const body = fillTemplateText(tpl.body, await templateVars(a.companyId, ctx));
-        notify(a.companyId, to.map((p) => p.id), { category: "customers", title: a.name.slice(0, 200), body: body.slice(0, 400), link: cust ? { screen: "customer", id: cust.id } : { screen: "automations" } });
-        return { status: "done", detail: `Notified ${names(to)}` };
+        const v = await templateVars(a.companyId, ctx);
+        const about = [v.EVENT_TITLE, v.CUSTOMER_NAME, [v.EVENT_DATE, v.EVENT_SCHEDULED_TIME].filter(Boolean).join(" at ")].filter(Boolean).join(" · ");
+        const link = run.subjectType === "visit" && run.subjectId ? { screen: "workorder" as const, id: run.subjectId }
+          : run.subjectType === "todo" && run.subjectId ? { screen: "todos" as const, id: run.subjectId }
+          : cust ? { screen: "customer" as const, id: cust.id } : { screen: "automations" as const };
+        notify(a.companyId, to.map((p) => p.id), { category: run.subjectType === "todo" ? "todos" : run.subjectType === "visit" ? "workorders" : "customers", title: a.name.slice(0, 200), body: (about || triggerLabel(run.triggerKey, "simple")).slice(0, 400), link });
+        return { status: "done", detail: `Push notification sent to ${names(to)}` };
       }
       case "add_tag": case "remove_tag": {
         if (!act.tagId) return { status: "failed", detail: "No tag is chosen" };
@@ -543,14 +569,14 @@ async function finishIfDone(runId: string, now: Date) {
   if (!left) await db.update(automationRuns).set({ status: "done", finishedAt: now }).where(and(eq(automationRuns.id, runId), eq(automationRuns.status, "running")));
 }
 
-/** Stops a run: what's still waiting won't happen. A sequence's stop actions are queued (when it's a "stop when"). */
+/** Stops a run: what's still waiting won't happen. A sequence's stop actions are queued, each after its waiting period (when it's a "stop when"). */
 export async function stopRun(a: Automation, run: Run, reason: string, now: Date, o: { stopActions: boolean }) {
   const [r] = await db.update(automationRuns).set({ status: "stopped", reason, finishedAt: now }).where(and(eq(automationRuns.id, run.id), eq(automationRuns.status, "running"))).returning();
   await db.update(automationSteps).set({ status: "stopped", detail: reason, dueAt: null, doneAt: now })
     .where(and(eq(automationSteps.runId, run.id), eq(automationSteps.kind, "action"), inArray(automationSteps.status, ["waiting", "review"])));
   if (r && o.stopActions && a.def.kind === "sequence" && a.def.stopActions.length) {
     await db.insert(automationSteps).values(a.def.stopActions.map((act, idx) => ({
-      companyId: run.companyId, runId: run.id, automationId: a.id, customerId: run.customerId, kind: "stop", idx, action: act, dueAt: now,
+      companyId: run.companyId, runId: run.id, automationId: a.id, customerId: run.customerId, kind: "stop", idx, action: act, dueAt: new Date(now.getTime() + act.waitMinutes * MIN),
     })));
   }
 }

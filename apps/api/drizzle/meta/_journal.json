@@ -659,6 +659,13 @@
       "when": 1795581856642,
       "tag": "0093_automations_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1795613528849,
+      "tag": "0094_automations_like_homeworks",
+      "breakpoints": true
     }
   ]
 }

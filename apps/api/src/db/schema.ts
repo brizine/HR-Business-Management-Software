@@ -14,7 +14,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid,
+  uuid, serial,
 } from "drizzle-orm/pg-core";
 
 const id = () => uuid("id").primaryKey().defaultRandom();
@@ -2486,6 +2486,10 @@ export const automations = pgTable(
     def: jsonb("def").$type<AutomationDef>().notNull(),
     /** "homeworks:auto:<id>" / "homeworks:seq:<id>" when imported (so it isn't imported twice). */
     importedFrom: text("imported_from"),
+    /** Imported: whether it was on in Homeworks (imports come in off; this is what "turn on what was on" goes by). */
+    importedOn: boolean("imported_on"),
+    /** Sequences: the hash of the password that protects it from being changed (null: not protected). */
+    passwordHash: text("password_hash"),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
     updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -2540,6 +2544,8 @@ export const automationSteps = pgTable(
     runId: uuid("run_id").notNull().references(() => automationRuns.id, { onDelete: "cascade" }),
     automationId: uuid("automation_id").notNull().references(() => automations.id, { onDelete: "cascade" }),
     customerId: uuid("customer_id").references(() => customers.id, { onDelete: "cascade" }),
+    /** A short number for the history lists (Homeworks' ID column). */
+    number: serial("number").notNull(),
     /** "action", or "stop" (a stop action, done when the sequence stops). */
     kind: text("kind").notNull().default("action"),
     /** Its place in the list, and the action as it was when queued. */
