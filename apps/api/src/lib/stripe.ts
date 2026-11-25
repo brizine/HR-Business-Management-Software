@@ -2,6 +2,7 @@ import Stripe from "stripe";
 import { and, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { customerName, formatMoney, systemTemplate } from "@crewdesk/shared";
 import { db } from "../db";
+import { recordAutomationEvent } from "./automationEvents";
 import { companies, customers, invoicePayments, invoices, paymentRefunds, prepayments } from "../db/schema";
 import { localDate } from "./tz";
 import { decrypt, encrypt } from "./crypto";
@@ -183,6 +184,7 @@ export async function applyPaymentIntent(companyId: string, pi: Stripe.PaymentIn
     paymentId = p.id;
   }
   const updated = await refreshInvoice(db, inv.id);
+  if (status === "failed") await recordAutomationEvent(companyId, inv.customerId, "payment_declined", { type: "invoice", id: inv.id });
   // "Save for next time": keep the card or bank account on file.
   if (pi.setup_future_usage === "off_session" && pi.payment_method && typeof pi.payment_method === "object" && status !== "failed") {
     const { saveMethod } = await import("./paymentMethods");
@@ -218,6 +220,7 @@ async function sendReceipt(companyId: string, invoiceId: string, paymentId: stri
     await sendTemplateEmail({ companyId, template: tpl, to: row.cust.email, ctx: { invoiceId, paymentId }, transactional: true, attachments });
   }
   if ((row.cust.delivery ?? []).includes("text") && chosen.text) await sendTemplateText({ companyId, template: chosen.text, ctx: { invoiceId, paymentId }, by: null });
+  await recordAutomationEvent(companyId, row.cust.id, "receipt_sent", { type: "payment", id: paymentId });
 }
 
 /** Checks a webhook really came from Stripe (signed with this company's webhook secret). */

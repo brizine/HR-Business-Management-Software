@@ -5,7 +5,7 @@ import {
   type MessageKind, type PaymentMethod, type TemplateDefaults, type TemplateVars,
 } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, customerNotes, customers, employees, estimates, invoicePayments, invoices, properties, propertyAssignments, templates, visits } from "../db/schema";
+import { assets, companies, customerNotes, customers, employees, estimates, invoicePayments, invoices, properties, propertyAssignments, templates, todos, visits, workOrders } from "../db/schema";
 import { PUBLIC_API_URL, WEB_URL, emailTransport, type EmailMessage } from "./channels";
 import { customerUnsubscribeToken } from "./customerMessages";
 import { payLinkFor, portalUrl } from "./invoices";
@@ -67,7 +67,12 @@ export async function messageTemplates(companyId: string, kind: MessageKind) {
 
 /* ───────────── Filling in the tags ───────────── */
 
-export type TemplateContext = { customerId?: string | null; invoiceId?: string | null; estimateId?: string | null; visitId?: string | null; paymentId?: string | null; message?: string | null };
+export type TemplateContext = {
+  customerId?: string | null; invoiceId?: string | null; estimateId?: string | null; visitId?: string | null; paymentId?: string | null;
+  /** Automations: a to-do or an equipment repair order (their title and date fill the EVENT tags). */
+  todoId?: string | null; maintenanceId?: string | null;
+  message?: string | null;
+};
 
 const longDate = (d: string | null | undefined) => (d ? new Date(`${d.slice(0, 10)}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }) : "");
 const time12 = (t: string | null | undefined) => { if (!t) return ""; const [h, m] = t.split(":").map(Number); return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
@@ -93,7 +98,10 @@ export async function templateVars(companyId: string, ctx: TemplateContext): Pro
   const [est] = ctx.estimateId ? await db.select().from(estimates).where(and(eq(estimates.id, ctx.estimateId), eq(estimates.companyId, companyId))) : [];
   const [visit] = ctx.visitId ? await db.select().from(visits).where(and(eq(visits.id, ctx.visitId), eq(visits.companyId, companyId))) : [];
   const [pay] = ctx.paymentId ? await db.select().from(invoicePayments).where(eq(invoicePayments.id, ctx.paymentId)) : [];
-  customerId ??= inv?.customerId ?? est?.customerId ?? visit?.customerId ?? pay?.customerId ?? null;
+  const [todo] = ctx.todoId ? await db.select().from(todos).where(and(eq(todos.id, ctx.todoId), eq(todos.companyId, companyId))) : [];
+  const [fix] = ctx.maintenanceId ? await db.select({ w: workOrders, asset: assets.name }).from(workOrders).innerJoin(assets, eq(assets.id, workOrders.assetId))
+    .where(and(eq(workOrders.id, ctx.maintenanceId), eq(workOrders.companyId, companyId))) : [];
+  customerId ??= inv?.customerId ?? est?.customerId ?? visit?.customerId ?? pay?.customerId ?? todo?.customerId ?? null;
   if (customerId) {
     const [c] = await db.select().from(customers).where(and(eq(customers.id, customerId), eq(customers.companyId, companyId)));
     if (c) {
@@ -136,6 +144,19 @@ export async function templateVars(companyId: string, ctx: TemplateContext): Pro
     Object.assign(v, {
       EVENT_TITLE: visit.title, EVENT_DATE: visit.date ? new Date(`${visit.date}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }) : "not scheduled yet",
       EVENT_SCHEDULED_TIME: time12(visit.startTime), EVENT_PROPERTY_ADDRESS: p ? formatAddress(p) : visit.location ?? "", NOTES_TO_DISPATCHER: visit.notes ?? "",
+    });
+  }
+  if (todo) {
+    Object.assign(v, {
+      EVENT_TITLE: todo.title, EVENT_DATE: new Date(`${todo.date}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }),
+      EVENT_SCHEDULED_TIME: time12(todo.startTime),
+    });
+  }
+  if (fix) {
+    Object.assign(v, {
+      EVENT_TITLE: `${fix.asset}: ${fix.w.title}`,
+      EVENT_DATE: fix.w.dueDate ? new Date(`${fix.w.dueDate}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }) : "",
+      NOTES_TO_DISPATCHER: fix.w.description ?? "",
     });
   }
   if (pay) {
@@ -188,27 +209,32 @@ ${body}
 export async function sendTemplateEmail(o: {
   companyId: string; template: { id?: string | null; subject: string | null; body: string }; to: string; cc?: string[]; ctx: TemplateContext; transactional?: boolean;
   attachments?: EmailMessage["attachments"];
+  /** To the owner or an employee (no unsubscribe link, and not logged as sent to the customer). */
+  internal?: boolean;
 }) {
   const transport = emailTransport();
   if (!transport) throw new Error("Email isn't set up on this server yet");
   const vars = await templateVars(o.companyId, o.ctx);
   const customerId = await customerFor(o.companyId, o.ctx);
-  const m = await renderTemplateEmail(o.companyId, o.template, vars, { unsubscribeCustomerId: o.transactional ? null : customerId });
+  const m = await renderTemplateEmail(o.companyId, o.template, vars, { unsubscribeCustomerId: o.transactional || o.internal ? null : customerId });
   await transport.send({
     to: o.to, cc: o.cc, subject: m.subject, text: m.text, html: m.html, headers: m.headers, fromName: m.fromName, replyTo: m.replyTo, attachments: o.attachments,
-    track: { companyId: o.companyId, customerId, templateId: o.template.id ?? null, keepBody: true, opens: true },
+    track: { companyId: o.companyId, customerId: o.internal ? null : customerId, templateId: o.template.id ?? null, keepBody: true, opens: !o.internal },
   });
   return m;
 }
 
 /** Sends a template by text, when texting is connected and the customer can get texts. */
-export async function sendTemplateText(o: { companyId: string; template: Pick<TemplateRow, "body">; ctx: TemplateContext; by: string | null }) {
+export async function sendTemplateText(o: { companyId: string; template: Pick<TemplateRow, "body">; ctx: TemplateContext; by: string | null; source?: "office" | "automation" }) {
   const customerId = await customerFor(o.companyId, o.ctx);
   if (!customerId) return { sent: false, skipped: "No customer" };
-  const body = fillTags(o.template.body, await templateVars(o.companyId, o.ctx)).replace(/\n{3,}/g, "\n\n").trim();
-  const r = await sendCustomerText(o.companyId, customerId, body, { by: o.by, source: "office" });
-  return { sent: !!r.text && r.text.status !== "failed", skipped: r.skipped };
+  const body = fillTemplateText(o.template.body, await templateVars(o.companyId, o.ctx));
+  const r = await sendCustomerText(o.companyId, customerId, body, { by: o.by, source: o.source ?? "office" });
+  return { sent: !!r.text && r.text.status !== "failed", skipped: r.skipped, phone: r.text?.phone ?? null, error: r.text?.status === "failed" ? r.text.error ?? "Not sent" : null };
 }
+
+/** A text template filled in (tidied blank lines). */
+export const fillTemplateText = (body: string, vars: TemplateVars) => fillTags(body, vars).replace(/\n{3,}/g, "\n\n").trim();
 
 async function customerFor(companyId: string, ctx: TemplateContext) {
   if (ctx.customerId) return ctx.customerId;
@@ -216,5 +242,6 @@ async function customerFor(companyId: string, ctx: TemplateContext) {
   if (ctx.estimateId) return (await db.select({ c: estimates.customerId }).from(estimates).where(and(eq(estimates.id, ctx.estimateId), eq(estimates.companyId, companyId))))[0]?.c ?? null;
   if (ctx.visitId) return (await db.select({ c: visits.customerId }).from(visits).where(and(eq(visits.id, ctx.visitId), eq(visits.companyId, companyId))))[0]?.c ?? null;
   if (ctx.paymentId) return (await db.select({ c: invoicePayments.customerId }).from(invoicePayments).where(eq(invoicePayments.id, ctx.paymentId)))[0]?.c ?? null;
+  if (ctx.todoId) return (await db.select({ c: todos.customerId }).from(todos).where(and(eq(todos.id, ctx.todoId), eq(todos.companyId, companyId))))[0]?.c ?? null;
   return null;
 }

@@ -91,6 +91,23 @@ export async function sendCustomerText(companyId: string, customerId: string, bo
   }
 }
 
+/**
+ * Texts the owner or an employee from the company's number (automations). Not kept with the
+ * customer's texts; the automation's history says what went.
+ */
+export async function sendStaffText(companyId: string, phone: string | null, body: string): Promise<{ sent: boolean; skipped?: string; error?: string }> {
+  const cfg = await textingConfig(companyId);
+  if (!cfg) return { sent: false, skipped: "Texting isn't connected (Settings → Integrations)" };
+  const to = toE164(phone);
+  if (!to) return { sent: false, skipped: "No mobile number on file" };
+  try {
+    await provider.send(cfg, to, body);
+    return { sent: true };
+  } catch (e) {
+    return { sent: false, error: (e as Error).message.slice(0, 300) };
+  }
+}
+
 /** The customer (if any) a number belongs to: their phone or other phone, then a contact's. */
 async function customerForNumber(companyId: string, e164: string) {
   const ten = e164.replace(/\D/g, "").slice(-10);

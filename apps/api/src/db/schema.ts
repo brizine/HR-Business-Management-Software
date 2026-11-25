@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { AutomationStep, CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings, WeatherSettings, ChemicalNoticeSettings, TemplateDefaults } from "@crewdesk/shared";
+import type { AutomationAction, AutomationDef, CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings, WeatherSettings, ChemicalNoticeSettings, TemplateDefaults } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -1339,6 +1339,8 @@ export const customers = pgTable(
     /** "lead", "active" or "cancelled". */
     status: text("status").notNull().default("active"),
     tagIds: uuid("tag_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
+    /** Automations turned off for this customer (their page → Automations). */
+    automationOffIds: uuid("automation_off_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
     /** Made by the sample-customer button, so they can be removed in one go. */
     sample: boolean("sample").notNull().default(false),
     stripeCustomerId: text("stripe_customer_id"),
@@ -2458,50 +2460,45 @@ export const customerTexts = pgTable(
   ],
 );
 
-/** Email and text templates for automations (with {fill-ins}). */
-export const messageTemplates = pgTable(
-  "message_templates",
-  {
-    id: id(),
-    companyId: companyId(),
-    /** "email" or "text". */
-    kind: text("kind").notNull(),
-    name: text("name").notNull(),
-    subject: text("subject"),
-    body: text("body").notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-    createdAt: createdAt(),
-  },
-  (t) => [index("message_templates_company_idx").on(t.companyId, t.kind)],
-);
-
-/** When something happens, run these steps (Automations). */
+/**
+ * Marketing → Automations (like Homeworks'): an automation (one trigger, one action) or a sequence
+ * (IF/ELSE blocks of timed actions, with stop conditions). See shared/automations.
+ */
 export const automations = pgTable(
   "automations",
   {
     id: id(),
     companyId: companyId(),
+    /** A short number to find it by (Homeworks' Id). */
+    number: integer("number").notNull(),
+    /** "simple" or "sequence". */
+    kind: text("kind").notNull(),
     name: text("name").notNull(),
     description: text("description"),
+    /** Labels for finding it (not customer tags). */
+    labels: text("labels").array().notNull().default(sql`ARRAY[]::text[]`),
     enabled: boolean("enabled").notNull().default(false),
-    /** When it was last turned on: only things that happen after this start it. */
+    /** When it was last turned on: only what happens after this starts it. */
     enabledAt: timestamp("enabled_at", { withTimezone: true }),
-    trigger: text("trigger").notNull(),
-    daysBefore: integer("days_before"),
-    tagId: uuid("tag_id").references(() => crmTags.id, { onDelete: "set null" }),
-    onlyTagIds: uuid("only_tag_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
-    exceptTagIds: uuid("except_tag_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
-    stopWhen: text("stop_when").array().notNull().default(sql`ARRAY[]::text[]`),
+    /** Each action waits in Review until someone sends or skips it. */
     review: boolean("review").notNull().default(false),
-    steps: jsonb("steps").$type<AutomationStep[]>().notNull(),
+    /** The trigger and action (simple), or the blocks, stops and stop actions (sequence). */
+    def: jsonb("def").$type<AutomationDef>().notNull(),
+    /** "homeworks:auto:<id>" / "homeworks:seq:<id>" when imported (so it isn't imported twice). */
+    importedFrom: text("imported_from"),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: createdAt(),
   },
-  (t) => [index("automations_company_idx").on(t.companyId, t.trigger)],
+  (t) => [
+    index("automations_company_idx").on(t.companyId, t.kind),
+    uniqueIndex("automations_number_idx").on(t.companyId, t.number),
+    uniqueIndex("automations_imported_idx").on(t.companyId, t.importedFrom),
+  ],
 );
 
-/** One automation running for one customer (and the estimate, invoice or work order it's about). */
+/** An automation running for one thing that happened (a customer, and the estimate, invoice, work order… it's about). */
 export const automationRuns = pgTable(
   "automation_runs",
   {
@@ -2509,26 +2506,78 @@ export const automationRuns = pgTable(
     companyId: companyId(),
     automationId: uuid("automation_id").notNull().references(() => automations.id, { onDelete: "cascade" }),
     customerId: uuid("customer_id").references(() => customers.id, { onDelete: "cascade" }),
-    /** "estimate", "invoice", "payment", "visit" or "customer", and its id. */
+    /** "visit", "todo", "maintenance", "estimate", "invoice", "payment", "customer" or "none", and its id. */
     subjectType: text("subject_type").notNull(),
     subjectId: uuid("subject_id"),
-    /** One run per automation per thing that started it. */
+    /** The trigger that started it, and (sequences) the block that ran. */
+    triggerKey: text("trigger_key").notNull(),
+    blockIndex: integer("block_index"),
+    /** One run per automation per thing that happened. */
     dedupeKey: text("dedupe_key").notNull(),
-    /** "running", "review" (waiting for approval), "done", "stopped" or "failed". */
+    /** When it happened: actions are timed from here. */
+    triggeredAt: timestamp("triggered_at", { withTimezone: true }).notNull(),
+    /** "running", "done", "stopped" or "skipped" (its conditions weren't met, or it's off for the customer). */
     status: text("status").notNull().default("running"),
-    stepIndex: integer("step_index").notNull().default(0),
-    nextAt: timestamp("next_at", { withTimezone: true }),
-    /** What each step did: { step, action, status ("done", "skipped" or "failed"), detail, at }. */
-    log: jsonb("log").$type<{ step: number; action: string; status: string; detail: string; at: string }[]>().notNull().default([]),
-    stoppedReason: text("stopped_reason"),
+    /** Why it stopped or was skipped. */
+    reason: text("reason"),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [
     uniqueIndex("automation_runs_dedupe_idx").on(t.automationId, t.dedupeKey),
-    index("automation_runs_due_idx").on(t.status, t.nextAt),
+    index("automation_runs_company_idx").on(t.companyId, t.createdAt),
     index("automation_runs_customer_idx").on(t.customerId, t.createdAt),
+    index("automation_runs_status_idx").on(t.automationId, t.status),
   ],
+);
+
+/** Each action of a run: when it's due, and what happened (Automation History). */
+export const automationSteps = pgTable(
+  "automation_steps",
+  {
+    id: id(),
+    companyId: companyId(),
+    runId: uuid("run_id").notNull().references(() => automationRuns.id, { onDelete: "cascade" }),
+    automationId: uuid("automation_id").notNull().references(() => automations.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "cascade" }),
+    /** "action", or "stop" (a stop action, done when the sequence stops). */
+    kind: text("kind").notNull().default("action"),
+    /** Its place in the list, and the action as it was when queued. */
+    idx: integer("idx").notNull().default(0),
+    action: jsonb("action").$type<AutomationAction>().notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    /** "waiting", "review", "done", "skipped", "failed" or "stopped". */
+    status: text("status").notNull().default("waiting"),
+    /** What happened ("Emailed …", "No email address on file"…). */
+    detail: text("detail"),
+    doneAt: timestamp("done_at", { withTimezone: true }),
+    /** Sent (or skipped) from Review: by whom. */
+    reviewedById: uuid("reviewed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("automation_steps_due_idx").on(t.status, t.dueAt),
+    index("automation_steps_run_idx").on(t.runId, t.idx),
+    index("automation_steps_company_idx").on(t.companyId, t.createdAt),
+  ],
+);
+
+/** Things automations start on that leave no other trace: a card or bank account removed, a receipt sent, a payment declined. */
+export const automationEvents = pgTable(
+  "automation_events",
+  {
+    id: id(),
+    companyId: companyId(),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "cascade" }),
+    /** "card_removed", "bank_removed", "receipt_sent" or "payment_declined". */
+    kind: text("kind").notNull(),
+    /** The payment or invoice it's about. */
+    subjectType: text("subject_type"),
+    subjectId: uuid("subject_id"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("automation_events_company_idx").on(t.companyId, t.kind, t.createdAt)],
 );
 
 /** Every email the server hands to the mail service: who to, the subject, and whether it went (for Email deliverability). */

@@ -1,74 +1,116 @@
 import type { FastifyPluginAsync } from "fastify";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, lt, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
-  AUTOMATION_ACTIONS, AUTOMATION_TRIGGERS, customerName, describeWait, fillTemplate, automationSchema, messageTemplateSchema,
-  type AutomationInput, type AutomationStep, type AutomationTrigger,
+  ACTION_KEYS, AUTOMATION_ACTIONS, allActions, allConds, automationImportSchema, automationProblems, automationSchema, cannotTurnOn, customerName, deadBlocks,
+  homeworksDelay, triggerDef, triggerKeyFor,
+  type ActionKey, type AutomationAction, type AutomationCond, type AutomationDef, type AutomationImport, type AutomationInput, type SubAction,
 } from "@crewdesk/shared";
 import { db } from "../db";
-import { automationRuns, automations, crmTags, customers, employees, messageTemplates } from "../db/schema";
+import { automationRuns, automationSteps, automations, crmTags, customers, employees, serviceTypes, templates, todoCategories } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
+import { previewStep, reviewCount, reviewStep, stopRun } from "../lib/automations";
 import { HttpError, parse } from "../lib/errors";
-import { reviewCount, reviewStep, runVars } from "../lib/automations";
 
 const AREA = "customers" as const;
-const EMAIL_ACTIONS = ["email_customer", "email_staff"];
+type Row = typeof automations.$inferSelect;
 
-/** Checks the templates, people and tags an automation uses are this company's (and the right kind). */
-async function checkRefs(companyId: string, a: AutomationInput) {
-  const tplIds = [...new Set(a.steps.map((s) => s.templateId).filter((x): x is string => !!x))];
-  const tpls = new Map((tplIds.length ? await db.select().from(messageTemplates).where(and(eq(messageTemplates.companyId, companyId), inArray(messageTemplates.id, tplIds))) : []).map((t) => [t.id, t]));
-  for (const [i, s] of a.steps.entries()) {
-    if (!s.templateId) continue;
-    const t = tpls.get(s.templateId);
-    if (!t) throw new HttpError(400, `Step ${i + 1}: that template doesn't exist`);
-    if (EMAIL_ACTIONS.includes(s.action) && t.kind !== "email") throw new HttpError(400, `Step ${i + 1}: choose an email template`);
-    if (s.action === "text_customer" && t.kind !== "text") throw new HttpError(400, `Step ${i + 1}: choose a text template`);
+/** The stored parts (everything but the columns). */
+const defOf = (a: AutomationInput): AutomationDef => {
+  const { name: _n, description: _d, labels: _l, enabled: _e, review: _r, ...def } = a;
+  return def as AutomationDef;
+};
+
+/** Checks the templates, people, tags, categories, services and next automation it uses are this company's (and the right kind). */
+async function checkRefs(companyId: string, def: AutomationDef, selfId?: string) {
+  const acts = allActions(def);
+  const tplIds = [...new Set(acts.map((s) => s.templateId).filter((x): x is string => !!x))];
+  const tpls = new Map((tplIds.length ? await db.select({ id: templates.id, channel: templates.channel, name: templates.name }).from(templates).where(and(eq(templates.companyId, companyId), inArray(templates.id, tplIds))) : []).map((t) => [t.id, t]));
+  for (const act of acts) {
+    if (!act.templateId) continue;
+    const t = tpls.get(act.templateId);
+    const want = AUTOMATION_ACTIONS[act.action];
+    if (!t) throw new HttpError(400, `${want.label}: that template doesn't exist`);
+    if ("channel" in want && t.channel !== want.channel) throw new HttpError(400, `${want.label}: choose ${want.channel === "email" ? "an email" : "a text"} template ("${t.name}" is ${t.channel === "email" ? "an email" : "a text"})`);
   }
-  const people = [...new Set(a.steps.flatMap((s) => s.employeeIds))];
-  if (people.length) {
-    const found = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.companyId, companyId), inArray(employees.id, people)));
-    if (found.length !== people.length) throw new HttpError(400, "One of those people isn't in your company");
-  }
-  const tags = [...new Set([a.tagId, ...a.onlyTagIds, ...a.exceptTagIds, ...a.steps.map((s) => s.tagId)].filter((x): x is string => !!x))];
-  if (tags.length) {
-    const found = await db.select({ id: crmTags.id }).from(crmTags).where(and(eq(crmTags.companyId, companyId), inArray(crmTags.id, tags)));
-    if (found.length !== tags.length) throw new HttpError(400, "One of those tags doesn't exist");
+  const same = async (ids: string[], q: (ids: string[]) => Promise<{ id: string }[]>, what: string) => {
+    const u = [...new Set(ids)];
+    if (u.length && (await q(u)).length !== u.length) throw new HttpError(400, `One of those ${what} isn't in your company`);
+  };
+  const conds = allConds(def).map((c) => c.cond);
+  await same(acts.flatMap((s) => s.employeeIds), (ids) => db.select({ id: employees.id }).from(employees).where(and(eq(employees.companyId, companyId), inArray(employees.id, ids))), "people");
+  await same([...conds.flatMap((c) => c.tagIds), ...acts.map((s) => s.tagId).filter((x): x is string => !!x)], (ids) => db.select({ id: crmTags.id }).from(crmTags).where(and(eq(crmTags.companyId, companyId), inArray(crmTags.id, ids))), "tags");
+  await same(conds.flatMap((c) => c.categoryIds), (ids) => db.select({ id: todoCategories.id }).from(todoCategories).where(and(eq(todoCategories.companyId, companyId), inArray(todoCategories.id, ids))), "to-do categories");
+  await same(conds.flatMap((c) => c.serviceIds), (ids) => db.select({ id: serviceTypes.id }).from(serviceTypes).where(and(eq(serviceTypes.companyId, companyId), inArray(serviceTypes.id, ids))), "services");
+  if (def.kind === "simple" && def.subAction === "run_automation" && def.subAutomationId) {
+    const [next] = await db.select({ id: automations.id, kind: automations.kind }).from(automations).where(and(eq(automations.id, def.subAutomationId), eq(automations.companyId, companyId)));
+    if (!next) throw new HttpError(400, "The automation to run next doesn't exist");
+    if (next.kind !== "simple") throw new HttpError(400, "Only an automation (not a sequence) can run next");
+    if (next.id === selfId) throw new HttpError(400, "An automation can't run itself next");
   }
 }
 
-const values = (a: AutomationInput) => ({
-  name: a.name, description: a.description ?? null, enabled: a.enabled, trigger: a.trigger,
-  daysBefore: a.trigger === "visit_upcoming" ? a.daysBefore ?? 1 : null, tagId: a.trigger === "tag_added" || a.trigger === "tag_removed" ? a.tagId ?? null : null,
-  onlyTagIds: a.onlyTagIds, exceptTagIds: a.exceptTagIds, stopWhen: a.stopWhen, review: a.review,
-  steps: a.steps.map((s) => ({ ...s, templateId: s.templateId ?? null, tagId: s.tagId ?? null, todoTitle: s.todoTitle ?? null })),
+/** The input checked and cleaned: what each trigger and action doesn't use is cleared. */
+function cleaned(a: AutomationInput): AutomationInput {
+  const cond = (c: AutomationCond): AutomationCond => {
+    const p = triggerDef(c.key)?.param;
+    return { key: c.key, tagIds: p === "tags" ? c.tagIds : [], categoryIds: p === "categories" ? c.categoryIds : [], serviceIds: p === "services" ? c.serviceIds : [] };
+  };
+  const act = (x: AutomationAction, keepWait: boolean): AutomationAction => {
+    const d = AUTOMATION_ACTIONS[x.action];
+    return {
+      waitMinutes: keepWait ? x.waitMinutes : 0, action: x.action, templateId: "channel" in d ? x.templateId : null,
+      employeeIds: d.to === "employee" ? x.employeeIds : [], tagId: "needs" in d && d.needs === "tag" ? x.tagId : null, todoTitle: "needs" in d && d.needs === "todo" ? x.todoTitle : null,
+    };
+  };
+  if (a.kind === "simple") {
+    const d = triggerDef(a.trigger.key);
+    return {
+      ...a, trigger: cond(a.trigger), action: act(a.action, false),
+      runAt: d?.param === "datetime" ? a.runAt : null, daysBefore: d?.before ? a.daysBefore : null, delayMinutes: d?.before || d?.param === "datetime" ? 0 : a.delayMinutes,
+      subAutomationId: a.subAction === "run_automation" ? a.subAutomationId : null, subDelayMinutes: a.subAction === "run_automation" ? a.subDelayMinutes : 0,
+    };
+  }
+  return {
+    ...a,
+    blocks: a.blocks.map((b) => ({ trigger: cond(b.trigger), or: b.or.map(cond), and: b.and.map(cond), actions: [...b.actions].sort((x, y) => x.waitMinutes - y.waitMinutes).map((x) => act(x, true)) })),
+    stops: a.stops.map(cond), stopActions: a.stopActions.map((x) => act(x, false)),
+  };
+}
+
+async function checked(companyId: string, body: unknown, selfId?: string) {
+  const a = cleaned(parse(automationSchema, body));
+  const problems = automationProblems(a);
+  if (problems.length) throw new HttpError(400, problems.slice(0, 3).join(". "));
+  await checkRefs(companyId, defOf(a), selfId);
+  if (a.enabled) { const no = cannotTurnOn(defOf(a)); if (no) throw new HttpError(400, no); }
+  return a;
+}
+
+const view = (a: Row, counts?: { running: number; review: number; done: number; skipped: number; lastAt: Date | null }) => ({
+  id: a.id, number: a.number, kind: a.kind, name: a.name, description: a.description, labels: a.labels, enabled: a.enabled, enabledAt: a.enabledAt, review: a.review, def: a.def,
+  imported: a.importedFrom?.split(":")[0] ?? null, createdAt: a.createdAt, updatedAt: a.updatedAt,
+  problems: automationProblems(a.def), cannotTurnOn: cannotTurnOn(a.def), deadBlocks: deadBlocks(a.def),
+  counts: counts ?? { running: 0, review: 0, done: 0, skipped: 0, lastAt: null },
 });
 
-/** Automations (like Homeworks'): the list, templates, runs (history and review), and a starter set. */
+/** Turns an automation off: its runs stop (what's waiting, or in Review, won't happen). */
+async function stopAll(a: Row, why: string) {
+  const now = new Date();
+  await db.update(automationSteps).set({ status: "stopped", detail: why, dueAt: null, doneAt: now }).where(and(eq(automationSteps.automationId, a.id), inArray(automationSteps.status, ["waiting", "review"])));
+  await db.update(automationRuns).set({ status: "stopped", reason: why, finishedAt: now }).where(and(eq(automationRuns.automationId, a.id), eq(automationRuns.status, "running")));
+}
+
+async function nextNumber(companyId: string) {
+  const [{ n }] = await db.select({ n: sql<number>`coalesce(max(${automations.number}), 0)::int` }).from(automations).where(eq(automations.companyId, companyId));
+  return n + 1;
+}
+
+/** Marketing → Automations: automations and sequences, Review, history, the customer tab, and the Homeworks import. */
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
   app.addHook("preHandler", requireRole("manager", AREA));
   const admin = { preHandler: requireRole("admin", AREA) };
-
-  app.get("/", async (req) => {
-    const { companyId } = req.user;
-    const list = await db.select().from(automations).where(eq(automations.companyId, companyId)).orderBy(automations.name);
-    const counts = await db.select({ id: automationRuns.automationId, status: automationRuns.status, n: sql<number>`count(*)::int` }).from(automationRuns)
-      .where(and(eq(automationRuns.companyId, companyId), sql`(${automationRuns.status} in ('running','review') or ${automationRuns.createdAt} > now() - interval '30 days')`))
-      .groupBy(automationRuns.automationId, automationRuns.status);
-    const of = (id: string, status: string) => counts.find((c) => c.id === id && c.status === status)?.n ?? 0;
-    return {
-      review: await reviewCount(companyId),
-      automations: list.map((a) => ({ ...a, counts: { running: of(a.id, "running"), review: of(a.id, "review"), done: of(a.id, "done"), stopped: of(a.id, "stopped") } })),
-    };
-  });
-
-  app.post("/", admin, async (req) => {
-    const a = parse(automationSchema, req.body);
-    await checkRefs(req.user.companyId, a);
-    const [row] = await db.insert(automations).values({ ...values(a), companyId: req.user.companyId, createdById: req.user.sub, enabledAt: a.enabled ? new Date() : null }).returning();
-    return row;
-  });
 
   const find = async (companyId: string, id: string) => {
     if (!/^[0-9a-f-]{36}$/i.test(id)) throw new HttpError(404, "Automation not found");
@@ -77,171 +119,385 @@ const routes: FastifyPluginAsync = async (app) => {
     return a;
   };
 
+  app.get("/", async (req) => {
+    const { companyId } = req.user;
+    const list = await db.select().from(automations).where(eq(automations.companyId, companyId)).orderBy(asc(automations.number));
+    const runs = await db.select({ id: automationRuns.automationId, status: automationRuns.status, n: sql<number>`count(*)::int`, last: sql<Date | null>`max(${automationRuns.createdAt})` }).from(automationRuns)
+      .where(and(eq(automationRuns.companyId, companyId), sql`(${automationRuns.status} = 'running' or ${automationRuns.createdAt} > now() - interval '30 days')`))
+      .groupBy(automationRuns.automationId, automationRuns.status);
+    const inReview = await db.select({ id: automationSteps.automationId, n: sql<number>`count(*)::int` }).from(automationSteps)
+      .where(and(eq(automationSteps.companyId, companyId), eq(automationSteps.status, "review"))).groupBy(automationSteps.automationId);
+    const of = (id: string, status: string) => runs.find((c) => c.id === id && c.status === status)?.n ?? 0;
+    return {
+      review: await reviewCount(companyId),
+      automations: list.map((a) => {
+        const mine = runs.filter((r) => r.id === a.id && r.last);
+        const lastAt = mine.length ? new Date(Math.max(...mine.map((r) => new Date(r.last!).getTime()))) : null;
+        return view(a, { running: of(a.id, "running"), review: inReview.find((r) => r.id === a.id)?.n ?? 0, done: of(a.id, "done"), skipped: of(a.id, "skipped"), lastAt });
+      }),
+    };
+  });
+
+  /** What the editor picks from: templates, tags, to-do categories, services, people and automations. */
+  app.get("/options", async (req) => {
+    const { companyId } = req.user;
+    const [tpls, tags, cats, services, people, autos] = await Promise.all([
+      db.select({ id: templates.id, name: templates.name, channel: templates.channel, audience: templates.audience }).from(templates).where(eq(templates.companyId, companyId)).orderBy(asc(templates.name)),
+      db.select({ id: crmTags.id, name: crmTags.name, color: crmTags.color }).from(crmTags).where(and(eq(crmTags.companyId, companyId), eq(crmTags.archived, false))).orderBy(asc(crmTags.name)),
+      db.select({ id: todoCategories.id, name: todoCategories.name }).from(todoCategories).where(eq(todoCategories.companyId, companyId)).orderBy(asc(todoCategories.name)),
+      db.select({ id: serviceTypes.id, name: serviceTypes.name }).from(serviceTypes).where(eq(serviceTypes.companyId, companyId)).orderBy(asc(serviceTypes.name)),
+      db.select({ id: employees.id, first: employees.firstName, last: employees.lastName, role: employees.role, status: employees.status }).from(employees).where(eq(employees.companyId, companyId)).orderBy(asc(employees.firstName)),
+      db.select({ id: automations.id, number: automations.number, name: automations.name, kind: automations.kind }).from(automations).where(eq(automations.companyId, companyId)).orderBy(asc(automations.number)),
+    ]);
+    return {
+      templates: tpls, tags, categories: cats, services,
+      employees: people.filter((p) => !["inactive", "terminated"].includes(p.status)).map((p) => ({ id: p.id, name: [p.first, p.last].filter(Boolean).join(" "), owner: p.role === "owner" })),
+      automations: autos,
+    };
+  });
+
+  app.get<{ Params: { id: string } }>("/:id", async (req) => view(await find(req.user.companyId, req.params.id)));
+
+  app.post("/", admin, async (req) => {
+    const { companyId, sub } = req.user;
+    const a = await checked(companyId, req.body);
+    const [row] = await db.insert(automations).values({
+      companyId, number: await nextNumber(companyId), kind: a.kind, name: a.name, description: a.description, labels: a.labels, enabled: a.enabled, enabledAt: a.enabled ? new Date() : null,
+      review: a.review, def: defOf(a), createdById: sub, updatedById: sub,
+    }).returning();
+    return view(row);
+  });
+
   app.put<{ Params: { id: string } }>("/:id", admin, async (req) => {
-    const a = parse(automationSchema, req.body);
-    const old = await find(req.user.companyId, req.params.id);
-    await checkRefs(req.user.companyId, a);
+    const { companyId, sub } = req.user;
+    const old = await find(companyId, req.params.id);
+    const a = await checked(companyId, req.body, old.id);
+    if (a.kind !== old.kind) throw new HttpError(400, "An automation can't become a sequence (or the other way); make a new one");
     // Turning it on starts from now: only what happens after this starts it.
-    const [row] = await db.update(automations).set({ ...values(a), enabledAt: a.enabled ? (old.enabled ? old.enabledAt : new Date()) : old.enabledAt, updatedAt: new Date() })
-      .where(eq(automations.id, old.id)).returning();
-    return row;
+    const [row] = await db.update(automations).set({
+      name: a.name, description: a.description, labels: a.labels, enabled: a.enabled, enabledAt: a.enabled ? (old.enabled ? old.enabledAt : new Date()) : old.enabledAt,
+      review: a.review, def: defOf(a), updatedById: sub, updatedAt: new Date(),
+    }).where(eq(automations.id, old.id)).returning();
+    if (old.enabled && !a.enabled) await stopAll(row, "The automation was turned off");
+    return view(row);
   });
 
   app.post<{ Params: { id: string } }>("/:id/enabled", admin, async (req) => {
     const { enabled } = parse(z.object({ enabled: z.boolean() }), req.body);
     const old = await find(req.user.companyId, req.params.id);
-    const [row] = await db.update(automations).set({ enabled, enabledAt: enabled && !old.enabled ? new Date() : old.enabledAt, updatedAt: new Date() }).where(eq(automations.id, old.id)).returning();
-    if (!enabled) {
-      // Runs waiting in review stop too.
-      await db.update(automationRuns).set({ status: "stopped", stoppedReason: "The automation was turned off", nextAt: null, finishedAt: new Date() })
-        .where(and(eq(automationRuns.automationId, old.id), inArray(automationRuns.status, ["running", "review"])));
+    if (enabled) {
+      const problems = automationProblems(old.def);
+      if (problems.length) throw new HttpError(400, `Fix it first: ${problems.slice(0, 2).join(". ")}`);
+      const no = cannotTurnOn(old.def);
+      if (no) throw new HttpError(400, no);
+      await checkRefs(req.user.companyId, old.def, old.id);
     }
-    return row;
+    const [row] = await db.update(automations).set({ enabled, enabledAt: enabled && !old.enabled ? new Date() : old.enabledAt, updatedById: req.user.sub, updatedAt: new Date() }).where(eq(automations.id, old.id)).returning();
+    if (!enabled && old.enabled) await stopAll(row, "The automation was turned off");
+    return view(row);
+  });
+
+  app.post<{ Params: { id: string } }>("/:id/clone", admin, async (req) => {
+    const { companyId, sub } = req.user;
+    const old = await find(companyId, req.params.id);
+    const [row] = await db.insert(automations).values({
+      companyId, number: await nextNumber(companyId), kind: old.kind, name: `Copy of ${old.name}`.slice(0, 150), description: old.description, labels: old.labels, enabled: false,
+      review: old.review, def: old.def, createdById: sub, updatedById: sub,
+    }).returning();
+    return view(row);
   });
 
   app.delete<{ Params: { id: string } }>("/:id", admin, async (req) => {
-    const a = await find(req.user.companyId, req.params.id);
+    const { companyId } = req.user;
+    const a = await find(companyId, req.params.id);
+    const callers = (await db.select({ name: automations.name, def: automations.def }).from(automations).where(eq(automations.companyId, companyId)))
+      .filter((x) => x.def.kind === "simple" && x.def.subAction === "run_automation" && x.def.subAutomationId === a.id);
+    if (callers.length) throw new HttpError(400, `${callers.map((c) => `"${c.name}"`).join(", ")} run${callers.length === 1 ? "s" : ""} it next. Change ${callers.length === 1 ? "that" : "those"} first`);
     await db.delete(automations).where(eq(automations.id, a.id));
     return { ok: true };
   });
 
-  /* ── Templates ── */
+  /* ── Review ── */
 
-  app.get("/templates", async (req) => db.select().from(messageTemplates).where(eq(messageTemplates.companyId, req.user.companyId)).orderBy(messageTemplates.kind, messageTemplates.name));
-
-  app.post("/templates", admin, async (req) => {
-    const t = parse(messageTemplateSchema, req.body);
-    const [row] = await db.insert(messageTemplates).values({ companyId: req.user.companyId, kind: t.kind, name: t.name, subject: t.kind === "email" ? t.subject ?? null : null, body: t.body }).returning();
-    return row;
-  });
-
-  app.put<{ Params: { id: string } }>("/templates/:id", admin, async (req) => {
-    const t = parse(messageTemplateSchema, req.body);
-    const [old] = await db.select().from(messageTemplates).where(and(eq(messageTemplates.id, req.params.id), eq(messageTemplates.companyId, req.user.companyId)));
-    if (!old) throw new HttpError(404, "Template not found");
-    if (old.kind !== t.kind) throw new HttpError(400, "A template can't change between email and text; make a new one");
-    const [row] = await db.update(messageTemplates).set({ name: t.name, subject: t.kind === "email" ? t.subject ?? null : null, body: t.body, updatedAt: new Date() }).where(eq(messageTemplates.id, old.id)).returning();
-    return row;
-  });
-
-  app.delete<{ Params: { id: string } }>("/templates/:id", admin, async (req) => {
+  app.get("/review/list", async (req) => {
     const { companyId } = req.user;
-    const used = (await db.select({ name: automations.name, steps: automations.steps }).from(automations).where(eq(automations.companyId, companyId)))
-      .filter((a) => a.steps.some((s) => s.templateId === req.params.id));
-    if (used.length) throw new HttpError(400, `It's used by ${used.map((u) => `"${u.name}"`).join(", ")}. Change those steps first`);
-    await db.delete(messageTemplates).where(and(eq(messageTemplates.id, req.params.id), eq(messageTemplates.companyId, companyId)));
-    return { ok: true };
-  });
-
-  /** The template filled in for a customer (or with sample values), for the preview. */
-  app.post("/templates/preview", async (req) => {
-    const b = parse(z.object({ subject: z.string().max(400).optional(), body: z.string().max(10000), customerId: z.string().uuid().optional() }), req.body);
-    const vars = b.customerId ? await runVars(req.user.companyId, b.customerId, "customer", b.customerId) : null;
-    return { subject: b.subject ? fillTemplate(b.subject, vars ?? {}) : null, body: fillTemplate(b.body, vars ?? {}) };
-  });
-
-  /* ── Runs ── */
-
-  app.get<{ Querystring: { status?: string; customerId?: string; automationId?: string; limit?: string } }>("/runs", async (req) => {
-    const { companyId } = req.user;
-    const q = req.query;
-    const where = and(eq(automationRuns.companyId, companyId),
-      q.status ? inArray(automationRuns.status, q.status.split(",")) : undefined,
-      q.customerId ? eq(automationRuns.customerId, q.customerId) : undefined,
-      q.automationId ? eq(automationRuns.automationId, q.automationId) : undefined);
-    const rows = await db.select({ r: automationRuns, a: automations, c: customers }).from(automationRuns)
-      .innerJoin(automations, eq(automations.id, automationRuns.automationId)).leftJoin(customers, eq(customers.id, automationRuns.customerId))
-      .where(where).orderBy(desc(automationRuns.createdAt)).limit(Math.min(Number(q.limit) || 100, 300));
-    const tplIds = [...new Set(rows.flatMap(({ r, a }) => (r.status === "review" ? [a.steps[r.stepIndex]?.templateId] : [])).filter((x): x is string => !!x))];
-    const tpls = new Map((tplIds.length ? await db.select().from(messageTemplates).where(inArray(messageTemplates.id, tplIds)) : []).map((t) => [t.id, t]));
+    const rows = await db.select({ s: automationSteps, r: automationRuns, a: { id: automations.id, name: automations.name, kind: automations.kind, number: automations.number }, c: customers }).from(automationSteps)
+      .innerJoin(automationRuns, eq(automationRuns.id, automationSteps.runId)).innerJoin(automations, eq(automations.id, automationSteps.automationId))
+      .leftJoin(customers, eq(customers.id, automationSteps.customerId))
+      .where(and(eq(automationSteps.companyId, companyId), eq(automationSteps.status, "review"))).orderBy(asc(automationSteps.createdAt)).limit(200);
     const out = [];
-    for (const { r, a, c } of rows) {
-      const step: AutomationStep | undefined = a.steps[r.stepIndex];
-      let preview: { subject: string | null; body: string } | null = null;
-      if (r.status === "review" && step?.templateId && tpls.get(step.templateId)) {
-        const t = tpls.get(step.templateId)!;
-        const vars = await runVars(companyId, r.customerId, r.subjectType, r.subjectId);
-        preview = { subject: t.subject ? fillTemplate(t.subject, vars) : null, body: fillTemplate(t.body, vars) };
-      }
+    for (const { s, r, a, c } of rows) {
       out.push({
-        id: r.id, status: r.status, stepIndex: r.stepIndex, steps: a.steps.length, nextAt: r.nextAt, createdAt: r.createdAt, finishedAt: r.finishedAt, stoppedReason: r.stoppedReason, log: r.log,
-        subjectType: r.subjectType, subjectId: r.subjectId,
-        automation: { id: a.id, name: a.name, trigger: AUTOMATION_TRIGGERS[a.trigger as AutomationTrigger]?.label ?? a.trigger },
-        customer: c ? { id: c.id, name: customerName(c) } : null,
-        next: step && (r.status === "running" || r.status === "review") ? { action: AUTOMATION_ACTIONS[step.action], wait: describeWait(step.waitMinutes) } : null,
-        preview,
+        id: s.id, kind: s.kind, action: s.action, actionLabel: AUTOMATION_ACTIONS[s.action.action]?.label ?? s.action.action, createdAt: s.createdAt, triggeredAt: r.triggeredAt, triggerKey: r.triggerKey,
+        automation: a, customer: c ? { id: c.id, name: customerName(c), email: c.email, phone: c.phone } : null, subjectType: r.subjectType, subjectId: r.subjectId,
+        preview: await previewStep(s, r).catch(() => null),
       });
     }
     return out;
   });
 
-  app.post<{ Params: { id: string } }>("/runs/:id/review", async (req) => {
+  app.post<{ Params: { id: string } }>("/steps/:id/review", async (req) => {
     const { decision } = parse(z.object({ decision: z.enum(["send", "skip", "stop"]) }), req.body);
-    const r = await reviewStep(req.user.companyId, req.params.id, decision);
-    if (!r) throw new HttpError(400, "It isn't waiting for review any more");
-    return r;
+    const s = await reviewStep(req.user.companyId, req.params.id, decision, req.user.sub);
+    if (!s) throw new HttpError(400, "It isn't waiting for review any more");
+    return s;
   });
 
+  /** Stop a run for a customer (what's still waiting won't happen; no stop actions). */
   app.post<{ Params: { id: string } }>("/runs/:id/stop", async (req) => {
-    const [r] = await db.update(automationRuns).set({ status: "stopped", stoppedReason: "Stopped by the office", nextAt: null, finishedAt: new Date() })
-      .where(and(eq(automationRuns.id, req.params.id), eq(automationRuns.companyId, req.user.companyId), inArray(automationRuns.status, ["running", "review"]))).returning();
-    if (!r) throw new HttpError(400, "It isn't running");
-    return r;
+    const [row] = await db.select({ r: automationRuns, a: automations }).from(automationRuns).innerJoin(automations, eq(automations.id, automationRuns.automationId))
+      .where(and(eq(automationRuns.id, req.params.id), eq(automationRuns.companyId, req.user.companyId)));
+    if (!row || row.r.status !== "running") throw new HttpError(400, "It isn't running");
+    await stopRun(row.a, row.r, "Stopped by the office", new Date(), { stopActions: false });
+    return { ok: true };
   });
 
-  /** Adds ready-made templates and automations (all off), like Homeworks' defaults. Skips any already there by name. */
-  app.post("/starter", admin, async (req) => {
-    const { companyId, sub } = req.user;
-    const have = new Set((await db.select({ name: messageTemplates.name }).from(messageTemplates).where(eq(messageTemplates.companyId, companyId))).map((t) => t.name));
-    const ids: Record<string, string> = {};
-    for (const t of STARTER_TEMPLATES) {
-      if (have.has(t.name)) { ids[t.key] = (await db.select({ id: messageTemplates.id }).from(messageTemplates).where(and(eq(messageTemplates.companyId, companyId), eq(messageTemplates.name, t.name))))[0].id; continue; }
-      const [row] = await db.insert(messageTemplates).values({ companyId, kind: t.kind, name: t.name, subject: t.subject ?? null, body: t.body }).returning();
-      ids[t.key] = row.id;
+  /* ── History ── */
+
+  const historyQuery = z.object({
+    kind: z.enum(["simple", "sequence"]).optional(), automationId: z.string().uuid().optional(), customerId: z.string().uuid().optional(),
+    status: z.string().max(60).optional(), q: z.string().max(100).optional(), before: z.string().datetime().optional(), limit: z.coerce.number().int().min(1).max(200).default(50),
+    skipped: z.enum(["0", "1"]).optional(),
+  });
+
+  /** Sequence History (and the customer tab): runs, newest first, with their actions. */
+  app.get("/runs", async (req) => {
+    const { companyId } = req.user;
+    const q = parse(historyQuery, req.query);
+    const where = and(eq(automationRuns.companyId, companyId),
+      q.kind ? eq(automations.kind, q.kind) : undefined,
+      q.automationId ? eq(automationRuns.automationId, q.automationId) : undefined,
+      q.customerId ? eq(automationRuns.customerId, q.customerId) : undefined,
+      q.status ? inArray(automationRuns.status, q.status.split(",")) : q.skipped === "1" ? undefined : sql`${automationRuns.status} <> 'skipped'`,
+      q.before ? lt(automationRuns.createdAt, new Date(q.before)) : undefined,
+      q.q ? or(ilike(automations.name, `%${q.q}%`), sql`concat_ws(' ', ${customers.firstName}, ${customers.lastName}, ${customers.companyName}) ilike ${`%${q.q}%`}`) : undefined);
+    const rows = await db.select({ r: automationRuns, a: { id: automations.id, name: automations.name, kind: automations.kind, number: automations.number }, c: customers }).from(automationRuns)
+      .innerJoin(automations, eq(automations.id, automationRuns.automationId)).leftJoin(customers, eq(customers.id, automationRuns.customerId))
+      .where(where).orderBy(desc(automationRuns.createdAt)).limit(q.limit);
+    const steps = rows.length ? await db.select().from(automationSteps).where(inArray(automationSteps.runId, rows.map((r) => r.r.id))).orderBy(asc(automationSteps.kind), asc(automationSteps.idx)) : [];
+    return {
+      runs: rows.map(({ r, a, c }) => ({
+        id: r.id, status: r.status, reason: r.reason, triggerKey: r.triggerKey, blockIndex: r.blockIndex, triggeredAt: r.triggeredAt, createdAt: r.createdAt, finishedAt: r.finishedAt,
+        subjectType: r.subjectType, subjectId: r.subjectId, automation: a, customer: c ? { id: c.id, name: customerName(c) } : null,
+        steps: steps.filter((s) => s.runId === r.id).map((s) => ({ id: s.id, kind: s.kind, idx: s.idx, action: s.action, dueAt: s.dueAt, status: s.status, detail: s.detail, doneAt: s.doneAt })),
+      })),
+      more: rows.length === q.limit ? rows[rows.length - 1].r.createdAt : null,
+    };
+  });
+
+  /** Automation History: each action done (or skipped, or failed), newest first. */
+  app.get("/history", async (req) => {
+    const { companyId } = req.user;
+    const q = parse(historyQuery, req.query);
+    const where = and(eq(automationSteps.companyId, companyId), inArray(automationSteps.status, q.status ? q.status.split(",") : ["done", "skipped", "failed"]),
+      q.kind ? eq(automations.kind, q.kind) : undefined,
+      q.automationId ? eq(automationSteps.automationId, q.automationId) : undefined,
+      q.customerId ? eq(automationSteps.customerId, q.customerId) : undefined,
+      q.before ? lt(automationSteps.doneAt, new Date(q.before)) : undefined,
+      q.q ? or(ilike(automations.name, `%${q.q}%`), ilike(automationSteps.detail, `%${q.q}%`)) : undefined);
+    const rows = await db.select({ s: automationSteps, triggerKey: automationRuns.triggerKey, a: { id: automations.id, name: automations.name, kind: automations.kind, number: automations.number }, c: customers })
+      .from(automationSteps).innerJoin(automationRuns, eq(automationRuns.id, automationSteps.runId)).innerJoin(automations, eq(automations.id, automationSteps.automationId))
+      .leftJoin(customers, eq(customers.id, automationSteps.customerId))
+      .where(where).orderBy(desc(automationSteps.doneAt)).limit(q.limit);
+    return {
+      rows: rows.map(({ s, triggerKey, a, c }) => ({ id: s.id, at: s.doneAt, status: s.status, detail: s.detail, kind: s.kind, action: s.action.action, triggerKey, automation: a, customer: c ? { id: c.id, name: customerName(c) } : null })),
+      more: rows.length === q.limit ? rows[rows.length - 1].s.doneAt : null,
+    };
+  });
+
+  /* ── A customer's automations (their page → Automations) ── */
+
+  const customerOf = async (companyId: string, id: string) => {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new HttpError(404, "Customer not found");
+    const [c] = await db.select().from(customers).where(and(eq(customers.id, id), eq(customers.companyId, companyId)));
+    if (!c) throw new HttpError(404, "Customer not found");
+    return c;
+  };
+
+  app.get<{ Params: { customerId: string } }>("/customer/:customerId", async (req) => {
+    const { companyId } = req.user;
+    const c = await customerOf(companyId, req.params.customerId);
+    const list = await db.select({ id: automations.id, number: automations.number, kind: automations.kind, name: automations.name, enabled: automations.enabled, def: automations.def })
+      .from(automations).where(eq(automations.companyId, companyId)).orderBy(asc(automations.number));
+    return { automations: list.map(({ def, ...a }) => ({ ...a, trigger: def.kind === "simple" ? def.trigger.key : def.blocks[0]?.trigger.key ?? null, off: c.automationOffIds.includes(a.id) })) };
+  });
+
+  app.put<{ Params: { customerId: string; automationId: string } }>("/customer/:customerId/:automationId", async (req) => {
+    const { on } = parse(z.object({ on: z.boolean() }), req.body);
+    const { companyId } = req.user;
+    const c = await customerOf(companyId, req.params.customerId);
+    const a = await find(companyId, req.params.automationId);
+    const off = on ? c.automationOffIds.filter((x) => x !== a.id) : [...new Set([...c.automationOffIds, a.id])];
+    await db.update(customers).set({ automationOffIds: off }).where(eq(customers.id, c.id));
+    if (!on) {
+      // What's still waiting for them won't happen.
+      const now = new Date();
+      const running = await db.select().from(automationRuns).where(and(eq(automationRuns.automationId, a.id), eq(automationRuns.customerId, c.id), eq(automationRuns.status, "running")));
+      for (const r of running) await stopRun(a, r, "Turned off for this customer", now, { stopActions: false });
     }
-    const haveA = new Set((await db.select({ name: automations.name }).from(automations).where(eq(automations.companyId, companyId))).map((a) => a.name));
-    let added = 0;
-    for (const a of starterAutomations(ids, sub)) {
-      if (haveA.has(a.name)) continue;
-      await db.insert(automations).values({ ...values(a), companyId, createdById: sub, enabled: false });
-      added++;
-    }
-    return { added };
+    return { ok: true, off: !on };
+  });
+
+  /* ── Homeworks import ── */
+
+  app.post("/import", { preHandler: requireRole("admin", AREA), bodyLimit: 5 * 1024 * 1024 }, async (req) => {
+    const b = parse(automationImportSchema, req.body);
+    return importHomeworks(req.user.companyId, req.user.sub, b);
   });
 };
 
-const STOP_TEXT = "\nReply STOP to opt out.";
-const STARTER_TEMPLATES: { key: string; kind: "email" | "text"; name: string; subject?: string; body: string }[] = [
-  { key: "estFollowEmail", kind: "email", name: "Estimate follow-up (customer)", subject: "Your estimate from {company}",
-    body: "Hi {first_name},\n\nJust checking in on your estimate for {estimate_title} ({estimate_total}). You can see it and accept it here:\n{estimate_link}\n\nAny questions? Just reply to this email.\n\nThank you,\n{company}" },
-  { key: "estFollowText", kind: "text", name: "Estimate follow-up (text)", body: `Hi {first_name}, it's {company}. Any questions about your estimate? You can accept it here: {estimate_link}${STOP_TEXT}` },
-  { key: "estLastEmail", kind: "email", name: "Estimate follow-up: last check-in (customer)", subject: "Still interested? Your estimate from {company}",
-    body: "Hi {first_name},\n\nWe don't want you to lose your spot on our schedule. Your estimate for {estimate_title} is here whenever you're ready:\n{estimate_link}\n\nIf the timing or price isn't right, reply and let us know. We're happy to adjust it.\n\n{company}" },
-  { key: "invPastDueEmail", kind: "email", name: "Invoice past due (customer)", subject: "Invoice {invoice_number} is past due",
-    body: "Hi {first_name},\n\nA friendly reminder that invoice {invoice_number} for {invoice_total} was due {invoice_due}. The balance is {invoice_balance}.\n\nPay online (card or bank account): {pay_link}\n\nAlready paid? Thank you, and please ignore this.\n\n{company}" },
-  { key: "invPastDueText", kind: "text", name: "Invoice past due (text)", body: `Hi {first_name}, {company} here. Invoice {invoice_number} ({invoice_balance}) is past due. Pay online: {pay_link}${STOP_TEXT}` },
-  { key: "visitReminderText", kind: "text", name: "Reminder: your job is on the schedule (text)", body: `Hi {first_name}, {company} is scheduled at {visit_address} on {visit_date}. Please leave gates unlocked and pets inside.${STOP_TEXT}` },
-  { key: "visitDoneEmail", kind: "email", name: "Your property has been serviced (customer)", subject: "We serviced your property today",
-    body: "Hi {first_name},\n\nWe completed {visit_title} at {visit_address} today. Please keep kids and pets off the lawn until it's dry.\n\nQuestions? Just reply to this email.\n\nThank you,\n{company}" },
-  { key: "cardOnFileEmail", kind: "email", name: "Add a card on file (new customer)", subject: "Welcome to {company}",
-    body: "Hi {first_name},\n\nWelcome, and thank you for choosing {company}! To make paying easy, you can save a card or bank account in your account:\n{portal_link}\n\nYou'll get an email code to sign in; there's no password.\n\n{company}" },
-];
+/**
+ * Brings in Homeworks' automations and sequences, all turned OFF (so nothing goes to a customer
+ * until someone checks each one and turns it on). Templates are matched to the ones imported from
+ * Homeworks (by their Homeworks id, then by name); missing customer tags are made; people are
+ * matched by name. Ones already imported are left alone.
+ */
+export async function importHomeworks(companyId: string, by: string, b: AutomationImport) {
+  const tpls = await db.select({ id: templates.id, channel: templates.channel, name: templates.name, importedFrom: templates.importedFrom }).from(templates).where(eq(templates.companyId, companyId));
+  const tagRows = await db.select({ id: crmTags.id, name: crmTags.name }).from(crmTags).where(eq(crmTags.companyId, companyId));
+  const tags = new Map(tagRows.map((t) => [t.name.trim().toLowerCase(), t.id]));
+  const cats = new Map((await db.select({ id: todoCategories.id, name: todoCategories.name }).from(todoCategories).where(eq(todoCategories.companyId, companyId))).map((t) => [t.name.trim().toLowerCase(), t.id]));
+  const services = new Map((await db.select({ id: serviceTypes.id, name: serviceTypes.name }).from(serviceTypes).where(eq(serviceTypes.companyId, companyId))).map((t) => [t.name.trim().toLowerCase(), t.id]));
+  const people = (await db.select({ id: employees.id, first: employees.firstName, last: employees.lastName }).from(employees).where(eq(employees.companyId, companyId)))
+    .map((p) => ({ id: p.id, name: [p.first, p.last].filter(Boolean).join(" ").toLowerCase() }));
+  const had = new Set((await db.select({ f: automations.importedFrom }).from(automations).where(eq(automations.companyId, companyId))).map((r) => r.f));
+  const notes: string[] = [];
+  let tagsMade = 0;
+  let missingTemplates = 0;
 
-function starterAutomations(t: Record<string, string>, me: string): AutomationInput[] {
-  const base: Pick<AutomationInput, "enabled" | "onlyTagIds" | "exceptTagIds" | "review" | "description" | "daysBefore" | "tagId"> = { enabled: false, onlyTagIds: [], exceptTagIds: [], review: false, description: null, daysBefore: null, tagId: null };
-  const step = (waitMinutes: number, action: AutomationStep["action"], extra: Partial<AutomationStep> = {}): AutomationStep => ({ waitMinutes, action, employeeIds: [], templateId: null, tagId: null, todoTitle: null, ...extra });
-  return [
-    { ...base, name: "7 days to close: estimate follow-up", description: "Follows up on a sent estimate until it's answered, then hands it to the office.", trigger: "estimate_sent", stopWhen: ["estimate_answered", "customer_cancelled"],
-      steps: [step(2 * 1440, "email_customer", { templateId: t.estFollowEmail }), step(2 * 1440, "text_customer", { templateId: t.estFollowText }), step(3 * 1440, "email_customer", { templateId: t.estLastEmail }), step(0, "create_todo", { todoTitle: "Call about estimate {estimate_number}", employeeIds: [me] })] },
-    { ...base, name: "Overdue invoice follow-up", description: "Reminds the customer about a past-due invoice until it's paid.", trigger: "invoice_past_due", stopWhen: ["invoice_paid", "customer_cancelled"],
-      steps: [step(0, "email_customer", { templateId: t.invPastDueEmail }), step(7 * 1440, "text_customer", { templateId: t.invPastDueText }), step(7 * 1440, "create_todo", { todoTitle: "Call about overdue invoice {invoice_number}", employeeIds: [me] })] },
-    { ...base, name: "Reminder: your job is on the schedule", description: "Texts the customer the day before a work order.", trigger: "visit_upcoming", daysBefore: 1, stopWhen: ["visit_closed", "customer_cancelled"],
-      steps: [step(0, "text_customer", { templateId: t.visitReminderText })] },
-    { ...base, name: "Your property has been serviced", description: "Emails the customer when a work order is completed.", trigger: "visit_completed", stopWhen: [],
-      steps: [step(0, "email_customer", { templateId: t.visitDoneEmail })] },
-    { ...base, name: "New customer: card on file request", description: "Welcomes a new customer and asks them to save a card or bank account.", trigger: "customer_added", stopWhen: ["customer_cancelled"],
-      steps: [step(15, "email_customer", { templateId: t.cardOnFileEmail })] },
-  ];
+  const pickText = (p: { value?: string | null; text?: string | null } | null | undefined) => {
+    const t = p?.text?.trim();
+    return t && !/^-+\s*please select\s*-+$/i.test(t) ? t : null;
+  };
+  const tagId = async (name: string | null) => {
+    if (!name) return null;
+    const k = name.trim().toLowerCase();
+    if (tags.has(k)) return tags.get(k)!;
+    const [t] = await db.insert(crmTags).values({ companyId, name: name.trim().slice(0, 60) }).onConflictDoNothing().returning();
+    const id = t?.id ?? (await db.select({ id: crmTags.id }).from(crmTags).where(and(eq(crmTags.companyId, companyId), sql`lower(${crmTags.name}) = ${k}`)))[0]?.id;
+    if (t) tagsMade++;
+    if (id) tags.set(k, id);
+    return id ?? null;
+  };
+  const template = (channel: "email" | "text", p: { value?: string | null; text?: string | null } | null | undefined) => {
+    const name = pickText(p);
+    if (!name && !p?.value) return null;
+    const hit = tpls.find((t) => t.channel === channel && p?.value && t.importedFrom === `homeworks:${p.value}`) ?? tpls.find((t) => t.channel === channel && name && t.name.trim().toLowerCase() === name.toLowerCase());
+    if (!hit) missingTemplates++;
+    return hit?.id ?? null;
+  };
+  const person = (p: { text?: string | null } | null | undefined) => {
+    const n = pickText(p)?.toLowerCase();
+    const hit = n ? people.find((x) => x.name === n) : null;
+    return hit ? [hit.id] : [];
+  };
+  const cond = async (value: string, attrs: string[]): Promise<AutomationCond | null> => {
+    const key = triggerKeyFor(value);
+    if (!key) return null;
+    const p = triggerDef(key)?.param;
+    const c: AutomationCond = { key, tagIds: [], categoryIds: [], serviceIds: [] };
+    for (const at of attrs) {
+      if (p === "tags") { const id = await tagId(at); if (id) c.tagIds.push(id); }
+      if (p === "categories") { const id = cats.get(at.trim().toLowerCase()); if (id) c.categoryIds.push(id); }
+      if (p === "services") { const id = services.get(at.replace(/\s*-\s*\$[\d,.]+$/, "").trim().toLowerCase()); if (id) c.serviceIds.push(id); }
+    }
+    return c;
+  };
+  type HwAction = AutomationImport["sequences"][number]["blocks"][number]["actions"][number];
+  const action = async (x: HwAction, keepWait: boolean): Promise<AutomationAction | null> => {
+    const key = x.action?.value as ActionKey | undefined;
+    if (!key || !ACTION_KEYS.includes(key)) return null;
+    const d = AUTOMATION_ACTIONS[key];
+    return {
+      waitMinutes: keepWait && !x.instant ? x.days * 1440 + x.hours * 60 + x.minutes : 0, action: key,
+      templateId: "channel" in d ? template(d.channel, d.channel === "email" ? x.email : x.text) : null,
+      employeeIds: d.to === "employee" ? person(x.employee) : [], tagId: "needs" in d && d.needs === "tag" ? await tagId(pickText(x.tag)) : null,
+      todoTitle: "needs" in d && d.needs === "todo" ? (x.title?.trim() || null) : null,
+    };
+  };
+
+  let number = await nextNumber(companyId);
+  let added = 0;
+  let already = 0;
+  const later: { id: string; sub: string }[] = [];
+  for (const h of b.automations) {
+    const importedFrom = `homeworks:auto:${h.id}`;
+    if (had.has(importedFrom)) { already++; continue; }
+    const key = triggerKeyFor(h.trigger?.value ?? "");
+    const actKey = h.action?.value as ActionKey | undefined;
+    if (!key || !actKey || !ACTION_KEYS.includes(actKey)) { notes.push(`"${h.title}": its trigger or action isn't one Crewdesk has, so it was left out`); continue; }
+    const d = triggerDef(key)!;
+    const delay = homeworksDelay(h.delay?.value);
+    const ad = AUTOMATION_ACTIONS[actKey];
+    let runAt: string | null = null;
+    if (d.param === "datetime" && h.date) {
+      const day = new Date(`${h.date} 12:00 UTC`);
+      const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i.exec(h.time?.trim() ?? "");
+      if (!Number.isNaN(day.getTime()) && m) {
+        const h12 = Number(m[1]);
+        const hour = m[3] ? (h12 % 12) + (m[3].toUpperCase() === "PM" ? 12 : 0) : h12;
+        runAt = `${day.toISOString().slice(0, 10)}T${String(hour).padStart(2, "0")}:${m[2]}`;
+      }
+    }
+    const subValue = h.subAction?.value ?? "none";
+    const subAction: SubAction = subValue === "none" || !subValue ? "none" : subValue === "stop_automation" ? "stop_automation" : "run_automation";
+    const trig = await cond(key, d.param === "tags" ? [pickText(h.tag)].filter((x): x is string => !!x) : []);
+    const def: AutomationDef = {
+      kind: "simple", trigger: trig!, runAt, delayMinutes: d.before || d.param === "datetime" ? 0 : delay.delayMinutes, daysBefore: d.before ? delay.daysBefore ?? d.before[0] : null,
+      action: {
+        waitMinutes: 0, action: actKey, templateId: "channel" in ad ? template(ad.channel, ad.channel === "email" ? h.emailTemplate : h.textTemplate) : null,
+        employeeIds: ad.to === "employee" ? person(h.employee) : [], tagId: "needs" in ad && ad.needs === "tag" ? await tagId(pickText(h.actionTag)) : null, todoTitle: null,
+      },
+      subAction, subAutomationId: null, subDelayMinutes: subAction === "run_automation" ? homeworksDelay(h.subDelay?.value).delayMinutes : 0,
+    };
+    const [row] = await db.insert(automations).values({
+      companyId, number: number++, kind: "simple", name: h.title.slice(0, 150), description: h.notes?.trim() || null, labels: h.tags.slice(0, 20).map((t) => t.slice(0, 40)),
+      enabled: false, review: !!h.review, def, importedFrom, createdById: by, updatedById: by,
+    }).onConflictDoNothing().returning();
+    if (!row) continue;
+    added++;
+    if (subAction === "run_automation" && h.subAutomation?.value) later.push({ id: row.id, sub: `homeworks:auto:${h.subAutomation.value}` });
+  }
+
+  for (const s of b.sequences) {
+    const importedFrom = `homeworks:seq:${s.id}`;
+    if (had.has(importedFrom)) { already++; continue; }
+    const blocks = [];
+    let bad = "";
+    for (const blk of s.blocks) {
+      const trig = await cond(blk.trigger.value, blk.trigger.attrs);
+      if (!trig) { bad = `its trigger "${blk.trigger.text ?? blk.trigger.value}" isn't one Crewdesk has`; break; }
+      const and: AutomationCond[] = [];
+      const orC: AutomationCond[] = [];
+      for (const [gi, group] of blk.when.entries()) {
+        for (const w of group) {
+          const c = await cond(w.value, w.attrs);
+          if (!c) continue;
+          const uses = triggerDef(c.key)!.use as readonly string[];
+          if (gi > 0 && uses.includes("if")) orC.push(c); else and.push(c);
+        }
+      }
+      const actions = (await Promise.all(blk.actions.map((x) => action(x, true)))).filter((x): x is AutomationAction => !!x).sort((x, y) => x.waitMinutes - y.waitMinutes);
+      if (!actions.length) { bad = "a block has no actions Crewdesk can do"; break; }
+      blocks.push({ trigger: trig, or: orC, and, actions });
+    }
+    if (bad || !blocks.length) { notes.push(`"${s.title}": ${bad || "it has no blocks"}, so it was left out`); continue; }
+    const stops = (await Promise.all(s.stops.map((x) => cond(x.value, x.attrs)))).filter((x): x is AutomationCond => !!x);
+    const stopActions = (await Promise.all(s.stopActions.map((x) => action(x, false)))).filter((x): x is AutomationAction => !!x);
+    const def: AutomationDef = { kind: "sequence", blocks, stops, stopActions };
+    const [row] = await db.insert(automations).values({
+      companyId, number: number++, kind: "sequence", name: s.title.slice(0, 150), description: s.description?.trim() || null, enabled: false, review: !!s.review, def, importedFrom, createdById: by, updatedById: by,
+    }).onConflictDoNothing().returning();
+    if (row) added++;
+  }
+
+  // "Run another automation": point at the imported one.
+  for (const l of later) {
+    const [next] = await db.select({ id: automations.id }).from(automations).where(and(eq(automations.companyId, companyId), eq(automations.importedFrom, l.sub)));
+    const [row] = await db.select().from(automations).where(eq(automations.id, l.id));
+    if (next && row.def.kind === "simple") await db.update(automations).set({ def: { ...row.def, subAutomationId: next.id } }).where(eq(automations.id, l.id));
+  }
+  return { added, already, notes, tagsMade, missingTemplates };
 }
 
 export default routes;

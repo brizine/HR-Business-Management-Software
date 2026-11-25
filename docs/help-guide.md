@@ -572,31 +572,50 @@ Texts go from your **Talkroute number**, so customers keep texting the number th
 
 ### Automations
 
-**Customers → Automations** runs emails, texts, tags and to-dos on their own when something happens, like Homeworks'
-automations and sequences.
+**Marketing → Automations** sends emails and texts, adds or removes tags, and makes to-dos on its own when something
+happens, laid out like Homeworks: **Automations**, **Sequence Automations**, **Sequence History**, **Review**,
+**Automation History**, and links to the text and email templates (in **Templates**). Admins in Customers & billing
+set them up; managers can see them and work the Review list.
 
-- **When:** an estimate is sent, accepted, declined or changes are asked for; an invoice is sent, becomes past due
-  or is paid in full; a payment is made; a work order is added, completed or skipped, or a set number of days
-  before it (at 8 AM); a new customer is added; a tag is added to or taken off a customer.
-- **Who:** optionally only customers with certain tags, and never customers with others. Cancelled customers are
-  skipped, and sample customers are only used in the test company.
-- **Steps:** each step waits (instantly, or minutes, hours or days after the step before), then emails or texts the
-  customer from a template, emails or notifies people in the office, adds or takes off a tag, or makes a to-do due
-  8 AM the next day. Texts only go out 9 AM to 6 PM; outside that they wait for 9 AM.
-- **Stop when:** e.g. the estimate is answered, the invoice is paid, the work order is done, the tag comes off, or the
-  customer is cancelled. The rest of the steps are skipped.
-- **Once each:** an automation runs once per estimate, invoice, payment, work order, new customer or tag change, and
-  only for things that happen after it's turned on. Turning it off stops its running ones.
-- **Review first:** with this ticked, customer emails and texts wait in **Review**, showing exactly what will be
-  sent. **Send**, **Skip this step**, or **Stop for this customer**.
-- **Templates:** email and text templates with fill-ins (click one to add it), such as {first_name},
-  {estimate_link}, {invoice_balance}, {pay_link} and {visit_date}. The preview uses sample values. A template in use
-  can't be deleted.
-- **Starter automations:** **Add the starter automations** adds five, all off: a 7-day estimate follow-up, an
-  overdue invoice follow-up, a "your job is on the schedule" text the day before, a "your property has been
-  serviced" email, and a card-on-file request for new customers. Read them, adjust the templates, then turn on the
-  ones you want.
-- **History** shows every run and what each step did; a customer's page has an **Automations** tab with theirs.
+- **Automations** (one trigger, one action): name it, pick the **trigger condition** (a work order is added,
+  completed, skipped, started or finished; before a work order, to-do or equipment maintenance (1, 2 or 3 days
+  before, at 9 AM); a to-do is added or done; repair orders; an estimate is created, sent, accepted, declined,
+  changes are asked for, or isn't answered 3 days after it's sent; an invoice is sent, past due, 1–30 days before
+  it's due, paid in full, partly paid or voided; a payment is made, declined or its receipt sent; a card or bank
+  account is added or removed; a new customer; a customer cancelled; a tag added or removed; or a set date and
+  time), the **run time** (instantly, 2 or 15 minutes, 1 hour, or 1–30 days after), and the **action**: text or
+  email the customer, the company owner or employees, a push notification, or add or remove a tag. **Sub action**
+  can then run another automation (after a wait) or turn this one off after it runs once.
+- **Sequence Automations:** **IF** a trigger happens (**OR** others), **AND** conditions are true (customer has or
+  doesn't have a tag, has no card on file, has no repeating service, is cancelled; the estimate is a draft or
+  includes a service; the to-do is in a category; the invoice is paid or partly paid), do the **actions**, each at
+  its own **waiting period** (instantly, or days, hours and minutes after the trigger). **Action** adds one; a
+  sequence can also **Create & assign a to-do** due 8 AM the next day. **ELSE trigger** adds another block; the
+  first block whose trigger and conditions match runs. **Stop when** ends it for that customer (e.g. the estimate is
+  accepted or declined, the invoice is paid in full, a tag is removed), and **Stop action** does something right
+  then (e.g. email the owner).
+- **Templates:** every message uses a template from **Templates**, so tags like {{CUSTOMER_FIRST_NAME}},
+  {{ESTIMATE_LINK}} or {{EVENT_DATE}} fill in for that customer, estimate, invoice or work order. A template an
+  automation uses can't be deleted. Team messages (owner and employee emails) have no unsubscribe link.
+- **Texts** only go out **9 AM to 6 PM** (company time); one due at night waits until 9 AM.
+- **Once each, from when it's on:** each runs once per thing that happened (one per estimate, invoice, work order,
+  tag change…), and only for things that happen after it's turned on. A repeating work order counts once. Turning
+  one off stops what's still waiting. Changes apply to new runs; ones already running keep their actions.
+- **Review before execution:** each action waits in **Review**, showing the message filled in for that customer.
+  **Send now**, **Skip** just that one, or **Stop for this customer**. My Day shows how many are waiting.
+- **For one customer:** their page's **Automations** tab turns any automation off (or back on) just for them, and
+  lists what's run for them, with **Stop** for one still running.
+- **History:** **Sequence History** lists each run (open **Details** for each action and when it's due or what it
+  did; tick **Show skipped** for ones whose conditions weren't met). **Automation History** lists every action done,
+  skipped or failed, with the reason (e.g. "Emailed Amy Aster", "Texting isn't connected", "They unsubscribed").
+- **Leaves things alone:** emails skip customers who unsubscribed, texts skip ones who replied STOP, sample
+  customers are only used in the test company, and an action about an invoice that's been voided, a work order
+  that's no longer coming up or an estimate already answered is skipped.
+- **Import from Homeworks:** **Import from Homeworks** (admins) reads the automations file Crewdesk made from
+  Homeworks: all their automations and sequences come in **turned off**, matched to the Homeworks templates (import
+  those in Templates first), with any missing customer tags added. Ones marked **Needs attention** are missing a
+  template or tag (Homeworks had none picked); ones marked **Can't run in Crewdesk** use meetings, reviews, work
+  requests or tips, which Crewdesk doesn't have. A sequence with only some such blocks still runs the rest.
 - Automations check every few minutes, so "instantly" means within about five minutes.
 
 ### Online payments and the customer portal

@@ -20,7 +20,7 @@ import { LinkedEstimates } from "@/components/estimates";
 import { Popover } from "@/components/customer-list";
 import { VisitFiles } from "@/components/visit-files";
 import { CustomerTexts } from "@/components/texting";
-import { RunHistory } from "@/components/automations";
+import { CustomerAutomations } from "@/components/automations";
 import { CustomerSchedulingPrefs } from "@/components/waitlist";
 import { AccountBox, CallNotes, CustomerNotesBox, DeliveryBox, InvoiceDefaultsBox, JobsBox, PayPicker, PaymentsBox, PortalBox, StatsBox, Timeline } from "@/components/customer-page";
 
@@ -131,12 +131,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
         ))}
       </nav>
 
-      {tab === "automations" && (
-        <div className="stack">
-          <p className="muted" style={{ margin: 0 }}>Automations that have run, or are running, for {c.name}. Stop one to end it for them. <a href="/automations">Set up automations</a></p>
-          <RunHistory customerId={id} />
-        </div>
-      )}
+      {tab === "automations" && <CustomerAutomations customerId={id} name={c.name} />}
       {tab === "communication" && (
         <div className="cp-grid">
           <div className="cp-col">

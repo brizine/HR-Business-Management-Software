@@ -1666,3 +1666,75 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 /* Text tabs on the segmented control (the calendar's buttons are 34px icons). */
 .text-tabs button { width: auto; height: 28px; padding: 0 12px; font-size: 13px; font-weight: 600; white-space: nowrap; }
 .text-tabs button.on, .text-tabs button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+
+/* Marketing → Automations (like Homeworks) */
+.au-tab-link { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; font-size: 13px; font-weight: 600; color: var(--muted); text-decoration: none; white-space: nowrap; border-radius: 6px; }
+.au-tab-link:hover { color: var(--text); }
+.au-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.au-filters input[type="search"] { width: 220px; max-width: 100%; }
+.au-filters select { width: auto; max-width: 240px; }
+.au-table td { vertical-align: top; font-size: 13px; }
+.au-table td strong { font-size: 14px; }
+.au-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.au-flags .badge { font-size: 11px; text-decoration: none; }
+.au-notes { color: var(--muted); font-size: 12px; max-width: 260px; }
+.au-row-actions { white-space: nowrap; text-align: right; }
+.au-row-actions .btn { margin-left: 4px; }
+.au-err { color: var(--bad); font-size: 12px; max-width: 220px; }
+.au-form { display: grid; gap: 14px; max-width: 900px; grid-template-columns: minmax(0, 1fr); }
+.au-seq { max-width: 1100px; }
+.au-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.au-form .req { color: var(--bad); }
+.au-form .row > label { flex: 1 1 200px; }
+.au-notice { background: var(--info-bg); border: 1px solid color-mix(in srgb, var(--primary) 25%, var(--border)); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+.au-na { margin: 0; font-size: 13px; color: var(--warn); }
+.au-problems { background: var(--bad-bg); color: var(--bad); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+.au-problems ul { margin: 4px 0 0; padding-left: 18px; }
+.au-foot { display: flex; justify-content: space-between; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+.au-toggles { display: flex; flex-wrap: wrap; gap: 6px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.au-toggles legend { font-size: 12px; color: var(--muted); font-weight: 500; margin-bottom: 4px; padding: 0; }
+.au-labels { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border: 1px solid var(--border); border-radius: 8px; padding: 6px; background: var(--surface); }
+.au-labels input { border: 0; flex: 1 1 140px; min-width: 120px; padding: 4px; background: transparent; }
+.au-x { border: 0; background: transparent; cursor: pointer; color: inherit; padding: 0 0 0 2px; font-size: 14px; line-height: 1; }
+.au-blocks { display: grid; gap: 12px; background: var(--bg); border-radius: 10px; padding: 12px; }
+.au-block { border: 1.5px dashed color-mix(in srgb, var(--muted) 55%, var(--border)); border-radius: 10px; padding: 12px; display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); background: color-mix(in srgb, var(--bg) 60%, var(--surface)); }
+.au-cond { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 10px; }
+.au-cond-body { display: grid; gap: 8px; min-width: 0; }
+.au-cond-body select { max-width: 420px; }
+.au-pill { font-size: 11px; font-weight: 700; padding: 6px 8px; border-radius: 6px; color: #fff; background: var(--text); text-align: center; min-width: 44px; letter-spacing: .02em; }
+.au-pill.if { background: var(--primary); color: var(--primary-ink); }
+.au-pill.else { background: #6d28d9; }
+.au-pill.or { background: #b45309; }
+.au-pill.and { background: #111827; }
+.au-pill.stop { background: var(--bad); }
+.au-action { display: grid; grid-template-columns: minmax(0, 250px) minmax(0, 1fr) auto; gap: 14px; align-items: start; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 10px; }
+.au-action.untimed { grid-template-columns: minmax(0, 1fr) auto; }
+.au-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; align-items: start; min-width: 0; }
+.au-fields .au-toggles { grid-column: 1 / -1; }
+.au-wait { display: grid; gap: 6px; }
+.au-wait-label { font-size: 12px; color: var(--muted); font-weight: 500; }
+.au-wait-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.au-unit { display: inline-flex; align-items: stretch; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.au-unit input { width: 44px; border: 0; border-radius: 0; padding: 4px 6px; }
+.au-unit b { background: var(--text); color: var(--surface); font-size: 12px; padding: 6px 7px; font-weight: 600; }
+.btn.au-and { background: #111827; color: #fff; border-color: #111827; }
+.btn.au-or { color: #b45309; border-color: #f59e0b; background: color-mix(in srgb, #f59e0b 10%, var(--surface)); }
+.btn.au-act { background: var(--bad); color: #fff; border-color: var(--bad); }
+.btn.au-else { background: var(--text); color: var(--surface); border-color: var(--text); }
+.au-stop { border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); }
+.au-review { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
+.au-review-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: start; }
+.au-preview { display: grid; gap: 6px; }
+.au-frame { width: 100%; height: 300px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+.au-steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.au-steps li { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; font-size: 13px; }
+.au-steps-row td { background: var(--bg); }
+.au-cust { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.au-cust li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+.au-import { position: fixed; right: 16px; top: 72px; z-index: 50; max-width: min(420px, calc(100vw - 32px)); box-shadow: 0 8px 24px rgba(0,0,0,.18); display: grid; gap: 6px; }
+@media (max-width: 760px) {
+  .au-two, .au-action, .au-action.untimed { grid-template-columns: minmax(0, 1fr); }
+  .au-cond { grid-template-columns: minmax(0, 1fr); }
+  .au-pill { justify-self: start; }
+  .au-filters input[type="search"] { width: 100%; }
+}

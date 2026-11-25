@@ -6,6 +6,7 @@ import { customerPaymentMethods, customers, invoicePayments, invoices } from "..
 import { HttpError } from "./errors";
 import { companyToday } from "./payRates";
 import { applyPaymentIntent, stripeCustomerId, stripeFor } from "./stripe";
+import { recordAutomationEvent } from "./automationEvents";
 
 /**
  * Cards and bank accounts on file. Customers save them in the portal (a card or bank account, or
@@ -100,6 +101,7 @@ export async function removeMethod(companyId: string, customerId: string, id: st
 
 /** Takes a method off the customer here (it's gone from Stripe already). */
 export async function forgetMethod(m: Row) {
+  await recordAutomationEvent(m.companyId, m.customerId, m.type === "ach" ? "bank_removed" : "card_removed");
   await db.transaction(async (tx) => {
     await tx.delete(customerPaymentMethods).where(eq(customerPaymentMethods.id, m.id));
     const rest = await tx.select().from(customerPaymentMethods).where(eq(customerPaymentMethods.customerId, m.customerId)).orderBy(asc(customerPaymentMethods.createdAt));
@@ -176,6 +178,7 @@ export async function chargeInvoice(companyId: string, invoiceId: string, o: { m
     if (e instanceof HttpError) throw e;
     const why = chargeError(e);
     if (o.autopay) await db.update(invoices).set({ autopayError: `${paymentMethodLabel(m)}: ${why}`.slice(0, 300), autopayFailedAt: new Date() }).where(eq(invoices.id, inv.id));
+    await recordAutomationEvent(companyId, inv.customerId, "payment_declined", { type: "invoice", id: inv.id });
     throw new HttpError(400, `${paymentMethodLabel(m)}: ${why}`);
   }
 }

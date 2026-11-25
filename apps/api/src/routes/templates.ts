@@ -2,12 +2,13 @@ import type { FastifyPluginAsync } from "fastify";
 import { and, desc, eq, ilike, inArray, lt, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
+  allActions,
   MESSAGE_KINDS, MESSAGE_KIND_NEEDS, SAMPLE_TEMPLATE_VARS, customerName, fillTags, formatMoney, htmlToText, smsSegments, systemTemplate, tagNeeds,
   templateDefaultsSchema, templateImportSchema, templatePreviewSchema, templateSchema, unknownTags,
   type MessageKind, type TemplateChannel,
 } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, customers, emailLog, employees, estimates, invoicePayments, invoices, templates, visits } from "../db/schema";
+import { automations, companies, customers, emailLog, employees, estimates, invoicePayments, invoices, templates, visits } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { emailTransport } from "../lib/channels";
 import { HttpError, parse } from "../lib/errors";
@@ -91,6 +92,9 @@ const routes: FastifyPluginAsync = async (app) => {
     if (t.systemKey) throw new HttpError(400, "Crewdesk's own templates can't be deleted; change the wording, or reset it");
     const used = (await usage(req.user.companyId)).get(t.id);
     if (used?.length) throw new HttpError(400, `It's what goes out with ${used.map((k) => k).join(" and ")}. Pick another template for that first (Defaults tab)`);
+    const autos = (await db.select({ name: automations.name, def: automations.def }).from(automations).where(eq(automations.companyId, req.user.companyId)))
+      .filter((a) => allActions(a.def).some((x) => x.templateId === t.id));
+    if (autos.length) throw new HttpError(400, `It's used by ${autos.slice(0, 3).map((a) => `"${a.name}"`).join(", ")}${autos.length > 3 ? ` and ${autos.length - 3} more` : ""}. Change those automations first`);
     await db.delete(templates).where(eq(templates.id, t.id));
     return { ok: true };
   });

@@ -1,10 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
 import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import { AUTOMATION_ACTIONS, customerName, invoiceBalance, isOverdue, type AutomationAction } from "@crewdesk/shared";
+import { AUTOMATION_ACTIONS, customerName, invoiceBalance, isOverdue } from "@crewdesk/shared";
 import { db } from "../db";
 import {
-  automationRuns, automations, crews, customerCredits, customerTexts, customers, employees, estimates, invoicePayments, invoices, prepayments, todoAssignees, todos, visits,
+  automationSteps, automations, crews, customerCredits, customerTexts, customers, employees, estimates, invoicePayments, invoices, prepayments, todoAssignees, todos, visits,
 } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { parse } from "../lib/errors";
@@ -47,11 +47,11 @@ const routes: FastifyPluginAsync = async (app) => {
       .where(and(eq(visits.companyId, companyId), gte(visits.date, from), lte(visits.date, to))).groupBy(visits.status);
     const jobs = (s: string) => jobRows.find((r) => r.status === s)?.n ?? 0;
 
-    // Automations waiting for review.
-    const review = await db.select({ id: automationRuns.id, at: automationRuns.createdAt, stepIndex: automationRuns.stepIndex, a: { name: automations.name, steps: automations.steps }, c: cust })
-      .from(automationRuns).innerJoin(automations, eq(automations.id, automationRuns.automationId)).leftJoin(customers, eq(customers.id, automationRuns.customerId))
-      .where(and(eq(automationRuns.companyId, companyId), eq(automationRuns.status, "review"))).orderBy(asc(automationRuns.createdAt)).limit(6);
-    const [{ reviewTotal }] = await db.select({ reviewTotal: sql<number>`count(*)::int` }).from(automationRuns).where(and(eq(automationRuns.companyId, companyId), eq(automationRuns.status, "review")));
+    // Automation actions waiting for review.
+    const review = await db.select({ id: automationSteps.id, at: automationSteps.createdAt, action: automationSteps.action, name: automations.name, c: cust })
+      .from(automationSteps).innerJoin(automations, eq(automations.id, automationSteps.automationId)).leftJoin(customers, eq(customers.id, automationSteps.customerId))
+      .where(and(eq(automationSteps.companyId, companyId), eq(automationSteps.status, "review"))).orderBy(asc(automationSteps.createdAt)).limit(6);
+    const [{ reviewTotal }] = await db.select({ reviewTotal: sql<number>`count(*)::int` }).from(automationSteps).where(and(eq(automationSteps.companyId, companyId), eq(automationSteps.status, "review")));
 
     // Upcoming to-dos (not done, from today), with who they're for.
     const todoRows = await db.select({ id: todos.id, title: todos.title, date: todos.date, startTime: todos.startTime, color: todos.color, c: cust }).from(todos)
@@ -91,7 +91,7 @@ const routes: FastifyPluginAsync = async (app) => {
       today, from, to,
       standing: { pastDueCents: owed.pastDue, outstandingCents: owed.outstanding, creditCents: credit.n, paidCents: paidInv.n + paidPre.n },
       jobs: { total: jobRows.reduce((s, r) => s + (r.status === "skipped" ? 0 : r.n), 0), notStarted: jobs("open"), inProgress: jobs("on_site"), completed: jobs("completed"), skipped: jobs("skipped") },
-      review: { total: reviewTotal, rows: review.map((r) => ({ id: r.id, at: r.at, automation: r.a.name, step: AUTOMATION_ACTIONS[r.a.steps[r.stepIndex]?.action as AutomationAction] ?? "", customer: r.c?.id ? { id: r.c.id, name: name(r.c) } : null })) },
+      review: { total: reviewTotal, rows: review.map((r) => ({ id: r.id, at: r.at, automation: r.name, step: AUTOMATION_ACTIONS[r.action.action]?.label ?? "", customer: r.c?.id ? { id: r.c.id, name: name(r.c) } : null })) },
       todos: { overdue: overdueTodos, rows: todoRows.map((t) => ({ id: t.id, title: t.title, date: t.date, startTime: t.startTime, color: t.color, customer: t.c?.id ? { id: t.c.id, name: name(t.c) } : null, people: who.filter((w) => w.todoId === t.id).map((w) => `${w.first} ${w.last}`) })) },
       visits: { total: visitsToday, rows: visitRows.map((v) => ({ id: v.id, title: v.title, status: v.status, startTime: v.startTime, crew: v.crew, customer: { id: v.c.id, name: name(v.c) } })) },
       payments: payRows.map((p) => ({ id: p.id, amountCents: p.amountCents, method: p.method, methodDetail: p.methodDetail, receivedOn: p.receivedOn, status: p.status, invoiceId: p.invoiceId, invoiceNumber: p.number, customer: p.c?.id ? { id: p.c.id, name: name(p.c) } : null })),
