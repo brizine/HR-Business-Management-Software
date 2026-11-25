@@ -1,16 +1,16 @@
 import type { FastifyPluginAsync } from "fastify";
-import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
-import { customerName, docEmailSchema, docImportSchema, docPrintSchema, docSchema, formatPhone, unknownTags } from "@crewdesk/shared";
+import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
+import { DOC_PRINT_MAX, customerName, docCustomersSchema, docEmailSchema, docImportSchema, docPreviewSchema, docPrintSchema, docSchema, formatPhone, unknownTags } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, customers, employees, marketingDocHistory, marketingDocTemplates, marketingDocs } from "../db/schema";
+import { companies, customers, marketingDocTemplates, marketingDocs } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
-import { PUBLIC_API_URL } from "../lib/channels";
-import { docHistory, docLetters, emailDoc, importDocTemplates, pdfFileName } from "../lib/docs";
+import { PUBLIC_API_URL, emailTransport } from "../lib/channels";
+import { docAudience, docHistory, docHistoryList, docLetters, emailDoc, importDocTemplates, letterCompany, pdfFileName, previewDoc } from "../lib/docs";
 import { lettersPdf } from "../lib/docPdf";
 import { HttpError, parse } from "../lib/errors";
 import { companyLines } from "../lib/invoicePdf";
 import { cleanEmailHtml } from "../lib/templates";
-import { companyForPdf } from "./invoices";
+import { parseSelection, selectedIds } from "./customers";
 
 const AREA = "customers" as const;
 
@@ -31,6 +31,14 @@ const routes: FastifyPluginAsync = async (app) => {
     const [t] = await db.select().from(marketingDocTemplates).where(and(eq(marketingDocTemplates.id, id), eq(marketingDocTemplates.companyId, companyId)));
     if (!t) throw new HttpError(404, "Template not found");
     return t;
+  };
+  /**
+   * Who it's for: the customers picked one by one in the pop-ups (`customerIds`), or a list from
+   * the Customers page (the ticked ones, or everyone the list matches).
+   */
+  const customerIdsFor = async (companyId: string, body: unknown) => {
+    const raw = (body ?? {}) as Record<string, unknown>;
+    return raw.match || raw.ids ? selectedIds(companyId, parseSelection(raw)) : parse(docCustomersSchema, raw).customerIds;
   };
   /** Cleaned content, and any {{WORDS}} that aren't fill-ins (probably typos). */
   const cleaned = (content: string) => { const c = cleanEmailHtml(content); return { content: c, unknown: unknownTags(c) }; };
@@ -138,27 +146,49 @@ const routes: FastifyPluginAsync = async (app) => {
 
   app.get<{ Params: { id: string } }>("/:id/history", async (req) => {
     const d = await findDoc(req.user.companyId, req.params.id);
-    const rows = await db.select({ h: marketingDocHistory, first: employees.firstName, last: employees.lastName }).from(marketingDocHistory)
-      .leftJoin(employees, eq(employees.id, marketingDocHistory.byId)).where(eq(marketingDocHistory.docId, d.id)).orderBy(desc(marketingDocHistory.createdAt)).limit(200);
-    return rows.map((r) => ({ id: r.h.id, action: r.h.action, detail: r.h.detail, by: [r.first, r.last].filter(Boolean).join(" ") || null, at: r.h.createdAt }));
+    return docHistoryList(d.id);
   });
 
-  /** One PDF: the document as a letter for each chosen customer. */
-  app.post<{ Params: { id: string } }>("/:id/print", async (req, reply) => {
-    const b = parse(docPrintSchema, req.body);
+  /** Before sending to a list: how many an email reaches, who it can't (and why), and who to show the preview for. */
+  app.post<{ Params: { id: string } }>("/:id/audience", async (req) => {
+    const { companyId } = req.user;
+    await findDoc(companyId, req.params.id);
+    const a = await docAudience(companyId, await customerIdsFor(companyId, req.body));
+    const first = a.going[0] ?? a.people[0] ?? null;
+    return {
+      total: a.people.length, sending: a.going.length, skipped: a.skipped, byMail: a.byMail.length, emailReady: !!emailTransport(),
+      first: first ? { id: first.customerId, name: first.name } : null,
+    };
+  });
+
+  /** The document as one customer will get it: the email and the printed letter. */
+  app.post<{ Params: { id: string } }>("/:id/preview", async (req) => {
+    const b = parse(docPreviewSchema, req.body);
     const d = await findDoc(req.user.companyId, req.params.id);
-    const letters = await docLetters(req.user.companyId, d.content, b.customerIds);
-    if (!letters.length) throw new HttpError(400, "Please select at least one customer");
-    const pdf = await lettersPdf(await companyForPdf(req.user.companyId), letters, { title: d.name });
-    await docHistory(req.user.companyId, d.id, "printed", req.user.sub, { customers: letters.length });
+    return previewDoc(req.user.companyId, d, b.customerId, b.emailTemplateId);
+  });
+
+  /** One PDF: the document as a letter for each chosen customer (or only those an email can't reach). */
+  app.post<{ Params: { id: string } }>("/:id/print", async (req, reply) => {
+    const { companyId } = req.user;
+    const o = parse(docPrintSchema, req.body ?? {});
+    const d = await findDoc(companyId, req.params.id);
+    let ids = await customerIdsFor(companyId, req.body);
+    if (o.only === "notEmailed") ids = (await docAudience(companyId, ids)).byMail.map((p) => p.customerId);
+    if (ids.length > DOC_PRINT_MAX) throw new HttpError(400, `That's more than ${DOC_PRINT_MAX.toLocaleString()} letters in one PDF. Narrow the list and print it in parts.`);
+    const letters = await docLetters(companyId, d.content, ids);
+    if (!letters.length) throw new HttpError(400, o.only === "notEmailed" ? "Everyone on this list can be emailed, so there are no letters to print" : "Please select at least one customer");
+    const pdf = await lettersPdf(await letterCompany(companyId), letters, { title: d.name });
+    if (!o.preview) await docHistory(companyId, d.id, "printed", req.user.sub, { customers: letters.length });
     return reply.header("content-type", "application/pdf").header("content-disposition", `inline; filename="${pdfFileName(d.name).replace(/"/g, "")}"`).send(Buffer.from(pdf));
   });
 
   /** Emails the document to each chosen customer. */
   app.post<{ Params: { id: string } }>("/:id/email", async (req) => {
-    const b = parse(docEmailSchema, req.body);
-    const d = await findDoc(req.user.companyId, req.params.id);
-    return emailDoc({ companyId: req.user.companyId, by: req.user.sub, doc: d, customerIds: b.customerIds, emailTemplateId: b.emailTemplateId, attachPdf: b.attachPdf, company: await companyForPdf(req.user.companyId) });
+    const { companyId } = req.user;
+    const b = parse(docEmailSchema, req.body ?? {});
+    const d = await findDoc(companyId, req.params.id);
+    return emailDoc({ companyId, by: req.user.sub, doc: d, customerIds: await customerIdsFor(companyId, req.body), emailTemplateId: b.emailTemplateId, attachPdf: b.attachPdf, audience: b.audience ?? null });
   });
 
   /* ── Homeworks import ── */

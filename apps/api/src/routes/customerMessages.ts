@@ -90,7 +90,8 @@ const routes: FastifyPluginAsync = async (app) => {
       .where(eq(customerMessages.companyId, companyId)).orderBy(desc(customerMessages.createdAt)).limit(limit).offset(offset);
     const [{ total }] = await db.select({ total: sql<number>`count(*)::int` }).from(customerMessages).where(eq(customerMessages.companyId, companyId));
     const counts = await messageCounts(rows.map((r) => r.m.id));
-    return { total, rows: rows.map((r) => ({ ...r.m, byName: r.by, counts: counts.get(r.m.id) ?? null })) };
+    // A document's words (kept for its PDF) aren't needed in the list.
+    return { total, rows: rows.map((r) => ({ ...r.m, docContent: undefined, byName: r.by, counts: counts.get(r.m.id) ?? null })) };
   });
 
   /** One message: what it said, and each customer on it (sent, failed, skipped and why). */
@@ -103,7 +104,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const recipients = await db.select().from(customerMessageRecipients).where(eq(customerMessageRecipients.messageId, row.m.id))
       .orderBy(sql`case ${customerMessageRecipients.status} when 'failed' then 0 when 'sending' then 1 when 'queued' then 2 when 'sent' then 3 else 4 end`, asc(customerMessageRecipients.createdAt)).limit(5000);
     const counts = (await messageCounts([row.m.id])).get(row.m.id) ?? null;
-    return { ...row.m, byName: row.by, counts, recipients: recipients.map((r) => ({ ...r, skipLabel: r.skipReason ? MESSAGE_SKIP_REASONS[r.skipReason as keyof typeof MESSAGE_SKIP_REASONS] ?? r.skipReason : null })) };
+    return { ...row.m, docContent: undefined, byName: row.by, counts, recipients: recipients.map((r) => ({ ...r, skipLabel: r.skipReason ? MESSAGE_SKIP_REASONS[r.skipReason as keyof typeof MESSAGE_SKIP_REASONS] ?? r.skipReason : null })) };
   });
 
   /** Stops a message that's still sending; customers not reached yet are skipped. */

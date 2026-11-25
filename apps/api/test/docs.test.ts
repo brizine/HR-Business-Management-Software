@@ -7,7 +7,7 @@ import { buildApp } from "../src/app";
 import { pool } from "../src/db";
 import { setEmailTransport, type EmailMessage } from "../src/lib/channels";
 import { letterBlocks, lettersPdf } from "../src/lib/docPdf";
-import { drainDocEmails, setDocEmailGap } from "../src/lib/docs";
+import { drainCustomerMessages, setMessageGap, setMessageQueueScope } from "../src/lib/customerMessages";
 import { setPushTransport } from "../src/lib/notify";
 
 let app: FastifyInstance;
@@ -27,7 +27,8 @@ async function call(method: string, url: string, who: string | null, payload?: u
 function pdfText(pdf: Uint8Array | Buffer): string {
   const s = Buffer.from(pdf).toString("latin1");
   let out = "";
-  for (const m of s.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+  // pdf-lib writes "stream\n", the bytes, "\nendstream" (the bytes themselves may end in \r, so don't trim one).
+  for (const m of s.matchAll(/stream\n([\s\S]*?)\nendstream/g)) {
     let body: string;
     try { body = inflateSync(Buffer.from(m[1], "latin1")).toString("latin1"); } catch { continue; }
     for (const t of body.matchAll(/<([0-9A-Fa-f]+)> Tj/g)) out += Buffer.from(t[1], "hex").toString("latin1") + " ";
@@ -39,7 +40,7 @@ function pdfText(pdf: Uint8Array | Buffer): string {
 beforeAll(async () => {
   setPushTransport({ send: async (m) => m.map(() => ({ status: "ok" as const, id: "x" })) });
   setEmailTransport({ send: async (m) => { sent.push(m); } });
-  setDocEmailGap(0);
+  setMessageGap(0);
   app = await buildApp({ logger: false });
   T.owner = (await app.inject({ method: "POST", url: "/auth/signup", payload: { companyName: "Letters Co", firstName: "Lena", lastName: "Owner", email: email("owner"), password: "password123" } })).json().token;
   await call("PUT", "/auth/policy", "owner", { twoFactorRequiredFor: "none" });
@@ -57,6 +58,8 @@ beforeAll(async () => {
   T.other = (await app.inject({ method: "POST", url: "/auth/signup", payload: { companyName: "Other Letters", firstName: "Otto", lastName: "Other", email: email("other"), password: "password123" } })).json().token;
   ID.otherCust = (await call("POST", "/customers", "other", { firstName: "Zed", lastName: "Else", email: email("zed") })).body.id;
   ID.otherDoc = (await call("POST", "/docs", "other", { name: "Theirs", content: "<p>Private</p>" })).body.id;
+  // Other test files use the same email queue: this one sends only its own companies' emails.
+  setMessageQueueScope((await pool.query("select distinct company_id from employees where email = any($1)", [[email("owner"), email("other")]])).rows.map((r) => r.company_id));
 });
 
 afterAll(async () => {
@@ -141,8 +144,9 @@ describe("documents", () => {
     expect((await call("POST", `/docs/${ID.doc}/email`, "mgr", { customerIds: [] })).body.issues[0].message).toMatch(/at least one customer/);
     expect((await call("POST", `/docs/${ID.doc}/email`, "mgr", { customerIds: [ID.otherCust] })).body.error).toMatch(/at least one customer/);
     const r = await call("POST", `/docs/${ID.doc}/email`, "mgr", { customerIds: [ID.ann, ID.cy, ID.otherCust], emailTemplateId: "", attachPdf: false });
-    expect(r.body).toEqual({ sending: 1, skipped: [{ name: "Cy Noemail", reason: "No email address" }], attachPdf: false });
-    await drainDocEmails();
+    expect(r.body).toMatchObject({ sending: 1, attachPdf: false, skipped: [{ reason: "no_email", label: "No email address", n: 1 }], skippedNames: [{ name: "Cy Noemail", reason: "No email address" }] });
+    ID.msg = r.body.messageId;
+    await drainCustomerMessages();
     const mine = sent.filter((m) => m.to.endsWith(`${suffix}@docs.test`));
     expect(mine).toHaveLength(1);
     expect(mine[0]).toMatchObject({ to: email("ann"), subject: "Spring letter 2027", fromName: "Letters Co" });
@@ -150,13 +154,20 @@ describe("documents", () => {
     expect(mine[0].html).toContain("Your customer portal</a>");
     expect(mine[0].html).toContain("Unsubscribe");
     expect(mine[0].attachments ?? []).toHaveLength(0);
-    expect((await call("GET", `/docs/${ID.doc}/history`, "mgr")).body[0]).toMatchObject({ action: "emailed", detail: { customers: 1, sent: 1, failed: 0, skipped: 1, done: true, emailTemplate: null } });
+    expect((await call("GET", `/docs/${ID.doc}/history`, "mgr")).body[0]).toMatchObject({ action: "emailed", detail: { messageId: ID.msg, customers: 1, sent: 1, failed: 0, skipped: 1, done: true, stopped: false, emailTemplate: null } });
+    // It's in Customers → Sent messages with everyone on it, and on the customer's own page.
+    const m = (await call("GET", `/customer-messages/${ID.msg}`, "mgr")).body;
+    expect(m).toMatchObject({ subject: "Spring letter 2027", format: "template", status: "sent", audience: "Document: Spring letter 2027", docName: "Spring letter 2027", counts: { sent: 1, skipped: 1 } });
+    expect(m.docContent).toBeUndefined();
+    expect(m.recipients.map((x: any) => [x.name, x.status]).sort()).toEqual([["Ann Lee", "sent"], ["Cy Noemail", "skipped"]]);
+    const timeline = (await call("GET", `/customers/${ID.ann}/timeline`, "mgr")).body;
+    expect(JSON.stringify(timeline)).toContain("Spring letter 2027");
   });
 
   it("emails with the PDF attached, or with an email template and the document as the attachment", async () => {
     sent.length = 0;
     await call("POST", `/docs/${ID.doc}/email`, "mgr", { customerIds: [ID.ann, ID.bob], attachPdf: true });
-    await drainDocEmails();
+    await drainCustomerMessages();
     let mine = sent.filter((m) => m.to.endsWith(`${suffix}@docs.test`));
     expect(mine.map((m) => m.to).sort()).toEqual([email("ann"), email("bob")]);
     const toBob = mine.find((m) => m.to === email("bob"))!;
@@ -171,7 +182,7 @@ describe("documents", () => {
     expect((await call("POST", `/docs/${ID.doc}/email`, "mgr", { customerIds: [ID.ann], emailTemplateId: text })).body.error).toMatch(/email template/);
     const r = await call("POST", `/docs/${ID.doc}/email`, "mgr", { customerIds: [ID.ann], emailTemplateId: tpl, attachPdf: false });
     expect(r.body).toMatchObject({ sending: 1, attachPdf: true });
-    await drainDocEmails();
+    await drainCustomerMessages();
     mine = sent.filter((m) => m.to.endsWith(`${suffix}@docs.test`));
     expect(mine).toHaveLength(1);
     expect(mine[0].subject).toBe("A letter for Ann");
@@ -186,8 +197,8 @@ describe("documents", () => {
     sent.length = 0;
     setEmailTransport({ send: async (m) => { if (m.to === email("ann")) throw new Error("Mailbox full"); sent.push(m); } });
     const r = await call("POST", `/docs/${ID.doc}/email`, "mgr", { customerIds: [ID.ann, ID.bob] });
-    expect(r.body).toMatchObject({ sending: 1, skipped: [{ name: "Bob Ray", reason: "Unsubscribed from these emails" }] });
-    await drainDocEmails();
+    expect(r.body).toMatchObject({ sending: 1, skippedNames: [{ name: "Bob Ray", reason: "Unsubscribed from these emails" }] });
+    await drainCustomerMessages();
     expect(sent.filter((m) => m.to.endsWith(`${suffix}@docs.test`))).toHaveLength(0);
     expect((await call("GET", `/docs/${ID.doc}/history`, "mgr")).body[0].detail).toMatchObject({ sent: 0, failed: 1, skipped: 1, done: true, error: "Mailbox full" });
     setEmailTransport({ send: async (m) => { sent.push(m); } });
@@ -201,12 +212,102 @@ describe("documents", () => {
     ] };
     expect((await call("POST", "/docs/import", "mgr", file)).status).toBe(403);
     expect((await call("POST", "/docs/import", "owner", { source: "homeworks", templates: [], automations: [] })).body.error).toMatch(/no document templates/);
-    expect((await call("POST", "/docs/import", "owner", file)).body).toEqual({ added: 1, skipped: 1 });
-    expect((await call("POST", "/docs/import", "owner", file)).body).toEqual({ added: 0, skipped: 2 });
+    expect((await call("POST", "/docs/import", "owner", file)).body).toEqual({ added: 1, updated: 0, kept: 0, skipped: 1 });
+    expect((await call("POST", "/docs/import", "owner", file)).body).toEqual({ added: 0, updated: 0, kept: 0, skipped: 2 });
     const list = (await call("GET", "/docs/templates", "mgr")).body;
     const w = list.find((t: any) => t.name === "Welcome To The Neighborhood");
     expect(w.imported).toBe("homeworks");
     expect((await call("GET", `/docs/templates/${w.id}`, "mgr")).body.content).toContain("{{TODAY}} RE: Welcome Dear {{CUSTOMER_NAME}}<br />");
+    ID.welcome = w.id;
+  });
+
+  it("a tidied file replaces templates nobody has changed here, and leaves the changed ones alone", async () => {
+    const tidy = (text: string) => ({ source: "homeworks", documentTemplates: [{ name: "Welcome To The Neighborhood", content: `<p>{{TODAY}}</p><p>Dear {{CUSTOMER_NAME}},</p><p>${text}</p>`, homeworksId: 2886 }] });
+    expect((await call("POST", "/docs/import", "owner", tidy("Welcome from {{COMPANY_NAME}}."))).body).toEqual({ added: 0, updated: 1, kept: 0, skipped: 0 });
+    expect((await call("GET", `/docs/templates/${ID.welcome}`, "mgr")).body.content).toBe("<p>{{TODAY}}</p><p>Dear {{CUSTOMER_NAME}},</p><p>Welcome from {{COMPANY_NAME}}.</p>");
+    // Still not edited here, so a newer file updates it again.
+    expect((await call("POST", "/docs/import", "owner", tidy("Welcome to the street from {{COMPANY_NAME}}."))).body.updated).toBe(1);
+    // Once someone changes it in Crewdesk, an import never overwrites it.
+    await call("PUT", `/docs/templates/${ID.welcome}`, "mgr", { name: "Welcome To The Neighborhood", content: "<p>Our own welcome.</p>" });
+    expect((await call("POST", "/docs/import", "owner", tidy("Welcome from {{COMPANY_NAME}}."))).body).toEqual({ added: 0, updated: 0, kept: 1, skipped: 0 });
+    expect((await call("GET", `/docs/templates/${ID.welcome}`, "mgr")).body.content).toBe("<p>Our own welcome.</p>");
+  });
+
+  it("previews the email and the letter for one customer before anything is sent", async () => {
+    sent.length = 0;
+    const before = (await call("GET", `/docs/${ID.doc}/history`, "mgr")).body.length;
+    const p = (await call("POST", `/docs/${ID.doc}/preview`, "mgr", { customerId: ID.ann })).body;
+    expect(p.customer).toEqual({ id: ID.ann, name: "Ann Lee", email: email("ann") });
+    expect(p.email.subject).toBe("Spring letter 2027");
+    expect(p.email.html).toContain("Dear Ann Lee,");
+    expect(p.letter).toMatchObject({ toName: "Ann Lee", toLines: ["9 Elm St", "Norman, OK 73069"] });
+    expect(p.letter.html).toContain("Dear Ann Lee,");
+    expect(p.letter.html).not.toContain("{{");
+    expect(p.attachPdf).toBe(false);
+    // With an email template, the preview is the cover note.
+    const tpl = (await call("GET", "/templates", "mgr")).body.find((t: any) => t.name === "Cover note").id;
+    const withTpl = (await call("POST", `/docs/${ID.doc}/preview`, "mgr", { customerId: ID.ann, emailTemplateId: tpl })).body;
+    expect(withTpl.email.subject).toBe("A letter for Ann");
+    expect(withTpl.attachPdf).toBe(true);
+    expect((await call("POST", `/docs/${ID.doc}/preview`, "mgr", { customerId: ID.otherCust })).status).toBe(404);
+    // The letter as a PDF, without it counting as printed.
+    const pdf = await call("POST", `/docs/${ID.doc}/print`, "mgr", { customerIds: [ID.ann], preview: true });
+    expect(pdfText(pdf.raw)).toContain("Ann Lee 9 Elm St");
+    expect((await call("GET", `/docs/${ID.doc}/history`, "mgr")).body).toHaveLength(before);
+    expect(sent).toHaveLength(0);
+  });
+
+  it("from the Customers page: emails a ticked or filtered list, and prints letters for those email can't reach", async () => {
+    // Ann can be emailed; Bob unsubscribed and Cy has no email address, so they'd need a letter.
+    const everyone = { match: { status: "all", filters: [] } };
+    const a = (await call("POST", `/docs/${ID.doc}/audience`, "mgr", everyone)).body;
+    expect(a).toMatchObject({ total: 3, sending: 1, byMail: 2, emailReady: true, first: { id: ID.ann, name: "Ann Lee" } });
+    expect(a.skipped.map((x: any) => [x.reason, x.n]).sort()).toEqual([["no_email", 1], ["unsubscribed", 1]]);
+    expect((await call("POST", `/docs/${ID.doc}/audience`, "tech", everyone)).status).toBe(403);
+
+    sent.length = 0;
+    const r = await call("POST", `/docs/${ID.doc}/email`, "mgr", { ...everyone, audience: "All · Tagged VIP" });
+    expect(r.body).toMatchObject({ sending: 1, attachPdf: false });
+    await drainCustomerMessages();
+    expect(sent.filter((m) => m.to.endsWith(`${suffix}@docs.test`)).map((m) => m.to)).toEqual([email("ann")]);
+    expect((await call("GET", `/customer-messages/${r.body.messageId}`, "mgr")).body).toMatchObject({ audience: "All · Tagged VIP · Document: Spring letter 2027", counts: { sent: 1, skipped: 2 } });
+
+    // Ticked rows work the same way.
+    const ticked = (await call("POST", `/docs/${ID.doc}/audience`, "mgr", { ids: [ID.bob, ID.cy] })).body;
+    expect(ticked).toMatchObject({ total: 2, sending: 0, byMail: 2 });
+
+    // Letters for the two an email can't reach, in the list's order (by last name).
+    const letters = await call("POST", `/docs/${ID.doc}/print`, "mgr", { ...everyone, only: "notEmailed" });
+    expect(letters.status).toBe(200);
+    const pages = pdfText(letters.raw).split("\n").filter((p) => p.trim());
+    expect(pages).toHaveLength(2);
+    expect(pages[0]).toContain("Cy Noemail 7 Pine Rd");
+    expect(pages[1]).toContain("Bob Ray PO Box 12");
+    expect((await call("GET", `/docs/${ID.doc}/history`, "mgr")).body[0]).toMatchObject({ action: "printed", detail: { customers: 2 } });
+    // Everyone on the list.
+    const all = await PDFDocument.load((await call("POST", `/docs/${ID.doc}/print`, "mgr", everyone)).raw);
+    expect(all.getPageCount()).toBe(3);
+    expect((await call("POST", `/docs/${ID.doc}/print`, "mgr", { ids: [ID.ann], only: "notEmailed" })).body.error).toMatch(/can be emailed/);
+  });
+
+  it("a send that's stopped part-way shows as stopped in the document's history", async () => {
+    // The queue sends in batches of ten, so a stop takes hold from the eleventh on.
+    const many: string[] = [];
+    for (let i = 0; i < 12; i++) many.push((await call("POST", "/customers", "owner", { firstName: "Bulk", lastName: `No${String(i).padStart(2, "0")}`, email: email(`bulk${i}`) })).body.id);
+    let release!: () => void;
+    const hold = new Promise<void>((res) => { release = res; });
+    const got: string[] = [];
+    setEmailTransport({ send: async (m) => { got.push(m.to); await hold; } });
+    const r = await call("POST", `/docs/${ID.doc}/email`, "mgr", { ids: many, audience: "12 picked customers" });
+    expect(r.body.sending).toBe(12);
+    // The first one is on its way: stop the rest.
+    while (!got.length) await new Promise((res) => setTimeout(res, 10));
+    expect((await call("POST", `/customer-messages/${r.body.messageId}/stop`, "mgr")).body.ok).toBe(true);
+    release();
+    await drainCustomerMessages();
+    expect(got).toHaveLength(10);
+    expect((await call("GET", `/docs/${ID.doc}/history`, "mgr")).body[0].detail).toMatchObject({ customers: 12, sent: 10, skipped: 2, done: true, stopped: true });
+    setEmailTransport({ send: async (m) => { sent.push(m); } });
   });
 
   it("deleting a document removes it and its history", async () => {

@@ -9,6 +9,8 @@ import { MESSAGE_STATUS, RECIPIENT_STATUS_LABELS } from "@/components/customer-m
 type Recipient = { id: string; customerId: string | null; name: string; email: string | null; status: string; skipLabel: string | null; error: string | null; sentAt: string | null };
 type Message = {
   id: string; subject: string; body: string; status: keyof typeof MESSAGE_STATUS; audience: string | null; byName: string | null; createdAt: string; finishedAt: string | null;
+  /** "template": a document (Marketing → Documents), formatted, with {{TAGS}}. */
+  format?: string; docName?: string | null; attachPdf?: boolean;
   counts: Record<string, number> | null; recipients: Recipient[];
 };
 
@@ -52,8 +54,20 @@ export default function MessageDetail({ params }: { params: Promise<{ id: string
         </div>
         <div className="card">
           <h2 style={{ fontSize: 16, marginTop: 0 }}>Message</h2>
-          <p className="muted" style={{ marginTop: 0 }}>Fill-in fields like {"{first_name}"} were filled in for each customer.</p>
-          <div style={{ whiteSpace: "pre-wrap" }}>{m.body}</div>
+          {m.format === "template" ? (
+            <>
+              <p className="muted" style={{ marginTop: 0 }}>
+                {m.docName ? <>The document <strong>{m.docName}</strong>{m.attachPdf ? " (sent with the letter attached as a PDF)" : ""}. </> : null}
+                Fill-ins like {"{{CUSTOMER_NAME}}"} were filled in for each customer.
+              </p>
+              <iframe title="What was sent" sandbox="" srcDoc={`<body style="font-family:system-ui,sans-serif;font-size:14px;line-height:1.5;color:#1d2939;margin:8px">${m.body}</body>`} className="cm-frame" style={{ marginTop: 0, borderRadius: 8 }} />
+            </>
+          ) : (
+            <>
+              <p className="muted" style={{ marginTop: 0 }}>Fill-in fields like {"{first_name}"} were filled in for each customer.</p>
+              <div style={{ whiteSpace: "pre-wrap" }}>{m.body}</div>
+            </>
+          )}
         </div>
       </div>
       <div className="card tablewrap">

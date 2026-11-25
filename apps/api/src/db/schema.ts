@@ -1681,6 +1681,18 @@ export const customerMessages = pgTable(
     status: text("status").notNull().default("sending"),
     /** Who it went to, in words (e.g. "Customers · Balance owed more than $0"). */
     audience: text("audience"),
+    /**
+     * "plain": plain text with {first_name} fields. "template": formatted, with {{TAGS}} like the
+     * templates (a Marketing → Documents document, or an email template sent with one).
+     */
+    format: text("format").notNull().default("plain"),
+    /** A document being sent: which one, and its name and words when it was sent (for the PDF). */
+    docId: uuid("doc_id"),
+    docName: text("doc_name"),
+    docContent: text("doc_content"),
+    attachPdf: boolean("attach_pdf").notNull().default(false),
+    /** The email template used as the cover note, when one was. */
+    emailTemplateId: uuid("email_template_id"),
     byId: uuid("by_id").references(() => employees.id, { onDelete: "set null" }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     createdAt: createdAt(),

@@ -96,10 +96,17 @@ ${textToHtml(body)}
 // ---------- Creating a message ----------
 
 /** Works out who gets it (in list order) and who's skipped, and saves the message; sending starts in the background. */
-export async function createCustomerMessage(o: { companyId: string; byId: string; subject: string; body: string; customerIds: string[]; audience: string | null }) {
-  const rows = await recipientsFor(o.companyId, o.customerIds);
+export async function createCustomerMessage(o: {
+  companyId: string; byId: string; subject: string; body: string; audience: string | null;
+  /** Who it's for: the customers, or the list already worked out with `recipientsFor`. */
+  customerIds?: string[]; rows?: Recipient[];
+  /** A Marketing → Documents document: formatted with {{TAGS}}, optionally with the document as a PDF. */
+  doc?: { docId: string; docName: string; docContent: string; attachPdf: boolean; emailTemplateId: string | null };
+}) {
+  const rows = o.rows ?? await recipientsFor(o.companyId, o.customerIds ?? []);
   const message = await db.transaction(async (tx) => {
     const [m] = await tx.insert(customerMessages).values({ companyId: o.companyId, subject: o.subject, body: o.body, audience: o.audience, byId: o.byId,
+      ...(o.doc ? { format: "template", ...o.doc } : {}),
       status: rows.some((r) => r.status === "queued") ? "sending" : "sent", finishedAt: rows.some((r) => r.status === "queued") ? null : new Date() }).returning();
     for (let i = 0; i < rows.length; i += 500) {
       await tx.insert(customerMessageRecipients).values(rows.slice(i, i + 500).map((r) => ({ ...r, companyId: o.companyId, messageId: m.id })));
@@ -109,7 +116,7 @@ export async function createCustomerMessage(o: { companyId: string; byId: string
   return message;
 }
 
-type Recipient = { customerId: string; name: string; email: string | null; status: "queued" | "skipped"; skipReason: MessageSkipReason | null };
+export type Recipient = { customerId: string; name: string; email: string | null; status: "queued" | "skipped"; skipReason: MessageSkipReason | null };
 
 /** Each customer's address, or why they're skipped (no email, unsubscribed, sample, same address as one earlier on the list). */
 export async function recipientsFor(companyId: string, customerIds: string[]): Promise<Recipient[]> {
@@ -138,6 +145,10 @@ let gapMs = 250;
 export function setMessageGap(ms: number) { gapMs = ms; }
 const pause = (ms: number) => (ms ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
 
+let onlyCompanies: string[] | null = null;
+/** Tests share one database: each test file's queue run takes only its own companies' emails. */
+export function setMessageQueueScope(companyIds: string[] | null) { onlyCompanies = companyIds; }
+
 let running: Promise<void> | null = null;
 
 /**
@@ -165,6 +176,7 @@ async function drain() {
       where id in (
         select r.id from customer_message_recipients r join customer_messages m on m.id = r.message_id
         where r.status = 'queued' and m.status = 'sending'
+          ${onlyCompanies ? sql`and r.company_id in (${sql.join(onlyCompanies.map((i) => sql`${i}::uuid`), sql`, `)})` : sql``}
         order by r.created_at, r.id limit 10 for update of r skip locked)
       returning id`);
     const ids = batch.rows.map((r) => r.id);
@@ -177,9 +189,15 @@ async function drain() {
       if (!company) { company = await companyInfo(r.companyId); companiesSeen.set(r.companyId, company); }
       try {
         if (!transport) throw new Error("Email isn't set up on this server");
-        const vars = r.customerId ? (await messageVars(r.companyId, [r.customerId], company)).get(r.customerId) ?? {} : {};
-        const email = renderCustomerEmail({ company, subject: m.subject, body: m.body, vars, customerId: r.customerId ?? undefined });
-        await transport.send({ to: r.email!, ...email, fromName: company.name, replyTo: company.email ?? undefined });
+        if (m.format === "template") {
+          // A document (Marketing → Documents): the templates' tags and letterhead, and the PDF when asked for.
+          const { sendDocMessage } = await import("./docs");
+          await sendDocMessage(m, { customerId: r.customerId, email: r.email! });
+        } else {
+          const vars = r.customerId ? (await messageVars(r.companyId, [r.customerId], company)).get(r.customerId) ?? {} : {};
+          const email = renderCustomerEmail({ company, subject: m.subject, body: m.body, vars, customerId: r.customerId ?? undefined });
+          await transport.send({ to: r.email!, ...email, fromName: company.name, replyTo: company.email ?? undefined });
+        }
         await db.update(customerMessageRecipients).set({ status: "sent", sentAt: new Date(), error: null }).where(eq(customerMessageRecipients.id, r.id));
       } catch (err) {
         await db.update(customerMessageRecipients).set({ status: "failed", error: (err as Error).message.slice(0, 300) }).where(eq(customerMessageRecipients.id, r.id));

@@ -673,6 +673,13 @@
       "when": 1795623420188,
       "tag": "0095_marketing_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1795628850296,
+      "tag": "0096_document_messages",
+      "breakpoints": true
     }
   ]
 }

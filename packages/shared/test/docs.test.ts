@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DOC_TAGS, docEmailSchema, docHistoryText, docImportSchema, docSchema, docWords, fillTags, templateTag, unknownTags, usedTags } from "../src";
+import { DOC_TAGS, docCustomersSchema, docEmailSchema, docHistoryText, docImportSchema, docPreviewSchema, docPrintSchema, docSchema, docWords, fillTags, templateTag, unknownTags, usedTags } from "../src";
 
 describe("documents", () => {
   it("every fill-in on the Insert Customer / Company Info list is a real tag", () => {
@@ -27,10 +27,14 @@ describe("documents", () => {
     expect(docWords("<p></p>")).toBe(0);
   });
 
-  it("emailing needs at least one customer; a blank email template means the document is the email", () => {
+  it("the pop-ups need at least one customer; a blank email template means the document is the email", () => {
     const id = "3b1f8c2e-9a7d-4c5e-8f10-2d3e4f5a6b7c";
-    expect(docEmailSchema.safeParse({ customerIds: [] }).error?.issues[0].message).toBe("Please select at least one customer");
-    expect(docEmailSchema.parse({ customerIds: [id], emailTemplateId: "" })).toEqual({ customerIds: [id], emailTemplateId: null, attachPdf: false });
+    expect(docCustomersSchema.safeParse({ customerIds: [] }).error?.issues[0].message).toBe("Please select at least one customer");
+    expect(docCustomersSchema.safeParse({}).error?.issues[0].message).toBe("Please select at least one customer");
+    expect(docCustomersSchema.safeParse({ customerIds: Array(201).fill(id) }).success).toBe(false);
+    expect(docEmailSchema.parse({ emailTemplateId: "" })).toEqual({ emailTemplateId: null, attachPdf: false });
+    expect(docPrintSchema.parse({})).toEqual({ only: "all", preview: false });
+    expect(docPreviewSchema.parse({ customerId: id })).toEqual({ customerId: id, emailTemplateId: null });
   });
 
   it("history reads like Homeworks', with what was emailed and printed", () => {
@@ -39,6 +43,7 @@ describe("documents", () => {
     expect(docHistoryText("printed", { customers: 3 })).toEqual({ verb: "Printed", rest: " for 3 customers" });
     expect(docHistoryText("emailed", { customers: 2, sent: 1, failed: 1, skipped: 1, done: true, error: "Mailbox full" }).rest).toBe(" to 1 customer, 1 failed: Mailbox full, 1 skipped");
     expect(docHistoryText("emailed", { customers: 5, sent: 2, done: false }).rest).toBe(" to 5 customers (2 sent so far)");
+    expect(docHistoryText("emailed", { customers: 5, sent: 2, skipped: 3, done: true, stopped: true }).rest).toBe(" to 2 customers, 3 skipped, stopped early");
   });
 
   it("the import file is a list of document templates", () => {

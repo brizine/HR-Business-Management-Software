@@ -77,21 +77,66 @@ export type TemplateContext = {
 const longDate = (d: string | null | undefined) => (d ? new Date(`${d.slice(0, 10)}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }) : "");
 const time12 = (t: string | null | undefined) => { if (!t) return ""; const [h, m] = t.split(":").map(Number); return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
 
-/** Every tag's value for a customer (and the invoice, estimate, work order or payment the message is about). */
-export async function templateVars(companyId: string, ctx: TemplateContext): Promise<TemplateVars> {
+/** The company's own tags and the date ones. */
+async function companyVars(companyId: string): Promise<TemplateVars> {
   const [co] = await db.select().from(companies).where(eq(companies.id, companyId));
   const now = localParts(new Date(), co.timezone);
   const [owner] = await db.select({ first: employees.firstName, last: employees.lastName }).from(employees)
     .where(and(eq(employees.companyId, companyId), eq(employees.role, "owner"))).orderBy(asc(employees.createdAt)).limit(1);
   const defaults = co.templateDefaults ?? {};
-  const v: TemplateVars = {
+  return {
     COMPANY_NAME: co.name, COMPANY_PHONE: co.phone ? formatPhone(co.phone) : "", COMPANY_EMAIL: co.email ?? "", COMPANY_WEBSITE: co.website ?? "",
     COMPANY_ADDRESS: [co.addressLine1, co.addressLine2, [co.city, co.state].filter(Boolean).join(", ") + (co.zip ? ` ${co.zip}` : "")].filter((x) => x && x.trim()).join(", "),
     COMPANY_OWNER_FIRST_NAME: owner?.first ?? "", COMPANY_OWNER_LAST_NAME: owner?.last ?? "",
     REVIEW_PAGE: defaults.reviewUrl ?? "",
     TODAY: longDate(now.date), CURRENT_MONTH: new Date(`${now.date}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", timeZone: "UTC" }), CURRENT_YEAR: now.date.slice(0, 4),
-    MESSAGE: ctx.message?.trim() ?? "",
   };
+}
+
+/** One customer's tags: their name, how to reach them, where they are (billing address, else their first property) and what they owe. */
+function customerVars(companyId: string, c: typeof customers.$inferSelect, prop: typeof properties.$inferSelect | undefined, balanceCents: number, callNote: string | null): TemplateVars {
+  const street = c.billingStreet ?? prop?.street ?? "";
+  const city = c.billingCity ?? prop?.city ?? "";
+  const state = c.billingState ?? prop?.state ?? "";
+  const zip = c.billingZip ?? prop?.zip ?? "";
+  const name = customerName(c);
+  return {
+    CUSTOMER_NAME: name, CUSTOMER_FIRST_NAME: c.firstName?.trim() || name, CUSTOMER_LAST_NAME: c.lastName ?? "", CUSTOMER_COMPANY_NAME: c.companyName ?? "",
+    CUSTOMER_NUMBER: String(c.number ?? ""), CUSTOMER_EMAIL: c.email ?? "", CUSTOMER_PHONE: c.phone ? formatPhone(c.phone) : "", CUSTOMER_CELL: c.altPhone ? formatPhone(c.altPhone) : c.phone ? formatPhone(c.phone) : "",
+    CUSTOMER_ADDRESS: [street, [city, state].filter(Boolean).join(", ") + (zip ? ` ${zip}` : "")].filter((x) => x && x.trim()).join(", "),
+    CUSTOMER_CITY: city, CUSTOMER_STATE: state, CUSTOMER_ZIP: zip, CUSTOMER_ACCOUNT_BALANCE: formatMoney(Math.max(0, balanceCents)),
+    CLIENT_PORTAL_LINK: portalUrl(companyId), CLIENT_PORTAL_ADD_CREDIT_CARD_LINK: portalUrl(companyId), CALL_NOTES: callNote ?? "",
+  };
+}
+
+/**
+ * The company and customer tags for many customers at once (letters for a whole list), by customer
+ * id. The same values `templateVars` gives one customer; customers of another company are left out.
+ */
+export async function customerTemplateVars(companyId: string, customerIds: string[]): Promise<Map<string, TemplateVars>> {
+  const out = new Map<string, TemplateVars>();
+  if (!customerIds.length) return out;
+  const base = { ...(await companyVars(companyId)), MESSAGE: "" };
+  for (let i = 0; i < customerIds.length; i += 500) {
+    const rows = await db.select().from(customers).where(and(eq(customers.companyId, companyId), inArray(customers.id, customerIds.slice(i, i + 500))));
+    const ids = rows.map((c) => c.id);
+    if (!ids.length) continue;
+    const props = await db.select({ customerId: propertyAssignments.customerId, p: properties }).from(propertyAssignments).innerJoin(properties, eq(properties.id, propertyAssignments.propertyId))
+      .where(and(inArray(propertyAssignments.customerId, ids), sql`${propertyAssignments.endDate} is null`)).orderBy(asc(propertyAssignments.startDate));
+    const firstProp = new Map<string, typeof properties.$inferSelect>();
+    for (const r of props) if (!firstProp.has(r.customerId)) firstProp.set(r.customerId, r.p);
+    const bals = new Map((await db.select({ customerId: invoices.customerId, cents: sql<number>`coalesce(sum(${invoices.totalCents} - ${invoices.paidCents} - ${invoices.creditedCents}), 0)::int` }).from(invoices)
+      .where(and(inArray(invoices.customerId, ids), notInArray(invoices.status, ["draft", "void"]))).groupBy(invoices.customerId)).map((r) => [r.customerId, r.cents]));
+    const calls = new Map((await db.selectDistinctOn([customerNotes.customerId], { customerId: customerNotes.customerId, body: customerNotes.body }).from(customerNotes)
+      .where(and(inArray(customerNotes.customerId, ids), eq(customerNotes.kind, "call"))).orderBy(customerNotes.customerId, desc(customerNotes.createdAt))).map((r) => [r.customerId, r.body]));
+    for (const c of rows) out.set(c.id, { ...base, ...customerVars(companyId, c, firstProp.get(c.id), bals.get(c.id) ?? 0, calls.get(c.id) ?? null) });
+  }
+  return out;
+}
+
+/** Every tag's value for a customer (and the invoice, estimate, work order or payment the message is about). */
+export async function templateVars(companyId: string, ctx: TemplateContext): Promise<TemplateVars> {
+  const v: TemplateVars = { ...(await companyVars(companyId)), MESSAGE: ctx.message?.trim() ?? "" };
   // Work out the customer from whatever the message is about.
   let customerId = ctx.customerId ?? null;
   const [inv] = ctx.invoiceId ? await db.select().from(invoices).where(and(eq(invoices.id, ctx.invoiceId), eq(invoices.companyId, companyId))) : [];
@@ -107,21 +152,10 @@ export async function templateVars(companyId: string, ctx: TemplateContext): Pro
     if (c) {
       const [prop] = await db.select({ p: properties }).from(propertyAssignments).innerJoin(properties, eq(properties.id, propertyAssignments.propertyId))
         .where(and(eq(propertyAssignments.customerId, c.id), sql`${propertyAssignments.endDate} is null`)).orderBy(asc(propertyAssignments.startDate)).limit(1);
-      const street = c.billingStreet ?? prop?.p.street ?? "";
-      const city = c.billingCity ?? prop?.p.city ?? "";
-      const state = c.billingState ?? prop?.p.state ?? "";
-      const zip = c.billingZip ?? prop?.p.zip ?? "";
       const [bal] = await db.select({ cents: sql<number>`coalesce(sum(${invoices.totalCents} - ${invoices.paidCents} - ${invoices.creditedCents}), 0)::int` }).from(invoices)
         .where(and(eq(invoices.customerId, c.id), notInArray(invoices.status, ["draft", "void"])));
       const [call] = await db.select({ body: customerNotes.body }).from(customerNotes).where(and(eq(customerNotes.customerId, c.id), eq(customerNotes.kind, "call"))).orderBy(desc(customerNotes.createdAt)).limit(1);
-      const name = customerName(c);
-      Object.assign(v, {
-        CUSTOMER_NAME: name, CUSTOMER_FIRST_NAME: c.firstName?.trim() || name, CUSTOMER_LAST_NAME: c.lastName ?? "", CUSTOMER_COMPANY_NAME: c.companyName ?? "",
-        CUSTOMER_NUMBER: String(c.number ?? ""), CUSTOMER_EMAIL: c.email ?? "", CUSTOMER_PHONE: c.phone ? formatPhone(c.phone) : "", CUSTOMER_CELL: c.altPhone ? formatPhone(c.altPhone) : c.phone ? formatPhone(c.phone) : "",
-        CUSTOMER_ADDRESS: [street, [city, state].filter(Boolean).join(", ") + (zip ? ` ${zip}` : "")].filter((x) => x && x.trim()).join(", "),
-        CUSTOMER_CITY: city, CUSTOMER_STATE: state, CUSTOMER_ZIP: zip, CUSTOMER_ACCOUNT_BALANCE: formatMoney(Math.max(0, bal?.cents ?? 0)),
-        CLIENT_PORTAL_LINK: portalUrl(companyId), CLIENT_PORTAL_ADD_CREDIT_CARD_LINK: portalUrl(companyId), CALL_NOTES: call?.body ?? "",
-      });
+      Object.assign(v, customerVars(companyId, c, prop?.p, bal?.cents ?? 0, call?.body ?? null));
     }
   }
   if (inv) {

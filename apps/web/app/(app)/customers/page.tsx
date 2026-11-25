@@ -14,6 +14,7 @@ import {
 } from "@/components/customer-list";
 import { openTestCompany, useTestCompany } from "@/components/test-company";
 import { CopyPhones, EmailComposer } from "@/components/customer-messages";
+import { DocumentSender } from "@/components/marketing-docs";
 import { CancelForm, CustomerFields, PropertyFields, customerBody, customerFormValue, propertyBody, propertyFormValue, useTags } from "@/components/customers";
 
 const TABS = [["active", "Customers"], ["lead", "Leads"], ["cancelled", "Cancelled"], ["all", "All"]] as const;
@@ -119,7 +120,7 @@ function Customers() {
   const selCount = allMatching ? list.data?.total ?? 0 : picked.length;
   const clearSelection = () => { setPicked([]); setAllMatching(false); setCancelling(false); };
   // Send: to the selection, or (nothing ticked) everyone the list matches.
-  const [sending, setSending] = useState<null | "email" | "phones">(null);
+  const [sending, setSending] = useState<null | "email" | "phones" | "document">(null);
   const sendTo = selCount > 0 ? selection : { match: { status: matchStatus, q: params.get("q") ?? undefined, filters } };
   const sendCount = selCount > 0 ? selCount : list.data?.total ?? 0;
   const audience = (() => {
@@ -131,7 +132,7 @@ function Customers() {
     if (params.get("q")) parts.push(`search "${params.get("q")}"`);
     return parts.join(" · ").slice(0, 300);
   })();
-  const openSend = (k: "email" | "phones") => { setSending(k); setOpen(null); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const openSend = (k: "email" | "phones" | "document") => { setSending(k); setOpen(null); window.scrollTo({ top: 0, behavior: "smooth" }); };
   const bulk = useAction();
   const runBulk = (body: Record<string, unknown>, done: string) => bulk.run(async () => {
     const r = await api<{ changed: number; skipped: number; propertiesCancelled: number }>("/customers/bulk", { body: { ...selection, ...body } });
@@ -182,6 +183,7 @@ function Customers() {
         <Popover label={<>Send ▾</>} title="Email or text the customers on this list (or the ones ticked)" open={open === "send"} setOpen={toggle("send")} align="right" buttonClass="btn no-print">
           <div className="cl-menu">
             <button type="button" disabled={!sendCount} onClick={() => openSend("email")}>Email {sendCount.toLocaleString()} customer{sendCount === 1 ? "" : "s"}…</button>
+            <button type="button" disabled={!sendCount} onClick={() => openSend("document")}>Document: email or print letters…</button>
             <button type="button" disabled={!sendCount} onClick={() => openSend("phones")}>Text: copy their phone numbers…</button>
             <hr />
             <Link href="/customers/messages">Sent messages</Link>
@@ -212,6 +214,10 @@ function Customers() {
       {notice && <div className="notice" role="status">{notice} <button type="button" className="linkbtn" onClick={() => setNotice(null)}>OK</button></div>}
       {sending === "email" && (
         <EmailComposer key={JSON.stringify(sendTo)} selection={sendTo} audience={audience} onClose={() => setSending(null)}
+          onSent={(m) => { setSending(null); clearSelection(); setNotice(`Sending to ${m.sending.toLocaleString()} customer${m.sending === 1 ? "" : "s"} now. Follow it under Messages.`); router.push(`/customers/messages/${m.id}`); }} />
+      )}
+      {sending === "document" && (
+        <DocumentSender key={JSON.stringify(sendTo)} selection={sendTo} audience={audience} onClose={() => setSending(null)}
           onSent={(m) => { setSending(null); clearSelection(); setNotice(`Sending to ${m.sending.toLocaleString()} customer${m.sending === 1 ? "" : "s"} now. Follow it under Messages.`); router.push(`/customers/messages/${m.id}`); }} />
       )}
       {sending === "phones" && <CopyPhones key={JSON.stringify(sendTo)} selection={sendTo} onClose={() => setSending(null)} />}
@@ -294,6 +300,7 @@ function Customers() {
             <Popover label="Send ▾" open={open === "bulksend"} setOpen={toggle("bulksend")}>
               <div className="cl-menu">
                 <button type="button" onClick={() => openSend("email")}>Email…</button>
+                <button type="button" onClick={() => openSend("document")}>Document: email or print letters…</button>
                 <button type="button" onClick={() => openSend("phones")}>Text: copy phone numbers…</button>
               </div>
             </Popover>

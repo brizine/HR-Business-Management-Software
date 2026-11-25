@@ -224,6 +224,10 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
       customers, and a second customer with the same address (each address gets it once). A misspelled field
       like {frist_name} is pointed out.
     - **Send me a test** emails it to you first. **Send to N customers** sends it; this can't be undone.
+    - **Document: email or print letters…** sends a document from Marketing → Documents (a price increase letter,
+      a thank you…) to the same list: pick the document, see it filled in for the first customer as an **Email**
+      or a **Printed letter**, then **Email N customers**, **Print letters for all**, or **Print letters for the
+      ones email can't reach** (no email address, or unsubscribed). See *Documents* under Marketing below.
     - The emails go out one at a time in the background (about four a second), from your company name, with
       replies going to your company email. Each has your company's name, address and phone and an
       **Unsubscribe** link at the bottom. Customers who unsubscribe still get invoices and receipts.
@@ -644,7 +648,8 @@ out like Homeworks' Documents: the form on the left, the list on the right, and 
 - **Document Templates** are the starting points (Thank You, Price Increase, Contract…). Give one a **Name** and
   write the **Content**, then **Create Template**. The pencil changes one; the trash deletes it. Admins can bring
   Homeworks' document templates in with **Import from Homeworks** under the list (choose the Homeworks documents
-  file Crewdesk made; importing again adds nothing twice).
+  file Crewdesk made; importing again adds nothing twice). A newer file brings a template up to date only if
+  nobody has changed it in Crewdesk; ones you've changed are left as they are.
 - **Documents:** pick a **Template** (it fills in the name and content; you're asked first if you'd already
   written something), change what you like, and **Create Document**. Or write one from scratch.
 - **Content box:** **+** adds a heading, list, quote or line; **</>** shows the HTML; **¶** sets normal text or a
@@ -661,12 +666,23 @@ out like Homeworks' Documents: the form on the left, the list on the right, and 
   email, in your email letterhead with an Unsubscribe link; tick **Attach PDF of document to email** to add the
   printed letter too. Or pick one of your **email templates** as the cover note, and the document goes as a PDF
   attachment. Each customer gets their own email. Customers with no email address, ones who unsubscribed and
-  sample customers can't be picked. The emails also show on each customer's page and in Templates → Sent / History.
+  sample customers can't be picked.
 - **Print:** pick customers, then **Print**: one PDF opens with a letter for each customer, on your letterhead,
   addressed to their billing address (or their property when there's no billing address). It's laid out for a
   standard #10 double-window envelope folded in thirds, like your invoices. Printed links show the web address.
+- **Preview** (in both pop-ups, next to Send Email or Print) shows the document as one of the picked customers
+  will get it, before anything is sent: the email with its subject, or the letter on its page. Choose whose with
+  **Preview for**. **Open the exact page as a PDF** shows the real printed page; it doesn't count as printed.
+- **To a whole list:** on the **Customers** page, filter the list or tick customers, then **Send ▾ → Document:
+  email or print letters…**. It shows how many an email reaches and who's skipped and why, with a preview for the
+  first customer. **Email N customers** sends it; **Print letters for the ones email can't reach** makes letters
+  for customers with no email address or who unsubscribed, so everyone hears from you. Up to 5,000 customers per
+  email and 2,000 letters per PDF.
+- **How emails go out:** one at a time in the background, so you can keep working. **See how it's going** (and
+  Customers → **Messages**) shows who it was sent to, who was skipped and anything that didn't go, with **Stop
+  sending** while it's still going. Each email is also on the customer's own page and in Templates → Sent / History.
 - **History** shows who created and changed a document and each time it was emailed (how many were sent, failed
-  or skipped) or printed.
+  or skipped, with a link to **who got it**) or printed.
 
 Homeworks' **Send By Regular Mail** (its paid stamps service) isn't in Crewdesk: print the letters and mail them.
 

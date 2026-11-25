@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";
 import { pool } from "../src/db";
 import { setEmailTransport, type EmailMessage } from "../src/lib/channels";
-import { drainCustomerMessages, setMessageGap } from "../src/lib/customerMessages";
+import { drainCustomerMessages, setMessageGap, setMessageQueueScope } from "../src/lib/customerMessages";
 import { flushNotifications, setPushTransport } from "../src/lib/notify";
 
 let app: FastifyInstance;
@@ -29,6 +29,8 @@ beforeAll(async () => {
   app = await buildApp({ logger: false });
   T.owner = (await app.inject({ method: "POST", url: "/auth/signup", payload: { companyName: "Lawn Pros", firstName: "Lee", lastName: "Owner", email: email("owner"), password: "password123" } })).json().token;
   await call("PUT", "/auth/policy", "owner", { twoFactorRequiredFor: "none" });
+  // Other test files use the same email queue: this one sends only its own company's emails.
+  setMessageQueueScope((await pool.query("select company_id from employees where email = $1", [email("owner")])).rows.map((r) => r.company_id));
   await call("PUT", "/company", "owner", { name: "Lawn Pros", phone: "(405) 555-0100", email: "office@cmsg.test", addressLine1: "1 Main St", city: "Norman", state: "OK", zip: "73069", timezone: "America/Chicago" });
   ID.office = (await call("POST", "/employees", "owner", { firstName: "Olive", lastName: "Office", email: email("office"), password: "password123", role: "manager" })).body.id;
   T.office = (await app.inject({ method: "POST", url: "/auth/login", payload: { email: email("office"), password: "password123" } })).json().token;

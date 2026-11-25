@@ -37,8 +37,10 @@ export const DOC_TAGS: { label: string; tag: string }[] = [
 
 export const DOC_NAME_MAX = 100;
 export const DOC_CONTENT_MAX = 200_000;
-/** The most customers one email or print run takes. */
+/** The most customers picked one by one in the pop-ups (a list from the Customers page can be bigger). */
 export const DOC_CUSTOMERS_MAX = 200;
+/** The most letters in one PDF. */
+export const DOC_PRINT_MAX = 2000;
 
 /** Words in a document, as the editor counts them. */
 export const docWords = (html: string) => { const t = htmlToText(html).trim(); return t ? t.split(/\s+/).length : 0; };
@@ -50,14 +52,22 @@ const name = z.string().trim().min(1, "Please enter the name").max(DOC_NAME_MAX,
 export const docSchema = z.object({ name, content });
 export type DocInput = z.infer<typeof docSchema>;
 
-const customerIds = z.array(z.string().uuid()).min(1, "Please select at least one customer").max(DOC_CUSTOMERS_MAX, `Pick up to ${DOC_CUSTOMERS_MAX} customers at a time`);
+/** The customers picked one by one in the Send Email and Print pop-ups. */
+export const docCustomersSchema = z.object({
+  customerIds: z.array(z.string().uuid(), { required_error: "Please select at least one customer" }).min(1, "Please select at least one customer").max(DOC_CUSTOMERS_MAX, `Pick up to ${DOC_CUSTOMERS_MAX} customers at a time`),
+});
+const emailTemplateId = z.preprocess((v) => (v === "" ? null : v), z.string().uuid().nullable()).default(null);
 /** Email a document: as the email itself, or with an email template and the document attached as a PDF. */
 export const docEmailSchema = z.object({
-  customerIds,
-  emailTemplateId: z.preprocess((v) => (v === "" ? null : v), z.string().uuid().nullable()).default(null),
+  emailTemplateId,
   attachPdf: z.boolean().default(false),
+  /** Who it went to, in words, when it's sent to a list from the Customers page. */
+  audience: z.string().trim().max(300).optional(),
 });
-export const docPrintSchema = z.object({ customerIds });
+/** Print letters: for everyone picked, or only those an email can't reach. `preview` leaves no history. */
+export const docPrintSchema = z.object({ only: z.enum(["all", "notEmailed"]).default("all"), preview: z.boolean().default(false) });
+/** Before sending: the document as one customer will get it. */
+export const docPreviewSchema = z.object({ customerId: z.string().uuid(), emailTemplateId });
 
 export const DOC_HISTORY_ACTIONS = ["created", "updated", "emailed", "printed"] as const;
 export type DocHistoryAction = (typeof DOC_HISTORY_ACTIONS)[number];
@@ -65,7 +75,9 @@ export type DocHistoryDetail = {
   /** Printed or emailed: how many customers. */
   customers?: number;
   /** Emailed: how it went. */
-  sent?: number; failed?: number; skipped?: number; done?: boolean; emailTemplate?: string | null; attachPdf?: boolean; error?: string | null;
+  sent?: number; failed?: number; skipped?: number; done?: boolean; stopped?: boolean; emailTemplate?: string | null; attachPdf?: boolean; error?: string | null;
+  /** Emailed: the message in Customers → Sent messages, with everyone on it. */
+  messageId?: string;
 };
 
 /** One line of a document's history, in Homeworks' words ("Created by John Test on …"). */
@@ -77,6 +89,7 @@ export function docHistoryText(action: DocHistoryAction, d: DocHistoryDetail | n
       d?.done ? `to ${n(d.sent)}` : `to ${n(d?.customers)} (${d?.sent ?? 0} sent so far)`,
       d?.failed ? `${d.failed} failed${d.error ? `: ${d.error}` : ""}` : "",
       d?.skipped ? `${d.skipped} skipped` : "",
+      d?.stopped ? "stopped early" : "",
     ].filter(Boolean);
     return { verb: "Emailed", rest: ` ${bits.join(", ")}` };
   }
