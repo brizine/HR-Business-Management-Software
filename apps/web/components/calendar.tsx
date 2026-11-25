@@ -181,7 +181,7 @@ export function EventCard({ e, s, onOpen, compact }: { e: CalendarEvent; s: CalS
 }
 
 /** The pop-up when you click an event: everything about it, with Open, Done and Move to. */
-export function EventPopover({ e, s, onClose, onChanged, anchor }: { e: CalendarEvent; s: CalSettings; onClose: () => void; onChanged: () => void; anchor: DOMRect | null }) {
+export function EventPopover({ e, s, onClose, onChanged, anchor, onComplete }: { e: CalendarEvent; s: CalSettings; onClose: () => void; onChanged: () => void; anchor: DOMRect | null; /** Completing a work order (a chemical one asks what was applied first). */ onComplete?: (visitId: string) => void }) {
   const ref = usePopover(true, onClose);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -226,7 +226,7 @@ export function EventPopover({ e, s, onClose, onChanged, anchor }: { e: Calendar
           <button type="button" className="btn" disabled={busy} onClick={() => run(() => api(`/visits/${e.id}/start`, { method: "POST", body: {} }))}>Arrived</button>
         )}
         {e.type === "visit" && e.canComplete && (
-          <button type="button" className="btn primary" disabled={busy} onClick={() => run(() => api(`/visits/${e.id}/complete`, { method: "POST", body: {} }))}>Completed</button>
+          <button type="button" className="btn primary" disabled={busy} onClick={() => (onComplete ? (onClose(), onComplete(e.id)) : run(() => api(`/visits/${e.id}/complete`, { method: "POST", body: {} })))}>Completed</button>
         )}
         {e.type === "repair" && e.canComplete && (
           <button type="button" className="btn primary" disabled={busy} onClick={() => confirm("Mark this repair order completed?") && run(() => api(`/work-orders/${e.id}`, { method: "PATCH", body: { status: "completed" } }))}>Complete</button>

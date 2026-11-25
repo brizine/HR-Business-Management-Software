@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/hooks";
 import { Icon } from "@/components/icons";
 import { PageHead } from "@/components/ui";
+import { useCompleteVisit } from "@/components/chemicals-step";
 import {
   AddTodoModal, DETAILS, DayView, EventCard, EventPopover, FILTER_LABELS, ListView, MiniMonth, MonthGrid, WeekGrid, applyFilters, days, downloadCsv,
   fmt, localToday, rangeFor, rangeLabel, step, usePopover, useCalSettings, workHours, workMoney, type CalFilter, type CalSettings, type CalView, type DetailKey, type FilterKind,
@@ -160,6 +161,8 @@ function CalendarPage() {
   const tagList = useApi<{ id: string; name: string }[]>(can("manager", "customers") ? "/crm/tags" : null);
   const serviceList = useApi<{ id: string; name: string }[]>(can("manager", "customers") ? "/service-types?all=1" : null);
   const reload = useCallback(() => { data.reload(); if (s.unscheduled) unscheduled.reload(); }, [data.reload, unscheduled.reload, s.unscheduled]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Completed from the pop-up: a chemical work order asks what was applied first.
+  const completing = useCompleteVisit(reload);
   useEffect(() => {
     window.addEventListener("crewdesk:todos", reload);
     return () => window.removeEventListener("crewdesk:todos", reload);
@@ -293,7 +296,9 @@ function CalendarPage() {
           </div>
         </div>
       </div>
-      {popup && <EventPopover key={popup.e.key} e={popup.e} s={s} anchor={popup.rect} onClose={() => setPopup(null)} onChanged={reload} />}
+      {popup && <EventPopover key={popup.e.key} e={popup.e} s={s} anchor={popup.rect} onClose={() => setPopup(null)} onChanged={reload} onComplete={completing.start} />}
+      {completing.dialog}
+      {completing.error && <div className="error" role="alert" style={{ position: "fixed", bottom: 16, left: "50%", transform: "translateX(-50%)", zIndex: 1001 }}>{completing.error}</div>}
       {adding && <AddTodoModal date={adding} canWorkOrder={can("manager", "customers")} onClose={() => setAdding(null)} onSaved={reload} />}
     </div>
   );

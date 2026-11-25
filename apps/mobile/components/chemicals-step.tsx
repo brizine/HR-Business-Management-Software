@@ -20,7 +20,7 @@ const fmt = (n: number | null | undefined, d = 3) => (n == null || !Number.isFin
 
 /**
  * The tech's chemicals step when completing a chemical work order: each product is prefilled as used,
- * with how it was applied (a Spray Mix sheet or spreader) and the amount for this lawn. If nothing
+ * with how it was applied (an application method from Chemical Tracking) and the amount for this lawn. If nothing
  * changed, Save is the only tap. Any product can be added (spot treatments).
  */
 export function ChemicalsStep({ options, busy, onSave, onCancel }: {
