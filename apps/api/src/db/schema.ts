@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { AutomationStep, CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings, WeatherSettings } from "@crewdesk/shared";
+import type { AutomationStep, CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings, WeatherSettings, ChemicalNoticeSettings } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -62,6 +62,8 @@ export const companies = pgTable("companies", {
   accounting: jsonb("accounting").$type<AccountingSettings>(),
   accountingKey: text("accounting_key"),
   /** Texting customers from the company's own number (Talkroute); the API key is encrypted in textingKey. */
+  /** After-application customer notices (Chemical Tracking): on or off, and the wording. */
+  chemicalNotices: jsonb("chemical_notices").$type<Partial<ChemicalNoticeSettings>>(),
   texting: jsonb("texting").$type<{ provider: "talkroute"; fromNumber: string; connectedAt: string; accountName?: string | null; inboundSince?: string | null }>(),
   textingKey: text("texting_key"),
   /** Grace periods, alerts and points for attendance (see attendance.ts in @crewdesk/shared). */
@@ -1419,6 +1421,8 @@ export const properties = pgTable(
     preferredCrewId: uuid("preferred_crew_id"),
     /** Overrides the customer's: "none", "text" or "call". */
     notifyBefore: text("notify_before"),
+    /** After a chemical application: "email", "text", "printed" or "none" (Chemical Tracking notices). */
+    chemicalNotice: text("chemical_notice").notNull().default("email"),
     /** Card on file not required for this property: why, who, when. */
     cardExemptReason: text("card_exempt_reason"),
     cardExemptById: uuid("card_exempt_by_id"),
@@ -2756,3 +2760,32 @@ export const chemicalAccess = pgTable("chemical_access", {
   addedById: uuid("added_by_id").references(() => employees.id, { onDelete: "set null" }),
   createdAt: createdAt(),
 });
+
+/**
+ * After-application notices to customers: one per chemical record, sent the way the property
+ * chooses (email, text) or queued to print. Kept with what was sent, for the record.
+ */
+export const chemicalNotices = pgTable(
+  "chemical_notices",
+  {
+    id: id(),
+    companyId: companyId(),
+    recordId: uuid("record_id").notNull().references(() => applicationRecords.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    propertyId: uuid("property_id").references(() => properties.id, { onDelete: "set null" }),
+    /** "email", "text" or "printed". */
+    channel: text("channel").notNull(),
+    /** "sending", "sent", "failed", "skipped", "to_print" or "printed". */
+    status: text("status").notNull(),
+    to: text("to"),
+    subject: text("subject"),
+    body: text("body").notNull(),
+    /** Why it failed or was skipped. */
+    detail: text("detail"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    printedAt: timestamp("printed_at", { withTimezone: true }),
+    sentById: uuid("sent_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("chemical_notices_company_idx").on(t.companyId, t.createdAt), index("chemical_notices_record_idx").on(t.recordId)],
+);

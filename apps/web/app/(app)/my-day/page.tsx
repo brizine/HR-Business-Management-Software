@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ESTIMATE_STATUS_LABELS, INVOICE_STATUS_LABELS, PAYMENT_METHOD_LABELS, VISIT_STATUS_LABELS, formatMoney, type PaymentMethod } from "@crewdesk/shared";
 import { fmtDate } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
+import { useAuth } from "@/lib/auth";
 import { ErrorBox, PageHead } from "@/components/ui";
 
 /** Date ranges like Homeworks' Job Stats picker (weeks start on Sunday). */
@@ -63,6 +64,7 @@ const longToday = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("
 
 /** My Day, like Homeworks': account standing, job stats for a range, and what needs attention. */
 export default function MyDay() {
+  const { me } = useAuth();
   const [preset, setPreset] = useState<Preset>("today");
   const [range, setRange] = useState<[string, string] | null>(null);
   const day = useApi<Data>(`/my-day${range ? `?from=${range[0]}&to=${range[1]}` : ""}`);
@@ -181,6 +183,7 @@ export default function MyDay() {
                   </li>
                 ))}
               </Box>
+              {me?.access?.chemicalTracking && <ChemicalBox />}
               <EmailHealthBox />
             </div>
           </div>
@@ -210,6 +213,41 @@ function Box({ title, more, count, note, children }: { title: string; more: [str
       </div>
       <div className="card myday-list">{items.length ? <ul className="plain-list">{items}</ul> : <p className="muted myday-empty">No records found</p>}</div>
     </section>
+  );
+}
+
+type Attention = {
+  records: { count: number; rows: { id: string; appliedOn: string; customerName: string; issues: string[] }[] };
+  certs: { id: string; name: string; certNo: string; expiresOn: string; expired: boolean }[];
+  notices: { toPrint: number; failed: number };
+};
+
+/** Chemical Tracking (for the people who can open it): records missing something, notices to print, certifications running out. */
+function ChemicalBox() {
+  const a = useApi<Attention>("/chemical-tracking/attention");
+  const d = a.data;
+  if (!d) return null;
+  const items = [
+    ...d.records.rows.map((r) => (
+      <li key={r.id}>
+        <span><Link href={`/chemical-tracking/records/${r.id}`}><strong>{r.customerName}</strong></Link> · {fmtDate(r.appliedOn)}</span>
+        <span className="muted">{r.issues[0]}{r.issues.length > 1 ? ` (+${r.issues.length - 1} more)` : ""}</span>
+      </li>
+    )),
+    ...d.certs.map((c) => (
+      <li key={c.id}>
+        <span><Link href="/chemical-tracking/applicators"><strong>{c.name}</strong></Link> · certification {c.certNo}</span>
+        <span className={c.expired ? "bad-text" : "warn-text"}>{c.expired ? "expired" : "expires"} {fmtDate(c.expiresOn)}</span>
+      </li>
+    )),
+    d.notices.toPrint ? <li key="print"><span><Link href="/chemical-tracking/notices?show=to_print"><strong>{d.notices.toPrint} customer notice{d.notices.toPrint === 1 ? "" : "s"}</strong></Link> waiting to print</span></li> : null,
+    d.notices.failed ? <li key="failed"><span><Link href="/chemical-tracking/notices"><strong>{d.notices.failed} customer notice{d.notices.failed === 1 ? "" : "s"}</strong></Link> didn&apos;t send</span></li> : null,
+  ];
+  return (
+    <Box title="Chemical Tracking" more={["/chemical-tracking?status=issues", "See records"]} count={d.records.count + d.certs.length + d.notices.toPrint + d.notices.failed}
+      note={d.records.count > d.records.rows.length ? <span className="muted">{d.records.count} records need attention</span> : null}>
+      {items}
+    </Box>
   );
 }
 

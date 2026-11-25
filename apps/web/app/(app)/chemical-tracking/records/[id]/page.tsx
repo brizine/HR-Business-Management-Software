@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { use, useState } from "react";
-import { ODAFF_RULE, WEATHER_SOURCE_LABELS, formatRateAmount, windText, type WeatherSource } from "@crewdesk/shared";
+import { NOTICE_CHANNEL_LABELS, NOTICE_STATUS_LABELS, ODAFF_RULE, WEATHER_SOURCE_LABELS, type NoticeChannel, formatRateAmount, windText, type WeatherSource } from "@crewdesk/shared";
 import { API_URL, api, fmtDate, fmtDateTime } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead } from "@/components/ui";
@@ -92,8 +92,35 @@ export default function ChemicalRecord({ params }: { params: Promise<{ id: strin
           </table>
         </div>
       )}
+      <RecordNotices recordId={r.id} />
       <p className="muted">Record made {fmtDateTime(r.createdAt)}. Records are kept and never deleted.</p>
     </>
+  );
+}
+
+/** The customer's notice for this application: what went out, and sending or printing one now. */
+function RecordNotices({ recordId }: { recordId: string }) {
+  const list = useApi<{ id: string; channel: string; status: string; to: string | null; detail: string | null; sentAt: string | null; createdAt: string }[]>(`/chemical-tracking/notices?recordId=${recordId}`);
+  const act = useAction();
+  const send = (channel: "email" | "text") => act.run(async () => { await api(`/chemical-tracking/records/${recordId}/notice`, { method: "POST", body: { channel } }); list.reload(); });
+  const rows = list.data ?? [];
+  return (
+    <div className="card stack noprint" style={{ marginTop: 16 }}>
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <h3 style={{ margin: 0 }}>Customer notice</h3>
+        <div className="row">
+          <button className="btn" disabled={act.busy} onClick={() => send("email")}>Email it</button>
+          <button className="btn" disabled={act.busy} onClick={() => send("text")}>Text it</button>
+          <Link className="btn" href={`/chemical-tracking/notices/print?record=${recordId}`}>Print it</Link>
+        </div>
+      </div>
+      {rows.length ? (
+        <ul className="plain-list">{rows.map((n) => (
+          <li key={n.id}>{NOTICE_CHANNEL_LABELS[n.channel as NoticeChannel] ?? n.channel}{n.to ? ` to ${n.to}` : ""}: <strong>{NOTICE_STATUS_LABELS[n.status] ?? n.status}</strong> <span className="muted">{fmtDateTime(n.sentAt ?? n.createdAt)}{n.detail ? ` · ${n.detail}` : ""}</span></li>
+        ))}</ul>
+      ) : <p className="muted" style={{ margin: 0 }}>No notice for this application yet.</p>}
+      <ErrorBox error={list.error ?? act.error} />
+    </div>
   );
 }
 

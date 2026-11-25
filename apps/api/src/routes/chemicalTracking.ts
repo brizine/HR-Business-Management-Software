@@ -1,14 +1,18 @@
 import type { FastifyPluginAsync } from "fastify";
-import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { z } from "zod";
-import { applicationMethodSchema, hasRole, serviceProductsSchema, type Role } from "@crewdesk/shared";
+import { applicationMethodSchema, hasRole, noticeSettings, noticeSettingsSchema, serviceProductsSchema, type Role } from "@crewdesk/shared";
 import { db } from "../db";
-import { applicationMethods, chemicalAccess, employees, productRates, products, serviceProducts, serviceTypes, visitProducts } from "../db/schema";
+import { applicationMethods, applicationRecords, applicatorCerts, chemicalAccess, chemicalNotices, companies, employees, productRates, products, serviceProducts, serviceTypes, visitProducts } from "../db/schema";
 import { authenticate } from "../lib/auth";
 import { requireAdmin, requireChemicalAccess } from "../lib/chemicalAccess";
 import { HttpError, parse } from "../lib/errors";
 import { companyToday, materialSummary, serviceProductLines } from "../lib/productCosts";
 import { methodsFor } from "../lib/techChemicals";
+import { loadSheet } from "../lib/loadSheet";
+import { buildNotice, deliverNotice, noticeCounts, noticeRows } from "../lib/chemicalNotices";
+import { emailTransport } from "../lib/channels";
+import { textingConfig } from "../lib/texting";
 
 /**
  * Chemical Tracking (Resources): application methods, which services apply which products and
@@ -106,6 +110,73 @@ const routes: FastifyPluginAsync = async (app) => {
       if (links.length) await tx.insert(serviceProducts).values(links.map((l, i) => ({ ...l, serviceTypeId: svc.id, sortOrder: i })));
     });
     return { ok: true };
+  });
+
+  // ---- Load sheet ----
+
+  app.get<{ Querystring: { date?: string; by?: string } }>("/load-sheet", async (req) => {
+    const q = parse(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), by: z.enum(["tech", "truck"]).default("tech") }), req.query);
+    return loadSheet(req.user.companyId, q.date ?? (await companyToday(req.user.companyId)), q.by);
+  });
+
+  // ---- Customer notices ----
+
+  app.get("/notice-settings", async (req) => {
+    const [co] = await db.select({ s: companies.chemicalNotices }).from(companies).where(eq(companies.id, req.user.companyId));
+    return { ...noticeSettings(co?.s), emailReady: !!emailTransport(), textingReady: !!(await textingConfig(req.user.companyId)) };
+  });
+  app.put("/notice-settings", async (req) => {
+    const body = parse(noticeSettingsSchema, req.body);
+    await db.update(companies).set({ chemicalNotices: body }).where(eq(companies.id, req.user.companyId));
+    return body;
+  });
+  app.get<{ Querystring: { status?: string; recordId?: string } }>("/notices", async (req) => noticeRows(req.user.companyId, { status: req.query.status, recordId: req.query.recordId }));
+  app.get<{ Params: { id: string } }>("/notices/:id", async (req) => {
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) throw new HttpError(404, "Notice not found");
+    const [n] = await noticeRows(req.user.companyId, { id: req.params.id, limit: 1 });
+    if (!n) throw new HttpError(404, "Notice not found");
+    return n;
+  });
+  /** A notice for a record now: email or text it, or queue it to print (any record, any time). */
+  app.post<{ Params: { recordId: string } }>("/records/:recordId/notice", async (req) => {
+    const { channel } = parse(z.object({ channel: z.enum(["email", "text", "printed"]) }), req.body);
+    const [r] = await db.select({ id: applicationRecords.id }).from(applicationRecords).where(and(eq(applicationRecords.id, req.params.recordId), eq(applicationRecords.companyId, req.user.companyId)));
+    if (!r) throw new HttpError(404, "Record not found");
+    return deliverNotice(r.id, channel, req.user.sub);
+  });
+  /** What a record's notice would say (for printing one that wasn't queued). */
+  app.get<{ Params: { recordId: string } }>("/records/:recordId/notice-preview", async (req) => {
+    const [r] = await db.select({ id: applicationRecords.id }).from(applicationRecords).where(and(eq(applicationRecords.id, req.params.recordId), eq(applicationRecords.companyId, req.user.companyId)));
+    if (!r) throw new HttpError(404, "Record not found");
+    const n = await buildNotice(r.id);
+    return { subject: n.subject, body: n.body, text: n.text, company: n.company, customerName: n.record.customerName, siteAddress: n.record.siteAddress };
+  });
+  /** Printed notices: mark them printed (or back to print). */
+  app.post("/notices/printed", async (req) => {
+    const { ids, printed } = parse(z.object({ ids: z.array(z.string().uuid()).min(1).max(500), printed: z.boolean().default(true) }), req.body);
+    const rows = await db.update(chemicalNotices).set(printed ? { status: "printed", printedAt: new Date() } : { status: "to_print", printedAt: null })
+      .where(and(inArray(chemicalNotices.id, ids), eq(chemicalNotices.companyId, req.user.companyId), eq(chemicalNotices.channel, "printed"))).returning({ id: chemicalNotices.id });
+    return { updated: rows.length };
+  });
+
+  // ---- What needs attention (My Day) ----
+
+  app.get("/attention", async (req) => {
+    const companyId = req.user.companyId;
+    const today = await companyToday(companyId);
+    const soon = new Date(Date.parse(`${today}T12:00:00Z`) + 60 * 86_400_000).toISOString().slice(0, 10);
+    const records = await db.select({ id: applicationRecords.id, appliedOn: applicationRecords.appliedOn, customerName: applicationRecords.customerName, issues: applicationRecords.issues })
+      .from(applicationRecords)
+      .where(and(eq(applicationRecords.companyId, companyId), isNull(applicationRecords.voidedAt), sql`jsonb_array_length(${applicationRecords.issues}) > 0`))
+      .orderBy(desc(applicationRecords.appliedOn)).limit(200);
+    const certs = await db.select({ id: employees.id, first: employees.firstName, last: employees.lastName, certNo: applicatorCerts.certNo, expiresOn: applicatorCerts.expiresOn })
+      .from(applicatorCerts).innerJoin(employees, eq(employees.id, applicatorCerts.employeeId))
+      .where(and(eq(applicatorCerts.companyId, companyId), eq(employees.status, "active"), lte(applicatorCerts.expiresOn, soon))).orderBy(asc(applicatorCerts.expiresOn));
+    return {
+      records: { count: records.length, rows: records.slice(0, 5) },
+      certs: certs.map((c) => ({ id: c.id, name: `${c.first} ${c.last}`.trim(), certNo: c.certNo, expiresOn: c.expiresOn, expired: c.expiresOn < today })),
+      notices: await noticeCounts(companyId),
+    };
   });
 
   // ---- Access: admins always; admins add anyone else ----

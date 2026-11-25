@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import "leaflet/dist/leaflet.css";
-import {
+import { NOTICE_CHANNELS, NOTICE_CHANNEL_LABELS,
   BACK_REASONS, BACK_REASON_LABELS, BADGE_HINTS, BADGE_LABELS, NOTIFY_BEFORE, NOTIFY_BEFORE_LABELS, PRIORITIES, PRIORITY_LABELS,
   formatMoney, visitNumber, type NotifyBefore, type Priority, type WaitBadge,
 } from "@crewdesk/shared";
@@ -689,7 +689,7 @@ export function CustomerSchedulingPrefs({ customer, onSaved }: { customer: { id:
 }
 
 /** A property's preferred crew and notice (overrides the customer's), and its card exemption. */
-export function PropertySchedulingPrefs({ property, onSaved }: { property: { id: string; notifyBefore?: NotifyBefore | null; preferredCrewId?: string | null; cardExemptReason?: string | null; cardExemptAt?: string | null }; onSaved: () => void }) {
+export function PropertySchedulingPrefs({ property, onSaved }: { property: { id: string; notifyBefore?: NotifyBefore | null; chemicalNotice?: string | null; preferredCrewId?: string | null; cardExemptReason?: string | null; cardExemptAt?: string | null }; onSaved: () => void }) {
   const crews = useApi<{ id: string; name: string; active: boolean }[]>("/crews");
   const act = useAction();
   const [reason, setReason] = useState("");
@@ -711,6 +711,12 @@ export function PropertySchedulingPrefs({ property, onSaved }: { property: { id:
           <select value={property.notifyBefore ?? ""} disabled={act.busy} onChange={(e) => put({ notifyBefore: (e.target.value || null) as NotifyBefore | null })}>
             <option value="">Same as the customer</option>
             {NOTIFY_BEFORE.map((n) => <option key={n} value={n}>{NOTIFY_BEFORE_LABELS[n]}</option>)}
+          </select>
+        </label>
+        <label>After a chemical application
+          <select value={property.chemicalNotice ?? "email"} disabled={act.busy}
+            onChange={(e) => act.run(async () => { await api(`/properties/${property.id}/chemical-notice`, { method: "PUT", body: { chemicalNotice: e.target.value } }); onSaved(); })}>
+            {NOTICE_CHANNELS.map((c) => <option key={c} value={c}>{NOTICE_CHANNEL_LABELS[c]}</option>)}
           </select>
         </label>
       </div>

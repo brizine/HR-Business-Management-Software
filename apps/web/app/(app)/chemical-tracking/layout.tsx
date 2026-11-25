@@ -7,6 +7,8 @@ import { Empty } from "@/components/ui";
 
 const TABS: [string, string][] = [
   ["/chemical-tracking", "Records"],
+  ["/chemical-tracking/load-sheet", "Load sheet"],
+  ["/chemical-tracking/notices", "Customer notices"],
   ["/chemical-tracking/products", "Products"],
   ["/chemical-tracking/methods", "Application methods"],
   ["/chemical-tracking/services", "Services"],
