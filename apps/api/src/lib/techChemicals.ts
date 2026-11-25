@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { DEFAULT_APPLICATION_METHODS, costOn, costPerUseUnitCents, type ChemicalCompletion } from "@crewdesk/shared";
 import { db } from "../db";
-import { applicationMethods, productCosts, productRates, products, properties, serviceTypes, visitLines, visitProducts, visits } from "../db/schema";
+import { applicationMethods, chemicalMixItems, chemicalMixes, productCosts, productRates, products, properties, serviceTypes, visitLines, visitProducts, visits } from "../db/schema";
 import { HttpError } from "./errors";
 import { companyToday, serviceProductLines } from "./productCosts";
 
@@ -68,17 +68,34 @@ export async function chemicalOptions(visitId: string, companyId: string) {
     };
   });
   const items = lines.flatMap((l) => (l.serviceTypeId ? byService.get(l.serviceTypeId) ?? [] : []).filter((p) => p.applies).map((p) => {
+    // A mix on the service: the mix's rate and method, grouped under the mix's name.
+    if (p.mixId) {
+      const method = methods.find((m) => m.id === p.applicationMethodId) ?? defaultMethod(methods, { carrierGalPer1000: p.carrierGalPer1000 });
+      return {
+        productId: p.productId, productName: p.productName, unit: p.unit, fromService: true, used: true, mixName: p.mixName,
+        methodId: method?.id ?? null, ratePer1000: p.amountPer1000, amount: area ? (p.amountPer1000 * area) / 1000 : null,
+      };
+    }
     const rate = rates.find((r) => r.id === p.productRateId) ?? null;
     const method = defaultMethod(methods, rate ?? { carrierGalPer1000: p.carrierGalPer1000 });
     // The service's chosen rate, unless it's for another method and the product has one for this method.
     const forMethod = method ? rates.find((r) => r.productId === p.productId && r.applicationMethodId === method.id) : null;
     const ratePer1000 = rate?.applicationMethodId === method?.id ? p.amountPer1000 : forMethod?.amountPer1000 ?? p.amountPer1000;
     return {
-      productId: p.productId, productName: p.productName, unit: p.unit, fromService: true, used: true,
+      productId: p.productId, productName: p.productName, unit: p.unit, fromService: true, used: true, mixName: null as string | null,
       methodId: method?.id ?? null, ratePer1000, amount: area ? (ratePer1000 * area) / 1000 : null,
     };
   }));
+  // Mixes: add every product in one tap, each at the mix's rate, applied the mix's way.
+  const mixes = await db.select().from(chemicalMixes).where(and(eq(chemicalMixes.companyId, companyId), eq(chemicalMixes.active, true))).orderBy(asc(chemicalMixes.sortOrder), asc(chemicalMixes.name));
+  const mixItems = mixes.length ? await db.select().from(chemicalMixItems).where(inArray(chemicalMixItems.mixId, mixes.map((m) => m.id))).orderBy(asc(chemicalMixItems.sortOrder)) : [];
+  const mixList = mixes.map((m) => ({
+    id: m.id, name: m.name, notes: m.notes,
+    methodId: methods.some((x) => x.id === m.applicationMethodId) ? m.applicationMethodId : null,
+    items: mixItems.filter((i) => i.mixId === m.id && catalog.some((c) => c.id === i.productId)).map((i) => ({ productId: i.productId, ratePer1000: i.ratePer1000 })),
+  })).filter((m) => m.items.length);
   return {
+    mixes: mixList,
     chemical: lines.some((l) => l.chemical) || items.length > 0,
     areaSqFt: area,
     site: lines.find((l) => l.site)?.site ?? null,
@@ -122,7 +139,7 @@ export async function snapshotFromTech(tx: Tx, visitId: string, companyId: strin
       companyId, visitId, serviceTypeId: link?.serviceTypeId ?? null, productId: p.id, productRateId: link?.productRateId ?? null, productCostId: cost?.id ?? null,
       productName: p.name, epaRegNo: p.epaRegNo, rateName: link?.rateName ?? null, amountPer1000: i.ratePer1000, areaSqFt: area, amount: i.amount, unit: p.useUnit,
       costPerUseUnitCents: perUse, costCents: perUse == null ? null : Math.round(i.amount * perUse), costDate: day,
-      applicationMethodId: method.id, methodName: method.name, carrierGalPer1000: method.galPer1000, sortOrder: n,
+      applicationMethodId: method.id, methodName: method.name, carrierGalPer1000: method.galPer1000, mixName: i.mixName ?? null, sortOrder: n,
     };
   });
   await tx.insert(visitProducts).values(rows);

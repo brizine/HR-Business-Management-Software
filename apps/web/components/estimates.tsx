@@ -20,13 +20,15 @@ export function EstimateStatus({ status, expired }: { status: string; expired?: 
 type Line = {
   id?: string; serviceTypeId: string | null; propertyId: string; description: string; quantity: string; price: string; visits: string; tax: string;
   incomeAccountCode: string; cost: string; hours: string; optional: boolean; selected: boolean; recommended: boolean; more: boolean;
+  /** "Our cost" from the service's products (kept up to date while open) rather than typed in. */
+  costAuto: boolean;
 };
-const blankLine = (): Line => ({ serviceTypeId: null, propertyId: "", description: "", quantity: "1", price: "", visits: "1", tax: "", incomeAccountCode: "4000", cost: "", hours: "", optional: false, selected: true, recommended: false, more: false });
+const blankLine = (): Line => ({ serviceTypeId: null, propertyId: "", description: "", quantity: "1", price: "", visits: "1", tax: "", incomeAccountCode: "4000", cost: "", hours: "", optional: false, selected: true, recommended: false, more: false, costAuto: false });
 const taxText = (r: number | null | undefined) => (r ? String(Number(r.toFixed(3))) : "");
 const fromLine = (l: any): Line => ({
   id: l.id, serviceTypeId: l.serviceTypeId, propertyId: l.propertyId ?? "", description: l.description, quantity: String(l.quantity), price: dollars(l.unitPriceCents), visits: String(l.visits ?? 1),
   tax: taxText(l.taxRate), incomeAccountCode: l.incomeAccountCode ?? "4000", cost: l.costCents != null ? dollars(l.costCents) : "", hours: l.budgetedHours != null ? String(l.budgetedHours) : "",
-  optional: l.optional, selected: l.selected, recommended: l.recommended, more: l.costCents != null || l.budgetedHours != null || l.optional || l.recommended || !!l.propertyId,
+  costAuto: !!l.costAuto, optional: l.optional, selected: l.selected, recommended: l.recommended, more: l.costCents != null || l.budgetedHours != null || l.optional || l.recommended || !!l.propertyId,
 });
 
 /** New or changed estimate, laid out like Homeworks': details, lines (with visits, optional and recommended lines, cost and hours), totals with profit, terms and notes. */
@@ -90,7 +92,7 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
     const material = lineMaterialCents(s, lawnFor(lines[i]));
     setLine(i, {
       serviceTypeId: s.id, description: lines[i].description || s.name, price: price != null ? dollars(price) : lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)),
-      cost: material != null ? dollars(material) : lines[i].cost,
+      cost: material != null ? dollars(material) : lines[i].cost, costAuto: material != null || (lines[i].costAuto && !lines[i].cost.trim()),
     });
   };
   const addPackage = (id: string) => {
@@ -100,7 +102,7 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
       const s = services.data?.find((x) => x.id === l.serviceTypeId);
       const price = l.unitPriceCents ?? (s ? priceFor(s, property?.lawnSqFt ?? null) : null);
       const material = s ? lineMaterialCents(s, property?.lawnSqFt ?? null) : null;
-      return { ...blankLine(), serviceTypeId: l.serviceTypeId ?? null, description: l.description ?? s?.name ?? "", quantity: String(l.quantity ?? 1), price: price != null ? dollars(price) : "", incomeAccountCode: s?.incomeAccountCode ?? "4000", tax: taxText(lineTaxRate(s?.taxable, rate)), hours: l.budgetedHours != null ? String(l.budgetedHours) : "", cost: material != null ? dollars(material) : "" };
+      return { ...blankLine(), serviceTypeId: l.serviceTypeId ?? null, description: l.description ?? s?.name ?? "", quantity: String(l.quantity ?? 1), price: price != null ? dollars(price) : "", incomeAccountCode: s?.incomeAccountCode ?? "4000", tax: taxText(lineTaxRate(s?.taxable, rate)), hours: l.budgetedHours != null ? String(l.budgetedHours) : "", cost: material != null ? dollars(material) : "", costAuto: material != null };
     });
     setLines((ls) => [...ls.filter((l) => l.description.trim() || l.price), ...added]);
   };
@@ -121,7 +123,7 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
         if (!l.description.trim()) throw new Error(`Line ${i + 1} needs a description`);
         if (!(p.quantity > 0)) throw new Error(`Line ${i + 1}: enter a quantity`);
         if (!Number.isFinite(toCents(l.price || "0"))) throw new Error(`Line ${i + 1}: check the price`);
-        out.push({ ...p, quantity: Math.round(p.quantity * 100) / 100, serviceTypeId: l.serviceTypeId, propertyId: l.propertyId || null, description: l.description.trim(), incomeAccountCode: l.incomeAccountCode, recommended: l.recommended });
+        out.push({ ...p, quantity: Math.round(p.quantity * 100) / 100, serviceTypeId: l.serviceTypeId, propertyId: l.propertyId || null, description: l.description.trim(), incomeAccountCode: l.incomeAccountCode, recommended: l.recommended, costAuto: l.costAuto && !!l.serviceTypeId });
       }
       if (!out.length) throw new Error("Add at least one line");
       const body = {
@@ -197,7 +199,8 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
                       </select>
                     </label>
                   )}
-                  <label>Our cost (each)<input inputMode="decimal" placeholder="0.00" value={l.cost} onChange={(e) => setLine(i, { cost: e.target.value })} /></label>
+                  <label>Our cost (each)<input inputMode="decimal" placeholder="0.00" value={l.cost} onChange={(e) => setLine(i, { cost: e.target.value, costAuto: false })} />
+                    {l.costAuto && <span className="muted" style={{ fontSize: 12 }}>From the service&apos;s products; stays up to date while the estimate is open</span>}</label>
                   <label>Hours per visit<input inputMode="decimal" value={l.hours} onChange={(e) => setLine(i, { hours: e.target.value })} /></label>
                   {!s && (
                     <label>Income account

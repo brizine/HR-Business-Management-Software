@@ -1,0 +1,1 @@
+ALTER TABLE "estimate_lines" ADD COLUMN "cost_auto" boolean DEFAULT false NOT NULL;

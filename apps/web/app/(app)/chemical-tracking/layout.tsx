@@ -10,6 +10,7 @@ const TABS: [string, string][] = [
   ["/chemical-tracking/load-sheet", "Load sheet"],
   ["/chemical-tracking/notices", "Customer notices"],
   ["/chemical-tracking/products", "Products"],
+  ["/chemical-tracking/mixes", "Mixes"],
   ["/chemical-tracking/methods", "Application methods"],
   ["/chemical-tracking/services", "Services"],
   ["/chemical-tracking/applicators", "Applicators & license"],

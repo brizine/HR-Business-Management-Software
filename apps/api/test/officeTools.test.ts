@@ -51,7 +51,7 @@ beforeAll(async () => {
   await call("PUT", "/company", "owner", { name: "Office Tools Co", addressLine1: "100 Main St", city: "Norman", state: "OK", zip: "73069", email: "office@office-tools.test", phone: "(405) 555-0100", timezone: "America/Chicago" });
   today = (await call("GET", "/todos?limit=1", "owner")).body.today;
   await call("PUT", "/weather/settings", "owner", { mode: "off" });
-  await call("PUT", "/texting/settings", "owner", { apiKey: "key-123456", fromNumber: "405-555-0199" });
+  await call("PUT", "/texting/settings", "owner", { apiKey: "key-123456", fromNumber: "405-555-0188" });
   for (const [who, first] of [["leo", "Leo"], ["ana", "Ana"]] as const) {
     ID[who] = (await call("POST", "/employees", "owner", { firstName: first, lastName: "Tech", email: email(who), password: "password123", role: "employee" })).body.id;
     T[who] = (await app.inject({ method: "POST", url: "/auth/login", payload: { email: email(who), password: "password123" } })).json().token;
@@ -74,17 +74,19 @@ beforeAll(async () => {
   await call("PUT", `/chemical-tracking/services/${ID.round}/products`, "owner", { products: [{ productId: pre.id, productRateId: pre.rates[0].id }, { productId: fert.id, productRateId: fert.rates[0].id }] });
 
   // Three customers, each with a property: 10,000, 6,000 and one with no lawn size.
-  const cust = async (key: string, first: string, sqFt: number | null, extra: Record<string, unknown> = {}) => {
+  const cust = async (key: string, first: string, sqFt: number | null, extra: Record<string, unknown> = {}, propExtra: Record<string, unknown> = {}) => {
     ID[key] = (await call("POST", "/customers", "owner", { firstName: first, lastName: "Example", email: email(key), phone: "(405) 555-01" + String(10 + Object.keys(ID).length).slice(-2), ...extra })).body.id;
-    ID[`${key}Prop`] = (await call("POST", "/properties", "owner", { street: `${first} St 1`, city: "Norman", zip: "73069", ...(sqFt ? { lawnSqFt: sqFt } : {}), billToCustomerId: ID[key] })).body.id;
+    ID[`${key}Prop`] = (await call("POST", "/properties", "owner", { street: `${first} St 1`, city: "Norman", zip: "73069", ...(sqFt ? { lawnSqFt: sqFt } : {}), billToCustomerId: ID[key], ...propExtra })).body.id;
   };
-  await cust("amy", "Amy", 10000); await cust("bob", "Bob", 6000); await cust("cal", "Cal", null);
+  await cust("amy", "Amy", 10000); await cust("bob", "Bob", 6000, {}, { mapCode: "N12", mapCodeManual: true }); await cust("cal", "Cal", null);
   ID.woAmy = (await call("POST", "/visits", "owner", workOrder(ID.amyProp, ID.amy, ID.leo, ID.crew))).body.id;
   ID.woBob = (await call("POST", "/visits", "owner", workOrder(ID.bobProp, ID.bob, ID.leo, ID.crew))).body.id;
   ID.woCal = (await call("POST", "/visits", "owner", workOrder(ID.calProp, ID.cal, ID.ana))).body.id;
 });
 
 afterAll(async () => {
+  // Disconnect texting again: other test files poll every connected company for replies.
+  await call("DELETE", "/texting/settings", "owner");
   setEmailTransport(null); setTextingProvider(null);
   await app.close();
   await flushNotifications();
@@ -102,6 +104,12 @@ describe("load sheet", () => {
       ["Sample Pre-Emergent", "Truck 2gal/1000ft", 8, 2], // 0.5 oz × 16
     ]);
     expect(leo.spray).toEqual([{ method: "Truck 2gal/1000ft", gal: 32 }]); // 2 gal × 16
+  });
+
+  it("puts the whole day in one list", async () => {
+    const s = (await call("GET", `/chemical-tracking/load-sheet?date=${today}&by=day`, "owner")).body;
+    expect(s.groups.map((g: any) => [g.label, g.stops.length, g.missingSize])).toEqual([["All work orders", 3, 1]]);
+    expect(s.groups[0].totals.map((t: any) => [t.product, +t.amount.toFixed(3)])).toEqual([["Sample Fertilizer", 48], ["Sample Pre-Emergent", 8]]);
   });
 
   it("groups by truck: the crew's truck, else the truck assigned to the tech", async () => {
@@ -169,6 +177,135 @@ describe("customer notices", () => {
     await complete(wo);
     const problems = (await call("GET", "/chemical-tracking/notices?status=problems", "owner")).body;
     expect(problems.map((n: any) => [n.customerName, n.status, n.detail])).toEqual([["Nia Nophone", "skipped", "Nia Nophone has no mobile number on file"]]);
+  });
+});
+
+describe("mixes", () => {
+  it("are kept in Chemical Tracking, within each label's maximum", async () => {
+    const methods = (await call("GET", "/chemical-tracking/methods", "owner")).body as { id: string; name: string }[];
+    const truck = methods.find((m) => m.name === "Truck 2gal/1000ft")!.id;
+    const products = (await call("GET", "/products", "owner")).body as { id: string; name: string }[];
+    ID.pre = products.find((p) => p.name === "Sample Pre-Emergent")!.id;
+    ID.surf = (await call("POST", "/products", "owner", { name: "Sample Surfactant", productType: "adjuvant", useUnit: "ounces liquid", labelMaxPer1000: 0.5, rates: [] })).body.id;
+    const mix = { name: "Pre-em + surfactant", applicationMethodId: truck, notes: "Surfactant last", items: [{ productId: ID.pre, ratePer1000: 0.55 }, { productId: ID.surf, ratePer1000: 0.25 }] };
+    expect((await call("POST", "/chemical-tracking/mixes", "mgr", mix)).status).toBe(403);
+    expect((await call("POST", "/chemical-tracking/mixes", "owner", { ...mix, items: [{ productId: ID.surf, ratePer1000: 0.9 }] })).status).toBe(400); // over the label
+    expect((await call("POST", "/chemical-tracking/mixes", "owner", { ...mix, items: [mix.items[0], mix.items[0]] })).status).toBe(400);
+    const made = await call("POST", "/chemical-tracking/mixes", "owner", mix);
+    expect(made.status).toBe(200);
+    expect(made.body).toMatchObject({ name: "Pre-em + surfactant", methodName: "Truck 2gal/1000ft" });
+    expect(made.body.items.map((i: any) => [i.productName, i.ratePer1000])).toEqual([["Sample Pre-Emergent", 0.55], ["Sample Surfactant", 0.25]]);
+    ID.mix = made.body.id; ID.truck = truck;
+  });
+
+  it("are offered to the tech, and the record keeps each product with the mix's name", async () => {
+    const wo = (await call("POST", "/visits", "owner", workOrder(ID.amyProp, ID.amy, ID.leo))).body.id;
+    const o = (await call("GET", `/visits/${wo}/chemicals`, "leo")).body;
+    expect(o.mixes).toEqual([{ id: ID.mix, name: "Pre-em + surfactant", notes: "Surfactant last", methodId: ID.truck, items: [{ productId: ID.pre, ratePer1000: 0.55 }, { productId: ID.surf, ratePer1000: 0.25 }] }]);
+    await call("POST", `/visits/${wo}/start`, "leo", {});
+    const done = await call("POST", `/visits/${wo}/complete`, "leo", { chemicals: { items: [
+      { productId: ID.pre, used: true, methodId: ID.truck, ratePer1000: 0.55, amount: 5.5, mixName: "Pre-em + surfactant" },
+      { productId: ID.surf, used: true, methodId: ID.truck, ratePer1000: 0.25, amount: 2.5, mixName: "Pre-em + surfactant" },
+    ] } });
+    expect(done.status).toBe(200);
+    const [r] = (await call("GET", `/chemical-records?visitId=${wo}`, "owner")).body;
+    const rec = (await call("GET", `/chemical-records/${r.id}`, "owner")).body;
+    expect(rec.products.map((p: any) => [p.tradeName, p.mixName, p.methodName, p.amount])).toEqual([
+      ["Sample Pre-Emergent", "Pre-em + surfactant", "Truck 2gal/1000ft", 5.5],
+      ["Sample Surfactant", "Pre-em + surfactant", "Truck 2gal/1000ft", 2.5],
+    ]);
+    const csv = (await call("GET", `/chemical-records/export.csv?from=${today}&to=${today}`, "owner")).body as string;
+    expect(csv.split("\n")[0]).toContain(",Mix,Application method,");
+    // Turned off: no longer offered; removed: records keep it.
+    await call("PUT", `/chemical-tracking/mixes/${ID.mix}`, "owner", { name: "Pre-em + surfactant", applicationMethodId: ID.truck, active: false, items: [{ productId: ID.pre, ratePer1000: 0.55 }] });
+    expect((await call("GET", `/visits/${ID.woAmy}/chemicals`, "leo")).body.mixes).toEqual([]);
+    expect((await call("DELETE", `/chemical-tracking/mixes/${ID.mix}`, "owner")).status).toBe(200);
+    expect((await call("GET", `/chemical-records/${r.id}`, "owner")).body.products[0].mixName).toBe("Pre-em + surfactant");
+  });
+});
+
+describe("mixes on services", () => {
+  it("attach to a service; open work orders, the load sheet and material follow changes; completed ones keep theirs", async () => {
+    const methods = (await call("GET", "/chemical-tracking/methods", "owner")).body as { id: string; name: string }[];
+    const truck = methods.find((m) => m.name === "Truck 2gal/1000ft")!.id;
+    const pack = methods.find((m) => m.name === "Backpack 1gal/1000ft")!.id;
+    const fert = ((await call("GET", "/products", "owner")).body as { id: string; name: string; rates: { id: string }[] }[]).find((p) => p.name === "Sample Fertilizer")!;
+    const mix = (await call("POST", "/chemical-tracking/mixes", "owner", { name: "Spring tank", applicationMethodId: truck, items: [{ productId: ID.pre, ratePer1000: 0.5 }, { productId: ID.surf, ratePer1000: 0.2 }] })).body;
+    ID.svc2 = (await call("POST", "/service-types", "owner", { name: "Round 2", pricing: "flat", priceCents: 6500, incomeAccountCode: "4000", chemical: true })).body.id;
+    expect((await call("PUT", `/chemical-tracking/services/${ID.svc2}/mixes`, "mgr", { mixes: [{ mixId: mix.id }] })).status).toBe(403);
+    expect((await call("PUT", `/chemical-tracking/services/${ID.svc2}/mixes`, "owner", { mixes: [{ mixId: mix.id }] })).status).toBe(200);
+    await call("PUT", `/chemical-tracking/services/${ID.svc2}/products`, "owner", { products: [{ productId: fert.id, productRateId: fert.rates[0].id }] });
+    const svc = (await call("GET", "/chemical-tracking/services", "owner")).body.find((x: any) => x.id === ID.svc2);
+    expect(svc.products.map((p: any) => p.productName)).toEqual(["Sample Fertilizer"]);
+    expect(svc.mixes.map((m: any) => [m.mixName, m.methodName, m.items.map((i: any) => [i.productName, i.amountPer1000])])).toEqual([
+      ["Spring tank", "Truck 2gal/1000ft", [["Sample Pre-Emergent", 0.5], ["Sample Surfactant", 0.2]]],
+    ]);
+    expect((await call("DELETE", `/chemical-tracking/mixes/${mix.id}`, "owner")).status).toBe(409);
+
+    // A work order scheduled now, before the mix changes.
+    const wo = (await call("POST", "/visits", "owner", { ...workOrder(ID.bobProp, ID.bob, ID.leo), lines: [{ serviceTypeId: ID.svc2, description: "Round 2", quantity: 1, unitPriceCents: 6500 }] })).body.id;
+    let o = (await call("GET", `/visits/${wo}/chemicals`, "leo")).body;
+    expect(o.items.map((i: any) => [i.productName, i.mixName, i.ratePer1000, i.methodId === truck])).toEqual([
+      ["Sample Fertilizer", null, 3, false], ["Sample Pre-Emergent", "Spring tank", 0.5, true], ["Sample Surfactant", "Spring tank", 0.2, true],
+    ]);
+    // The mix changes: the scheduled work order, load sheet and material follow.
+    await call("PUT", `/chemical-tracking/mixes/${mix.id}`, "owner", { name: "Spring tank", applicationMethodId: pack, items: [{ productId: ID.pre, ratePer1000: 0.6 }, { productId: ID.surf, ratePer1000: 0.2 }] });
+    o = (await call("GET", `/visits/${wo}/chemicals`, "leo")).body;
+    expect(o.items.filter((i: any) => i.mixName).map((i: any) => [i.productName, i.ratePer1000, i.methodId === pack])).toEqual([["Sample Pre-Emergent", 0.6, true], ["Sample Surfactant", 0.2, true]]);
+    const sheet = (await call("GET", `/chemical-tracking/load-sheet?date=${today}&by=day`, "owner")).body;
+    const stop = sheet.groups[0].stops.find((x: any) => x.visitId === wo);
+    expect(stop.items.map((i: any) => [i.product, i.method, +i.amount.toFixed(3)])).toEqual([
+      ["Sample Fertilizer", "Spreader (not mixed)", 18], ["Sample Pre-Emergent", "Backpack 1gal/1000ft", 3.6], ["Sample Surfactant", "Backpack 1gal/1000ft", 1.2],
+    ]);
+    // Completed without the step (older phones): the record has the mix's products, rates and name as they are now.
+    await call("POST", `/visits/${wo}/start`, "leo", {});
+    await call("POST", `/visits/${wo}/complete`, "leo", {});
+    const [r] = (await call("GET", `/chemical-records?visitId=${wo}`, "owner")).body;
+    const rec = (await call("GET", `/chemical-records/${r.id}`, "owner")).body;
+    expect(rec.products.map((p: any) => [p.tradeName, p.mixName, p.ratePer1000, p.methodName])).toEqual([
+      ["Sample Fertilizer", null, 3, "Spreader (not mixed)"], ["Sample Pre-Emergent", "Spring tank", 0.6, "Backpack 1gal/1000ft"], ["Sample Surfactant", "Spring tank", 0.2, "Backpack 1gal/1000ft"],
+    ]);
+    // Later changes don't touch the completed one.
+    await call("PUT", `/chemical-tracking/mixes/${mix.id}`, "owner", { name: "Spring tank", applicationMethodId: pack, items: [{ productId: ID.pre, ratePer1000: 0.7 }] });
+    expect((await call("GET", `/chemical-records/${r.id}`, "owner")).body.products[1].ratePer1000).toBe(0.6);
+    // Off the service, the mix can be removed.
+    await call("PUT", `/chemical-tracking/services/${ID.svc2}/mixes`, "owner", { mixes: [] });
+    expect((await call("DELETE", `/chemical-tracking/mixes/${mix.id}`, "owner")).status).toBe(200);
+  });
+});
+
+describe("record filters, monthly totals and exports", () => {
+  it("finds records by property, Map Code, product and applicator", async () => {
+    const ids = async (qs: string) => ((await call("GET", `/chemical-records?status=all&${qs}`, "owner")).body as any[]).map((r) => r.customerName).sort();
+    expect(await ids("q=bob")).toEqual(["Bob Example", "Bob Example"]);
+    expect(await ids("q=Cal%20St")).toEqual(["Cal Example"]);
+    expect(await ids("mapCode=n12")).toEqual(["Bob Example", "Bob Example"]);
+    expect(await ids(`applicatorId=${ID.ana}`)).toEqual(["Cal Example"]);
+    expect(await ids(`productId=${ID.surf}`)).toEqual(["Amy Example", "Bob Example"]); // both got the surfactant mix
+    expect(await ids("q=%25")).toEqual([]); // a literal %, not "anything"
+    expect((await call("GET", "/chemical-records/map-codes", "owner")).body).toEqual(["N12"]);
+  });
+
+  it("totals each product by month", async () => {
+    const m = (await call("GET", `/chemical-records/monthly?applicatorId=${ID.ana}`, "owner")).body;
+    expect(m).toEqual([]); // Ana's only record (Cal's lawn, no size yet) has no products on it
+    const all = (await call("GET", "/chemical-records/monthly", "owner")).body as any[];
+    const surf = all.find((r) => r.tradeName === "Sample Surfactant");
+    expect([surf.month, surf.unit, +surf.amount.toFixed(3), surf.applications]).toEqual([today.slice(0, 7), "ounces liquid", 3.7, 2]); // 2.5 + 1.2
+    const byLeo = (await call("GET", `/chemical-records/monthly?applicatorId=${ID.leo}&productId=${ID.surf}`, "owner")).body as any[];
+    expect(byLeo.map((r) => r.tradeName)).toEqual(["Sample Surfactant"]);
+    const csv = (await call("GET", "/chemical-records/monthly.csv", "owner")).body as string;
+    expect(csv).toContain("Month,Product (trade name),EPA reg #,Total applied,Unit,Applications");
+  });
+
+  it("exports PDFs of the records and the monthly totals", async () => {
+    for (const url of ["/chemical-records/export.pdf?q=bob", "/chemical-records/monthly.pdf", "/chemical-records/export.pdf?q=nobody"]) {
+      const res = await app.inject({ method: "GET", url, headers: { authorization: `Bearer ${T.owner}` } });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["content-type"]).toBe("application/pdf");
+      expect(res.rawPayload.subarray(0, 5).toString()).toBe("%PDF-");
+    }
+    expect((await app.inject({ method: "GET", url: "/chemical-records/export.pdf", headers: { authorization: `Bearer ${T.mgr}` } })).statusCode).toBe(403);
   });
 });
 

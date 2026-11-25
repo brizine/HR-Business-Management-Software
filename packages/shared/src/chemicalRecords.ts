@@ -141,6 +141,19 @@ export const DEFAULT_APPLICATION_METHODS: { name: string; galPer1000: number | n
   { name: "Spreader (not mixed)", galPer1000: null },
 ];
 
+/** A mix: products that go in one tank together, each at its rate, applied one way. */
+export const chemicalMixSchema = z.object({
+  name: z.string().trim().min(1, "Name the mix").max(80),
+  applicationMethodId: z.string().uuid("Pick how the mix is applied"),
+  notes: z.preprocess(blankToNull, z.string().trim().max(1000).nullable()).optional(),
+  active: z.boolean().default(true),
+  items: z.array(z.object({
+    productId: z.string().uuid("Pick a product"),
+    ratePer1000: z.number().positive("Enter the rate").max(1_000_000),
+  })).min(1, "Add at least one product").max(20),
+});
+export type ChemicalMixInput = z.infer<typeof chemicalMixSchema>;
+
 /** "How it was applied" for a dry product: no spray mix. */
 export const DRY_METHOD = "dry";
 export const DRY_METHOD_LABEL = "Spreader (not mixed)";
@@ -152,7 +165,7 @@ export const per1000FromAcre = (ratePerAcre: number) => ratePerAcre / 43.56;
 
 /**
  * What the tech confirms when completing a chemical work order: for each product, whether it was
- * used, how it was applied (a Spray Mix sheet, or "dry"), the rate and the amount; and the area and
+ * used, how it was applied (an application method), the rate and the amount, and the mix it came in (if any); and the area and
  * site, when they differ from the property and the service.
  */
 export const chemicalCompletionSchema = z.object({
@@ -164,6 +177,8 @@ export const chemicalCompletionSchema = z.object({
     methodId: z.string().uuid("Pick how it was applied"),
     ratePer1000: z.number().nonnegative().max(1_000_000),
     amount: z.number().nonnegative().max(1_000_000),
+    /** Added as part of a mix (Chemical Tracking → Mixes): its name, kept on the record. */
+    mixName: z.preprocess(blankToNull, z.string().trim().max(80).nullable()).optional(),
   })).max(40),
 });
 export type ChemicalCompletion = z.infer<typeof chemicalCompletionSchema>;

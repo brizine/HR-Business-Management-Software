@@ -54,7 +54,7 @@ export async function createApplicationRecord(tx: Tx, visitId: string, companyId
     productRows.push({
       productId: u.p.id, tradeName: u.vp.productName, epaRegNo: u.vp.epaRegNo, productType: u.p.productType, restrictedUse: u.p.restrictedUse,
       rateName: u.vp.rateName, ratePer1000: u.vp.amountPer1000, unit: u.vp.unit,
-      dilutionPerGal: dilutionPerGal(u.vp.amountPer1000, u.vp.carrierGalPer1000), carrierGalPer1000: u.vp.carrierGalPer1000 ?? null, methodName: u.vp.methodName,
+      dilutionPerGal: dilutionPerGal(u.vp.amountPer1000, u.vp.carrierGalPer1000), carrierGalPer1000: u.vp.carrierGalPer1000 ?? null, methodName: u.vp.methodName, mixName: u.vp.mixName,
       amount: u.vp.amount, targets: u.p.targets, reiHours: u.p.reiHours, labelId: await labelOn(tx, u.p.id, appliedOn), sortOrder: i,
       requiredAdjuvant: u.p.requiredAdjuvant, requiredDriftAgent: u.p.requiredDriftAgent,
     });
