@@ -7,12 +7,14 @@ import { and, asc, desc, eq, exists, gte, ilike, inArray, isNull, lte, max, notI
 import { z } from "zod";
 import {
   INACTIVE_STATUSES, VISIT_FILES_MAX, VISIT_STATUS_LABELS, customerName, describeRepeat, formatAddress, formatMoney, formatTodoTime, invoiceTotals, lineAmount,
+  cleanFormAnswers, formAnswersSchema, isSigned,
   visitCompleteSchema, visitDates, visitLineHours, visitNumber, visitSchema, visitSkipSchema, visitTotal, visitUpdateSchema,
   type VisitStatus, type VisitUpdate,
 } from "@crewdesk/shared";
 import { db } from "../db";
 import type { Tx } from "../lib/crm";
-import { crews, crmTags, customers, employees, estimates, invoiceLines, invoices, properties, propertyAssignments, serviceTypes, visitAssignees, visitFiles, visitLines, visitProducts, visitWeather, visits } from "../db/schema";
+import { crews, crmTags, customers, employees, estimates, invoiceLines, invoices, properties, propertyAssignments, serviceTypes, visitAssignees, visitFiles, visitFormEntries, visitLines, visitProducts, visitWeather, visits } from "../db/schema";
+import { autoFormIds, formsByVisit, formsFor, syncVisitForms } from "../lib/visitForms";
 import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { addDays, billingSettings } from "../lib/invoices";
@@ -63,6 +65,7 @@ export async function presentVisits(req: FastifyRequest, rows: Visit[]) {
   const fileCounts = await db.select({ visitId: visitFiles.visitId, n: sql<number>`count(*)::int` }).from(visitFiles).where(inArray(visitFiles.visitId, ids)).groupBy(visitFiles.visitId);
   const crewIds = [...new Set(rows.map((v) => v.crewId).filter((x): x is string => !!x))];
   const cr = crewIds.length ? await db.select({ id: crews.id, name: crews.name, color: crews.color }).from(crews).where(inArray(crews.id, crewIds)) : [];
+  const forms = await formsByVisit(ids);
   const name = (id: string | null) => { const e = es.find((x) => x.id === id); return e ? `${e.firstName} ${e.lastName}` : null; };
   return rows.map((v) => {
     const c = cs.find((x) => x.id === v.customerId)!;
@@ -78,6 +81,8 @@ export async function presentVisits(req: FastifyRequest, rows: Visit[]) {
       invoice: i ? { id: i.id, number: i.number, status: i.status } : null,
       crew: cr.find((x) => x.id === v.crewId) ?? null,
       fileCount: fileCounts.find((x) => x.visitId === v.id)?.n ?? 0,
+      /** Its visit forms, and whether each has been submitted. */
+      forms: forms.get(v.id) ?? [],
       tags: (v.tagIds ?? []).map((id) => tagRows.find((t) => t.id === id)).filter((t): t is { id: string; name: string; color: string } => !!t),
       invoiced: v.billing === "invoice" ? !!i && i.status !== "void" : null,
       trackedMinutes: minutesBetween(v.startedAt, v.completedAt),
@@ -254,6 +259,8 @@ const routes: FastifyPluginAsync = async (app) => {
     const body = parse(visitSchema, req.body);
     const { companyId, sub: me } = req.user;
     const crew = await checkInput(companyId, body);
+    // The forms picked for it; when the form isn't asked (not from the work order form), the ones set to attach to every new work order.
+    const forms = await formsFor(companyId, body.formIds ?? await autoFormIds(companyId));
     const dates: (string | null)[] = body.scheduling === "waitlist" ? [null]
       : body.scheduling === "repeat" ? visitDates(body.date!, body.repeatUnit, body.repeatEvery, body.repeatUntil, body.offMonths) : [body.date!];
     if (!dates.length) throw new HttpError(400, "Every date in that series falls in the off-season");
@@ -277,6 +284,7 @@ const routes: FastifyPluginAsync = async (app) => {
       const ls = rows.flatMap((v) => lineRows(v.id, body));
       if (ls.length) await tx.insert(visitLines).values(ls);
       if (crew.length) await tx.insert(visitAssignees).values(rows.flatMap((v) => crew.map((employeeId) => ({ visitId: v.id, employeeId }))));
+      await syncVisitForms(tx, companyId, rows.map((v) => v.id), forms);
       // Made from an accepted estimate: link it, so the estimate shows its work order.
       const estimateId = (req.body as { estimateId?: unknown })?.estimateId;
       if (typeof estimateId === "string" && /^[0-9a-f-]{36}$/i.test(estimateId)) {
@@ -302,6 +310,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const body = parse(visitUpdateSchema, req.body);
     const { companyId, sub: me } = req.user;
     const crew = await checkInput(companyId, body);
+    const forms = body.formIds ? await formsFor(companyId, body.formIds) : null;
     const before = new Set((await db.select({ id: visitAssignees.employeeId }).from(visitAssignees).where(eq(visitAssignees.visitId, v.id))).map((r) => r.id));
     const shift = v.date && body.date ? Math.round((Date.parse(body.date) - Date.parse(v.date)) / 86_400_000) : 0;
     const custom = await updatedCustom(companyId, "workorder", (req.body as { custom?: unknown })?.custom, v.custom);
@@ -321,6 +330,8 @@ const routes: FastifyPluginAsync = async (app) => {
         await tx.delete(visitAssignees).where(eq(visitAssignees.visitId, row.id));
         if (crew.length) await tx.insert(visitAssignees).values(crew.map((employeeId) => ({ visitId: row.id, employeeId })));
       }
+      // Forms taken off go, unless they've been submitted; new ones are added.
+      if (forms) await syncVisitForms(tx, companyId, targets.map((t) => t.id), forms);
     });
     const [after] = await db.select().from(visits).where(eq(visits.id, v.id));
     notify(companyId, except(crew.filter((id) => !before.has(id)), me), {
@@ -386,6 +397,44 @@ const routes: FastifyPluginAsync = async (app) => {
       await voidApplicationRecords(tx, v.id, "Work order reopened");
     });
     return reply(req, v.id);
+  });
+
+  /* ── Visit forms on the work order ── */
+
+  const findEntry = async (visitId: string, entryId: string) => {
+    const [e] = /^[0-9a-f-]{36}$/i.test(entryId) ? await db.select().from(visitFormEntries).where(and(eq(visitFormEntries.id, entryId), eq(visitFormEntries.visitId, visitId))) : [];
+    if (!e) notFound("Form");
+    return e;
+  };
+  const showEntry = async (e: typeof visitFormEntries.$inferSelect, canFill: boolean) => {
+    const who = [e.submittedById, e.updatedById].filter((x): x is string => !!x);
+    const es = who.length ? await db.select({ id: employees.id, firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(inArray(employees.id, who)) : [];
+    const nameOf = (id: string | null) => { const p = es.find((x) => x.id === id); return p ? `${p.firstName} ${p.lastName}` : null; };
+    return {
+      id: e.id, formId: e.formId, name: e.name, def: e.def, answers: e.answers ?? {}, signature: e.signature ?? null,
+      submitted: !!e.submittedAt, submittedAt: e.submittedAt, submittedBy: nameOf(e.submittedById),
+      updatedAt: e.submittedAt ? e.updatedAt : null, updatedBy: e.submittedAt ? nameOf(e.updatedById) : null, canFill,
+    };
+  };
+
+  /** One of its forms, with what's been answered so far. */
+  app.get<{ Params: { id: string; entryId: string } }>("/:id/forms/:entryId", async (req) => {
+    const v = await findVisit(req, req.params.id);
+    return showEntry(await findEntry(v.id, req.params.entryId), canManageVisits(req) || await isCrew(v.id, req.user.sub));
+  });
+
+  /** Submit a form, or change what was submitted (the crew on the work order, or a manager). */
+  app.put<{ Params: { id: string; entryId: string } }>("/:id/forms/:entryId", async (req) => {
+    const v = await crewAction(req, req.params.id);
+    const e = await findEntry(v.id, req.params.entryId);
+    const b = parse(formAnswersSchema, req.body);
+    const signature = e.def.signature && isSigned(b.signature) ? b.signature : null;
+    const now = new Date();
+    const [saved] = await db.update(visitFormEntries).set({
+      answers: cleanFormAnswers(e.def, b.answers), signature,
+      submittedAt: e.submittedAt ?? now, submittedById: e.submittedById ?? req.user.sub, updatedAt: now, updatedById: req.user.sub,
+    }).where(eq(visitFormEntries.id, e.id)).returning();
+    return showEntry(saved, true);
   });
 
   /** For the tech completing it: the products to confirm, how they can be applied, and any product to add. */

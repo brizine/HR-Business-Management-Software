@@ -56,7 +56,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   see Invoices, Estimates and Sales tax report, and click it again to fold it away. The section you're in starts
   open, and the menu remembers which ones you opened or closed.
 - **Operations:** **Customers** (Customers, Properties), **Schedule** (Calendar, Work orders, To-dos), **Billing** (Invoices,
-  Estimates, Sales tax report), **Marketing** (Templates, Automations, Documents, Texts), **Resources** (Products & services, Custom fields, Tags; like Homeworks' Resources), **Field**
+  Estimates, Sales tax report), **Marketing** (Templates, Automations, Documents, Visit Forms, Texts), **Resources** (Products & services, Custom fields, Tags; like Homeworks' Resources), **Field**
   (Property Measure, Spray Mix Calculator), **Fleet** (Assets, Repair Orders, Inspections) and **Reports**
   (managers).
 - **Team:** **Dashboard** (managers), **People** (Team, Shifts, Crews, Time Clock, Attendance, Time Off, Reviews &
@@ -740,6 +740,45 @@ out like Homeworks' Documents: the form on the left, the list on the right, and 
 
 Homeworks' **Send By Regular Mail** (its paid stamps service) isn't in Crewdesk: print the letters and mail them.
 
+### Visit forms
+
+**Marketing → Visit Forms** (Customers & billing managers) is laid out like Homeworks'. A visit form is something
+the crew fills in on a work order: a service checklist, a quality check, notes on the lawn or the weather, a
+sign-off.
+
+- **The list** shows each form's name, when it was last changed, how many work orders it's on (and on how many
+  it's been submitted), and whether it's **Auto Attached**. The pencil opens it; the trash can deletes it.
+- **New Form** opens the builder:
+  - **Form name** on top (two forms can't share a name).
+  - A form is made of **sections**. Give a section a name, then use the **Add:** row under it: **Short Text
+    Field** (a one-line answer), **Long Text Field** (notes), **CheckBox** (a list to tick; **Add New Checkbox**
+    adds another) and **DropDown** (pick one; **Add New Option** adds another). Type the question in each box.
+  - The small arrows move a question (or a section) up or down; the trash can or × removes it.
+  - **Accept Signature with this form** adds a signature box at the end; change its label if you like
+    (for example "Customer signature").
+  - **Add New Section** starts another section.
+  - **Automatically attach to new work orders** puts the form on every new work order (it can still be taken off
+    any one of them).
+  - **Preview** shows the form as the crew will see it (try it; nothing is saved) and can **Print** a blank copy.
+  - **Save Form** saves it. Leftover empty questions and options are dropped. HTML isn't allowed in a form.
+  - On a form you've saved, **Duplicate Form** makes "Copy - (name)" to start a similar one from.
+- **Putting forms on a work order:** the work order form has a **Visit Forms** box. Click it, search, and pick as
+  many as you want (the list stays open). Forms set to attach automatically are already picked on a new work
+  order. A repeating series gets the forms on every work order in it.
+- **Filling one in:** on the work order, **Visit forms** lists each form with a dotted circle (not submitted) or a
+  green check (submitted). Click one, answer it, sign in the box with a mouse or a finger (**Clear** starts the
+  signature over) and press **Submit**. Afterwards it shows who submitted it and when, and the button becomes
+  **Update** once something is changed. The crew on the work order and managers can fill forms in; nothing on a
+  form has to be answered. **Print** gives the form, with its answers, on a page of its own.
+- **On the phone:** the crew sees **Visit forms** on each of their work orders (Tasks tab); tapping one opens it
+  to fill in, sign with a finger, and **Submit**.
+- **Taking a form off a work order** (edit the work order and remove it from the box) removes it only if it
+  hasn't been submitted: "Any Unfilled forms will be removed from visit event. Saved form will remain."
+- **Changing a form** changes the copies on work orders that haven't been submitted yet. Submitted ones stay
+  exactly as they were answered, even if the form is later changed or deleted.
+- **Deleting a form** takes it off the work orders where it hasn't been submitted; submitted copies stay on
+  their work orders.
+
 ### Online payments and the customer portal
 
 Customers pay invoices by **card or US bank account** through Stripe. Card and bank details are typed into Stripe's own
@@ -852,6 +891,9 @@ are numbered **WO-1001**, **WO-1002** and so on. Open them from **Schedule → W
   After, problem spot…), **Download** or **Remove** it. The crew adds them from the phone (**Add photo**: take one or
   choose several). The crew on the work order and managers add them; whoever added one, or a manager, removes it.
   Everyone who can see the work order sees them. They're stored encrypted like other uploads.
+- **Visit forms** (like Homeworks'): checklists and sign-offs the crew fills in on the work order. Pick them in the
+  **Visit Forms** box when making or editing a work order; they're listed on the work order with whether each has
+  been submitted. See **Visit forms** under Marketing.
 - **The Work orders page:** **Show** Coming up, Waitlist, **Ready to invoice**, Completed, Skipped or All;
   filter by **Person**, **Crew**, **Tag** and **Search** (WO number, title or notes). Overdue open ones are marked;
   📎 shows how many photos and documents one has, and its tags show under the title.
@@ -1476,8 +1518,8 @@ Location is required to use the app (it's recorded at clock in/out and every 5 m
 clocked in with the app open). Clock in and out, schedule and open shifts, time off, assigned vehicles, meter readings, fuel (with receipt photos),
 inspections, issue reports, repair orders, work orders, to-dos, training, onboarding tasks and signing documents.
 - **Work orders** (Tasks tab): yours for the next week with the customer, the address (tap it for directions), gate
-  code, pets, the services, tags and notes, **Add photo** (take one or choose several), and **Arrived**, **Completed**
-  (with notes) and **Skip** (with a reason).
+  code, pets, the services, tags and notes, **Visit forms** to fill in and sign (tap one), **Add photo** (take one
+  or choose several), and **Arrived**, **Completed** (with notes) and **Skip** (with a reason).
 - **To-dos** (Tasks tab): yours for the next week with the category and repeat, the customer, the address (tap
   it for directions), gate code and notes; **Start work** / **Stop work** (time tracking), **Done**, **Add photo**
   and **Note for office** (a note for the dispatcher). **Quick add** makes one for yourself for today or tomorrow.

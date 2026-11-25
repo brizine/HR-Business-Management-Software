@@ -4,6 +4,7 @@ import { lineAmount } from "./billing";
 import { DEFAULT_TODO_COLOR } from "./todos";
 import { checkWaitWindow, waitWindowFields } from "./waitlist";
 import { chemicalCompletionSchema } from "./chemicalRecords";
+import { VISIT_FORMS_MAX } from "./visitForms";
 
 /**
  * Work orders: scheduled jobs at a customer's property (Homeworks calls them visits). Each has the
@@ -74,6 +75,11 @@ const visitFields = z.object({
   crewId: z.preprocess(blankToNull, z.string().uuid().nullable()).optional(),
   /** For the crew (gate, where to start, what to watch for). */
   notes: z.preprocess(blankToNull, z.string().trim().max(5000).nullable()).optional(),
+  /**
+   * The visit forms the crew fills in on it (Marketing → Visit Forms). Left out of a new work
+   * order, it gets the forms set to attach automatically; left out of a change, its forms stay.
+   */
+  formIds: z.array(z.string().uuid()).max(VISIT_FORMS_MAX).optional(),
   repeatEvery: z.coerce.number().int().min(1).max(52).default(1),
   repeatUnit: z.enum(REPEAT_UNITS).default("week"),
   repeatUntil: z.preprocess(blankToNull, isoDate.nullable()).optional(),

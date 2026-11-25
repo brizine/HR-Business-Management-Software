@@ -53,6 +53,7 @@ import waitlistRoutes from "./routes/waitlist";
 import weatherRoutes from "./routes/weather";
 import templateRoutes, { emailImageRoutes, trackRoutes } from "./routes/templates";
 import docRoutes from "./routes/docs";
+import visitFormRoutes from "./routes/visitForms";
 import propertyRoutes from "./routes/properties";
 import crmSettingsRoutes from "./routes/crmSettings";
 import searchRoutes from "./routes/search";
@@ -171,6 +172,7 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(weatherRoutes, { prefix: "/weather" });
   await app.register(templateRoutes, { prefix: "/templates" });
   await app.register(docRoutes, { prefix: "/docs" });
+  await app.register(visitFormRoutes, { prefix: "/visit-forms" });
   await app.register(trackRoutes, { prefix: "/public/t" });
   await app.register(emailImageRoutes, { prefix: "/public/email-image" });
   await app.register(publicEstimateRoutes, { prefix: "/public/estimates" });

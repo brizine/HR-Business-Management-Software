@@ -9,6 +9,7 @@ import {
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
+import { VisitFormsPicker, type WorkOrderForm } from "./visit-forms";
 import { CustomerPicker, TagChip, TagPicker, useTags } from "./customers";
 import { Icon } from "./icons";
 import { useBillingSettings } from "./invoices";
@@ -30,6 +31,8 @@ export interface Visit {
   invoice: { id: string; number: number | null; status: string } | null;
   lines: VisitLine[]; assignees: { id: string; firstName: string; lastName: string }[];
   finishedBy: string | null; createdBy: string | null;
+  /** Its visit forms (Marketing → Visit Forms), and whether each has been submitted. */
+  forms?: WorkOrderForm[];
   /** The waiting-list window (see the Waiting list page). */
   releaseOn?: string | null; dueBy?: string | null; minDaysAfterLast?: number | null; priority?: Priority; windowStart?: string | null; windowEnd?: string | null;
   earlyReason?: string | null; backReason?: string | null;
@@ -136,6 +139,8 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
   const [tagIds, setTagIds] = useState<string[]>(visit?.tagIds ?? []);
   const { tags } = useTags();
   const [notes, setNotes] = useState(visit?.notes ?? preset?.notes ?? "");
+  // The visit forms on it: on a new work order, null until the list says which attach automatically.
+  const [formIds, setFormIds] = useState<string[] | null>(visit ? (visit.forms ?? []).map((f) => f.formId).filter((x): x is string => !!x) : null);
   const [custom, setCustom] = useState<CustomValues>(visit?.custom ?? {});
   const [applyTo, setApplyTo] = useState<"one" | "following">("one");
   const [releaseOn, setReleaseOn] = useState(visit?.releaseOn ?? "");
@@ -200,6 +205,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
         date: scheduling === "waitlist" ? null : date, endDate: multi && scheduling === "single" ? endDate : null,
         startTime: timed && scheduling !== "waitlist" ? startTime : null, endTime: timed && scheduling !== "waitlist" ? endTime || null : null,
         budgetedHours: hours.trim() === "" ? null : Number(hours), assigneeIds: crew, crewId: crewId || null, tagIds, custom,
+        ...(formIds ? { formIds } : {}),
         releaseOn: releaseOn || null, dueBy: dueBy || null, minDaysAfterLast: minDays ? Number(minDays) : null, priority, windowStart: windowStart || null, windowEnd: windowStart ? windowEnd || null : null,
         ...(visit ? {} : { scheduling, repeatEvery: Number(every) || 1, repeatUnit: unit, repeatUntil: scheduling === "repeat" ? until : null, offMonths, estimateId: preset?.estimateId }),
       };
@@ -363,6 +369,9 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
           <p className="muted" style={{ margin: 0 }}>{count} work order{count === 1 ? "" : "s"}{total ? `, ${formatMoney(total * count)} in all` : ""}.</p>
         </div>
       )}
+
+      <h3 className="todo-section">Visit Forms</h3>
+      <VisitFormsPicker value={formIds} onChange={setFormIds} attached={visit?.forms} />
 
       <h3 className="todo-section">Crew</h3>
       <label style={{ maxWidth: 320 }}>Crew

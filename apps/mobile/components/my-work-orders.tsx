@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { CustomLines, useCustomFieldDefs } from "./custom-values";
 import { ChemicalsStep, type ChemicalOptions } from "./chemicals-step";
+import { VisitFormLines } from "./visit-forms";
 import { Badge, Button, Card, Divider, Input, Row, Txt, useTheme } from "./ui";
 
 const day = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
@@ -132,6 +133,7 @@ export function MyWorkOrdersCard({ refreshKey }: { refreshKey?: number }) {
               {v.budgetedHours ? <Txt muted>{v.budgetedHours} h budgeted</Txt> : null}
               {v.fileCount ? <Txt muted>📎 {v.fileCount} photo{v.fileCount === 1 ? "" : "s"} or document{v.fileCount === 1 ? "" : "s"}</Txt> : null}
             </View>
+            <VisitFormLines visitId={v.id} forms={v.forms} onChanged={list.reload} />
             <Button title={busy === v.id ? "Adding…" : "Add photo"} kind="secondary" busy={busy === v.id} onPress={() => addPhoto(v.id)} />
             {chem && chem.id === v.id ? (
               <ChemicalsStep options={chem.options} busy={busy === v.id} onCancel={() => setChem(null)}

@@ -10,6 +10,7 @@ import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead } from "@/components/ui";
 import { CrewButtons, VisitForm, VisitStatus, VisitTags, crewNames, trackedLabel, visitWhen, type Visit } from "@/components/visits";
 import { VisitFiles } from "@/components/visit-files";
+import { WorkOrderForms } from "@/components/visit-forms";
 import { useAuth } from "@/lib/auth";
 import { CustomFacts, CustomFieldsCard } from "@/components/custom-fields";
 
@@ -112,6 +113,7 @@ export default function WorkOrder({ params }: { params: Promise<{ id: string }> 
           </div>
         </div>
       )}
+      {!editing && !!v.forms?.length && <div style={{ marginTop: 16 }}><WorkOrderForms visitId={v.id} forms={v.forms} onChanged={data.reload} /></div>}
       {!editing && v.canManage && v.status === "completed" && <div style={{ marginTop: 16 }}><WorkOrderWeather visitId={v.id} /></div>}
       {!editing && v.status === "completed" && <VisitProducts visitId={v.id} completedAt={v.completedAt} />}
       {!editing && me?.access?.chemicalTracking && v.status === "completed" && <ChemicalRecordLink visitId={v.id} completedAt={v.completedAt} />}

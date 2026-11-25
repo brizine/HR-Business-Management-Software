@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { AutomationAction, AutomationDef, CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings, WeatherSettings, ChemicalNoticeSettings, TemplateDefaults } from "@crewdesk/shared";
+import type { AutomationAction, AutomationDef, CustomValues, FormAnswers, FormDef, FormSignature, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings, WeatherSettings, ChemicalNoticeSettings, TemplateDefaults } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -2442,6 +2442,51 @@ export const visitFiles = pgTable(
   (t) => [index("visit_files_visit_idx").on(t.visitId)],
 );
 
+
+/** Marketing → Visit Forms: what the crew fills in on a work order (a checklist, a quality check…). */
+export const visitForms = pgTable(
+  "visit_forms",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    /** Its sections and questions, and whether it ends with a signature. */
+    def: jsonb("def").$type<FormDef>().notNull(),
+    /** Goes on every new work order unless it's taken off there. */
+    autoAttach: boolean("auto_attach").notNull().default(false),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("visit_forms_company_name_idx").on(t.companyId, sql`lower(${t.name})`)],
+);
+
+/**
+ * A form on one work order: the work order's own copy of it, and what the crew answered. Until
+ * it's submitted the copy follows the form; once submitted it stays as it was answered, even if
+ * the form is changed or deleted later.
+ */
+export const visitFormEntries = pgTable(
+  "visit_form_entries",
+  {
+    id: id(),
+    companyId: companyId(),
+    visitId: uuid("visit_id").notNull().references(() => visits.id, { onDelete: "cascade" }),
+    formId: uuid("form_id").references(() => visitForms.id, { onDelete: "set null" }),
+    name: text("name").notNull(),
+    def: jsonb("def").$type<FormDef>().notNull(),
+    answers: jsonb("answers").$type<FormAnswers>(),
+    signature: jsonb("signature").$type<FormSignature>(),
+    submittedById: uuid("submitted_by_id").references(() => employees.id, { onDelete: "set null" }),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    /** The last change after it was first submitted. */
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("visit_form_entries_visit_idx").on(t.visitId), index("visit_form_entries_form_idx").on(t.formId), uniqueIndex("visit_form_entries_visit_form_idx").on(t.visitId, t.formId)],
+);
 
 /** Texts with customers: sent from the office or automations, and their replies. */
 export const customerTexts = pgTable(
