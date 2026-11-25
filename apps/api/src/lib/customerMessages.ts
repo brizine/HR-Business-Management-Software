@@ -100,8 +100,11 @@ export async function createCustomerMessage(o: {
   companyId: string; byId: string; subject: string; body: string; audience: string | null;
   /** Who it's for: the customers, or the list already worked out with `recipientsFor`. */
   customerIds?: string[]; rows?: Recipient[];
-  /** A Marketing → Documents document: formatted with {{TAGS}}, optionally with the document as a PDF. */
-  doc?: { docId: string; docName: string; docContent: string; attachPdf: boolean; emailTemplateId: string | null };
+  /**
+   * Formatted, with {{TAGS}}: an email template (Marketing → Templates), or a Marketing → Documents
+   * document (as the email itself or attached as a PDF).
+   */
+  doc?: { emailTemplateId: string | null; docId?: string | null; docName?: string | null; docContent?: string | null; attachPdf?: boolean };
 }) {
   const rows = o.rows ?? await recipientsFor(o.companyId, o.customerIds ?? []);
   const message = await db.transaction(async (tx) => {

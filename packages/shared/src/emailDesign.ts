@@ -404,3 +404,114 @@ export function htmlToDesign(html: string, o: { logoUrl?: string | null } = {}):
   row.columns[0].p = { ...COLUMN_DEFAULTS, padTop: 14, padBottom: 14, padLeft: 14, padRight: 14 };
   return { v: 1, p: { ...DESIGN_DEFAULTS, width: 600, bg: "#f5f6f8" }, rows: blocks.length ? [row] : [] };
 }
+
+/* ───────────── Saved rows and the company's own header ───────────── */
+
+/**
+ * A saved row is a row kept by name (a header, a footer) and used in many templates. A row in a
+ * design that came from one carries its id in `p.saved` (and its name in `p.savedName`): it's the
+ * same everywhere, so changing the saved row changes every template that uses it.
+ */
+export type SavedRow = { id: string; name: string; row: Row };
+export const emailRowSchema = emailDesignSchema.shape.rows.element;
+export const savedRowSchema = z.object({ name: z.string().trim().min(1, "Name the row").max(60), row: emailRowSchema });
+
+const unlinked = (p: Props): Props => { const { saved: _s, savedName: _n, ...rest } = p; return rest; };
+/** A copy of a saved row to put in a design, tied to the saved one. */
+export const linkedRow = (s: SavedRow): Row => ({
+  id: designId(), p: { ...unlinked(s.row.p), saved: s.id, savedName: s.name },
+  columns: s.row.columns.map((c) => ({ ...c, id: designId(), p: { ...c.p }, blocks: c.blocks.map((b) => ({ ...b, id: designId(), p: { ...b.p }, items: b.items?.map((i) => ({ ...i })), cells: b.cells?.map((r) => [...r]) })) })),
+});
+/** The row as its own (no longer tied to a saved row). */
+export const unlinkRow = (r: Row): Row => ({ ...r, p: unlinked(r.p) });
+/**
+ * A design with every row that's tied to a saved row brought up to date with it (a row tied to
+ * one that no longer exists becomes the design's own). `changed` says whether anything differed.
+ */
+export function withSavedRows(d: EmailDesign, saved: Map<string, SavedRow>): { design: EmailDesign; changed: boolean } {
+  let changed = false;
+  const rows = d.rows.map((r) => {
+    if (typeof r.p.saved !== "string") return r;
+    const s = saved.get(r.p.saved);
+    const next: Row = s ? { ...linkedRow(s), id: r.id } : unlinkRow(r);
+    // Compared whatever order the settings are stored in (the database doesn't keep it).
+    const sorted = (_k: string, v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as object).sort(([a], [b]) => (a < b ? -1 : 1))) : v);
+    const same = (x: Row) => JSON.stringify({ p: x.p, columns: x.columns.map((c) => ({ span: c.span, p: c.p, blocks: c.blocks.map((b) => ({ type: b.type, p: b.p, items: b.items, cells: b.cells })) })) }, sorted);
+    if (same(next) !== same(r)) changed = true;
+    return s && same(next) === same(r) ? r : next;
+  });
+  return { design: { ...d, rows }, changed };
+}
+/** How many rows of a design are tied to this saved row. */
+export const usesSavedRow = (d: EmailDesign, id: string) => d.rows.filter((r) => r.p.saved === id).length;
+
+/** White or near-black, whichever reads better on a colour. */
+export function contrastText(hex: string): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return "#111111";
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.45 ? "#111111" : "#ffffff";
+}
+/**
+ * A header in the company's own colours: its logo (or its name) on a background, with a line of
+ * its accent colour underneath (left out when the two are the same colour).
+ */
+export function brandHeaderRow(o: { color: string; accent?: string | null; logoUrl?: string | null; companyName: string }): Row {
+  const color = col(o.color, "#ffffff").toLowerCase(), accent = col(o.accent, color).toLowerCase();
+  const inner: Props = { padTop: 18, padBottom: 18, padLeft: 20, padRight: 20 };
+  const block: Block = o.logoUrl
+    ? { ...newBlock("image"), p: { ...BLOCK_DEFAULTS.image.p, src: o.logoUrl, alt: o.companyName, autoWidth: false, width: 42, align: "center", ...inner } }
+    : { ...newBlock("title"), p: { ...BLOCK_DEFAULTS.title.p, level: "h1", html: esc(o.companyName), size: 24, align: "center", color: contrastText(color), ...inner } };
+  const row = newRow([12], accent === color ? [block] : [block, accentLine(accent)]);
+  row.p.contentBg = color;
+  row.columns[0].p = { ...COLUMN_DEFAULTS, ...pad(0) };
+  return row;
+}
+const accentLine = (accent: string): Block => ({ ...newBlock("divider"), p: { ...BLOCK_DEFAULTS.divider.p, lineWidth: 4, color: accent, ...pad(0) } });
+/**
+ * A header put on other colours: the background changes, words that were white or near-black stay
+ * readable on it, and its lines take the accent colour (one is added when it had none).
+ */
+export function recolorHeaderRow(row: Row, hex: string, accentHex?: string | null): Row {
+  const color = col(hex, "#ffffff").toLowerCase(), accent = col(accentHex, color).toLowerCase();
+  const plain = (c: unknown) => typeof c === "string" && ["#ffffff", "#111111"].includes(c.toLowerCase());
+  const lined = row.columns.some((c) => c.blocks.some((b) => b.type === "divider"));
+  return {
+    ...row, p: { ...row.p, contentBg: color },
+    columns: row.columns.map((c, i) => ({
+      ...c,
+      blocks: [
+        ...c.blocks.map((b) => (b.type === "divider" && accentHex ? { ...b, p: { ...b.p, color: accent } } : plain(b.p.color) ? { ...b, p: { ...b.p, color: contrastText(color) } } : b)),
+        ...(accentHex && !lined && accent !== color && i === 0 && row.columns.length === 1 ? [accentLine(accent)] : []),
+      ],
+    })),
+  };
+}
+
+/** A picture that lives on Homeworks' storage (its own artwork, which goes away if Homeworks removes it). */
+export const isHomeworksPicture = (src: unknown) => typeof src === "string" && /prod-beefree-images\.s3\.amazonaws\.com|copilot-template-builder/i.test(src);
+export const homeworksPictures = (d: EmailDesign | null | undefined) => (d ? d.rows.reduce((n, r) => n + r.columns.reduce((m, c) => m + c.blocks.filter((b) => b.type === "image" && isHomeworksPicture(b.p.src)).length, 0), 0) : 0);
+/** What a Homeworks picture said, when its file name says it ("Estimate Accepted"); nothing for its plain art ("Invoice 1"). */
+export function homeworksPictureTitle(src: string): string | null {
+  let name = src.split("/").pop() ?? "";
+  try { name = decodeURIComponent(name); } catch { /* keep it as it is */ }
+  name = name.replace(/\.[a-z]+$/i, "").replace(/\s*\d+$/, "").trim();
+  if (!name || /copilot|google|header/i.test(name) || !name.includes(" ")) return null;
+  return name;
+}
+/**
+ * A design with Homeworks' pictures taken out and the company's own header (a saved row) put on
+ * top instead. Where a picture's name said what the email is about, a title says it now.
+ */
+export function swapHomeworksPictures(d: EmailDesign, header: SavedRow): { design: EmailDesign; swapped: number } {
+  let swapped = 0;
+  const rows = d.rows.map((r) => ({ ...r, columns: r.columns.map((c) => ({ ...c, blocks: c.blocks.flatMap((b): Block[] => {
+    if (b.type !== "image" || !isHomeworksPicture(b.p.src)) return [b];
+    swapped++;
+    const title = homeworksPictureTitle(String(b.p.src));
+    return title ? [{ ...newBlock("title"), p: { ...BLOCK_DEFAULTS.title.p, level: "h1", html: esc(title), size: 22, align: "center", padTop: 18, padBottom: 6 } }] : [];
+  }) })) }));
+  if (!swapped) return { design: d, swapped };
+  const has = rows.some((r) => r.p.saved === header.id);
+  return { design: { ...d, rows: has ? rows : [linkedRow(header), ...rows] }, swapped };
+}

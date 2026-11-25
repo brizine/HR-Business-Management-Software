@@ -223,6 +223,10 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
       first customer. It shows how many will get it and who's skipped: no email address, unsubscribed, sample
       customers, and a second customer with the same address (each address gets it once). A misspelled field
       like {frist_name} is pointed out.
+    - **Template** (top of the form) sends one of your designed emails from **Marketing → Templates** instead of
+      a typed message: pick it and the right side shows it filled in for the first customer, as designed. Your
+      company details and an unsubscribe link go underneath, as always. A template with fill-ins about one
+      invoice or estimate is flagged, since those are blank in an email to a list.
     - **Send me a test** emails it to you first. **Send to N customers** sends it; this can't be undone.
     - **Document: email or print letters…** sends a document from Marketing → Documents (a price increase letter,
       a thank you…) to the same list: pick the document, see it filled in for the first customer as an **Email**
@@ -537,12 +541,17 @@ template builder. **Text Templates** and **Defaults** follow.
   and a copy icon. Clicking a name opens it too. Underneath are **Template Name**, **Subject** (with **Insert
   Tags** for the customer's name and the like) and the builder, then **Create Template** or **Update Template**
   (and **Cancel** while you're changing one).
+- **Search templates** (top right of the list) narrows the list as you type.
+- **Used by** on a template's line means it's already going out: hover over it to see which automations and
+  sequences send it, and whether it's the template for every invoice, estimate or receipt (**Defaults**). When
+  you **Update** a template that's in use, Crewdesk names what will change and asks first.
 - **The builder** has a dark bar on top (**Actions**, **Show structure**, **Help**), three tabs on the left and
   the email on the right:
   - **Content:** the blocks: Title, Paragraph, List, Image, Button, Table, Divider, Spacer, Social, HTML, Video,
     Icons, Menu and Text. Drag one onto the email (a blue **Drop it here** line shows where it lands), or just
     click it to add it under the block you've picked.
   - **Rows:** layouts of one to six columns. Drag one onto the email or click it. Blocks go inside a row's columns.
+    Switch the list from **Empty** to **Saved rows** for the rows you've kept (see **Saved rows** below).
   - **Settings:** how wide the email is, left or centered, the background colors, the default font, the link
     color, the **preheader** (the short line inboxes show after the subject) and who the template is for
     (customers or your team).
@@ -559,10 +568,32 @@ template builder. **Text Templates** and **Defaults** follow.
   - **Actions → Preview** shows the finished email at desktop, tablet or phone width, with example values or
     filled in for a customer you pick. **Actions → Send test** emails it to any address (yours by default), with
     the fill-ins shown as example values.
+- **Saved rows** are rows you design once and use in every template, like a header or a footer.
+  - **Save one:** click a row, then **Save this row to reuse** and give it a name. It's now in **Rows → Saved
+    rows**; drag it onto any template, or click it to add it at the end.
+  - **It's the same everywhere.** On the email a saved row is marked **Saved row: (name)** and can't be typed in
+    there. Click it, then **Edit saved row**: it opens by itself, and **Save row** changes every template that
+    uses it (the page says how many). **Unlink** makes it that one template's own row again.
+  - **Deleting** a saved row (the × in the list) leaves it in each template as that template's own row.
+- **My header** (**Rows → Saved rows → My header**) makes the saved row **Header**: your logo (or your company
+  name, until a logo is added in **Settings → Company info**) on a background, over a line of your color. Crewdesk
+  reads starting colors from your logo; change the **Background** and the **Line and buttons** color and the
+  preview follows. The second color is also what new **Button** blocks start in. Open it again any time to
+  change the colors everywhere at once.
+- **Homeworks' header pictures:** templates brought in from Homeworks show Homeworks' own artwork on top, kept on
+  Homeworks' servers, so it stops showing if Homeworks takes it down. While any template has one, a notice at the
+  top of the page says how many. **Use my own header…** (admins) puts your **Header** in every one of them and
+  takes those pictures out. Where a picture named what the email is about (like "Estimate Accepted"), a title
+  says it instead. The wording of the emails isn't touched.
 - **Tags (fill-ins)** are the same names Homeworks uses, e.g. `{{CUSTOMER_FIRST_NAME}}`, `{{INVOICE_BALANCE}}`,
   `{{ESTIMATE_LINK}}`, `{{EVENT_DATE}}`, `{{REVIEW_PAGE}}`. Tags about an invoice, estimate, work order or payment
   are filled in when the email is about one, and left empty otherwise. A link tag shows as words ("View and pay
   your invoice"), or put it in a **Button**'s Url. In a text, it's the address.
+  - About the work: `{{EMPLOYEE_FIRST_NAME}}` and `{{EMPLOYEE_LAST_NAME}}` (whoever finished or skipped the visit,
+    or the first person it's assigned to), `{{EVENT_NOTES}}` (the notes written when it was finished) and
+    `{{PROPERTY_NOT_SERVICED_REASON}}` (why a visit was skipped).
+  - `{{INVOICE_TAX}}` is the sales tax on the invoice. `{{UNSUBSCRIBE}}` is an unsubscribe link you can place
+    yourself (one is added at the bottom either way).
 - **What's added when it's sent:** your company name, address, phone and website underneath, and an
   **Unsubscribe** link on emails that aren't bills.
 - **Templates from Homeworks** open as the same blocks they had there. **Import** (admins, top right) takes the

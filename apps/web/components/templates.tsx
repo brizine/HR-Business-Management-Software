@@ -20,6 +20,12 @@ import { ErrorBox } from "./ui";
 export type Template = {
   id: string; channel: TemplateChannel; audience: TemplateAudience; name: string; subject: string | null; body: string;
   system: boolean; systemKey: string | null; imported: string | null; updatedAt: string; needs: TagNeeds[]; usedFor: MessageKind[];
+  /** Made in the builder. */
+  designed?: boolean;
+  /** The automations and sequences that send it. */
+  usedBy?: string[];
+  /** How many pictures in it still come from Homeworks' storage. */
+  homeworksPictures?: number;
 };
 const NEEDS_LABELS: Record<TagNeeds, string> = { invoice: "an invoice", estimate: "an estimate", visit: "a work order", payment: "a payment" };
 

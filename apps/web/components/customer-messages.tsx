@@ -11,8 +11,11 @@ export type Selection = { ids: string[] } | { match: { status: string; q?: strin
 
 type Preview = {
   total: number; sending: number; skipped: { reason: string; label: string; n: number }[]; emailReady: boolean;
-  sample: { name: string; email: string; subject: string; html: string; text: string } | null;
+  sample: { name: string; email: string | null; subject: string; html: string; text: string } | null;
+  /** A template's fill-ins about an invoice, estimate, work order or payment (blank in an email to a list). */
+  needs?: string[];
 };
+const NEEDS_WORDS: Record<string, string> = { invoice: "an invoice", estimate: "an estimate", visit: "a work order", payment: "a payment" };
 
 /**
  * Email the customers picked on the list: subject and message with fill-in fields, a live preview
@@ -22,6 +25,9 @@ type Preview = {
 export function EmailComposer({ selection, audience, onClose, onSent }: { selection: Selection; audience: string; onClose: () => void; onSent: (m: { id: string; sending: number }) => void }) {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  // An email template from Marketing → Templates, sent as designed, instead of a typed message.
+  const [templateId, setTemplateId] = useState("");
+  const templates = useApi<{ id: string; name: string; channel: string; audience: string }[]>("/templates");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
@@ -30,9 +36,11 @@ export function EmailComposer({ selection, audience, onClose, onSent }: { select
   const loading = useAction();
   // The counts and preview follow what's typed (after a pause).
   useEffect(() => {
-    const t = setTimeout(() => loading.run(async () => setPreview(await api<Preview>("/customer-messages/preview", { body: { ...selection, subject, body } }))), subject || body ? 400 : 0);
+    const t = setTimeout(() => loading.run(async () => setPreview(await api<Preview>("/customer-messages/preview", { body: templateId ? { ...selection, templateId } : { ...selection, subject, body } }))), !templateId && (subject || body) ? 400 : 0);
     return () => clearTimeout(t);
-  }, [subject, body]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [subject, body, templateId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ready = templateId ? true : !!subject.trim() && !!body.trim();
+  const content = templateId ? { templateId } : { subject, body };
   const insert = (field: string) => {
     const el = box.current;
     const tag = `{${field}}`;
@@ -57,6 +65,18 @@ export function EmailComposer({ selection, audience, onClose, onSent }: { select
       {preview && !preview.emailReady && <ErrorBox error="Email isn't set up on this server yet, so nothing can be sent." />}
       <div className="cm-grid">
         <div className="stack">
+          <label>Template
+            <select value={templateId} onChange={(e) => { setTemplateId(e.target.value); setNotice(null); }} aria-label="Template">
+              <option value="">--- Write a message here ---</option>
+              {(templates.data ?? []).filter((t) => t.channel === "email" && t.audience === "customer").map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </label>
+          {templateId ? (
+            <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+              It goes out as designed in <Link href="/templates">Marketing → Templates</Link>, filled in for each customer, with your company details and an unsubscribe link underneath.
+              {preview?.needs?.length ? <span className="bad-text"> This template has fill-ins about {preview.needs.map((k) => NEEDS_WORDS[k] ?? k).join(" and ")}; they&apos;ll be blank in an email to a list.</span> : null}
+            </p>
+          ) : (<>
           <label>Subject<input value={subject} maxLength={200} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Spring service starts next week" /></label>
           <label>Message
             <textarea ref={box} rows={10} value={body} maxLength={20000} onChange={(e) => setBody(e.target.value)}
@@ -71,6 +91,7 @@ export function EmailComposer({ selection, audience, onClose, onSent }: { select
             Your company name, address and phone, and an unsubscribe link, are added at the bottom. Replies go to your company email.
             Customers who unsubscribe still get their invoices and receipts.
           </p>
+          </>)}
         </div>
         <div className="stack cm-preview">
           <div className="todo-label">Preview{preview?.sample ? ` for ${preview.sample.name}` : ""}</div>
@@ -79,21 +100,21 @@ export function EmailComposer({ selection, audience, onClose, onSent }: { select
               <div className="cm-subject"><span className="muted">Subject:</span> {preview.sample.subject || <span className="muted">(none yet)</span>}</div>
               <iframe title="Email preview" sandbox="" srcDoc={preview.sample.html} className="cm-frame" />
             </>
-          ) : <p className="muted">{preview && !preview.sending ? "Nobody on this list can get it." : "Type a subject or message to see it filled in."}</p>}
+          ) : <p className="muted">{preview && !preview.sending ? "Nobody on this list can get it." : templateId ? "Loading the preview…" : "Type a subject or message, or pick a template, to see it filled in."}</p>}
         </div>
       </div>
       <ErrorBox error={sending.error ?? testing.error ?? loading.error} />
       {notice && <div className="notice" role="status">{notice}</div>}
       <div className="row">
-        <button type="button" className="btn primary" disabled={sending.busy || !n || !subject.trim() || !body.trim() || !preview?.emailReady}
+        <button type="button" className="btn primary" disabled={sending.busy || !n || !ready || !preview?.emailReady}
           onClick={() => confirm(`Email ${n.toLocaleString()} customer${n === 1 ? "" : "s"} now? This can't be unsent.`) && sending.run(async () => {
-            const m = await api<{ id: string; counts: { queued: number } }>("/customer-messages", { body: { ...selection, subject, body, audience } });
+            const m = await api<{ id: string; counts: { queued: number } }>("/customer-messages", { body: { ...selection, ...content, audience } });
             onSent({ id: m.id, sending: m.counts?.queued ?? n });
           })}>
           Send to {n.toLocaleString()} customer{n === 1 ? "" : "s"}
         </button>
-        <button type="button" className="btn" disabled={testing.busy || !subject.trim() || !body.trim() || !preview?.emailReady}
-          onClick={() => testing.run(async () => { const r = await api<{ to: string }>("/customer-messages/test", { body: { ...selection, subject, body } }); setNotice(`Sent a test to ${r.to}.`); })}>
+        <button type="button" className="btn" disabled={testing.busy || !ready || !preview?.emailReady}
+          onClick={() => testing.run(async () => { const r = await api<{ to: string }>("/customer-messages/test", { body: { ...selection, ...content } }); setNotice(`Sent a test to ${r.to}.`); })}>
           Send me a test
         </button>
         <button type="button" className="btn" onClick={onClose}>Cancel</button>

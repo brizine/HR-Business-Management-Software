@@ -2,20 +2,23 @@ import type { FastifyPluginAsync } from "fastify";
 import { and, desc, eq, ilike, inArray, lt, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
-  allActions,
+  allActions, brandHeaderRow, recolorHeaderRow, homeworksPictures, savedRowSchema, swapHomeworksPictures, usesSavedRow,
   MESSAGE_KINDS, MESSAGE_KIND_NEEDS, SAMPLE_TEMPLATE_VARS, customerName, fillTags, formatMoney, htmlToText, smsSegments, systemTemplate, tagNeeds,
   templateDefaultsSchema, templateImportSchema, templatePreviewSchema, templateSchema, unknownTags,
   type MessageKind, type TemplateChannel,
 } from "@crewdesk/shared";
 import { randomUUID } from "node:crypto";
 import { db } from "../db";
-import { automations, companies, customers, emailImages, emailLog, employees, estimates, invoicePayments, invoices, templates, visits } from "../db/schema";
+import { automations, companies, customers, emailImages, emailLog, emailSavedRows, employees, estimates, invoicePayments, invoices, templates, visits } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { PUBLIC_API_URL, emailTransport } from "../lib/channels";
 import { HttpError, parse } from "../lib/errors";
 import { MAX_IMAGE_BYTES } from "../lib/images";
 import { storage } from "../lib/storage";
-import { cleanEmailHtml, designedTemplate, ensureSystemTemplates, importTemplates, renderTemplateEmail, templateDefaults, templateDesign, templateVars, type TemplateRow } from "../lib/templates";
+import {
+  cleanEmailHtml, cleanRow, designedTemplate, designedTemplateFor, ensureSystemTemplates, importTemplates, refreshSavedRowUse, renderTemplateEmail, savedRows, templateDefaults, templateDesign, templateVars,
+  type TemplateRow,
+} from "../lib/templates";
 
 /** Pictures for emails: the kinds every email program shows (no WebP: Outlook can't). */
 function emailImageType(b: Buffer) {
@@ -26,10 +29,14 @@ function emailImageType(b: Buffer) {
 }
 
 const AREA = "customers" as const;
-const view = (t: TemplateRow, usedFor: MessageKind[] = []) => ({
+const view = (t: TemplateRow, usedFor: MessageKind[] = [], usedBy: string[] = []) => ({
   id: t.id, channel: t.channel as TemplateChannel, audience: t.audience, name: t.name, subject: t.subject, body: t.body,
   system: !!t.systemKey, systemKey: t.systemKey, imported: t.importedFrom?.split(":")[0] ?? null, updatedAt: t.updatedAt, designed: !!t.design,
   needs: tagNeeds(t.subject, t.body), usedFor,
+  /** The automations and sequences that send it. */
+  usedBy,
+  /** How many pictures in it still live on Homeworks' storage. */
+  homeworksPictures: homeworksPictures(t.design),
 });
 
 /** Marketing → Templates: the email and text template library, previews, the defaults and the Sent / History. */
@@ -43,6 +50,14 @@ const routes: FastifyPluginAsync = async (app) => {
     for (const k of MESSAGE_KINDS) for (const id of [d[k].email, d[k].text]) if (id) m.set(id, [...(m.get(id) ?? []), k]);
     return m;
   };
+  /** Which automations and sequences send each template (by template id). */
+  const senders = async (companyId: string) => {
+    const m = new Map<string, string[]>();
+    for (const a of await db.select({ name: automations.name, def: automations.def }).from(automations).where(eq(automations.companyId, companyId)).orderBy(automations.name)) {
+      for (const id of new Set(allActions(a.def).map((x) => x.templateId).filter((x): x is string => !!x))) m.set(id, [...(m.get(id) ?? []), a.name]);
+    }
+    return m;
+  };
   const find = async (companyId: string, id: string) => {
     const [t] = await db.select().from(templates).where(and(eq(templates.id, id), eq(templates.companyId, companyId)));
     if (!t) throw new HttpError(404, "Template not found");
@@ -54,25 +69,26 @@ const routes: FastifyPluginAsync = async (app) => {
     const { companyId } = req.user;
     await ensureSystemTemplates(companyId);
     const used = await usage(companyId);
+    const by = await senders(companyId);
     const rows = await db.select().from(templates).where(eq(templates.companyId, companyId)).orderBy(templates.name);
-    return rows.map((t) => view(t, used.get(t.id)));
+    return rows.map((t) => view(t, used.get(t.id), by.get(t.id)));
   });
 
   /** One template; an email comes with its design for the builder (an earlier plain one is turned into blocks). */
   app.get<{ Params: { id: string } }>("/:id", async (req) => {
     const t = await find(req.user.companyId, req.params.id);
-    return { ...view(t, (await usage(req.user.companyId)).get(req.params.id)), design: t.channel === "email" ? await templateDesign(t) : null };
+    return { ...view(t, (await usage(req.user.companyId)).get(req.params.id), (await senders(req.user.companyId)).get(t.id)), design: t.channel === "email" ? await templateDesign(t) : null };
   });
 
   /** An email saved from the builder is kept as its design, with the email HTML made from it here (never taken from the browser). */
-  const content = (channel: TemplateChannel, b: { body: string; design?: Parameters<typeof designedTemplate>[0] | null }) =>
-    channel === "email" && b.design ? designedTemplate(b.design) : { design: null, body: cleanBody(channel, b.body) };
+  const content = async (companyId: string, channel: TemplateChannel, b: { body: string; design?: Parameters<typeof designedTemplate>[0] | null }) =>
+    channel === "email" && b.design ? designedTemplateFor(companyId, b.design) : { design: null, body: cleanBody(channel, b.body) };
 
   app.post("/", async (req) => {
     const b = parse(templateSchema, req.body);
     const [t] = await db.insert(templates).values({
       companyId: req.user.companyId, channel: b.channel, audience: b.audience, name: b.name, subject: b.channel === "email" ? b.subject ?? null : null,
-      ...content(b.channel, b), createdById: req.user.sub, updatedById: req.user.sub,
+      ...(await content(req.user.companyId, b.channel, b)), createdById: req.user.sub, updatedById: req.user.sub,
     }).returning();
     return view(t);
   });
@@ -82,7 +98,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const t = await find(req.user.companyId, req.params.id);
     if (b.channel !== t.channel) throw new HttpError(400, "A template can't change between email and text; make a new one");
     const [u] = await db.update(templates).set({
-      audience: b.audience, name: t.systemKey ? t.name : b.name, subject: t.channel === "email" ? b.subject ?? null : null, ...content(t.channel as TemplateChannel, b),
+      audience: b.audience, name: t.systemKey ? t.name : b.name, subject: t.channel === "email" ? b.subject ?? null : null, ...(await content(req.user.companyId, t.channel as TemplateChannel, b)),
       updatedById: req.user.sub, updatedAt: new Date(),
     }).where(eq(templates.id, t.id)).returning();
     return view(u, (await usage(req.user.companyId)).get(u.id));
@@ -151,6 +167,91 @@ const routes: FastifyPluginAsync = async (app) => {
     const to = b.to ?? me.email;
     await transport.send({ to, subject: `[Test] ${m.subject}`, text: m.text, html: m.html, fromName: m.fromName, replyTo: m.replyTo });
     return { to };
+  });
+
+  /* ── Saved rows and the company's own header ── */
+
+  const findRow = async (companyId: string, id: string) => {
+    const [r] = /^[0-9a-f-]{36}$/i.test(id) ? await db.select().from(emailSavedRows).where(and(eq(emailSavedRows.id, id), eq(emailSavedRows.companyId, companyId))) : [];
+    if (!r) throw new HttpError(404, "Saved row not found");
+    return r;
+  };
+  /** How many templates use each saved row. */
+  const rowUse = async (companyId: string) => {
+    const designs = (await db.select({ design: templates.design }).from(templates).where(and(eq(templates.companyId, companyId), sql`${templates.design} is not null`))).map((t) => t.design!);
+    return (id: string) => designs.filter((d) => usesSavedRow(d, id) > 0).length;
+  };
+
+  /** The saved rows (headers, footers…), the company's email colour, and how many templates still show Homeworks' pictures. */
+  app.get("/rows", async (req) => {
+    const { companyId } = req.user;
+    const [co] = await db.select({ color: companies.emailBrandColor, name: companies.name, logoKey: companies.logoKey }).from(companies).where(eq(companies.id, companyId));
+    const used = await rowUse(companyId);
+    return {
+      rows: [...(await savedRows(companyId)).values()].map((r) => ({ ...r, usedIn: used(r.id) })), brandColor: co?.color ?? null,
+      companyName: co?.name ?? "", logoUrl: co?.logoKey ? `${PUBLIC_API_URL}/public/company/${companyId}/logo` : null,
+    };
+  });
+
+  app.post("/rows", async (req) => {
+    const b = parse(savedRowSchema, req.body);
+    const [r] = await db.insert(emailSavedRows).values({ companyId: req.user.companyId, name: b.name, row: cleanRow({ ...b.row, p: (({ saved: _s, savedName: _n, ...rest }) => rest)(b.row.p) }), createdById: req.user.sub, updatedById: req.user.sub }).returning();
+    return { id: r.id, name: r.name, row: r.row, usedIn: 0 };
+  });
+
+  /** Changing a saved row changes every template that uses it. */
+  app.put<{ Params: { id: string } }>("/rows/:id", async (req) => {
+    const b = parse(savedRowSchema, req.body);
+    const r = await findRow(req.user.companyId, req.params.id);
+    await db.update(emailSavedRows).set({ name: b.name, row: cleanRow({ ...b.row, p: (({ saved: _s, savedName: _n, ...rest }) => rest)(b.row.p) }), updatedById: req.user.sub, updatedAt: new Date() }).where(eq(emailSavedRows.id, r.id));
+    return { ok: true, templates: await refreshSavedRowUse(req.user.companyId) };
+  });
+
+  /** Deleting one leaves the row in each template, as that template's own. */
+  app.delete<{ Params: { id: string } }>("/rows/:id", async (req) => {
+    const r = await findRow(req.user.companyId, req.params.id);
+    await db.delete(emailSavedRows).where(eq(emailSavedRows.id, r.id));
+    return { ok: true, templates: await refreshSavedRowUse(req.user.companyId) };
+  });
+
+  /**
+   * The company's own header as a saved row named "Header": its logo (or its name) on a
+   * background, over a line of its accent colour. Made once; choosing colours again changes it
+   * everywhere it's used.
+   */
+  app.post("/brand-header", async (req) => {
+    const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, "Pick a color").transform((c) => c.toLowerCase());
+    const b = parse(z.object({ color: hex, accent: hex.optional() }), req.body);
+    const { companyId, sub } = req.user;
+    const [co] = await db.select().from(companies).where(eq(companies.id, companyId));
+    const row = brandHeaderRow({ color: b.color, accent: b.accent, logoUrl: co.logoKey ? `${PUBLIC_API_URL}/public/company/${co.id}/logo` : null, companyName: co.name });
+    // The accent is the company's colour for emails: the line under its header, and new buttons.
+    await db.update(companies).set({ emailBrandColor: b.accent ?? b.color }).where(eq(companies.id, companyId));
+    const [have] = await db.select().from(emailSavedRows).where(and(eq(emailSavedRows.companyId, companyId), eq(emailSavedRows.name, "Header")));
+    if (have) {
+      // Keep whatever they've put in their header; only its colour follows.
+      const kept = recolorHeaderRow(have.row, b.color, b.accent);
+      await db.update(emailSavedRows).set({ row: kept, updatedById: sub, updatedAt: new Date() }).where(eq(emailSavedRows.id, have.id));
+      return { id: have.id, name: have.name, row: kept, made: false, templates: await refreshSavedRowUse(companyId) };
+    }
+    const [r] = await db.insert(emailSavedRows).values({ companyId, name: "Header", row, createdById: sub, updatedById: sub }).returning();
+    return { id: r.id, name: r.name, row: r.row, made: true, templates: 0 };
+  });
+
+  /** Every template that still shows Homeworks' pictures gets the saved header instead (admins). */
+  app.post("/replace-homeworks-pictures", { preHandler: requireRole("admin", AREA) }, async (req) => {
+    const b = parse(z.object({ rowId: z.string().uuid() }), req.body);
+    const { companyId, sub } = req.user;
+    const r = await findRow(companyId, b.rowId);
+    const header = { id: r.id, name: r.name, row: r.row };
+    let changed = 0, pictures = 0;
+    for (const t of await db.select().from(templates).where(and(eq(templates.companyId, companyId), sql`${templates.design} is not null`))) {
+      const out = swapHomeworksPictures(t.design!, header);
+      if (!out.swapped) continue;
+      await db.update(templates).set({ ...designedTemplate(out.design), updatedById: sub, updatedAt: new Date() }).where(eq(templates.id, t.id));
+      changed++; pictures += out.swapped;
+    }
+    return { templates: changed, pictures };
   });
 
   /** A picture for an email (JPEG, PNG or GIF, up to 5 MB): saved, and served to whoever opens the email. */

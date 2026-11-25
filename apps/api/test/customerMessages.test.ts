@@ -130,6 +130,45 @@ describe("customer emails", () => {
     expect((await call("POST", `/customer-messages/${r.body.id}/stop`, "office")).status).toBe(400);
   });
 
+  it("sends an email template from Marketing → Templates to the list, as designed", async () => {
+    failFor = null;
+    await pool.query("update customers set email_opt_out_at = null where id = any($1)", [[ID.ann, ID.bob]]);
+    const design = { v: 1, p: { width: 600 }, rows: [{ id: "r", p: {}, columns: [{ id: "c", span: 12, p: {}, blocks: [
+      { id: "t", type: "title", p: { html: "Spring is here, {{CUSTOMER_FIRST_NAME}}" } },
+      { id: "b", type: "button", p: { text: "See your account", href: "{{CLIENT_PORTAL_LINK}}" } },
+    ] }] }] };
+    const tpl = (await call("POST", "/templates", "office", { channel: "email", name: "Spring news", subject: "Spring news for {{CUSTOMER_FIRST_NAME}}", design })).body;
+    const internal = (await call("POST", "/templates", "office", { channel: "email", audience: "internal", name: "For the team", subject: "x", body: "<p>x</p>" })).body;
+    const text = (await call("POST", "/templates", "office", { channel: "text", name: "A text", body: "Hi" })).body;
+    const picked = { ids: [ID.ann, ID.bob, ID.dan] };
+    expect((await call("POST", "/customer-messages/preview", "office", { ...picked, templateId: internal.id })).body.error).toMatch(/for customers/);
+    expect((await call("POST", "/customer-messages", "office", { ...picked, templateId: text.id })).body.error).toMatch(/for customers/);
+    // The preview is the template as the first customer gets it.
+    const p = (await call("POST", "/customer-messages/preview", "office", { ...picked, templateId: tpl.id })).body;
+    expect(p).toMatchObject({ total: 3, sending: 2, needs: [], sample: { name: "Ann Apple", subject: "Spring news for Ann" } });
+    expect(p.sample.html).toContain("cd-design");
+    expect(p.sample.html).toContain("Spring is here, Ann");
+    sent.length = 0;
+    expect((await call("POST", "/customer-messages/test", "office", { ...picked, templateId: tpl.id })).body.to).toBe(email("office"));
+    expect(sent[0]).toMatchObject({ to: email("office"), subject: "[Test] Spring news for Ann" });
+    // Sending needs no subject or message of its own.
+    sent.length = 0;
+    const r = await call("POST", "/customer-messages", "office", { ...picked, templateId: tpl.id, audience: "3 picked customers" });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ format: "template", audience: "3 picked customers · Template: Spring news", emailTemplateId: tpl.id, counts: { queued: 2, skipped: 1 } });
+    await drainCustomerMessages();
+    const got = sent.filter((m) => ["ann@example.com", "bob@example.com"].includes(m.to));
+    expect(got.map((m) => m.subject).sort()).toEqual(["Spring news for Ann", "Spring news for Bob"]);
+    const bob = got.find((m) => m.to === "bob@example.com")!;
+    expect(bob.html).toContain("Spring is here, Bob");
+    expect(bob.html).toContain("See your account</a>");
+    expect(bob.html).toContain("Unsubscribe");
+    expect((await call("GET", `/customer-messages/${r.body.id}`, "office")).body).toMatchObject({ status: "sent", counts: { sent: 2, skipped: 1 } });
+    // It's in Templates → Sent / History under the template, too.
+    const hist = (await call("GET", `/templates/history/list?templateId=${tpl.id}`, "office")).body;
+    expect(hist.map((h: any) => h.to).sort()).toEqual(["ann@example.com", "bob@example.com"]);
+  });
+
   it("phone numbers for texting: one per number, counting the customers with none", async () => {
     const r = await call("POST", "/customer-messages/phones", "office", everyone);
     expect(r.body.phones).toEqual([{ name: "Ann Apple", phone: "(405) 555-0101" }, { name: "Bob Berry", phone: "(405) 555-0202" }]);

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  BLOCK_LABELS, BLOCK_TYPES, DESIGN_MARK, beeToDesign, designHasContent, designTexts, emailDesignSchema, emptyDesign, fillTags, htmlToDesign, isDesignedBody, newBlock, newRow,
-  renderDesign, renderDesignBlock, safeHref, usedTags, videoThumb, type EmailDesign,
+  BLOCK_LABELS, BLOCK_TYPES, DESIGN_MARK, beeToDesign, brandHeaderRow, contrastText, designHasContent, designTexts, emailDesignSchema, emptyDesign, fillTags, homeworksPictureTitle, homeworksPictures, recolorHeaderRow,
+  htmlToDesign, isDesignedBody, isHomeworksPicture, linkedRow, newBlock, newRow, renderDesign, renderDesignBlock, safeHref, swapHomeworksPictures, unlinkRow, usedTags, usesSavedRow, videoThumb, withSavedRows,
+  type EmailDesign,
 } from "../src";
 
 const design = (...blocks: ReturnType<typeof newBlock>[]): EmailDesign => ({ ...emptyDesign(), rows: [newRow([12], blocks)] });
@@ -122,5 +123,80 @@ describe("email designs", () => {
     expect(videoThumb("https://www.youtube.com/watch?v=abc123XYZ_-")).toBe("https://img.youtube.com/vi/abc123XYZ_-/hqdefault.jpg");
     expect(videoThumb("https://youtu.be/abc123XYZ_-?t=4")).toBe("https://img.youtube.com/vi/abc123XYZ_-/hqdefault.jpg");
     expect(videoThumb("https://vimeo.com/123")).toBeNull();
+  });
+});
+
+describe("saved rows and the company's own header", () => {
+  it("a saved row is the same in every design that uses it", () => {
+    const header = { id: "hdr1", name: "Header", row: brandHeaderRow({ color: "#14532d", logoUrl: "https://x.test/logo.png", companyName: "Pro Spray" }) };
+    const d: EmailDesign = { ...emptyDesign(), rows: [linkedRow(header), newRow([12], [newBlock("paragraph")])] };
+    expect(d.rows[0].p).toMatchObject({ saved: "hdr1", savedName: "Header", contentBg: "#14532d" });
+    expect(usesSavedRow(d, "hdr1")).toBe(1);
+    expect(emailDesignSchema.safeParse(d).success).toBe(true);
+    expect(withSavedRows(d, new Map([["hdr1", header]])).changed).toBe(false);
+    // The saved row changes: the design follows, keeping its own row's id.
+    const blue = { ...header, name: "Top", row: brandHeaderRow({ color: "#1d4ed8", companyName: "Pro Spray" }) };
+    const next = withSavedRows(d, new Map([["hdr1", blue]]));
+    expect(next.changed).toBe(true);
+    expect(next.design.rows[0]).toMatchObject({ id: d.rows[0].id, p: { saved: "hdr1", savedName: "Top", contentBg: "#1d4ed8" } });
+    expect(next.design.rows[0].columns[0].blocks[0]).toMatchObject({ type: "title", p: { html: "Pro Spray", color: "#ffffff" } });
+    expect(next.design.rows[1]).toBe(d.rows[1]);
+    // The saved row is deleted: the row stays, as the design's own.
+    const gone = withSavedRows(d, new Map());
+    expect(gone.changed).toBe(true);
+    expect(gone.design.rows[0].p.saved).toBeUndefined();
+    expect(gone.design.rows[0].columns[0].blocks[0].p.src).toBe("https://x.test/logo.png");
+    expect(unlinkRow(d.rows[0]).p.savedName).toBeUndefined();
+  });
+
+  it("picks white or black words for a colour", () => {
+    expect(contrastText("#14532d")).toBe("#ffffff");
+    expect(contrastText("#fde047")).toBe("#111111");
+    expect(contrastText("nonsense")).toBe("#111111");
+  });
+
+  it("swaps Homeworks' pictures for the company's header", () => {
+    const hw = "https://prod-beefree-images.s3.amazonaws.com/images/copilot-template-builder-/";
+    expect(isHomeworksPicture(`${hw}Customer%20Emails/Invoice%201.png`)).toBe(true);
+    expect(isHomeworksPicture("https://x.test/mine.png")).toBe(false);
+    expect(homeworksPictureTitle(`${hw}Internal%20Emails/Estimate%20Accepted.png`)).toBe("Estimate Accepted");
+    expect(homeworksPictureTitle(`${hw}Internal%20Emails/Invoice%20Overdue%20Notice.png`)).toBe("Invoice Overdue Notice");
+    expect(homeworksPictureTitle(`${hw}Customer%20Emails/Invoice%201.png`)).toBeNull();
+    expect(homeworksPictureTitle(`${hw}Internal%20Emails/Copilot%20Header%20Light.png`)).toBeNull();
+    expect(homeworksPictureTitle(`${hw}Customer%20Emails/Google%20Email.png`)).toBeNull();
+    const image = (src: string) => ({ ...newBlock("image"), p: { ...newBlock("image").p, src } });
+    const header = { id: "hdr1", name: "Header", row: brandHeaderRow({ color: "#14532d", companyName: "Pro Spray" }) };
+    const d = design(image(`${hw}Internal%20Emails/Estimate%20Accepted.png`), newBlock("paragraph"), image("https://x.test/mine.png"), image(`${hw}Customer%20Emails/Service%204.png`));
+    expect(homeworksPictures(d)).toBe(2);
+    const { design: out, swapped } = swapHomeworksPictures(d, header);
+    expect(swapped).toBe(2);
+    expect(out.rows).toHaveLength(2);
+    expect(out.rows[0].p.saved).toBe("hdr1");
+    expect(out.rows[1].columns[0].blocks.map((b) => [b.type, b.p.html ?? b.p.src])).toEqual([["title", "Estimate Accepted"], ["paragraph", "<p>I'm a new paragraph block.</p>"], ["image", "https://x.test/mine.png"]]);
+    expect(homeworksPictures(out)).toBe(0);
+    // Nothing to swap: nothing changes, and the header isn't added twice.
+    expect(swapHomeworksPictures(out, header)).toMatchObject({ swapped: 0 });
+    expect(swapHomeworksPictures(out, header).design).toBe(out);
+    expect(homeworksPictures(null)).toBe(0);
+  });
+
+  it("the company's header: its logo on a background, over a line of its colour", () => {
+    // One colour: a band of it, and no line.
+    expect(brandHeaderRow({ color: "#14532d", companyName: "Pro Spray" }).columns[0].blocks.map((b) => b.type)).toEqual(["title"]);
+    const row = brandHeaderRow({ color: "#FFFFFF", accent: "#15803D", logoUrl: "https://x.test/logo.png", companyName: "Pro Spray" });
+    expect(row.p.contentBg).toBe("#ffffff");
+    expect(row.columns[0].blocks.map((b) => [b.type, b.p.src ?? b.p.color, b.p.padTop])).toEqual([["image", "https://x.test/logo.png", 18], ["divider", "#15803d", 0]]);
+    const html = renderDesign({ ...emptyDesign(), rows: [row] });
+    expect(html).toContain("border-top:4px solid #15803d");
+    expect(html).toContain('alt="Pro Spray"');
+    // Other colours: the background and the line follow, the words stay readable, and what was added stays.
+    const named = brandHeaderRow({ color: "#14532d", companyName: "Pro Spray" });
+    const mine = { ...named, columns: [{ ...named.columns[0], blocks: [...named.columns[0].blocks, { ...newBlock("paragraph"), p: { ...newBlock("paragraph").p, html: "<p>Since 1998</p>", color: "#ff0000" } }] }] };
+    const light = recolorHeaderRow(mine, "#FEF9C3", "#a16207");
+    expect(light.p.contentBg).toBe("#fef9c3");
+    expect(light.columns[0].blocks.map((b) => [b.type, b.p.color])).toEqual([["title", "#111111"], ["paragraph", "#ff0000"], ["divider", "#a16207"]]);
+    // Again: the line it has is recoloured, not doubled. With no accent given, lines are left alone.
+    expect(recolorHeaderRow(light, "#1e3a8a", "#f59e0b").columns[0].blocks.map((b) => [b.type, b.p.color])).toEqual([["title", "#ffffff"], ["paragraph", "#ff0000"], ["divider", "#f59e0b"]]);
+    expect(recolorHeaderRow(light, "#1e3a8a").columns[0].blocks.map((b) => b.p.color)).toEqual(["#ffffff", "#ff0000", "#a16207"]);
   });
 });

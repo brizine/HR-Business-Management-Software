@@ -237,6 +237,91 @@ describe("templates", () => {
     expect((await call("GET", `/templates/${ID.hwInvoice}`, "mgr")).body.subject).toBe("Ours now");
   });
 
+  it("fills Homeworks' other tags: the employee, why a work order was skipped, the invoice's tax, an unsubscribe link", async () => {
+    const tech = (await call("GET", "/employees", "owner")).body.find((e: any) => e.firstName === "Tia").id;
+    const propertyId = (await pool.query("select property_id from property_assignments where customer_id = $1", [ID.cust])).rows[0].property_id;
+    const visit = (await call("POST", "/visits", "owner", { customerId: ID.cust, propertyId, title: "Round 2", date: "2026-04-06", assigneeIds: [tech], notes: "Gate code 1234", lines: [{ description: "Round 2", quantity: 1, unitPriceCents: 4500 }] })).body;
+    if (!visit.id) throw new Error(JSON.stringify(visit));
+    const body = "{{EMPLOYEE_FIRST_NAME}} {{EMPLOYEE_LAST_NAME}} | {{PROPERTY_NOT_SERVICED_REASON}} | {{EVENT_NOTES}} | {{INVOICE_TAX}} | {{UNSUBSCRIBE}}";
+    const text = async () => (await call("POST", "/templates/preview", "mgr", { channel: "text", body, customerId: ID.cust, visitId: visit.id, invoiceId: ID.inv })).body.text as string;
+    // Before it's done: the person it's given to.
+    expect(await text()).toMatch(/^Tia Tech \| +\| +\| \$0\.00 \| http\S+\/unsubscribe\?customer=\S+$/);
+    // Skipped: who skipped it, and why.
+    expect((await call("POST", `/visits/${visit.id}/skip`, "owner", { reason: "Gate locked" })).body.status).toBe("skipped");
+    expect(await text()).toMatch(/^Tess Owner \| Gate locked \| +\| \$0\.00 \| http/);
+    // In an email the unsubscribe tag is a link.
+    const email = (await call("POST", "/templates/preview", "mgr", { channel: "email", subject: "x", body: "<p>{{UNSUBSCRIBE}}</p>", customerId: ID.cust })).body.html as string;
+    expect(email).toMatch(/<a href="http[^"]+\/unsubscribe\?customer=[^"]+"[^>]*>Unsubscribe<\/a>/);
+  });
+
+  it("says which automations send a template", async () => {
+    const tpl = (await call("POST", "/templates", "mgr", { channel: "email", name: "Thanks for paying", subject: "Thank you", body: "<p>Thanks {{CUSTOMER_FIRST_NAME}}</p>" })).body;
+    expect(tpl.usedBy).toEqual([]);
+    const made = await call("POST", "/automations", "owner", { kind: "simple", name: "Say thanks", enabled: false, trigger: { key: "complete_visit" }, action: { action: "email_customer", templateId: tpl.id } });
+    expect(made.status).toBe(200);
+    expect((await call("GET", "/templates", "mgr")).body.find((t: any) => t.id === tpl.id).usedBy).toEqual(["Say thanks"]);
+    expect((await call("GET", `/templates/${tpl.id}`, "mgr")).body.usedBy).toEqual(["Say thanks"]);
+  });
+
+  it("saved rows: a header kept once, used in many templates, changed in one place", async () => {
+    const h = (await call("POST", "/templates/brand-header", "mgr", { color: "#14532D" })).body;
+    expect(h).toMatchObject({ name: "Header", made: true });
+    expect(h.row.p.contentBg).toBe("#14532d");
+    expect(h.row.columns[0].blocks[0]).toMatchObject({ type: "title", p: { html: "Template Co", color: "#ffffff" } });
+    expect((await call("POST", "/templates/brand-header", "mgr", { color: "green" })).body.issues[0].message).toBe("Pick a color");
+    expect((await call("GET", "/templates/rows", "mgr")).body).toMatchObject({ brandColor: "#14532d", rows: [{ id: h.id, name: "Header", usedIn: 0 }] });
+    // Two templates use it. Whatever the browser sends for a tied row, the saved row is what's kept.
+    const withHeader = (text: string) => ({ v: 1, p: { width: 600 }, rows: [
+      { id: "top", p: { saved: h.id, contentBg: "#ff0000" }, columns: [{ id: "x", span: 12, p: {}, blocks: [block("paragraph", { html: "<p>stale</p>" }, "stale")] }] },
+      { id: "body", p: {}, columns: [{ id: "c", span: 12, p: {}, blocks: [block("paragraph", { html: `<p>${text}</p>` })] }] },
+    ] });
+    const a = (await call("POST", "/templates", "mgr", { channel: "email", name: "With header A", subject: "A", design: withHeader("First") })).body;
+    const b = (await call("POST", "/templates", "mgr", { channel: "email", name: "With header B", subject: "B", design: withHeader("Second") })).body;
+    expect(a.body).toContain("background:#14532d");
+    expect(a.body).toContain("Template Co");
+    expect(a.body).not.toMatch(/stale|#ff0000/);
+    expect((await call("GET", "/templates/rows", "mgr")).body.rows[0].usedIn).toBe(2);
+    // A row of your own, saved by name.
+    const footer = (await call("POST", "/templates/rows", "mgr", { name: "Footer", row: { id: "f", p: { bg: "#eeeeee" }, columns: [{ id: "fc", span: 12, p: {}, blocks: [block("paragraph", { html: '<p onclick="x()">Call {{COMPANY_PHONE}}</p>' })] }] } })).body;
+    expect(footer.row.columns[0].blocks[0].p.html).toBe("<p>Call {{COMPANY_PHONE}}</p>");
+    expect((await call("POST", "/templates/rows", "mgr", { name: "", row: footer.row })).body.issues[0].message).toBe("Name the row");
+    // Change the header once: both templates follow.
+    const blue = { ...h.row, p: { ...h.row.p, contentBg: "#1d4ed8" } };
+    expect((await call("PUT", `/templates/rows/${h.id}`, "mgr", { name: "Header", row: blue })).body).toEqual({ ok: true, templates: 2 });
+    for (const id of [a.id, b.id]) expect((await call("GET", `/templates/${id}`, "mgr")).body.body).toContain("background:#1d4ed8");
+    // Choosing the company colour again changes the header everywhere too.
+    expect((await call("POST", "/templates/brand-header", "mgr", { color: "#7c2d12" })).body).toMatchObject({ made: false, templates: 2 });
+    expect((await call("GET", `/templates/${a.id}`, "mgr")).body.body).toContain("background:#7c2d12");
+    // A background and an accent: the accent is the line under the header, and the company's colour for emails.
+    expect((await call("POST", "/templates/brand-header", "mgr", { color: "#FFFFFF", accent: "#15803D" })).body).toMatchObject({ made: false, templates: 2 });
+    const lined = (await call("GET", `/templates/${a.id}`, "mgr")).body.body;
+    expect(lined).toContain("border-top:4px solid #15803d");
+    expect(lined).toMatch(/color:#111111[^>]*>Template Co/);
+    expect((await call("GET", "/templates/rows", "mgr")).body).toMatchObject({ brandColor: "#15803d", companyName: "Template Co", logoUrl: null });
+    expect((await call("POST", "/templates/brand-header", "mgr", { color: "#7c2d12", accent: "#7c2d12" })).body).toMatchObject({ made: false, templates: 2 });
+    // Deleting a saved row leaves it in each template, as that template's own.
+    expect((await call("DELETE", `/templates/rows/${footer.id}`, "mgr")).body).toEqual({ ok: true, templates: 0 });
+    expect((await call("PUT", `/templates/rows/${footer.id}`, "mgr", { name: "x", row: footer.row })).status).toBe(404);
+    ID.header = h.id;
+  });
+
+  it("swaps Homeworks' pictures for the company's header in every template (admins)", async () => {
+    const hw = "https://prod-beefree-images.s3.amazonaws.com/images/copilot-template-builder-/Internal%20Emails/Estimate%20Accepted.png";
+    const made = (await call("POST", "/templates", "mgr", { channel: "email", name: "Old picture", subject: "x", design: oneRow(block("image", { src: hw }), block("paragraph", { html: "<p>Hello</p>" })) })).body;
+    expect((await call("GET", "/templates", "mgr")).body.find((t: any) => t.id === made.id).homeworksPictures).toBe(1);
+    expect((await call("POST", "/templates/replace-homeworks-pictures", "mgr", { rowId: ID.header })).status).toBe(403);
+    expect((await call("POST", "/templates/replace-homeworks-pictures", "owner", { rowId: ID.header })).body).toEqual({ templates: 1, pictures: 1 });
+    const after = (await call("GET", `/templates/${made.id}`, "mgr")).body;
+    expect(after.homeworksPictures).toBe(0);
+    expect(after.design.rows[0].p).toMatchObject({ saved: ID.header, savedName: "Header" });
+    expect(after.design.rows[1].columns[0].blocks.map((b: any) => [b.type, b.p.html])).toEqual([["title", "Estimate Accepted"], ["paragraph", "<p>Hello</p>"]]);
+    expect(after.body).not.toContain("prod-beefree-images");
+    expect((await call("POST", "/templates/replace-homeworks-pictures", "owner", { rowId: ID.header })).body).toEqual({ templates: 0, pictures: 0 });
+    // The header's row goes away: the templates keep it as their own.
+    expect((await call("DELETE", `/templates/rows/${ID.header}`, "mgr")).body.templates).toBe(3);
+    expect((await call("GET", `/templates/${made.id}`, "mgr")).body.design.rows[0].p.saved).toBeUndefined();
+  });
+
   it("pictures for emails are uploaded once and served to anyone who opens the email", async () => {
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
     const upload = async (buf: Buffer, name: string, who = "mgr") => {

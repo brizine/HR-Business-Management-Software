@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import {
-  BLOCK_LABELS, BLOCK_TYPES, COLUMN_DEFAULTS, EMAIL_FONTS, ROW_LAYOUTS, SOCIAL_NETWORKS, TEMPLATE_TAGS, designId, newBlock, newRow, renderDesignBlock,
-  type Block, type BlockType, type Column, type EmailDesign, type Item, type Props, type Row,
+  BLOCK_LABELS, BLOCK_TYPES, COLUMN_DEFAULTS, EMAIL_FONTS, ROW_LAYOUTS, SOCIAL_NETWORKS, TEMPLATE_TAGS, designId, linkedRow, newBlock, newRow, renderDesignBlock, unlinkRow,
+  type Block, type BlockType, type Column, type EmailDesign, type Item, type Props, type Row, type SavedRow,
 } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
@@ -327,14 +327,33 @@ const ICON = {
 
 /* ───────────── The builder ───────────── */
 
-type Drag = { kind: "new"; type: BlockType } | { kind: "block"; id: string } | { kind: "row"; spans: number[] } | { kind: "moverow"; id: string };
+type Drag = { kind: "new"; type: BlockType } | { kind: "block"; id: string } | { kind: "row"; spans: number[] } | { kind: "moverow"; id: string } | { kind: "saved"; row: SavedRow };
+/** Saved rows (a header, a footer): kept by name, used in many templates, changed in one place. */
+export type SavedRows = {
+  rows: (SavedRow & { usedIn?: number })[];
+  /** The company's colour for emails (new buttons start in it). */
+  brandColor: string | null;
+  onSave: (row: Row, name: string) => Promise<SavedRow>;
+  onEdit: (s: SavedRow) => void;
+  onDelete: (s: SavedRow) => void;
+  /** Opens "My header" (the company's logo on its colour). */
+  onHeader: () => void;
+};
 type Drop = { colId: string; index: number } | { rowIndex: number } | null;
 
-export function EmailBuilder({ value, onChange, onPreview, onSendTest, extra }: {
-  value: EmailDesign; onChange: (d: EmailDesign) => void; onPreview: () => void; onSendTest: () => void;
+export function EmailBuilder({ value, onChange, onPreview, onSendTest, extra, saved, oneRow }: {
+  value: EmailDesign; onChange: (d: EmailDesign) => void; onPreview?: () => void; onSendTest?: () => void;
   /** More settings for the Settings tab (who the template is for). */
   extra?: ReactNode;
+  /** Saved rows; left out where a saved row itself is being edited. */
+  saved?: SavedRows;
+  /** Editing one saved row: it stays a single row (no adding, deleting or copying rows). */
+  oneRow?: boolean;
 }) {
+  const [rowsView, setRowsView] = useState<"empty" | "saved">("empty");
+  /** The name being typed for a row that's about to be saved (null when not saving one). */
+  const [naming, setNaming] = useState<string | null>(null);
+  const saving = useAction();
   const [tab, setTab] = useState<"content" | "rows" | "settings">("content");
   const [sel, setSel] = useState<Sel>(null);
   const [mobile, setMobile] = useState(false);
@@ -361,16 +380,24 @@ export function EmailBuilder({ value, onChange, onPreview, onSendTest, extra }: 
   /** Adds a block where it makes sense: after the picked block, in the picked row, or at the end. */
   const addBlock = (type: BlockType) => {
     const b = newBlock(type);
+    if (type === "button" && saved?.brandColor) b.p.bg = saved.brandColor;
     const at = picked ? { colId: picked.col.id, index: picked.index + 1 } : pickedRow ? { colId: pickedRow.columns[0].id, index: pickedRow.columns[0].blocks.length }
       : value.rows.length ? { colId: value.rows[value.rows.length - 1].columns[0].id, index: value.rows[value.rows.length - 1].columns[0].blocks.length } : null;
     apply(at ? putBlock(value, at.colId, at.index, b) : { ...value, rows: [newRow([12], [b])] });
     setSel({ kind: "block", id: b.id });
   };
+  const addSaved = (sr: SavedRow, index = value.rows.length) => { const r = linkedRow(sr); apply({ ...value, rows: [...value.rows.slice(0, index), r, ...value.rows.slice(index)] }); setSel({ kind: "row", id: r.id }); };
+  /** Keeps the picked row by name, and ties this copy to it. */
+  const saveRow = (r: Row) => {
+    const name = (naming ?? "").trim();
+    if (!name || !saved) return;
+    void saving.run(async () => { const sr = await saved.onSave(unlinkRow(r), name); setNaming(null); apply(patchRow(value, r.id, () => ({ ...linkedRow(sr), id: r.id }))); setSel({ kind: "row", id: r.id }); });
+  };
   const addRow = (spans: number[], index = value.rows.length) => { const r = newRow(spans); apply({ ...value, rows: [...value.rows.slice(0, index), r, ...value.rows.slice(index)] }); setSel({ kind: "row", id: r.id }); };
-  const removeSel = () => { if (!sel) return; apply(sel.kind === "block" ? dropBlock(value, sel.id) : { ...value, rows: value.rows.filter((r) => r.id !== sel.id) }); setSel(null); };
+  const removeSel = () => { if (!sel || (oneRow && sel.kind === "row")) return; apply(sel.kind === "block" ? dropBlock(value, sel.id) : { ...value, rows: value.rows.filter((r) => r.id !== sel.id) }); setSel(null); };
   const duplicateSel = () => {
     if (picked) { const b = copyBlock(picked.block); apply(putBlock(value, picked.col.id, picked.index + 1, b)); setSel({ kind: "block", id: b.id }); }
-    else if (pickedRow) { const r = copyRow(pickedRow); const i = value.rows.indexOf(pickedRow); apply({ ...value, rows: [...value.rows.slice(0, i + 1), r, ...value.rows.slice(i + 1)] }); setSel({ kind: "row", id: r.id }); }
+    else if (pickedRow && !oneRow) { const r = copyRow(pickedRow); const i = value.rows.indexOf(pickedRow); apply({ ...value, rows: [...value.rows.slice(0, i + 1), r, ...value.rows.slice(i + 1)] }); setSel({ kind: "row", id: r.id }); }
   };
 
   /* Dragging */
@@ -407,6 +434,7 @@ export function EmailBuilder({ value, onChange, onPreview, onSendTest, extra }: 
       apply(putBlock(dropBlock(value, d.id), at.colId, index, from.block));
     } else if ("rowIndex" in at) {
       if (d.kind === "row") addRow(d.spans, at.rowIndex);
+      else if (d.kind === "saved") addSaved(d.row, at.rowIndex);
       else if (d.kind === "moverow") { const i = value.rows.findIndex((r) => r.id === d.id); if (i < 0) return; const rest = value.rows.filter((r) => r.id !== d.id); const to = i < at.rowIndex ? at.rowIndex - 1 : at.rowIndex; apply({ ...value, rows: [...rest.slice(0, to), value.rows[i], ...rest.slice(to)] }); }
       else if (d.kind === "new") { const b = newBlock(d.type); const r = newRow([12], [b]); apply({ ...value, rows: [...value.rows.slice(0, at.rowIndex), r, ...value.rows.slice(at.rowIndex)] }); setSel({ kind: "block", id: b.id }); }
       else { const from = findBlock(value, d.id); if (!from) return; const without = dropBlock(value, d.id); const r = newRow([12], [from.block]); apply({ ...without, rows: [...without.rows.slice(0, at.rowIndex), r, ...without.rows.slice(at.rowIndex)] }); }
@@ -449,25 +477,28 @@ export function EmailBuilder({ value, onChange, onPreview, onSendTest, extra }: 
     const stack = mobile && r.p.stack !== false;
     const bw = n(r.p.borderWidth, 0);
     const dim = (mobile && r.p.hideOn === "mobile") || (!mobile && r.p.hideOn === "desktop");
+    const tied = typeof r.p.saved === "string";
     return (
-      <div key={r.id} data-row={r.id} className={`eb-row-wrap${on ? " on" : ""}${dim ? " dim" : ""}`} style={{ background: s(r.p.bg, "transparent") }} onClick={(e) => { e.stopPropagation(); setSel({ kind: "row", id: r.id }); setTab("rows"); }}>
+      <div key={r.id} data-row={r.id} className={`eb-row-wrap${on ? " on" : ""}${dim ? " dim" : ""}${tied ? " tied" : ""}`} style={{ background: s(r.p.bg, "transparent") }} onClick={(e) => { e.stopPropagation(); setSel({ kind: "row", id: r.id }); setTab("rows"); }}>
         <div className="eb-row-box" style={{ width: stageWidth, maxWidth: "100%", margin: value.p.align === "left" ? "0" : "0 auto", background: s(r.p.contentBg, "transparent") === "transparent" ? s(value.p.contentBg, "transparent") : s(r.p.contentBg), border: bw ? `${bw}px ${s(r.p.borderStyle, "solid")} ${s(r.p.borderColor, "transparent")}` : undefined, borderRadius: n(r.p.radius, 0), flexDirection: stack ? "column" : "row", alignItems: r.p.valign === "middle" ? "center" : r.p.valign === "bottom" ? "flex-end" : "stretch" }}>
           {r.columns.map((c) => {
             const cw = Math.round((stack ? stageWidth : stageWidth * c.span / total)) - n(c.p.padLeft, 0) - n(c.p.padRight, 0);
             const cb = n(c.p.borderWidth, 0);
             return (
-              <div key={c.id} className="eb-col" data-col={c.id} onDragOver={overColumn(c.id)} onDrop={onDrop}
+              <div key={c.id} className="eb-col" data-col={c.id} onDragOver={tied ? undefined : overColumn(c.id)} onDrop={tied ? undefined : onDrop}
                 style={{ width: stack ? "100%" : `${c.span / total * 100}%`, background: s(c.p.bg, "transparent"), padding: `${n(c.p.padTop, 0)}px ${n(c.p.padRight, 0)}px ${n(c.p.padBottom, 0)}px ${n(c.p.padLeft, 0)}px`, border: cb ? `${cb}px ${s(c.p.borderStyle, "solid")} ${s(c.p.borderColor, "transparent")}` : undefined }}>
-                {c.blocks.map((b, i) => <div key={b.id} data-block={b.id} className="eb-slot">{drop && "colId" in drop && drop.colId === c.id && drop.index === i && line}{block(b, c, r, cw)}</div>)}
+                {/* A saved row is shown as it is; it's changed in one place (Edit saved row), not here. */}
+                {tied ? c.blocks.map((b) => <Shown key={b.id} html={renderDesignBlock(b, value, cw)} />)
+                  : c.blocks.map((b, i) => <div key={b.id} data-block={b.id} className="eb-slot">{drop && "colId" in drop && drop.colId === c.id && drop.index === i && line}{block(b, c, r, cw)}</div>)}
                 {c.blocks.length > 0 && drop && "colId" in drop && drop.colId === c.id && drop.index === c.blocks.length && line}
                 {/* An empty column keeps its drop area while something is dragged over it (swapping it out would lose the drop). */}
-                {!c.blocks.length && <div className={`eb-dropzone${drop && "colId" in drop && drop.colId === c.id ? " over" : ""}`}>{drop && "colId" in drop && drop.colId === c.id ? "Drop it here" : "Drop content blocks here"}</div>}
+                {!c.blocks.length && !tied && <div className={`eb-dropzone${drop && "colId" in drop && drop.colId === c.id ? " over" : ""}`}>{drop && "colId" in drop && drop.colId === c.id ? "Drop it here" : "Drop content blocks here"}</div>}
               </div>
             );
           })}
         </div>
-        <span className="eb-row-tag" draggable onDragStart={start({ kind: "moverow", id: r.id })} onDragEnd={end} title="Click to pick the row; drag to move it">Row</span>
-        {on && <span className="eb-tools row"><button type="button" title="Delete" aria-label="Delete row" onClick={(e) => { e.stopPropagation(); removeSel(); }}><Glyph d={ICON.trash} size={16} /></button><button type="button" title="Duplicate" aria-label="Duplicate row" onClick={(e) => { e.stopPropagation(); duplicateSel(); }}><Glyph d={ICON.copy} size={16} /></button></span>}
+        <span className="eb-row-tag" draggable onDragStart={start({ kind: "moverow", id: r.id })} onDragEnd={end} title="Click to pick the row; drag to move it">{tied ? `Saved row: ${String(r.p.savedName ?? "")}` : "Row"}</span>
+        {on && !oneRow && <span className="eb-tools row"><button type="button" title="Delete" aria-label="Delete row" onClick={(e) => { e.stopPropagation(); removeSel(); }}><Glyph d={ICON.trash} size={16} /></button><button type="button" title="Duplicate" aria-label="Duplicate row" onClick={(e) => { e.stopPropagation(); duplicateSel(); }}><Glyph d={ICON.copy} size={16} /></button></span>}
       </div>
     );
   };
@@ -476,7 +507,7 @@ export function EmailBuilder({ value, onChange, onPreview, onSendTest, extra }: 
   const head = (title: string) => (
     <div className="eb-prop-head">
       <strong>{title}</strong>
-      <span><button type="button" title="Delete" aria-label="Delete" onClick={removeSel}><Glyph d={ICON.trash} size={18} /></button><button type="button" title="Duplicate" aria-label="Duplicate" onClick={duplicateSel}><Glyph d={ICON.copy} size={18} /></button><button type="button" title="Close" aria-label="Close properties" onClick={() => setSel(null)}><Glyph d={ICON.close} size={18} /></button></span>
+      <span>{!(oneRow && sel?.kind === "row") && <><button type="button" title="Delete" aria-label="Delete" onClick={removeSel}><Glyph d={ICON.trash} size={18} /></button><button type="button" title="Duplicate" aria-label="Duplicate" onClick={duplicateSel}><Glyph d={ICON.copy} size={18} /></button></>}<button type="button" title="Close" aria-label="Close properties" onClick={() => setSel(null)}><Glyph d={ICON.close} size={18} /></button></span>
     </div>
   );
   const setBlockProps = (b: Block) => (patch: Props) => {
@@ -508,10 +539,12 @@ export function EmailBuilder({ value, onChange, onPreview, onSendTest, extra }: 
   return (
     <div className={`eb${structure ? " structure" : ""}`} onDragEnd={end}>
       <div className="eb-top">
-        <div className="eb-actions">
-          <button type="button" aria-haspopup="menu" aria-expanded={actions} onClick={() => setActions(!actions)} onBlur={() => setTimeout(() => setActions(false), 150)}>Actions <span aria-hidden="true">▾</span></button>
-          {actions && <div className="eb-actions-menu" role="menu"><button type="button" role="menuitem" onMouseDown={(e) => e.preventDefault()} onClick={() => { setActions(false); onPreview(); }}>Preview</button><button type="button" role="menuitem" onMouseDown={(e) => e.preventDefault()} onClick={() => { setActions(false); onSendTest(); }}>Send test</button></div>}
-        </div>
+        {onPreview && onSendTest && (
+          <div className="eb-actions">
+            <button type="button" aria-haspopup="menu" aria-expanded={actions} onClick={() => setActions(!actions)} onBlur={() => setTimeout(() => setActions(false), 150)}>Actions <span aria-hidden="true">▾</span></button>
+            {actions && <div className="eb-actions-menu" role="menu"><button type="button" role="menuitem" onMouseDown={(e) => e.preventDefault()} onClick={() => { setActions(false); onPreview(); }}>Preview</button><button type="button" role="menuitem" onMouseDown={(e) => e.preventDefault()} onClick={() => { setActions(false); onSendTest(); }}>Send test</button></div>}
+          </div>
+        )}
         <button type="button" aria-pressed={structure} onClick={() => setStructure(!structure)}><Glyph d={ICON.eye} size={16} /> {structure ? "Hide structure" : "Show structure"}</button>
         <a href="/help" target="_blank" rel="noreferrer" className="eb-help">? Help</a>
       </div>
@@ -525,16 +558,57 @@ export function EmailBuilder({ value, onChange, onPreview, onSendTest, extra }: 
           <div className="eb-panel">
             {picked ? (
               <>{head("CONTENT PROPERTIES")}<Fields fields={FIELDS[picked.block.type]} p={picked.block.p} set={setBlockProps(picked.block)} block={picked.block} setBlock={(b) => apply(patchBlock(value, b.id, () => b))} /></>
+            ) : pickedRow && typeof pickedRow.p.saved === "string" ? (
+              <>
+                {head("ROW PROPERTIES")}
+                <div className="eb-field col">
+                  <strong style={{ color: "#333" }}>Saved row: {String(pickedRow.p.savedName ?? "")}</strong>
+                  <small>It&apos;s the same in every template that uses it. Change it once and they all follow.</small>
+                  <div className="eb-row" style={{ justifyContent: "flex-start" }}>
+                    {saved && <button type="button" className="eb-primary" onClick={() => { const sr = saved.rows.find((x) => x.id === pickedRow.p.saved); if (sr) saved.onEdit(sr); }}>Edit saved row</button>}
+                    <button type="button" className="eb-plain" title="Make it this template's own row, no longer tied to the saved one" onClick={() => apply(patchRow(value, pickedRow.id, unlinkRow))}>Unlink</button>
+                  </div>
+                </div>
+              </>
             ) : pickedRow ? (
-              <>{head("ROW PROPERTIES")}<Fields fields={ROW_FIELDS} p={pickedRow.p} set={(patch) => apply(patchRow(value, pickedRow.id, (x) => ({ ...x, p: { ...x.p, ...patch } })))} />{columnsEditor(pickedRow)}</>
+              <>
+                {head("ROW PROPERTIES")}
+                {saved && (
+                  <div className="eb-field col">
+                    {naming === null ? <button type="button" className="eb-primary" onClick={() => { saving.setError(null); setNaming(""); }}>Save this row to reuse</button> : (
+                      <>
+                        <small>Name it (for example Header or Footer). It can then go in any template, and changing it once changes it in all of them.</small>
+                        <input type="text" className="eb-text" autoFocus maxLength={60} aria-label="Saved row name" placeholder="Header" value={naming} onChange={(e) => setNaming(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") saveRow(pickedRow); if (e.key === "Escape") setNaming(null); }} />
+                        <div className="eb-row" style={{ justifyContent: "flex-start" }}><button type="button" className="eb-primary" disabled={saving.busy || !naming.trim()} onClick={() => saveRow(pickedRow)}>{saving.busy ? "Saving…" : "Save row"}</button><button type="button" className="eb-plain" onClick={() => setNaming(null)}>Cancel</button></div>
+                        {saving.error && <span className="eb-err">{saving.error}</span>}
+                      </>
+                    )}
+                  </div>
+                )}
+                <Fields fields={ROW_FIELDS} p={pickedRow.p} set={(patch) => apply(patchRow(value, pickedRow.id, (x) => ({ ...x, p: { ...x.p, ...patch } })))} />{columnsEditor(pickedRow)}
+              </>
             ) : tab === "content" ? (
               <div className="eb-tiles">
                 {BLOCK_TYPES.map((t) => <button key={t} type="button" className="eb-tile" draggable onDragStart={start({ kind: "new", type: t })} onDragEnd={end} onClick={() => addBlock(t)} title={`Drag onto the email, or click to add a ${BLOCK_LABELS[t].toLowerCase()}`}><Glyph d={TILE_ICONS[t]} /><span>{BLOCK_LABELS[t].toUpperCase()}</span></button>)}
               </div>
             ) : tab === "rows" ? (
-              <div className="eb-rows">
-                <div className="eb-rows-pick">Empty</div>
-                {ROW_LAYOUTS.map((l) => <button key={l.join("-")} type="button" className="eb-rowtile" draggable onDragStart={start({ kind: "row", spans: l })} onDragEnd={end} onClick={() => addRow(l)} title="Drag onto the email, or click to add this row at the end" aria-label={`Row: ${l.map((x) => `${Math.round(x / 12 * 100)}%`).join(" + ")}`}>{l.map((x, i) => <span key={i} style={{ flex: x }}><i /></span>)}</button>)}
+              oneRow ? <div className="eb-rows"><p className="eb-note">A saved row is a single row. Click it on the right to change its background, padding and columns; add what goes in it from <strong>Content</strong>.</p></div> : <div className="eb-rows">
+                {saved
+                  ? <select className="eb-rows-pick" aria-label="Rows to show" value={rowsView} onChange={(e) => setRowsView(e.target.value as "empty" | "saved")}><option value="empty">Empty</option><option value="saved">Saved rows ({saved.rows.length})</option></select>
+                  : <div className="eb-rows-pick">Empty</div>}
+                {rowsView === "saved" && saved ? (
+                  <>
+                    {saved.rows.map((sr) => (
+                      <div key={sr.id} className="eb-savedtile" draggable onDragStart={start({ kind: "saved", row: sr })} onDragEnd={end}>
+                        <button type="button" className="eb-savedname" onClick={() => addSaved(sr)} title="Drag onto the email, or click to add it at the end"><strong>{sr.name}</strong><small>{sr.usedIn ? `In ${sr.usedIn} template${sr.usedIn === 1 ? "" : "s"}` : "Not used yet"}</small></button>
+                        <button type="button" className="eb-x" style={{ color: "#333" }} title="Edit saved row" aria-label={`Edit saved row ${sr.name}`} onClick={() => saved.onEdit(sr)}>✎</button>
+                        <button type="button" className="eb-x" title="Delete saved row" aria-label={`Delete saved row ${sr.name}`} onClick={() => saved.onDelete(sr)}>×</button>
+                      </div>
+                    ))}
+                    {!saved.rows.length && <p className="eb-note">No saved rows yet. Pick a row on the email and choose <strong>Save this row to reuse</strong>, or start with your header.</p>}
+                    <button type="button" className="eb-primary" onClick={saved.onHeader}>My header (logo and color)…</button>
+                  </>
+                ) : ROW_LAYOUTS.map((l) => <button key={l.join("-")} type="button" className="eb-rowtile" draggable onDragStart={start({ kind: "row", spans: l })} onDragEnd={end} onClick={() => addRow(l)} title="Drag onto the email, or click to add this row at the end" aria-label={`Row: ${l.map((x) => `${Math.round(x / 12 * 100)}%`).join(" + ")}`}>{l.map((x, i) => <span key={i} style={{ flex: x }}><i /></span>)}</button>)}
               </div>
             ) : (
               <><Fields fields={SETTINGS_FIELDS} p={value.p} set={(patch) => apply({ ...value, p: { ...value.p, ...patch } })} />{extra}</>

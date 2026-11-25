@@ -2,11 +2,11 @@ import { and, asc, desc, eq, inArray, isNotNull, notInArray, sql } from "drizzle
 import sanitizeHtml from "sanitize-html";
 import {
   DESIGN_CSS, EMPTY_TEMPLATE_DEFAULTS, MESSAGE_KINDS, PAYMENT_METHOD_LABELS, SYSTEM_TEMPLATES, beeToDesign, customerName, designHasContent, fillTags, formatAddress, formatMoney, formatPhone,
-  htmlToDesign, htmlToText, isDesignedBody, renderDesign,
-  type EmailDesign, type MessageKind, type PaymentMethod, type TemplateDefaults, type TemplateVars,
+  htmlToDesign, htmlToText, isDesignedBody, renderDesign, withSavedRows,
+  type EmailDesign, type MessageKind, type PaymentMethod, type Row, type SavedRow, type TemplateDefaults, type TemplateVars,
 } from "@crewdesk/shared";
 import { db } from "../db";
-import { assets, companies, customerNotes, customers, employees, estimates, invoicePayments, invoices, properties, propertyAssignments, templates, todos, visits, workOrders } from "../db/schema";
+import { assets, companies, customerNotes, customers, emailSavedRows, employees, estimates, invoicePayments, invoices, properties, propertyAssignments, templates, todos, visitAssignees, visits, workOrders } from "../db/schema";
 import { PUBLIC_API_URL, WEB_URL, emailTransport, type EmailMessage } from "./channels";
 import { customerUnsubscribeToken } from "./customerMessages";
 import { payLinkFor, portalUrl } from "./invoices";
@@ -74,6 +74,33 @@ export function designedTemplate(design: EmailDesign) {
   const clean = cleanDesign(design);
   return { design: clean, body: renderDesign(clean) };
 }
+/** A row as saved (its blocks' words cleaned). */
+export const cleanRow = (row: Row): Row => cleanDesign({ v: 1, p: {}, rows: [row] }).rows[0];
+/** The company's saved rows (headers, footers…), by id. */
+export async function savedRows(companyId: string): Promise<Map<string, SavedRow>> {
+  return new Map((await db.select().from(emailSavedRows).where(eq(emailSavedRows.companyId, companyId)).orderBy(asc(emailSavedRows.name))).map((r) => [r.id, { id: r.id, name: r.name, row: r.row }]));
+}
+/** What a template made in the builder is saved as, with its saved rows brought up to date first. */
+export async function designedTemplateFor(companyId: string, design: EmailDesign) {
+  return designedTemplate(withSavedRows(design, await savedRows(companyId)).design);
+}
+/**
+ * After a saved row changes (or is deleted): every template that uses it is brought up to date,
+ * and its email made again. Returns how many templates changed.
+ */
+export async function refreshSavedRowUse(companyId: string): Promise<number> {
+  const saved = await savedRows(companyId);
+  let n = 0;
+  for (const t of await db.select({ id: templates.id, design: templates.design }).from(templates).where(and(eq(templates.companyId, companyId), isNotNull(templates.design)))) {
+    if (!t.design || !t.design.rows.some((r) => typeof r.p.saved === "string")) continue;
+    const next = withSavedRows(t.design, saved);
+    if (!next.changed) continue;
+    await db.update(templates).set(designedTemplate(next.design)).where(eq(templates.id, t.id));
+    n++;
+  }
+  return n;
+}
+
 /** A template's design for the builder: the one saved, or its plain wording turned into blocks (with the company's logo on top, as those emails were framed). */
 export async function templateDesign(t: { companyId: string; design: EmailDesign | null; body: string }): Promise<EmailDesign> {
   if (t.design) return t.design;
@@ -156,6 +183,7 @@ function customerVars(companyId: string, c: typeof customers.$inferSelect, prop:
     CUSTOMER_ADDRESS: [street, [city, state].filter(Boolean).join(", ") + (zip ? ` ${zip}` : "")].filter((x) => x && x.trim()).join(", "),
     CUSTOMER_CITY: city, CUSTOMER_STATE: state, CUSTOMER_ZIP: zip, CUSTOMER_ACCOUNT_BALANCE: formatMoney(Math.max(0, balanceCents)),
     CLIENT_PORTAL_LINK: portalUrl(companyId), CLIENT_PORTAL_ADD_CREDIT_CARD_LINK: portalUrl(companyId), CALL_NOTES: callNote ?? "",
+    UNSUBSCRIBE: `${WEB_URL}/unsubscribe?customer=${encodeURIComponent(customerUnsubscribeToken(c.id))}`,
   };
 }
 
@@ -211,7 +239,7 @@ export async function templateVars(companyId: string, ctx: TemplateContext): Pro
   if (inv) {
     const pay = (await stripeConfig(companyId)) ? payLinkFor(inv)?.url ?? null : null;
     Object.assign(v, {
-      INVOICE_NUMBER: inv.number != null ? String(inv.number) : "(draft)", INVOICE_TOTAL: formatMoney(inv.totalCents),
+      INVOICE_NUMBER: inv.number != null ? String(inv.number) : "(draft)", INVOICE_TOTAL: formatMoney(inv.totalCents), INVOICE_TAX: formatMoney(inv.taxCents),
       INVOICE_BALANCE: formatMoney(Math.max(0, inv.totalCents - inv.paidCents - inv.creditedCents)), INVOICE_DUE_DATE: longDate(inv.dueDate),
       INVOICES_LINKS: pay ?? portalUrl(companyId), RECEIPT_ADMIN_LINK: `${WEB_URL}/invoices/${inv.id}`,
     });
@@ -228,13 +256,22 @@ export async function templateVars(companyId: string, ctx: TemplateContext): Pro
     Object.assign(v, {
       EVENT_TITLE: visit.title, EVENT_DATE: visit.date ? new Date(`${visit.date}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }) : "not scheduled yet",
       EVENT_SCHEDULED_TIME: time12(visit.startTime), EVENT_PROPERTY_ADDRESS: p ? formatAddress(p) : visit.location ?? "", NOTES_TO_DISPATCHER: visit.notes ?? "",
+      EVENT_NOTES: visit.completionNotes ?? "", PROPERTY_NOT_SERVICED_REASON: visit.skipReason ?? "",
     });
+    // The employee: whoever finished or skipped it, else the first person it's given to.
+    const [who] = visit.finishedById
+      ? await db.select({ first: employees.firstName, last: employees.lastName }).from(employees).where(eq(employees.id, visit.finishedById))
+      : await db.select({ first: employees.firstName, last: employees.lastName }).from(visitAssignees).innerJoin(employees, eq(employees.id, visitAssignees.employeeId))
+        .where(eq(visitAssignees.visitId, visit.id)).orderBy(asc(employees.firstName), asc(employees.lastName)).limit(1);
+    if (who) Object.assign(v, { EMPLOYEE_FIRST_NAME: who.first, EMPLOYEE_LAST_NAME: who.last });
   }
   if (todo) {
     Object.assign(v, {
       EVENT_TITLE: todo.title, EVENT_DATE: new Date(`${todo.date}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }),
       EVENT_SCHEDULED_TIME: time12(todo.startTime),
     });
+    const [who] = todo.doneById ? await db.select({ first: employees.firstName, last: employees.lastName }).from(employees).where(eq(employees.id, todo.doneById)) : [];
+    if (who) Object.assign(v, { EMPLOYEE_FIRST_NAME: who.first, EMPLOYEE_LAST_NAME: who.last });
   }
   if (fix) {
     Object.assign(v, {

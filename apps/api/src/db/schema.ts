@@ -42,6 +42,8 @@ export const companies = pgTable("companies", {
   billing: jsonb("billing").$type<Partial<BillingSettings>>(),
   /** Which template goes out with invoices, estimates and receipts (Marketing → Templates), and the review link. */
   templateDefaults: jsonb("template_defaults").$type<Partial<TemplateDefaults>>(),
+  /** The company's colour for emails made in the builder (its header band, new buttons). */
+  emailBrandColor: text("email_brand_color"),
   /** Weather on chemical applications: automatic, manual or off. */
   weather: jsonb("weather").$type<WeatherSettings>(),
   /** Chemical application records: the company's pesticide license number (on every record). */
@@ -3015,6 +3017,25 @@ export const marketingDocHistory = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("marketing_doc_history_doc_idx").on(t.docId, t.createdAt)],
+);
+
+/**
+ * Saved rows for the email template builder: a row kept by name (a header, a footer) and used in
+ * many templates. Changing one changes every template that uses it.
+ */
+export const emailSavedRows = pgTable(
+  "email_saved_rows",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    row: jsonb("row").$type<import("@crewdesk/shared").Row>().notNull(),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("email_saved_rows_company_idx").on(t.companyId)],
 );
 
 /** Pictures uploaded in the email template builder, served to whoever opens the email. */

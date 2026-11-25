@@ -1,14 +1,15 @@
 import type { FastifyPluginAsync } from "fastify";
 import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { z } from "zod";
-import { MESSAGE_SKIP_REASONS, SAMPLE_MESSAGE_VARS, customerEmailSchema, customerName, formatPhone, type MessageVars } from "@crewdesk/shared";
+import { MESSAGE_SKIP_REASONS, SAMPLE_MESSAGE_VARS, SAMPLE_TEMPLATE_VARS, customerEmailSchema, customerName, formatPhone, tagNeeds, type MessageVars } from "@crewdesk/shared";
 import { db } from "../db";
-import { customerMessageRecipients, customerMessages, customers, employees } from "../db/schema";
+import { customerMessageRecipients, customerMessages, customers, employees, templates } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { emailTransport } from "../lib/channels";
 import { companyInfo, createCustomerMessage, drainCustomerMessages, messageCounts, messageVars, recipientsFor, renderCustomerEmail } from "../lib/customerMessages";
 import { customerInCompany } from "../lib/crm";
 import { HttpError, parse } from "../lib/errors";
+import { renderTemplateEmail, templateVars } from "../lib/templates";
 import { parseSelection, selectedIds } from "./customers";
 
 const AREA = "customers" as const;
@@ -22,6 +23,15 @@ const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
   app.addHook("preHandler", requireRole("manager", AREA));
 
+  /** The email template picked instead of writing a message (one for customers, from Marketing → Templates). */
+  const pickedTemplate = async (companyId: string, raw: Record<string, unknown>) => {
+    if (!raw.templateId) return null;
+    const id = parse(z.string().uuid(), raw.templateId);
+    const [t] = await db.select().from(templates).where(and(eq(templates.id, id), eq(templates.companyId, companyId)));
+    if (!t || t.channel !== "email" || t.audience !== "customer") throw new HttpError(400, "Pick an email template for customers");
+    return t;
+  };
+
   /** Before sending: how many get it, who's skipped and why, and the first customer's email filled in. */
   app.post("/preview", async (req) => {
     const raw = (req.body ?? {}) as Record<string, unknown>;
@@ -34,7 +44,13 @@ const routes: FastifyPluginAsync = async (app) => {
     const subject = typeof raw.subject === "string" ? raw.subject : "";
     const body = typeof raw.body === "string" ? raw.body : "";
     let sample = null;
-    if (first && (subject || body)) {
+    const tpl = await pickedTemplate(companyId, raw);
+    if (tpl) {
+      // A template: shown exactly as the first customer will get it (or with example values when nobody can).
+      const vars = first ? await templateVars(companyId, { customerId: first.customerId }) : { ...SAMPLE_TEMPLATE_VARS, ...(await templateVars(companyId, {})) };
+      const m = await renderTemplateEmail(companyId, { subject: tpl.subject, body: tpl.body }, vars);
+      sample = { name: first?.name ?? "an example customer", email: first?.email ?? null, subject: m.subject, html: m.html, text: m.text };
+    } else if (first && (subject || body)) {
       const company = await companyInfo(companyId);
       const vars = (await messageVars(companyId, [first.customerId], company)).get(first.customerId) ?? {};
       sample = { name: first.name, email: first.email, ...renderCustomerEmail({ company, subject, body, vars, customerId: first.customerId }) };
@@ -43,18 +59,28 @@ const routes: FastifyPluginAsync = async (app) => {
       total: list.length, sending: list.filter((r) => r.status === "queued").length,
       skipped: Object.entries(skipped).map(([reason, n]) => ({ reason, label: MESSAGE_SKIP_REASONS[reason as keyof typeof MESSAGE_SKIP_REASONS], n })),
       emailReady: !!emailTransport(), sample,
+      /** A template's fill-ins about an invoice, estimate, work order or payment: blank in an email to a list. */
+      needs: tpl ? tagNeeds(tpl.subject, tpl.body) : [],
     };
   });
 
   /** "Send me a test": the email as the first customer on the list would get it, to the person sending. */
   app.post("/test", async (req) => {
     const raw = (req.body ?? {}) as Record<string, unknown>;
-    const msg = parse(customerEmailSchema, raw);
     const { companyId, sub } = req.user;
+    const tpl = await pickedTemplate(companyId, raw);
     const transport = emailTransport();
     if (!transport) throw new HttpError(400, "Email isn't set up on this server yet");
     const [me] = await db.select({ email: employees.email }).from(employees).where(eq(employees.id, sub));
     if (!me?.email) throw new HttpError(400, "Your account has no email address");
+    if (tpl) {
+      const first = raw.ids || raw.match ? (await recipientsFor(companyId, (await selectedIds(companyId, parseSelection(raw))).slice(0, 200))).find((r) => r.status === "queued") : undefined;
+      const vars = first ? await templateVars(companyId, { customerId: first.customerId }) : { ...SAMPLE_TEMPLATE_VARS, ...(await templateVars(companyId, {})) };
+      const m = await renderTemplateEmail(companyId, { subject: tpl.subject, body: tpl.body }, vars);
+      await transport.send({ to: me.email, subject: `[Test] ${m.subject}`, text: m.text, html: m.html, fromName: m.fromName, replyTo: m.replyTo });
+      return { to: me.email };
+    }
+    const msg = parse(customerEmailSchema, raw);
     const company = await companyInfo(companyId);
     let vars: MessageVars = { ...SAMPLE_MESSAGE_VARS, company: company.name, company_phone: company.phone ?? "" };
     if (raw.ids || raw.match) {
@@ -69,12 +95,16 @@ const routes: FastifyPluginAsync = async (app) => {
   /** Sends it: saves who gets it now, then the emails go out one by one in the background. */
   app.post("/", async (req) => {
     const raw = (req.body ?? {}) as Record<string, unknown>;
-    const msg = parse(customerEmailSchema, raw);
-    const audience = parse(audienceSchema, raw.audience) ?? null;
     const { companyId, sub } = req.user;
+    const tpl = await pickedTemplate(companyId, raw);
+    const msg = tpl ? null : parse(customerEmailSchema, raw);
+    const audience = parse(audienceSchema, raw.audience) ?? null;
     if (!emailTransport()) throw new HttpError(400, "Email isn't set up on this server yet, so nothing can be sent");
     const ids = await selectedIds(companyId, parseSelection(raw));
-    const m = await createCustomerMessage({ companyId, byId: sub, subject: msg.subject, body: msg.body, customerIds: ids, audience });
+    // A template goes out as designed (the same way documents do); a typed message as plain text.
+    const m = tpl
+      ? await createCustomerMessage({ companyId, byId: sub, subject: tpl.subject ?? tpl.name, body: tpl.body, customerIds: ids, audience: [audience, `Template: ${tpl.name}`].filter(Boolean).join(" · ").slice(0, 300), doc: { emailTemplateId: tpl.id } })
+      : await createCustomerMessage({ companyId, byId: sub, subject: msg!.subject, body: msg!.body, customerIds: ids, audience });
     void drainCustomerMessages().catch((err) => console.error("customer emails failed", err));
     const counts = (await messageCounts([m.id])).get(m.id);
     return { ...m, counts };
