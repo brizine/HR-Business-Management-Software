@@ -1,6 +1,6 @@
 import Stripe from "stripe";
 import { and, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
-import { customerName, formatMoney } from "@crewdesk/shared";
+import { customerName, formatMoney, systemTemplate } from "@crewdesk/shared";
 import { db } from "../db";
 import { companies, customers, invoicePayments, invoices, paymentRefunds, prepayments } from "../db/schema";
 import { localDate } from "./tz";
@@ -190,7 +190,7 @@ export async function applyPaymentIntent(companyId: string, pi: Stripe.PaymentIn
   }
   if (status === "completed") {
     queueBillingSync(() => syncPayment(companyId, paymentId));
-    await sendReceipt(companyId, inv.id, amount, detail, updated ? updated.totalCents - updated.paidCents - updated.creditedCents : 0).catch((e) => console.error("Receipt email failed:", (e as Error).message));
+    await sendReceipt(companyId, inv.id, paymentId).catch((e) => console.error("Receipt email failed:", (e as Error).message));
   }
   return { status, paymentId };
 }
@@ -200,21 +200,24 @@ async function recordAgain(companyId: string, piId: string) {
   return { status: p?.status ?? "unknown", paymentId: p?.id };
 }
 
-/** A short "payment received" email to the bill-to customer. */
-async function sendReceipt(companyId: string, invoiceId: string, amountCents: number, detail: string | null, balanceCents: number) {
-  const transport = emailTransport();
-  if (!transport) return;
-  const [row] = await db.select({ inv: invoices, cust: customers, co: companies }).from(invoices).innerJoin(customers, eq(customers.id, invoices.customerId))
-    .innerJoin(companies, eq(companies.id, invoices.companyId)).where(eq(invoices.id, invoiceId));
-  const to = row?.cust.email;
-  if (!row || !to) return;
-  const { inv, cust, co } = row;
-  const lines = [`Thank you, ${customerName(cust)}.`, "", `We received your payment of ${formatMoney(amountCents)} for invoice ${inv.number}${detail ? ` (${detail})` : ""}.`,
-    balanceCents > 0 ? `Remaining balance on this invoice: ${formatMoney(balanceCents)}.` : "This invoice is now paid in full.", "", co.name];
-  await transport.send({
-    to, subject: `Payment received: invoice ${inv.number} from ${co.name}`, text: lines.join("\n"), fromName: co.name, replyTo: co.email ?? undefined,
-    html: lines.map((l) => (l ? `<p>${l.replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[ch]!)}</p>` : "")).join(""),
-  });
+/** The "payment received" email (and text, for customers who get texts), from the receipt template in Marketing → Templates. */
+async function sendReceipt(companyId: string, invoiceId: string, paymentId: string | undefined) {
+  if (!paymentId) return;
+  const [row] = await db.select({ inv: invoices, cust: customers }).from(invoices).innerJoin(customers, eq(customers.id, invoices.customerId)).where(eq(invoices.id, invoiceId));
+  if (!row) return;
+  const { messageTemplates, sendTemplateEmail, sendTemplateText } = await import("./templates");
+  const chosen = await messageTemplates(companyId, "receipt");
+  const tpl = chosen.email ?? { id: null, subject: systemTemplate("receipt_email")!.subject!, body: systemTemplate("receipt_email")!.body };
+  if (row.cust.email && emailTransport()) {
+    let attachments: { filename: string; content: Buffer; contentType: string }[] = [];
+    if (chosen.attachPdf) {
+      const { companyForPdf, pdfInvoice } = await import("../routes/invoices");
+      const { invoicePdf } = await import("./invoicePdf");
+      attachments = [{ filename: `Invoice-${row.inv.number}.pdf`, content: Buffer.from(await invoicePdf(await companyForPdf(companyId), await pdfInvoice(companyId, invoiceId))), contentType: "application/pdf" }];
+    }
+    await sendTemplateEmail({ companyId, template: tpl, to: row.cust.email, ctx: { invoiceId, paymentId }, transactional: true, attachments });
+  }
+  if ((row.cust.delivery ?? []).includes("text") && chosen.text) await sendTemplateText({ companyId, template: chosen.text, ctx: { invoiceId, paymentId }, by: null });
 }
 
 /** Checks a webhook really came from Stripe (signed with this company's webhook secret). */

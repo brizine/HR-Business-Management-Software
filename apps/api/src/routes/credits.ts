@@ -19,7 +19,7 @@ export async function creditsFor(companyId: string, customerId: string) {
     .where(and(eq(customerCredits.companyId, companyId), eq(customerCredits.customerId, customerId))).orderBy(desc(customerCredits.issuedOn), desc(customerCredits.number));
   const ids = list.map((r) => r.c.id);
   const apps = ids.length ? await db.select({ a: creditApplications, number: invoices.number }).from(creditApplications).innerJoin(invoices, eq(invoices.id, creditApplications.invoiceId))
-    .where(and(inArray(creditApplications.creditId, ids), isNull(creditApplications.removedAt))).orderBy(asc(creditApplications.createdAt)) : [];
+    .where(and(inArray(creditApplications.creditId, ids), isNull(creditApplications.removedAt))).orderBy(asc(creditApplications.createdAt), asc(invoices.dueDate), asc(invoices.number)) : [];
   const posts = ids.length ? await db.select().from(accountingPostings).where(and(eq(accountingPostings.companyId, companyId), eq(accountingPostings.kind, "credit"), inArray(accountingPostings.sourceId, ids))) : [];
   const credits = list.map(({ c, propStreet, propCity, propState, propZip, by, byLast }) => ({
     ...c, leftCents: creditLeft(c),

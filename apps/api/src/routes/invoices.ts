@@ -3,7 +3,7 @@ import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql, typ
 import { z } from "zod";
 import {
   DEFAULT_BILLING_SETTINGS, autoSendSettingsSchema, billingSettingsSchema, customerName, effectiveLateFeeRules, lateFeeSettingsSchema, estimateDepositSettingsSchema, formatAddress, formatMoney, invoiceSchema, invoiceTotals, isOverdue, lineAmount, paymentSchema, taxBreakdown,
-  invoiceBalance, sendInvoiceSchema, termsLabel, voidSchema, type InvoiceInput,
+  invoiceBalance, sendInvoiceSchema, systemTemplate, termsLabel, voidSchema, type InvoiceInput,
 } from "@crewdesk/shared";
 import { db } from "../db";
 import { newRecordCustom, updatedCustom } from "../lib/customFields";
@@ -18,6 +18,7 @@ import { waiveLateFee } from "../lib/billingJobs";
 import { REFUND_REASONS, refundPayment, stripeConfig } from "../lib/stripe";
 import { batchPdf, billToLines, invoicePdf, type PdfCompany, type PdfInvoice } from "../lib/invoicePdf";
 import { emailTransport } from "../lib/channels";
+import { messageTemplates, sendTemplateEmail, sendTemplateText } from "../lib/templates";
 import { randomToken } from "../lib/crypto";
 import { storage } from "../lib/storage";
 import { queueBillingSync, syncCredit, syncInvoice, syncInvoiceAndPayments, syncPayment, syncStatus } from "../lib/billingSync";
@@ -87,10 +88,6 @@ async function prepare(tx: Tx, companyId: string, body: InvoiceInput) {
   return { cust, totals };
 }
 
-const INVOICE_TEXT = (o: { company: string; number: number; customer: string; due: string; amount: string; dueDate: string; message?: string; phone?: string | null; payUrl?: string | null }) => ({
-  subject: `Invoice ${o.number} from ${o.company}: ${o.amount} due ${o.dueDate}`,
-  text: `Hello ${o.customer},\n\n${o.message ? `${o.message}\n\n` : ""}Your invoice ${o.number} from ${o.company} is attached.\nAmount due: ${o.amount}\nDue: ${o.due}\n\n${o.payUrl ? `Pay online (card or bank account): ${o.payUrl}\n\nOr, to pay by check` : "To pay by check"}, mail it with the bottom part of the invoice. Questions? Just reply to this email${o.phone ? ` or call ${o.phone}` : ""}.\n\nThank you,\n${o.company}`,
-});
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]!);
 
@@ -134,7 +131,6 @@ export async function sendInvoice(companyId: string, invoiceId: string, body: { 
   const [linked] = await db.update(invoices).set({ payToken: inv.payToken ?? randomToken(24), payTokenExpiresAt: new Date(Date.now() + PAY_LINK_DAYS * 86_400_000) })
     .where(eq(invoices.id, inv.id)).returning();
   const fresh = await refreshInvoice(db, inv.id);
-  const payUrl = (await stripeConfig(companyId)) ? payLinkFor(linked)?.url ?? null : null;
 
   if (wantsEmail && transport && to) {
     const company = await companyForPdf(companyId);
@@ -143,24 +139,20 @@ export async function sendInvoice(companyId: string, invoiceId: string, body: { 
     const copies = (await db.select({ email: customerContacts.email }).from(customerContacts)
       .where(and(eq(customerContacts.customerId, cust.id), eq(customerContacts.getsInvoices, true), isNotNull(customerContacts.email))))
       .map((c) => c.email!).filter((e) => e !== to);
-    const amount = formatMoney(invoiceBalance(data));
-    const due = `${data.dueDate.slice(5, 7)}/${data.dueDate.slice(8, 10)}/${data.dueDate.slice(0, 4)}`;
-    const t = INVOICE_TEXT({ company: company.name, number: inv.number!, customer: customerName(cust), due: `${due} (${termsLabel(data.termsDays)})`, amount, dueDate: due, message: body.message, phone: company.phone, payUrl });
-    const html = `<p>Hello ${esc(customerName(cust))},</p>${body.message ? `<p>${esc(body.message).replace(/\n/g, "<br>")}</p>` : ""}
-<p>Your invoice <strong>${inv.number}</strong> from ${esc(company.name)} is attached.</p>
-<table style="border-collapse:collapse"><tr><td style="padding:2px 12px 2px 0;color:#667085">Amount due</td><td style="font-size:18px;font-weight:700">${amount}</td></tr>
-<tr><td style="padding:2px 12px 2px 0;color:#667085">Due</td><td>${esc(t.text.match(/Due: (.*)/)?.[1] ?? due)}</td></tr></table>
-${payUrl ? `<p><a href="${esc(payUrl)}" style="display:inline-block;background:#1f7a3a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600">Pay online</a></p>
-<p style="color:#667085;font-size:13px">Card or bank account. This button works for ${PAY_LINK_DAYS} days; after that, sign in at <a href="${esc(portalUrl(companyId))}">${esc(portalUrl(companyId).replace(/^https?:\/\//, "").replace(/\?.*$/, ""))}</a>.</p>` : ""}
-<p>${payUrl ? "Or, to pay by check" : "To pay by check"}, mail it with the bottom part of the invoice. Questions? Just reply to this email${company.phone ? ` or call ${esc(company.phone)}` : ""}.</p>
-<p>Thank you,<br>${esc(company.name)}</p>`;
-    await transport.send({
-      to, cc: copies, subject: t.subject, text: t.text, html, fromName: company.name, replyTo: company.email ?? undefined,
-      attachments: [{ filename: `Invoice-${inv.number}.pdf`, content: Buffer.from(pdf), contentType: "application/pdf" }],
+    // The invoice template chosen in Marketing → Templates (Crewdesk's own unless another was picked).
+    const chosen = await messageTemplates(companyId, "invoice");
+    const tpl = chosen.email ?? { id: null, subject: systemTemplate("invoice_email")!.subject!, body: systemTemplate("invoice_email")!.body };
+    await sendTemplateEmail({
+      companyId, template: tpl, to, cc: copies, ctx: { invoiceId: inv.id, message: body.message }, transactional: true,
+      attachments: chosen.attachPdf || !chosen.email ? [{ filename: `Invoice-${inv.number}.pdf`, content: Buffer.from(pdf), contentType: "application/pdf" }] : [],
     });
     await db.update(invoices).set({ emailedAt: new Date(), emailedTo: [to, ...copies].join(", ") }).where(eq(invoices.id, inv.id));
   }
   if (body.via.includes("paper")) await db.update(invoices).set({ needsMailing: true }).where(eq(invoices.id, inv.id));
+  if ((cust.delivery ?? []).includes("text")) {
+    const chosen = await messageTemplates(companyId, "invoice");
+    if (chosen.text) await sendTemplateText({ companyId, template: chosen.text, ctx: { invoiceId: inv.id }, by }).catch((e) => console.error("invoice text failed", (e as Error).message));
+  }
   queueBillingSync(() => syncInvoice(companyId, inv.id, by));
   for (const paymentId of prepaid.paymentIds) queueBillingSync(() => syncPayment(companyId, paymentId, by));
   for (const creditId of creditsUsed) queueBillingSync(() => syncCredit(companyId, creditId, by));

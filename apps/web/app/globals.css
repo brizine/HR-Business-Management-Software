@@ -1622,3 +1622,47 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .chem-overlay { position: fixed; inset: 0; background: rgba(16, 24, 40, .45); display: flex; align-items: flex-start; justify-content: center; padding: 48px 16px; overflow-y: auto; z-index: 1000; }
 .chem-dialog { width: 100%; max-width: 720px; }
 @media (max-width: 700px) { .chem-overlay { padding: 0; } .chem-dialog { border-radius: 0; min-height: 100%; } }
+
+/* ───────────── Templates ───────────── */
+.tpl-tabs { margin-bottom: 12px; flex-wrap: wrap; }
+.tpl-tabs button { white-space: nowrap; }
+.tpl-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 12px; align-items: start; }
+.tpl-list { padding: 12px; position: sticky; top: 12px; }
+.tpl-items { list-style: none; margin: 10px 0 0; padding: 0; max-height: 62vh; overflow-y: auto; display: grid; gap: 2px; }
+.tpl-items button { width: 100%; text-align: left; border: 0; background: transparent; color: var(--text); padding: 7px 8px; border-radius: 6px; cursor: pointer; display: grid; gap: 1px; font: inherit; }
+.tpl-items button:hover { background: var(--bg); }
+.tpl-items button.on { background: var(--info-bg); }
+.tpl-item-name { font-size: 14px; font-weight: 500; }
+.tpl-item-meta { font-size: 12px; color: var(--muted); }
+.tpl-edit { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.tpl-form, .tpl-preview { grid-template-columns: minmax(0, 1fr); }
+.tpl-preview { position: sticky; top: 12px; }
+.tpl-editor { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.tpl-editor-loading { min-height: 260px; }
+.tpl-toolbar { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; padding: 6px; border-bottom: 1px solid var(--border); }
+.tpl-tool { min-width: 30px; height: 30px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text); cursor: pointer; font-size: 14px; }
+.tpl-tool:hover:not(:disabled) { background: var(--bg); }
+.tpl-tool.on { background: var(--info-bg); border-color: color-mix(in srgb, var(--primary) 40%, var(--border)); }
+.tpl-tool:disabled { opacity: .4; cursor: default; }
+.tpl-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+.tpl-body .ProseMirror { min-height: 260px; padding: 12px 14px; outline: none; line-height: 1.55; }
+.tpl-body .ProseMirror p { margin: 0 0 .8em; }
+.tpl-body .ProseMirror h2 { font-size: 20px; margin: .4em 0 .5em; }
+.tpl-body .ProseMirror a { color: var(--primary); text-decoration: underline; }
+.tpl-body .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--muted); float: left; height: 0; pointer-events: none; }
+.tpl-tags { display: grid; gap: 6px; max-height: 320px; overflow-y: auto; }
+.tpl-tag { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: var(--text); padding: 4px 6px; border-radius: 5px; cursor: pointer; font-size: 13px; }
+.tpl-tag:hover { background: var(--bg); }
+.tpl-subject { font-size: 14px; padding: 6px 2px; border-bottom: 1px solid var(--border); }
+.tpl-frame { width: 100%; height: 560px; border: 1px solid var(--border); border-radius: 8px; background: #f5f6f8; }
+.tpl-bubble { white-space: pre-wrap; background: #e7f0ff; color: #0f172a; border-radius: 16px 16px 16px 4px; padding: 10px 14px; max-width: 360px; font-size: 15px; line-height: 1.45; }
+.tpl-defaults { border-collapse: collapse; width: 100%; }
+.tpl-defaults th, .tpl-defaults td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+.tpl-defaults select { min-width: 220px; max-width: 100%; }
+.tpl-sent-body { white-space: pre-wrap; font: inherit; background: var(--bg); padding: 12px; border-radius: 8px; max-height: 60vh; overflow: auto; margin: 0; }
+@media (max-width: 1100px) { .tpl-edit { grid-template-columns: minmax(0, 1fr); } .tpl-preview { position: static; } }
+@media (max-width: 760px) { .tpl-layout { grid-template-columns: minmax(0, 1fr); } .tpl-list { position: static; } .tpl-items { max-height: 260px; } .tpl-frame { height: 440px; } }
+
+/* Text tabs on the segmented control (the calendar's buttons are 34px icons). */
+.text-tabs button { width: auto; height: 28px; padding: 0 12px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.text-tabs button.on, .text-tabs button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }

@@ -205,7 +205,8 @@ describe("Pay links and payments", () => {
     const mail = sent.find((m) => m.to === email("pat"))!;
     const token = await tokenOf(ID.inv1);
     expect(mail.text).toContain(`/pay/${token}`);
-    expect(mail.html).toContain("Pay online");
+    expect(mail.html).toContain(`/pay/${token}`);
+    expect(mail.html).toContain("View and pay your invoice");
     const staff = await call("GET", `/invoices/${ID.inv1}`, "office");
     expect(staff.body.payLink.url).toMatch(new RegExp(`/pay/${token}$`));
     expect(staff.body.payToken).toBeUndefined();

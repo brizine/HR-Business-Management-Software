@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { AutomationStep, CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings, WeatherSettings, ChemicalNoticeSettings } from "@crewdesk/shared";
+import type { AutomationStep, CustomValues, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings, WeatherSettings, ChemicalNoticeSettings, TemplateDefaults } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -40,6 +40,8 @@ export const companies = pgTable("companies", {
   stripeWebhookSecret: text("stripe_webhook_secret"),
   /** Invoice numbering, terms and the printed footer (Settings → Billing); defaults apply when unset. */
   billing: jsonb("billing").$type<Partial<BillingSettings>>(),
+  /** Which template goes out with invoices, estimates and receipts (Marketing → Templates), and the review link. */
+  templateDefaults: jsonb("template_defaults").$type<Partial<TemplateDefaults>>(),
   /** Weather on chemical applications: automatic, manual or off. */
   weather: jsonb("weather").$type<WeatherSettings>(),
   /** Chemical application records: the company's pesticide license number (on every record). */
@@ -2540,9 +2542,19 @@ export const emailLog = pgTable(
     /** "sent" (the mail service took it) or "failed" (it refused it, with the error). */
     status: text("status").notNull(),
     error: text("error"),
+    /** Customer emails (invoices, estimates, templates): whose, to whom, from which template. */
+    companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    templateId: uuid("template_id"),
+    /** The message as plain text (template emails only; never sign-in codes). */
+    body: text("body"),
+    /** Opens, from the tracking image in template emails (some mail apps load it on their own). */
+    openedAt: timestamp("opened_at", { withTimezone: true }),
+    lastOpenedAt: timestamp("last_opened_at", { withTimezone: true }),
+    openCount: integer("open_count").notNull().default(0),
     createdAt: createdAt(),
   },
-  (t) => [index("email_log_to_idx").on(t.to, t.createdAt), index("email_log_created_idx").on(t.createdAt)],
+  (t) => [index("email_log_to_idx").on(t.to, t.createdAt), index("email_log_created_idx").on(t.createdAt), index("email_log_company_idx").on(t.companyId, t.createdAt)],
 );
 
 /** Saved views of a list (filters, columns, sort): shared with everyone, or one person's. */
@@ -2843,4 +2855,37 @@ export const serviceMixes = pgTable(
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (t) => [index("service_mixes_service_idx").on(t.serviceTypeId), index("service_mixes_mix_idx").on(t.mixId)],
+);
+
+/**
+ * Message templates (Marketing → Templates): emails (formatted) and texts with merge tags like
+ * {{CUSTOMER_FIRST_NAME}}. `systemKey` marks Crewdesk's own invoice, estimate and receipt
+ * templates: changeable and resettable, not deletable.
+ */
+export const templates = pgTable(
+  "templates",
+  {
+    id: id(),
+    companyId: companyId(),
+    /** "email" or "text". */
+    channel: text("channel").notNull(),
+    /** "customer" or "internal" (to your team). */
+    audience: text("audience").notNull().default("customer"),
+    name: text("name").notNull(),
+    subject: text("subject"),
+    /** Email: cleaned HTML. Text: plain text. */
+    body: text("body").notNull(),
+    systemKey: text("system_key"),
+    /** Brought in from another system, e.g. "homeworks:592671" (so importing twice doesn't double up). */
+    importedFrom: text("imported_from"),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("templates_company_idx").on(t.companyId, t.channel),
+    uniqueIndex("templates_company_system_idx").on(t.companyId, t.systemKey),
+    uniqueIndex("templates_company_imported_idx").on(t.companyId, t.importedFrom),
+  ],
 );

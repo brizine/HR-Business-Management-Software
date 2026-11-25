@@ -41,7 +41,7 @@ export default function WeatherPage() {
           <DayEntry today={d.today} days={d.days} manual={d.settings.mode === "manual"} onSaved={data.reload} />
           <div className="card stack">
             <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-              <div className="cal-seg" role="tablist" aria-label="Show">
+              <div className="cal-seg text-tabs" role="tablist" aria-label="Show">
                 {SHOW.map(([k, label]) => (
                   <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setShow(k)}>
                     {label}{k === "needs" ? ` (${needs.length})` : ` (${d.records.length})`}

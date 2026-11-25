@@ -47,3 +47,4 @@ export * from "./weather";
 export * from "./products";
 export * from "./chemicalRecords";
 export * from "./chemicalNotices";
+export * from "./templates";

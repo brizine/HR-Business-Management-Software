@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import nodemailer from "nodemailer";
 import type { NotificationCategory } from "@crewdesk/shared";
 
@@ -20,6 +20,11 @@ export interface EmailMessage {
   /** Shown as the sender's name, e.g. the company name (the address stays EMAIL_FROM's). */
   fromName?: string;
   cc?: string[];
+  /**
+   * A customer email: logged with the company, customer and template (Marketing → Sent / History).
+   * `keepBody` saves the plain-text message too; `opens` adds a tracking image to count opens.
+   */
+  track?: { companyId: string; customerId?: string | null; templateId?: string | null; keepBody?: boolean; opens?: boolean };
 }
 
 export interface EmailTransport {
@@ -45,20 +50,32 @@ class SmtpEmail implements EmailTransport {
 
 let email: EmailTransport | null = process.env.SMTP_URL ? new SmtpEmail() : null;
 
+/** The tracking image's address for one logged email. */
+export const openPixelUrl = (logId: string) => `${PUBLIC_API_URL}/public/t/o/${logId}.gif`;
+
 /** Notes each email in email_log (sent, or refused with the reason) for Email deliverability; never stops a send. */
-async function logEmail(to: string, subject: string, error: unknown) {
+async function logEmail(id: string, msg: EmailMessage, error: unknown) {
   try {
     const { db } = await import("../db");
     const { emailLog } = await import("../db/schema");
-    await db.insert(emailLog).values({ to: to.trim().toLowerCase().slice(0, 320), subject: subject.slice(0, 300), status: error ? "failed" : "sent", error: error ? String((error as Error).message ?? error).slice(0, 500) : null });
+    const tr = msg.track;
+    await db.insert(emailLog).values({
+      id, to: msg.to.trim().toLowerCase().slice(0, 320), subject: msg.subject.slice(0, 300), status: error ? "failed" : "sent",
+      error: error ? String((error as Error).message ?? error).slice(0, 500) : null,
+      companyId: tr?.companyId ?? null, customerId: tr?.customerId ?? null, templateId: tr?.templateId ?? null, body: tr?.keepBody ? msg.text.slice(0, 20_000) : null,
+    });
   } catch { /* the log is a nicety */ }
 }
 function logged(t: EmailTransport): EmailTransport {
   return {
     async send(msg) {
-      if (isUndeliverable(msg.to)) return t.send(msg);
-      try { await t.send(msg); } catch (e) { await logEmail(msg.to, msg.subject, e); throw e; }
-      await logEmail(msg.to, msg.subject, null);
+      const { track, ...plain } = msg;
+      if (isUndeliverable(msg.to)) return t.send(plain);
+      const id = randomUUID();
+      const pixel = `<img src="${openPixelUrl(id)}" width="1" height="1" alt="" style="display:block;border:0">`;
+      const out = track?.opens ? { ...plain, html: plain.html.includes("</body>") ? plain.html.replace("</body>", `${pixel}</body>`) : `${plain.html}${pixel}` } : plain;
+      try { await t.send(out); } catch (e) { await logEmail(id, msg, e); throw e; }
+      await logEmail(id, msg, null);
     },
   };
 }

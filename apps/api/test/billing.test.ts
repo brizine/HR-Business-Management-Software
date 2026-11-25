@@ -102,8 +102,10 @@ describe("invoices", () => {
     expect(r.body.emailedAt).toBeTruthy();
     const m = sent.at(-1)!;
     expect(m).toMatchObject({ to: "jane.example@example.com", fromName: "Billing Co", replyTo: "office@billing.test" });
-    expect(m.subject).toContain("Invoice 5001 from Billing Co: $64.57 due 03/17/2026");
+    // Sent with the invoice template (Marketing → Templates): Crewdesk's own unless another was picked.
+    expect(m.subject).toBe("Invoice 5001 from Billing Co: $64.57 due March 17, 2026");
     expect(m.text).toContain("Round 1 is done.");
+    expect(m.html).toContain("Amount due: <strong>$64.57</strong>");
     expect(m.attachments?.[0]).toMatchObject({ filename: "Invoice-5001.pdf", contentType: "application/pdf" });
     expect(m.attachments?.[0].content.subarray(0, 5).toString()).toBe("%PDF-");
     const pdf = await call("GET", `/invoices/${ID.draft}/pdf`, "office");

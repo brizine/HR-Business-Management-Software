@@ -20,8 +20,15 @@ export const NAV: Record<Side, NavGroup[]> = {
       items: [
         { href: "/customers", label: "Customers", min: "manager", area: "customers" },
         { href: "/properties", label: "Properties", min: "manager", area: "customers" },
-        { href: "/texts", label: "Texts", min: "manager", area: "customers" },
+      ],
+    },
+    {
+      // Like Homeworks' Marketing: what Crewdesk says to customers, and when.
+      key: "marketing", label: "Marketing", icon: "megaphone",
+      items: [
+        { href: "/templates", label: "Templates", min: "manager", area: "customers" },
         { href: "/automations", label: "Automations", min: "manager", area: "customers" },
+        { href: "/texts", label: "Texts", min: "manager", area: "customers" },
       ],
     },
     {

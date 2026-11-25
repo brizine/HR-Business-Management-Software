@@ -1,0 +1,220 @@
+import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import sanitizeHtml from "sanitize-html";
+import {
+  EMPTY_TEMPLATE_DEFAULTS, MESSAGE_KINDS, PAYMENT_METHOD_LABELS, SYSTEM_TEMPLATES, customerName, fillTags, formatAddress, formatMoney, formatPhone, htmlToText,
+  type MessageKind, type PaymentMethod, type TemplateDefaults, type TemplateVars,
+} from "@crewdesk/shared";
+import { db } from "../db";
+import { companies, customerNotes, customers, employees, estimates, invoicePayments, invoices, properties, propertyAssignments, templates, visits } from "../db/schema";
+import { PUBLIC_API_URL, WEB_URL, emailTransport, type EmailMessage } from "./channels";
+import { customerUnsubscribeToken } from "./customerMessages";
+import { payLinkFor, portalUrl } from "./invoices";
+import { stripeConfig } from "./stripe";
+import { sendCustomerText } from "./texting";
+import { localParts } from "./tz";
+
+export type TemplateRow = typeof templates.$inferSelect;
+
+/* ───────────── Cleaning what's saved ───────────── */
+
+/** An email body as saved: formatting, lists and links only (no scripts, styles or outside images). */
+export function cleanEmailHtml(html: string): string {
+  return sanitizeHtml(html, {
+    allowedTags: ["p", "br", "strong", "b", "em", "i", "u", "s", "a", "h1", "h2", "h3", "ul", "ol", "li", "blockquote", "hr"],
+    allowedAttributes: { a: ["href", "target", "rel"], p: ["style"], h1: ["style"], h2: ["style"], h3: ["style"], li: ["style"] },
+    allowedStyles: { "*": { "text-align": [/^(left|right|center|justify)$/] } },
+    allowedSchemes: ["http", "https", "mailto", "tel"],
+    // {{TAG}} as a link address is filled in when sent.
+    allowedSchemesAppliedToAttributes: ["href"],
+    transformTags: { h1: "h2", b: "strong", i: "em" },
+    exclusiveFilter: (f) => f.tag === "a" && !f.attribs.href,
+  }).replace(/href="%7B%7B([A-Z0-9_]+)%7D%7D"/g, 'href="{{$1}}"').trim();
+}
+
+/* ───────────── Crewdesk's own templates and the chosen ones ───────────── */
+
+/** Makes sure the company has its copy of each of Crewdesk's own templates. */
+export async function ensureSystemTemplates(companyId: string) {
+  const have = new Set((await db.select({ key: templates.systemKey }).from(templates).where(and(eq(templates.companyId, companyId), sql`${templates.systemKey} is not null`))).map((r) => r.key));
+  const missing = SYSTEM_TEMPLATES.filter((t) => !have.has(t.key));
+  if (missing.length) {
+    await db.insert(templates).values(missing.map((t) => ({ companyId, channel: t.channel, audience: "customer", name: t.name, subject: t.subject ?? null, body: t.body, systemKey: t.key })))
+      .onConflictDoNothing();
+  }
+}
+
+/** The templates chosen for invoices, estimates and receipts (Crewdesk's own when none was picked). */
+export async function templateDefaults(companyId: string): Promise<TemplateDefaults> {
+  await ensureSystemTemplates(companyId);
+  const [c] = await db.select({ d: companies.templateDefaults }).from(companies).where(eq(companies.id, companyId));
+  const saved = c?.d ?? {};
+  const system = new Map((await db.select({ id: templates.id, key: templates.systemKey }).from(templates).where(and(eq(templates.companyId, companyId), sql`${templates.systemKey} is not null`))).map((r) => [r.key!, r.id]));
+  const out = { ...EMPTY_TEMPLATE_DEFAULTS, reviewUrl: saved.reviewUrl ?? null } as TemplateDefaults;
+  for (const k of MESSAGE_KINDS) {
+    const s = { ...EMPTY_TEMPLATE_DEFAULTS[k], ...(saved[k] ?? {}) };
+    out[k] = { email: s.email ?? system.get(`${k}_email`) ?? null, text: s.text ?? system.get(`${k}_text`) ?? null, attachPdf: s.attachPdf };
+  }
+  return out;
+}
+
+/** The email and text template for one kind of message, and whether the PDF goes with it. */
+export async function messageTemplates(companyId: string, kind: MessageKind) {
+  const d = (await templateDefaults(companyId))[kind];
+  const ids = [d.email, d.text].filter((x): x is string => !!x);
+  const rows = ids.length ? await db.select().from(templates).where(and(eq(templates.companyId, companyId), inArray(templates.id, ids))) : [];
+  return { email: rows.find((r) => r.id === d.email && r.channel === "email") ?? null, text: rows.find((r) => r.id === d.text && r.channel === "text") ?? null, attachPdf: d.attachPdf };
+}
+
+/* ───────────── Filling in the tags ───────────── */
+
+export type TemplateContext = { customerId?: string | null; invoiceId?: string | null; estimateId?: string | null; visitId?: string | null; paymentId?: string | null; message?: string | null };
+
+const longDate = (d: string | null | undefined) => (d ? new Date(`${d.slice(0, 10)}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }) : "");
+const time12 = (t: string | null | undefined) => { if (!t) return ""; const [h, m] = t.split(":").map(Number); return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
+
+/** Every tag's value for a customer (and the invoice, estimate, work order or payment the message is about). */
+export async function templateVars(companyId: string, ctx: TemplateContext): Promise<TemplateVars> {
+  const [co] = await db.select().from(companies).where(eq(companies.id, companyId));
+  const now = localParts(new Date(), co.timezone);
+  const [owner] = await db.select({ first: employees.firstName, last: employees.lastName }).from(employees)
+    .where(and(eq(employees.companyId, companyId), eq(employees.role, "owner"))).orderBy(asc(employees.createdAt)).limit(1);
+  const defaults = co.templateDefaults ?? {};
+  const v: TemplateVars = {
+    COMPANY_NAME: co.name, COMPANY_PHONE: co.phone ? formatPhone(co.phone) : "", COMPANY_EMAIL: co.email ?? "", COMPANY_WEBSITE: co.website ?? "",
+    COMPANY_ADDRESS: [co.addressLine1, co.addressLine2, [co.city, co.state].filter(Boolean).join(", ") + (co.zip ? ` ${co.zip}` : "")].filter((x) => x && x.trim()).join(", "),
+    COMPANY_OWNER_FIRST_NAME: owner?.first ?? "", COMPANY_OWNER_LAST_NAME: owner?.last ?? "",
+    REVIEW_PAGE: defaults.reviewUrl ?? "",
+    TODAY: longDate(now.date), CURRENT_MONTH: new Date(`${now.date}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", timeZone: "UTC" }), CURRENT_YEAR: now.date.slice(0, 4),
+    MESSAGE: ctx.message?.trim() ?? "",
+  };
+  // Work out the customer from whatever the message is about.
+  let customerId = ctx.customerId ?? null;
+  const [inv] = ctx.invoiceId ? await db.select().from(invoices).where(and(eq(invoices.id, ctx.invoiceId), eq(invoices.companyId, companyId))) : [];
+  const [est] = ctx.estimateId ? await db.select().from(estimates).where(and(eq(estimates.id, ctx.estimateId), eq(estimates.companyId, companyId))) : [];
+  const [visit] = ctx.visitId ? await db.select().from(visits).where(and(eq(visits.id, ctx.visitId), eq(visits.companyId, companyId))) : [];
+  const [pay] = ctx.paymentId ? await db.select().from(invoicePayments).where(eq(invoicePayments.id, ctx.paymentId)) : [];
+  customerId ??= inv?.customerId ?? est?.customerId ?? visit?.customerId ?? pay?.customerId ?? null;
+  if (customerId) {
+    const [c] = await db.select().from(customers).where(and(eq(customers.id, customerId), eq(customers.companyId, companyId)));
+    if (c) {
+      const [prop] = await db.select({ p: properties }).from(propertyAssignments).innerJoin(properties, eq(properties.id, propertyAssignments.propertyId))
+        .where(and(eq(propertyAssignments.customerId, c.id), sql`${propertyAssignments.endDate} is null`)).orderBy(asc(propertyAssignments.startDate)).limit(1);
+      const street = c.billingStreet ?? prop?.p.street ?? "";
+      const city = c.billingCity ?? prop?.p.city ?? "";
+      const state = c.billingState ?? prop?.p.state ?? "";
+      const zip = c.billingZip ?? prop?.p.zip ?? "";
+      const [bal] = await db.select({ cents: sql<number>`coalesce(sum(${invoices.totalCents} - ${invoices.paidCents} - ${invoices.creditedCents}), 0)::int` }).from(invoices)
+        .where(and(eq(invoices.customerId, c.id), notInArray(invoices.status, ["draft", "void"])));
+      const [call] = await db.select({ body: customerNotes.body }).from(customerNotes).where(and(eq(customerNotes.customerId, c.id), eq(customerNotes.kind, "call"))).orderBy(desc(customerNotes.createdAt)).limit(1);
+      const name = customerName(c);
+      Object.assign(v, {
+        CUSTOMER_NAME: name, CUSTOMER_FIRST_NAME: c.firstName?.trim() || name, CUSTOMER_LAST_NAME: c.lastName ?? "", CUSTOMER_COMPANY_NAME: c.companyName ?? "",
+        CUSTOMER_NUMBER: String(c.number ?? ""), CUSTOMER_EMAIL: c.email ?? "", CUSTOMER_PHONE: c.phone ? formatPhone(c.phone) : "", CUSTOMER_CELL: c.altPhone ? formatPhone(c.altPhone) : c.phone ? formatPhone(c.phone) : "",
+        CUSTOMER_ADDRESS: [street, [city, state].filter(Boolean).join(", ") + (zip ? ` ${zip}` : "")].filter((x) => x && x.trim()).join(", "),
+        CUSTOMER_CITY: city, CUSTOMER_STATE: state, CUSTOMER_ZIP: zip, CUSTOMER_ACCOUNT_BALANCE: formatMoney(Math.max(0, bal?.cents ?? 0)),
+        CLIENT_PORTAL_LINK: portalUrl(companyId), CLIENT_PORTAL_ADD_CREDIT_CARD_LINK: portalUrl(companyId), CALL_NOTES: call?.body ?? "",
+      });
+    }
+  }
+  if (inv) {
+    const pay = (await stripeConfig(companyId)) ? payLinkFor(inv)?.url ?? null : null;
+    Object.assign(v, {
+      INVOICE_NUMBER: inv.number != null ? String(inv.number) : "(draft)", INVOICE_TOTAL: formatMoney(inv.totalCents),
+      INVOICE_BALANCE: formatMoney(Math.max(0, inv.totalCents - inv.paidCents - inv.creditedCents)), INVOICE_DUE_DATE: longDate(inv.dueDate),
+      INVOICES_LINKS: pay ?? portalUrl(companyId), RECEIPT_ADMIN_LINK: `${WEB_URL}/invoices/${inv.id}`,
+    });
+  }
+  if (est) {
+    Object.assign(v, {
+      ESTIMATE_NUMBER: String(est.number ?? ""), ESTIMATE_TITLE: est.title ?? "", ESTIMATE_TOTAL: formatMoney(est.totalCents), ESTIMATE_VALID_UNTIL: longDate(est.validUntil),
+      ESTIMATE_LINK: est.token ? `${WEB_URL}/estimate/${est.token}` : "", ESTIMATE_EDIT_LINK: `${WEB_URL}/estimates/${est.id}`,
+      ESTIMATE_CHANGES: est.status === "changes" ? est.responseComment ?? "" : "",
+    });
+  }
+  if (visit) {
+    const [p] = visit.propertyId ? await db.select().from(properties).where(eq(properties.id, visit.propertyId)) : [];
+    Object.assign(v, {
+      EVENT_TITLE: visit.title, EVENT_DATE: visit.date ? new Date(`${visit.date}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }) : "not scheduled yet",
+      EVENT_SCHEDULED_TIME: time12(visit.startTime), EVENT_PROPERTY_ADDRESS: p ? formatAddress(p) : visit.location ?? "", NOTES_TO_DISPATCHER: visit.notes ?? "",
+    });
+  }
+  if (pay) {
+    Object.assign(v, {
+      PAYMENT_AMOUNT: formatMoney(pay.amountCents), PAYMENT_DATE: longDate(pay.receivedOn),
+      PAYMENT_METHOD: pay.methodDetail ?? PAYMENT_METHOD_LABELS[pay.method as PaymentMethod] ?? pay.method, RECEIPT_LINK: portalUrl(companyId),
+    });
+  }
+  return v;
+}
+
+/* ───────────── The email around the message ───────────── */
+
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/**
+ * The email: the template filled in, inside the company's letterhead (logo, name) and footer. A
+ * link on a line by itself becomes a button. Customer emails that aren't about a bill get an
+ * unsubscribe link (invoices, estimates and receipts always go).
+ */
+export async function renderTemplateEmail(companyId: string, tpl: { subject: string | null; body: string }, vars: TemplateVars, o: { unsubscribeCustomerId?: string | null } = {}) {
+  const [co] = await db.select().from(companies).where(eq(companies.id, companyId));
+  const subject = fillTags(tpl.subject ?? "", vars).replace(/\s+/g, " ").trim() || co.name;
+  const body = fillTags(tpl.body, vars, { html: true })
+    .replace(/<p>(\s|<br>)*<\/p>/g, "")
+    .replace(/<p([^>]*)>\s*<a href="([^"]+)" data-cd-link="1">([^<]*)<\/a>\s*<\/p>/g, (_, attrs: string, href: string, label: string) =>
+      `<p${attrs}><a href="${href}" style="display:inline-block;background:#1f7a3a;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600">${label}</a></p>`)
+    .replace(/ data-cd-link="1"/g, ' style="color:#1f7a3a;font-weight:600"');
+  const token = o.unsubscribeCustomerId ? customerUnsubscribeToken(o.unsubscribeCustomerId) : null;
+  const unsubscribe = token ? `${WEB_URL}/unsubscribe?customer=${encodeURIComponent(token)}` : null;
+  const footer = [co.name, vars.COMPANY_ADDRESS, vars.COMPANY_PHONE, co.website].filter(Boolean).join(" · ");
+  const logo = co.logoKey ? `<img src="${PUBLIC_API_URL}/public/company/${co.id}/logo" alt="${esc(co.name)}" style="max-height:64px;max-width:240px;margin:0 0 12px">` : `<div style="font-size:18px;font-weight:700;margin:0 0 12px">${esc(co.name)}</div>`;
+  const html = `<!doctype html><html><body style="margin:0;padding:24px 12px;background:#f5f6f8">
+<div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:10px;padding:24px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:15px;line-height:1.55;color:#1d2939">
+${logo}
+${body}
+<hr style="border:0;border-top:1px solid #eaecf0;margin:24px 0 12px">
+<p style="color:#667085;font-size:12px;margin:0">${esc(footer)}${unsubscribe ? `<br>Don't want these emails? <a href="${esc(unsubscribe)}" style="color:#667085">Unsubscribe</a>. You'll still get your invoices and receipts.` : ""}</p>
+</div></body></html>`;
+  const text = `${htmlToText(body)}\n\n--\n${footer}${unsubscribe ? `\nDon't want these emails? Unsubscribe: ${unsubscribe}` : ""}\n`;
+  const headers: Record<string, string> = token ? { "List-Unsubscribe": `<${PUBLIC_API_URL}/public/unsubscribe/customer?token=${encodeURIComponent(token)}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } : {};
+  return { subject, html, text, headers, fromName: co.name, replyTo: co.email ?? undefined };
+}
+
+/**
+ * Sends a template by email: filled in for the customer (and what it's about), logged in
+ * Sent / History with the message, and opens counted. `transactional` (invoices, estimates,
+ * receipts) goes even to customers who unsubscribed from other email.
+ */
+export async function sendTemplateEmail(o: {
+  companyId: string; template: { id?: string | null; subject: string | null; body: string }; to: string; cc?: string[]; ctx: TemplateContext; transactional?: boolean;
+  attachments?: EmailMessage["attachments"];
+}) {
+  const transport = emailTransport();
+  if (!transport) throw new Error("Email isn't set up on this server yet");
+  const vars = await templateVars(o.companyId, o.ctx);
+  const customerId = await customerFor(o.companyId, o.ctx);
+  const m = await renderTemplateEmail(o.companyId, o.template, vars, { unsubscribeCustomerId: o.transactional ? null : customerId });
+  await transport.send({
+    to: o.to, cc: o.cc, subject: m.subject, text: m.text, html: m.html, headers: m.headers, fromName: m.fromName, replyTo: m.replyTo, attachments: o.attachments,
+    track: { companyId: o.companyId, customerId, templateId: o.template.id ?? null, keepBody: true, opens: true },
+  });
+  return m;
+}
+
+/** Sends a template by text, when texting is connected and the customer can get texts. */
+export async function sendTemplateText(o: { companyId: string; template: Pick<TemplateRow, "body">; ctx: TemplateContext; by: string | null }) {
+  const customerId = await customerFor(o.companyId, o.ctx);
+  if (!customerId) return { sent: false, skipped: "No customer" };
+  const body = fillTags(o.template.body, await templateVars(o.companyId, o.ctx)).replace(/\n{3,}/g, "\n\n").trim();
+  const r = await sendCustomerText(o.companyId, customerId, body, { by: o.by, source: "office" });
+  return { sent: !!r.text && r.text.status !== "failed", skipped: r.skipped };
+}
+
+async function customerFor(companyId: string, ctx: TemplateContext) {
+  if (ctx.customerId) return ctx.customerId;
+  if (ctx.invoiceId) return (await db.select({ c: invoices.customerId }).from(invoices).where(and(eq(invoices.id, ctx.invoiceId), eq(invoices.companyId, companyId))))[0]?.c ?? null;
+  if (ctx.estimateId) return (await db.select({ c: estimates.customerId }).from(estimates).where(and(eq(estimates.id, ctx.estimateId), eq(estimates.companyId, companyId))))[0]?.c ?? null;
+  if (ctx.visitId) return (await db.select({ c: visits.customerId }).from(visits).where(and(eq(visits.id, ctx.visitId), eq(visits.companyId, companyId))))[0]?.c ?? null;
+  if (ctx.paymentId) return (await db.select({ c: invoicePayments.customerId }).from(invoicePayments).where(eq(invoicePayments.id, ctx.paymentId)))[0]?.c ?? null;
+  return null;
+}

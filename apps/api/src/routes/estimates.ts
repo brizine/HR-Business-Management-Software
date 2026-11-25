@@ -4,11 +4,13 @@ import { z } from "zod";
 import {
   ESTIMATE_STATUSES, ESTIMATE_STATUS_LABELS, customerName, estimateLineAmount, estimateResponseSchema, estimateSchema, estimateTotals, formatAddress,
   formatMoney, lineIncluded, sendEstimateSchema, type EstimateInput, type EstimateResponse,
+  systemTemplate,
 } from "@crewdesk/shared";
 import { db } from "../db";
 import { companies, customers, employees, estimateLines, estimates, invoiceLines, invoices, properties } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { WEB_URL, emailTransport } from "../lib/channels";
+import { messageTemplates, sendTemplateEmail, sendTemplateText } from "../lib/templates";
 import { customerInCompany, type Tx } from "../lib/crm";
 import { randomToken } from "../lib/crypto";
 import { HttpError, parse } from "../lib/errors";
@@ -262,21 +264,17 @@ const routes: FastifyPluginAsync = async (app) => {
     if (!transport) throw new HttpError(400, "Email isn't set up on this server yet");
     const [u] = await db.update(estimates).set({ status: "sent", token: e.token ?? randomToken(24), sentAt: new Date(), emailedTo: to, updatedAt: new Date() })
       .where(eq(estimates.id, e.id)).returning();
-    const [co] = await db.select().from(companies).where(eq(companies.id, companyId));
-    const url = `${WEB_URL}/estimate/${u.token}`;
     const pdf = await pdfFor(u);
-    const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-    const name = customerName(cust);
-    const what = u.title ? `${u.title} (estimate ${u.number})` : `estimate ${u.number}`;
-    const until = u.validUntil ? ` It's good until ${new Date(`${u.validUntil}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })}.` : "";
-    const text = [`Hello ${name},`, "", ...(body.message ? [body.message, ""] : []), `Here's your ${what} from ${co.name}: ${formatMoney(u.totalCents)}.${until}`, "",
-      `See it, choose any options, and accept it online: ${url}`, "", "The PDF is attached too. Questions? Just reply to this email" + (co.phone ? ` or call ${co.phone}.` : "."), "", `Thank you,`, co.name].join("\n");
-    const html = `<p>Hello ${esc(name)},</p>${body.message ? `<p>${esc(body.message).replace(/\n/g, "<br>")}</p>` : ""}
-<p>Here's your ${esc(what)} from ${esc(co.name)}: <strong>${formatMoney(u.totalCents)}</strong>.${esc(until)}</p>
-<p><a href="${esc(url)}" style="display:inline-block;background:#1f7a3a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600">View and accept the estimate</a></p>
-<p>The PDF is attached too. Questions? Just reply to this email${co.phone ? ` or call ${esc(co.phone)}` : ""}.</p><p>Thank you,<br>${esc(co.name)}</p>`;
-    await transport.send({ to, subject: `Estimate ${u.number} from ${co.name}`, text, html, fromName: co.name, replyTo: co.email ?? undefined,
-      attachments: [{ filename: `Estimate-${u.number}.pdf`, content: Buffer.from(pdf), contentType: "application/pdf" }] });
+    // The estimate template chosen in Marketing → Templates (Crewdesk's own unless another was picked).
+    const chosen = await messageTemplates(companyId, "estimate");
+    const tpl = chosen.email ?? { id: null, subject: systemTemplate("estimate_email")!.subject!, body: systemTemplate("estimate_email")!.body };
+    await sendTemplateEmail({
+      companyId, template: tpl, to, ctx: { estimateId: u.id, message: body.message }, transactional: true,
+      attachments: chosen.attachPdf || !chosen.email ? [{ filename: `Estimate-${u.number}.pdf`, content: Buffer.from(pdf), contentType: "application/pdf" }] : [],
+    });
+    if ((cust.delivery ?? []).includes("text") && chosen.text) {
+      await sendTemplateText({ companyId, template: chosen.text, ctx: { estimateId: u.id }, by: req.user.sub }).catch((e) => console.error("estimate text failed", (e as Error).message));
+    }
     return estimateView(u, { office: true });
   });
 

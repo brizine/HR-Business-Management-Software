@@ -56,7 +56,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   see Invoices, Estimates and Sales tax report, and click it again to fold it away. The section you're in starts
   open, and the menu remembers which ones you opened or closed.
 - **Operations:** **Customers** (Customers, Properties), **Schedule** (Calendar, Work orders, To-dos), **Billing** (Invoices,
-  Estimates, Sales tax report), **Resources** (Products & services, Custom fields, Tags; like Homeworks' Resources), **Field**
+  Estimates, Sales tax report), **Marketing** (Templates, Automations, Texts), **Resources** (Products & services, Custom fields, Tags; like Homeworks' Resources), **Field**
   (Property Measure, Spray Mix Calculator), **Fleet** (Assets, Repair Orders, Inspections) and **Reports**
   (managers).
 - **Team:** **Dashboard** (managers), **People** (Team, Shifts, Crews, Time Clock, Attendance, Time Off, Reviews &
@@ -522,6 +522,38 @@ Deposits are **off** until an admin sets them in **Settings → Customers & bill
 - **Accepted by phone?** **Email a deposit link** sends the customer a prepay link for the deposit.
 - **No online payments set up:** customers can still accept. Their notification tells you to collect the deposit
   yourself (add a check or cash prepayment on their page).
+
+### Templates
+
+**Marketing → Templates** (Customers & billing managers) is the library of emails and texts Crewdesk sends, like
+Homeworks' Email Templates and Text Message Templates, with **Sent / History**.
+
+- **Tags** fill in each customer's details: pick **Insert tag** (or type them), e.g. `{{CUSTOMER_FIRST_NAME}}`,
+  `{{INVOICE_BALANCE}}`, `{{ESTIMATE_LINK}}`, `{{EVENT_DATE}}`, `{{REVIEW_PAGE}}`. They're the same names Homeworks
+  uses, so templates brought over work as they are. Tags about an invoice, estimate, work order or payment are
+  filled in when the message is sent about one, and left empty otherwise. Link tags show as words in an email
+  ("View and pay your invoice"); a link on a line by itself becomes a button. In a text, they're the address.
+- **Email templates:** a name, who it's for (customers or your team), the subject and the message, with bold,
+  italic, underline, headings, lists, centering and links. Every email goes out in your letterhead (logo and
+  name at the top; your name, address, phone and website at the bottom). Emails that aren't bills get an
+  **Unsubscribe** link at the bottom.
+- **Text templates:** plain text (emoji are fine). The preview shows how many texts one send takes: 160
+  characters fit in one, or 70 once there's an emoji or special character.
+- **Preview:** with example values, or pick a customer (and one of their invoices, estimates, work orders or
+  payments) to see exactly what they'd get. **Send me a test** emails it to you.
+- **Copy** a template to start a new one from it; **Delete** one you don't need (not while it's chosen on
+  **Defaults**).
+- **Crewdesk's own templates** (Invoice, Estimate and Payment receipt, as an email and a text) can be changed,
+  and **Reset to Crewdesk's wording** puts them back. They can't be deleted.
+- **Defaults:** which template goes out when you **Send** an invoice or estimate, and when a customer pays
+  online; whether the PDF is attached; and your **review link** for `{{REVIEW_PAGE}}`. Only templates for
+  customers that fit are offered. The text goes to customers whose invoices are set to go **by text**, once
+  texting is connected (admins).
+- **Sent / History:** every invoice, estimate, receipt and template email: when, to whom, which template, and
+  whether it was opened (and how many times). Open one to read what was sent. Opens come from a tiny image in the
+  email; some mail apps load it on their own, so treat opens as a hint.
+- **Import** (admins): brings in the templates file exported from Homeworks. Each comes in once; importing the
+  same file again skips them.
 
 ### Texting customers
 
