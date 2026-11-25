@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ODAFF_RULE, formatRateAmount, windText } from "@crewdesk/shared";
 import { download, fmtDate } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
@@ -21,6 +21,8 @@ export default function ChemicalRecords() {
   const [from, setFrom] = useState(daysAgo(30));
   const [to, setTo] = useState(daysAgo(0));
   const [status, setStatus] = useState("all");
+  // A link can open it filtered (e.g. from My Day: ?status=…).
+  useEffect(() => { const v = new URLSearchParams(window.location.search).get("status"); if (v) setStatus(v as never); }, []);
   const qs = new URLSearchParams({ from, to, status }).toString();
   const list = useApi<Row[]>(`/chemical-records?${qs}`);
   const act = useAction();

@@ -214,8 +214,12 @@ tr.openrow td { background: var(--bg); }
 .label-small .label-sub { font-size: 8px; }
 .label-code { font-family: ui-monospace, monospace; font-size: 11px; color: #444; margin-top: 4px; letter-spacing: .04em; }
 .label-small .label-code { font-size: 8px; margin-top: 1px; }
+.printonly { display: none; }
 @media print {
   .sidebar, .topbar, .rail, .noprint { display: none !important; }
+  .printonly { display: block; }
+  .notice-page { page-break-after: always; break-after: page; border: 0 !important; box-shadow: none !important; }
+  .notice-page:last-child { page-break-after: auto; break-after: auto; }
   .main { padding: 0; }
   body { background: #fff; }
   .label { border-color: #ddd; }

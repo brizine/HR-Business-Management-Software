@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { aliasedTable, and, arrayContains, arrayOverlaps, asc, desc, eq, ilike, inArray, isNull, not, or, sql, type SQL } from "drizzle-orm";
-import { assignmentSchema, cancelSchema, customerName, endAssignmentSchema, lawnTotal, propertyCreateSchema, propertySchema } from "@crewdesk/shared";
+import { NOTICE_CHANNELS, assignmentSchema, cancelSchema, customerName, endAssignmentSchema, lawnTotal, propertyCreateSchema, propertySchema } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
 import { newRecordCustom, updatedCustom } from "../lib/customFields";
@@ -148,6 +148,15 @@ const routes: FastifyPluginAsync = async (app) => {
   });
 
   /** Links a saved Property Measure and takes its front, back and total lawn size. */
+  /** How the customer hears about a chemical application here: email, text, printed or none. */
+  app.put<{ Params: { id: string } }>("/:id/chemical-notice", async (req) => {
+    const { chemicalNotice } = parse(z.object({ chemicalNotice: z.enum(NOTICE_CHANNELS) }), req.body);
+    const [row] = await db.update(properties).set({ chemicalNotice, updatedAt: new Date() })
+      .where(and(eq(properties.id, req.params.id), eq(properties.companyId, req.user.companyId))).returning({ id: properties.id });
+    if (!row) throw new HttpError(404, "Property not found");
+    return { chemicalNotice };
+  });
+
   app.post<{ Params: { id: string } }>("/:id/measurement", async (req) => {
     const { measurementId } = parse(z.object({ measurementId: z.string().uuid() }), req.body);
     const { companyId } = req.user;

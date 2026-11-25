@@ -1,4 +1,5 @@
 import { hasChemicalAccess } from "../lib/chemicalAccess";
+import { noticeAfterComplete } from "../lib/chemicalNotices";
 import { randomUUID } from "node:crypto";
 import { fileView, sendStored, storeUpload } from "../lib/attachments";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
@@ -360,6 +361,8 @@ const routes: FastifyPluginAsync = async (app) => {
     });
     // Chemical applications get the weather (in the background).
     weatherAfterComplete(v.id, v.companyId);
+    // And the customer's after-application notice, the way their property chooses.
+    noticeAfterComplete(v.id, v.companyId);
     return reply(req, v.id);
   });
   app.post<{ Params: { id: string } }>("/:id/skip", async (req) => {
