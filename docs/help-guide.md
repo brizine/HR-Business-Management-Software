@@ -13,7 +13,8 @@ question, get step-by-step answers) and **User Manual** (this guide, with conten
 Every page has a **top bar**, and a **left menu** for the side you're on.
 
 - **Top bar** (laid out like Homeworks, left to right): the **menu button** (shows or hides the page names in the
-  left menu); your company's name (click it for the home page); the **Operations | Team** switch; **Search** in
+  left menu); your company's **logo**, or its name until a logo is added in **Settings → Company Info** (click
+  it for the home page); the **Operations | Team** switch; **Search** in
   the middle (click it or press **Ctrl+K**, **⌘K** on a Mac); **Clocked out** / **Clocked in** (click to clock
   in or out after a quick "are you sure?"; it shows how long you've been on and follows your company's location
   rules like the Time Clock page); the **Text** chat bubble (for the people who answer texts; the red number is
@@ -52,7 +53,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   customer's device.
 - **Left menu:** one icon per group. Point at (or click) a group to see its pages; groups with one page open
   straight away. **Company Wiki**, **Settings**, **Help** and light or dark mode are at the bottom. The top bar's menu button widens
-  the menu, with your company logo on top (click it again to narrow it); Crewdesk remembers your choice on that
+  the menu (click it again to narrow it); Crewdesk remembers your choice on that
   computer. Widened (and on a phone), each heading opens and closes its pages, like Homeworks: click **Billing** to
   see Invoices, Estimates and Sales tax report, and click it again to fold it away. The section you're in starts
   open, and the menu remembers which ones you opened or closed.
@@ -114,7 +115,10 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   pick any employee from the **Change notification settings for** drop-down at the top, or open
   someone's profile and click **Notifications**. These settings are changed on the website; the phone app
   doesn't have them.
-- **Company Info:** company name, logo, address (separate boxes), phone, email, website, time zone.
+- **Company Info:** company name, logo, address (separate boxes), phone, email, website, time zone. Once a
+  **logo** is uploaded it takes the place of the company name at the left of everyone's top bar (remove the logo
+  and the name comes back). A transparent PNG looks best; a logo with dark lettering on a see-through background
+  is set on a white plate so it can still be read on the dark bar.
 - **Layout Editor** (owner): drag boxes and fields to rearrange pages, hide items, edit drop-down
   menus (job titles, departments and so on), set **Role access**, and edit the **User Manual**
   (**Edit the user manual**: change anything or add company procedures, check it on **Preview**,
@@ -957,7 +961,7 @@ A separate company, named after yours with "(Test)", for trying things out witho
 
 - **Getting in:** owners, admins, managers and anyone with Customers & billing access click their initials at the top
   right, then **Open … (Test)**, on any page (also on the Customers page's **⋯** menu, and Settings → Company Info). No separate password: you switch in as yourself. While
-  you're in it, a yellow **TEST** badge sits next to the company name in the top bar (with a yellow line under
+  you're in it, a yellow **TEST** badge sits next to the company's logo or name in the top bar (with a yellow line under
   the bar); click it, or open your initials menu, for **Back to the real company**.
 - **What's in it:** the sample customers are loaded the first time anyone opens it. Nothing else is copied: it has
   no employees, payroll or settings of its own beyond what you add. Its sign-ins never get email.

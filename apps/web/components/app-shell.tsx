@@ -32,8 +32,58 @@ function useDismiss(open: boolean, close: () => void, ref: React.RefObject<HTMLE
 const isNarrow = () => typeof window !== "undefined" && window.matchMedia("(max-width: 800px)").matches;
 
 /**
- * The top bar, laid out like Homeworks: menu toggle and company name on the left, search in the
- * middle, then the time clock, notifications, + New and your account menu on the right.
+ * Whether a logo needs a light plate behind it to be seen on the dark bar: a logo with a see-through
+ * background whose artwork is mostly dark (black lettering, say). Read from the picture itself.
+ */
+function needsPlate(img: HTMLImageElement): boolean {
+  try {
+    const N = 48, c = document.createElement("canvas");
+    c.width = c.height = N;
+    const g = c.getContext("2d");
+    if (!g) return false;
+    g.drawImage(img, 0, 0, N, N);
+    const px = g.getImageData(0, 0, N, N).data;
+    let seen = 0, dark = 0;
+    for (let i = 0; i < px.length; i += 4) {
+      if (px[i + 3] < 128) continue;
+      seen++;
+      // How bright the eye finds it, 0 (black) to 255.
+      if (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2] < 80) dark++;
+    }
+    // A logo that fills its whole picture brings its own background.
+    return seen > 0 && seen < N * N * 0.97 && dark / seen > 0.5;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The company in the top bar: its logo once one is uploaded (Settings → Company Info), its name
+ * until then, or if the logo can't be loaded. Either way it is the link home.
+ */
+function Brand({ company }: { company: { name: string; hasLogo?: boolean; logoUpdatedAt?: string | null } }) {
+  const version = company.logoUpdatedAt ?? "";
+  const [failed, setFailed] = useState<string | null>(null);
+  // Remembered per logo, so the plate is there from the first paint on later visits.
+  const [plate, setPlate] = useState<boolean>(() => { try { return localStorage.getItem("logo-plate") === `${version}:1`; } catch { return false; } });
+  const logo = !!company.hasLogo && failed !== version;
+  return (
+    <Link href="/" className={`topbar-brand${logo ? " has-logo" : ""}${logo && plate ? " plate" : ""}`} title={`${company.name}: home`}>
+      {logo ? (
+        <img src={`${API_URL}/company/logo${version ? `?v=${encodeURIComponent(version)}` : ""}`} alt={company.name} onError={() => setFailed(version)}
+          onLoad={(e) => {
+            const need = needsPlate(e.currentTarget);
+            setPlate(need);
+            try { localStorage.setItem("logo-plate", `${version}:${need ? 1 : 0}`); } catch { /* private window */ }
+          }} />
+      ) : <span>{company.name}</span>}
+    </Link>
+  );
+}
+
+/**
+ * The top bar, laid out like Homeworks: menu toggle and the company (logo, or name) on the left,
+ * search in the middle, then the time clock, notifications, + New and your account menu on the right.
  */
 export function TopBar(props: {
   side: Side; onSwitch: (s: Side) => void; unread: number; onMenu: () => void; onToggleRail: () => void; railExpanded: boolean;
@@ -58,7 +108,7 @@ export function TopBar(props: {
     <header className={`topbar${me.company.isTest ? " is-test" : ""}`}>
       <button type="button" className="topbar-icon topbar-toggle" aria-label={props.railExpanded ? "Narrow the menu" : "Expand the menu"} title="Show or hide the menu"
         onClick={() => (isNarrow() ? props.onMenu() : props.onToggleRail())}><Icon name="sidebar" /></button>
-      <Link href="/" className="topbar-brand" title={`${me.company.name}: home`}><span>{me.company.name}</span></Link>
+      <Brand company={me.company} />
       <TestBadge />
       <div className="side-switch" role="tablist" aria-label="Menu">
         {SIDES.map((o) => (
@@ -502,11 +552,6 @@ export function Rail(props: {
     <>
       {props.drawer && <div className="rail-backdrop" onClick={props.onCloseDrawer} />}
       <nav ref={railRef} className={`rail ${wide ? "wide" : ""} ${props.drawer ? "drawer" : ""}`} aria-label="Main menu">
-        {wide && me?.company.hasLogo && (
-          <Link href="/" className="rail-logo" onClick={pick} aria-label={`${me.company.name} home`}>
-            <img src={`${API_URL}/company/logo${me.company.logoUpdatedAt ? `?v=${encodeURIComponent(me.company.logoUpdatedAt)}` : ""}`} alt={`${me.company.name} logo`} />
-          </Link>
-        )}
         {props.drawer && (
           <div className="side-switch rail-switch" role="tablist" aria-label="Menu">
             {SIDES.map((o) => (

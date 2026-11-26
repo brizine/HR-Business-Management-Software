@@ -305,8 +305,6 @@ tr.openrow td { background: var(--bg); }
 .perm-table select { width: 100%; max-width: 360px; }
 .perm-table tr.perm-custom th[scope="row"]::after { content: " ●"; color: var(--warn); }
 @media (max-width: 800px) { .perm-layout { grid-template-columns: 1fr; } .perm-people { max-height: 260px; } }
-.sidebar-logo { display: block; max-width: calc(100% - 20px); max-height: 56px; object-fit: contain; object-position: left; margin: 6px 10px 4px; }
-.sidebar-company { padding-bottom: 14px; line-height: 1.25; }
 .logo-preview { width: 160px; height: 90px; border: 1px dashed var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; background: var(--bg); flex: none; }
 .logo-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .settings-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
@@ -764,7 +762,13 @@ dl.facts dd { margin: 0; overflow-wrap: anywhere; }
   background: var(--sidebar); color: var(--sidebar-text); border-bottom: 1px solid rgba(255,255,255,.06); }
 .topbar-brand { display: flex; align-items: center; color: #fff; font-weight: 700; font-size: 16px; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
 .topbar-brand span { overflow: hidden; text-overflow: ellipsis; }
-.topbar-brand img { max-height: 36px; max-width: 160px; object-fit: contain; }
+/* The company's logo stands in for its name once one is uploaded. */
+/* On a narrowing window the search box gives way first; the logo keeps its size as long as it can. */
+.topbar-brand.has-logo { flex: 0 .1 auto; border-radius: 6px; }
+.topbar-brand img { display: block; min-width: 0; max-height: 40px; max-width: 100%; object-fit: contain; border-radius: 4px; }
+/* Dark artwork on a see-through background would vanish into the bar: it gets a light plate. */
+.topbar-brand.plate { background: #fff; padding: 3px 8px; }
+.topbar-brand.plate img { max-height: 34px; border-radius: 0; }
 .topbar .side-switch { margin: 0; flex: 0 0 auto; }
 .topbar .side-switch button { padding: 6px 14px; }
 kbd { font: 11px ui-monospace, monospace; padding: 1px 6px; border-radius: 4px; border: 1px solid currentColor; opacity: .6; white-space: nowrap; }
@@ -881,9 +885,6 @@ kbd { font: 11px ui-monospace, monospace; padding: 1px 6px; border-radius: 4px; 
 .rail-flyout .theme-option { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: inherit; cursor: pointer; text-align: left; }
 .rail-flyout .theme-option:hover { background: var(--info-bg); }
 .rail-flyout .theme-option[aria-checked="true"] { color: var(--primary); font-weight: 600; }
-/* Company logo at the top of the expanded menu */
-.rail-logo { display: flex; justify-content: center; padding: 4px 8px 12px; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,.08); }
-.rail-logo img { max-width: 100%; max-height: 52px; object-fit: contain; }
 
 @media (max-width: 1100px) {
   .topbar-search kbd { display: none; }
@@ -910,6 +911,9 @@ kbd { font: 11px ui-monospace, monospace; padding: 1px 6px; border-radius: 4px; 
 @media (max-width: 520px) {
   .topbar-clock-label, .topbar-clock-time { display: none; }
   .topbar-brand { max-width: 110px; }
+  /* A phone's bar is all buttons: close them up so the logo (or name) has what room there is. */
+  .topbar { gap: 2px; padding: 0 6px; }
+  .topbar-brand.plate { padding: 2px 4px; }
 }
 
 /* Billing */
