@@ -5,7 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";
 import { pool } from "../src/db";
 import { setDispatchLocator } from "../src/lib/dispatch";
-import { forecastAt, nwsAlerts, nwsHours, nwsPeriods, setForecastFetch } from "../src/lib/forecast";
+import { forecastAt, forgetForecastSpots, nwsAlerts, nwsHours, nwsPeriods, setForecastFetch } from "../src/lib/forecast";
 
 // Answers the National Weather Service gave for Norman, OK (trimmed).
 const NWS = JSON.parse(readFileSync(new URL("./fixtures-nws.json", import.meta.url), "utf8"));
@@ -38,7 +38,8 @@ const service = async (url: string) => {
 
 beforeAll(async () => {
   setForecastFetch(service);
-  setDispatchLocator(async (address) => (/main/i.test(address) ? { lat: 35.22263, lng: -97.43951 } : null));
+  // The pretend map: Main St and the town of Norman can be found; "Nowhere Rd" and "Lostville" can't.
+  setDispatchLocator(async (address) => (/nowhere|lostville/i.test(address) ? null : /main/i.test(address) ? { lat: 35.22263, lng: -97.43951 } : /^norman, ok/i.test(address) ? { lat: 35.2, lng: -97.4 } : null));
   app = await buildApp({ logger: false });
   T.owner = (await app.inject({ method: "POST", url: "/auth/signup", payload: { companyName: "Forecast Co", firstName: "Fay", lastName: "Owner", email: email("owner"), password: "password123" } })).json().token;
   await call("PUT", "/auth/policy", "owner", { twoFactorRequiredFor: "none" });
@@ -105,8 +106,8 @@ describe("the forecast box", () => {
   it("needs the business address first", async () => {
     const r = await call("GET", "/company/forecast", "tech");
     expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({ forecast: null, links: [], canEdit: false });
-    expect(r.body.problem).toMatch(/business address/);
+    expect(r.body).toMatchObject({ forecast: null, links: [], canEdit: false, spot: null });
+    expect(r.body.problem).toMatch(/^Add your business address/);
   });
 
   it("shows everyone the forecast for the business address", async () => {
@@ -117,6 +118,7 @@ describe("the forecast box", () => {
       expect(r.status).toBe(200);
       expect(r.body.problem).toBeNull();
       expect(r.body.canEdit).toBe(who === "owner");
+      expect(r.body.spot).toBe("address");
       expect(r.body.forecast).toMatchObject({ place: "Norman, OK", lat: 35.22263, lng: -97.43951 });
       expect(r.body.forecast.pages.forecast).toBe("https://forecast.weather.gov/MapClick.php?lat=35.2226&lon=-97.4395");
       expect(Array.isArray(r.body.forecast.periods)).toBe(true);
@@ -154,5 +156,40 @@ describe("the forecast box", () => {
     expect((await call("PUT", "/weather/settings", "owner", { mode: "manual" })).status).toBe(200);
     expect((await call("GET", "/company/forecast", "tech")).body.links).toHaveLength(2);
     expect((await call("GET", "/weather/settings", "owner")).body).toEqual({ mode: "manual" });
+  });
+
+  it("a test company, which starts with no address, gets the forecast for where the real company is", async () => {
+    expect((await call("POST", "/auth/test-company", "owner")).status).toBe(200);
+    T.test = (await call("POST", "/auth/test-company/open", "owner")).body.token;
+    const r = (await call("GET", "/company/forecast", "test")).body;
+    expect(r).toMatchObject({ problem: null, spot: "company" });
+    expect(r.forecast).toMatchObject({ lat: 35.22263, lng: -97.43951 });
+    // Its own address, once it has one that's on the map, is what counts.
+    await call("PUT", "/company", "test", { name: "Forecast Co (Test)", addressLine1: "500 Main St", city: "Norman", state: "OK", zip: "73069", timezone: "America/Chicago" });
+    expect((await call("GET", "/company/forecast", "test")).body.spot).toBe("address");
+  });
+
+  it("an address that can't be put on the map: the properties the company works at, else the town", async () => {
+    forgetForecastSpots();
+    await call("PUT", "/company", "owner", { name: "Forecast Co", addressLine1: "9 Nowhere Rd", city: "Norman", state: "OK", zip: "73069", email: "office@forecast.test", timezone: "America/Chicago" });
+    const town = (await call("GET", "/company/forecast", "tech")).body;
+    expect(town).toMatchObject({ problem: null, spot: "town" });
+    expect(town.forecast).toMatchObject({ lat: 35.2, lng: -97.4 });
+    // With customers' properties on the map, their middle is where the company works.
+    for (const [street, lat, lng] of [["1 Oak St", 35.21, -97.44], ["2 Elm St", 35.23, -97.48], ["3 Ash St", 35.29, -97.42]] as const) {
+      expect((await call("POST", "/customers", "owner", { firstName: "Pat", lastName: street, email: email(`p${lat}`), property: { street, city: "Norman", zip: "73069", lat, lng } })).status).toBe(200);
+    }
+    const mid = (await call("GET", "/company/forecast", "tech")).body;
+    expect(mid).toMatchObject({ problem: null, spot: "properties" });
+    expect(mid.forecast).toMatchObject({ lat: 35.23, lng: -97.44 });
+  });
+
+  it("nothing to go on at all: says the address couldn't be placed, not that it's missing", async () => {
+    T.lost = (await app.inject({ method: "POST", url: "/auth/signup", payload: { companyName: "Lost Co", firstName: "Lou", lastName: "Owner", email: email("lost"), password: "password123" } })).json().token;
+    if (!T.lost) return; // sign-up is closed once a company exists, unless the install allows more
+    await call("PUT", "/company", "lost", { name: "Lost Co", addressLine1: "1 Hidden Way", city: "Lostville", state: "OK", zip: "70000", timezone: "America/Chicago" });
+    const r = (await call("GET", "/company/forecast", "lost")).body;
+    expect(r).toMatchObject({ forecast: null, spot: null });
+    expect(r.problem).toMatch(/couldn't place your business address/);
   });
 });

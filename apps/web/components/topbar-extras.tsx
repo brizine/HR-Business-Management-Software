@@ -21,7 +21,17 @@ function useAway(open: boolean, close: () => void, ref: React.RefObject<HTMLElem
 
 /* ───────────────────────── Weather ───────────────────────── */
 
-type ForecastBox = { forecast: Forecast | null; stale: boolean; links: WeatherLink[]; problem: string | null; canEdit: boolean };
+type ForecastBox = {
+  forecast: Forecast | null; stale: boolean; links: WeatherLink[]; problem: string | null; canEdit: boolean;
+  /** How the place was found: the business address itself, or the next best thing when that can't be put on a map. */
+  spot?: "address" | "town" | "company" | "properties" | null;
+};
+/** Said under the forecast when it isn't for the business address itself. */
+const SPOT_NOTE: Record<string, string> = {
+  company: "This is the forecast for your real company's location: the test company's own address isn't on the map.",
+  properties: "This is the forecast for the middle of the properties you work at: your business address couldn't be placed on a map.",
+  town: "This is the forecast for your town: the street address couldn't be placed on a map.",
+};
 const PICTURE: Record<ForecastIcon, string> = {
   sun: "sun", moon: "moon", partly: "cloudSun", "partly-night": "cloudMoon", cloud: "cloud", rain: "cloudRain", storm: "cloudStorm", snow: "cloudSnow", fog: "cloudFog", wind: "wind",
 };
@@ -155,6 +165,7 @@ function Forecasted({ box, onClose }: { box: ForecastBox; onClose: () => void })
           <div className="wx-foot muted">
             {box.stale ? "The Weather Service couldn't be reached just now; this is its last forecast" : "Forecast from the National Weather Service"}
             {f.updatedAt ? `, written ${new Date(f.updatedAt).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}` : ""}. Click a day for its details.
+            {box.spot && SPOT_NOTE[box.spot] ? <> {SPOT_NOTE[box.spot]}{box.canEdit && box.spot !== "company" ? <> Check it in <Link href="/settings/company-info" onClick={onClose}>Settings → Company Info</Link>.</> : null}</> : null}
           </div>
         </>
       )}

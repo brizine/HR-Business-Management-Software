@@ -1,8 +1,8 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { forecastIcon, windTopMph, type Forecast, type ForecastAlert, type ForecastHour, type ForecastPeriod, type WeatherLink } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies } from "../db/schema";
-import { dispatchSettings } from "./dispatch";
+import { companies, properties } from "../db/schema";
+import { dispatchSettings, locateAddress } from "./dispatch";
 
 /**
  * The forecast box in the top bar: the National Weather Service's forecast for the company's
@@ -16,15 +16,19 @@ const userAgent = () => process.env.WEATHER_USER_AGENT || "Crewdesk (forecast fo
 
 export type ForecastFetch = (url: string) => Promise<any>;
 const nws: ForecastFetch = async (url) => {
-  let r: Response;
-  try {
-    r = await fetch(url, { headers: { "user-agent": userAgent(), accept: "application/geo+json" }, signal: AbortSignal.timeout(12_000) });
-  } catch {
-    throw new Error("Couldn't reach the National Weather Service. Try again in a minute.");
+  // The Weather Service hiccups now and then (a 500, a slow answer): it gets a second try.
+  for (let attempt = 1; ; attempt++) {
+    let r: Response | null = null;
+    try {
+      r = await fetch(url, { headers: { "user-agent": userAgent(), accept: "application/geo+json" }, signal: AbortSignal.timeout(attempt === 1 ? 8_000 : 12_000) });
+    } catch {
+      if (attempt === 2) throw new Error("Couldn't reach the National Weather Service. Try again in a minute.");
+    }
+    if (r?.ok) return r.json();
+    if (r?.status === 404) throw new Error("The National Weather Service has no forecast for this location.");
+    if (r && (r.status < 500 || attempt === 2)) throw new Error(`The National Weather Service answered ${r.status}. Try again in a minute.`);
+    await new Promise((done) => setTimeout(done, 600));
   }
-  if (r.status === 404) throw new Error("The National Weather Service has no forecast for this location.");
-  if (!r.ok) throw new Error(`The National Weather Service answered ${r.status}. Try again in a minute.`);
-  return r.json();
 };
 let get: ForecastFetch = nws;
 /** Tests swap in their own Weather Service. */
@@ -137,18 +141,80 @@ export async function saveWeatherLinks(companyId: string, links: WeatherLink[]) 
   return links;
 }
 
+/* ───────────── Where the company is ───────────── */
+
+export type ForecastSpot = { lat: number; lng: number; from: "address" | "town" | "company" | "properties" };
+const HOUR = 60 * MIN;
+const looked = new Map<string, { at: number; spot: { lat: number; lng: number } | null }>();
+/** An address looked up, and remembered: a day when found, an hour when not (the lookup may have been down). */
+async function place(address: string): Promise<{ lat: number; lng: number } | null> {
+  const hit = looked.get(address);
+  if (hit && Date.now() - hit.at < (hit.spot ? 24 * HOUR : HOUR)) return hit.spot;
+  const found = await locateAddress(address).catch(() => null);
+  const spot = found && Number.isFinite(found.lat) && Number.isFinite(found.lng) ? { lat: found.lat, lng: found.lng } : null;
+  looked.set(address, { at: Date.now(), spot });
+  if (looked.size > 500) looked.clear();
+  return spot;
+}
+/** Tests start from nothing remembered. */
+export function forgetForecastSpots() { looked.clear(); }
+
 /**
- * What the forecast box shows: the forecast for the business address, the company's own weather
+ * Where the company is, near enough for a forecast. The weather is the same across town, so when
+ * the business address itself can't be placed on a map there are other ways to know:
+ *   1. the business address, as the dispatch board places it;
+ *   2. the same address, looked up again (the first try may have met a lookup that was down);
+ *   3. for a test company, wherever the real company is;
+ *   4. the middle of the properties the company works at;
+ *   5. the town or ZIP code of the business address.
+ */
+export async function forecastSpot(companyId: string, real = true): Promise<ForecastSpot | null> {
+  const depot = (await dispatchSettings(companyId)).depot;
+  if (depot) return { lat: depot.lat, lng: depot.lng, from: "address" };
+  const [co] = await db.select({ line1: companies.addressLine1, city: companies.city, state: companies.state, zip: companies.zip, testOf: companies.testOfCompanyId }).from(companies).where(eq(companies.id, companyId));
+  if (!co) return null;
+  const town = [co.city, [co.state, co.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  if (co.line1 && town) {
+    const again = await place(`${co.line1}, ${town}`);
+    if (again) return { ...again, from: "address" };
+  }
+  if (real && co.testOf) {
+    const theirs = await forecastSpot(co.testOf, false);
+    if (theirs) return { ...theirs, from: "company" };
+  }
+  const [mid] = await db.select({
+    lat: sql<number | null>`percentile_cont(0.5) within group (order by ${properties.lat})`, lng: sql<number | null>`percentile_cont(0.5) within group (order by ${properties.lng})`,
+  }).from(properties).where(and(eq(properties.companyId, companyId), eq(properties.status, "active"), isNotNull(properties.lat), isNotNull(properties.lng)));
+  if (mid?.lat != null && mid.lng != null) return { lat: Number(mid.lat), lng: Number(mid.lng), from: "properties" };
+  // A ZIP code or a town on its own is enough to go on.
+  if (co.zip || (co.city && co.state)) {
+    const near = await place(town);
+    if (near) return { ...near, from: "town" };
+  }
+  return null;
+}
+
+/**
+ * What the forecast box shows: the forecast for where the company is, the company's own weather
  * links, and (when there is no forecast) why not, in words for the person looking.
  */
 export async function companyForecast(companyId: string, now = new Date()) {
   const links = await weatherLinks(companyId);
-  const depot = (await dispatchSettings(companyId)).depot;
-  if (!depot) return { forecast: null, stale: false, links, problem: "Add your business address (Settings → Company Info) to see the forecast for where you work." };
+  const spot = await forecastSpot(companyId);
+  if (!spot) {
+    const [co] = await db.select({ line1: companies.addressLine1, city: companies.city, zip: companies.zip }).from(companies).where(eq(companies.id, companyId));
+    const has = !!(co?.line1 || co?.city || co?.zip);
+    return {
+      forecast: null, stale: false, links, spot: null,
+      problem: has
+        ? "Crewdesk couldn't place your business address on a map. Check the street, city, state and ZIP code in Settings → Company Info."
+        : "Add your business address (Settings → Company Info) to see the forecast for where you work.",
+    };
+  }
   try {
-    const { stale, ...forecast } = await forecastAt(depot.lat, depot.lng, now);
-    return { forecast, stale, links, problem: null };
+    const { stale, ...forecast } = await forecastAt(spot.lat, spot.lng, now);
+    return { forecast, stale, links, spot: spot.from, problem: null };
   } catch (e) {
-    return { forecast: null, stale: false, links, problem: (e as Error).message };
+    return { forecast: null, stale: false, links, spot: spot.from, problem: (e as Error).message };
   }
 }

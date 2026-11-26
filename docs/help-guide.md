@@ -28,8 +28,12 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   your company has listed.
   - The owner lists those in **Settings → Company Info → Weather links** (a name and a web address each; drag
     them into order; up to 12). **Edit links** in the box goes there.
-  - The forecast is for the business address in Settings → Company Info, so it needs one. Crewdesk asks the
-    Weather Service every 15 minutes at most; if it can't be reached, the last forecast shows, marked as such.
+  - The forecast is for the **business address** in Settings → Company Info. When that address can't be placed
+    on a map (or there isn't one yet), Crewdesk uses the next best thing and says so under the forecast: in the
+    **test company**, where your real company is; otherwise the middle of the properties you work at, or your
+    town or ZIP code. Only with none of those does the box ask for the address.
+  - Crewdesk asks the Weather Service every 15 minutes at most; if it can't be reached, the last forecast
+    shows, marked as such.
   - A red dot on the icon means a warning or advisory is in effect.
 - **Phone** (right of Search, for the people who answer texts): click it to open **Talkroute's desktop app**.
   It opens your computer's calling app, so set Talkroute as the default app for calls once (Windows: Settings →
