@@ -10,6 +10,7 @@ import { NAV, NEW_MENU, SIDES, pathMatches, type NavGroup, type NavItem, type Si
 import { Icon } from "@/components/icons";
 import { TextsButton } from "./texting";
 import { EmailButton, PhoneButton, WeatherButton } from "./topbar-extras";
+import { useHelp } from "./help-window";
 import { useClockPunch } from "@/components/clock-card";
 import { TestBadge, backToRealCompany, openTestCompany } from "@/components/test-company";
 import { THEME_CHOICES, setTheme, useTheme } from "@/lib/theme";
@@ -540,6 +541,7 @@ export function Rail(props: {
   useDismiss(!!openGroup, close, railRef);
   useEffect(() => { setOpenGroup(null); }, [path]);
   const wide = props.expanded || props.drawer;
+  const help = useHelp();
   const theme = useTheme();
   const themeNow = THEME_CHOICES.find((c) => c.key === theme) ?? THEME_CHOICES[2];
   const groupActive = (g: NavGroup) => g.items.some((i) => pathMatches(path, i.href)) || (g.key === "pay" && (path.startsWith("/pay-periods") || path.startsWith("/tax-forms")));
@@ -615,14 +617,14 @@ export function Rail(props: {
           <>
             <Link href="/wiki" className={`rail-link ${path.startsWith("/wiki") ? "active" : ""}`} onClick={pick}><Icon name="book" size={18} /><span>Company Wiki</span></Link>
             <Link href="/settings/security" className={`rail-link ${path.startsWith("/settings") ? "active" : ""}`} onClick={pick}><Icon name="settings" size={18} /><span>Settings</span></Link>
-            <Link href="/help" className={`rail-link ${path.startsWith("/help") ? "active" : ""}`} onClick={pick}><Icon name="help" size={18} /><span>Help</span></Link>
+            <button type="button" className={`rail-link rail-help ${help.open ? "open" : ""}`} aria-expanded={help.open} onClick={() => { pick(); help.toggle(); }}><Icon name="help" size={18} /><span>Help</span></button>
             <ThemeSwitch />
           </>
         ) : (
           <>
             <Link href="/wiki" className={`rail-btn ${path.startsWith("/wiki") ? "active" : ""}`} title="Company Wiki"><Icon name="book" /><span>Wiki</span></Link>
             <Link href="/settings/security" className={`rail-btn ${path.startsWith("/settings") ? "active" : ""}`} title="Settings"><Icon name="settings" /><span>Settings</span></Link>
-            <Link href="/help" className={`rail-btn ${path.startsWith("/help") ? "active" : ""}`} title="Help"><Icon name="help" /><span>Help</span></Link>
+            <button type="button" className={`rail-btn rail-help ${help.open ? "open" : ""}`} aria-expanded={help.open} title="Help: ask a question or open the User Manual" onClick={help.toggle}><Icon name="help" /><span>Help</span></button>
             <div className="rail-slot">
               <button type="button" className="rail-btn" aria-haspopup="menu" aria-expanded={openGroup === THEME_SLOT} title="Light or dark mode"
                 onClick={() => setOpenGroup(openGroup === THEME_SLOT ? null : THEME_SLOT)}>

@@ -8,6 +8,7 @@ import { Trail } from "@/components/trail";
 import { NAV, pathMatches, sideOf, type NavGroup, type NavItem, type Side } from "@/lib/nav";
 import { PageLayoutRoot } from "@/components/page-layout";
 import { Rail, TopBar } from "@/components/app-shell";
+import { HelpProvider } from "@/components/help-window";
 
 const SIDE_KEY = "crewdesk.side";
 const RAIL_KEY = "crewdesk.menu-expanded";
@@ -121,6 +122,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   return (
+    // The Help window is drawn once, over every page, and stays put from page to page.
+    <HelpProvider>
     <div className="app">
       <TopBar side={side} onSwitch={switchTo} unread={unread} onMenu={() => setDrawer(true)} onToggleRail={toggleRail} railExpanded={expanded} visibleItems={(s) => groupsFor(s).flatMap((g) => g.items)} />
       <div className="shell">
@@ -129,5 +132,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {fullPage ? <main className="main main-full">{children}</main> : <main className="main"><Trail /><PageLayoutRoot>{children}</PageLayoutRoot></main>}
       </div>
     </div>
+    </HelpProvider>
   );
 }

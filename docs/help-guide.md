@@ -5,8 +5,27 @@ features change. Menu names are written as they appear in the top bar and the le
 
 ## Getting help
 
-The blue **? Help** button near the bottom of the left menu, above **Settings**, opens Help: **Ask the Assistant** (type a
-question, get step-by-step answers) and **User Manual** (this guide, with contents and search).
+The blue **Help** button at the bottom of the left menu opens the **Help window**. It pops up in the corner over
+whatever page you're on and **stays there as you move from page to page**, so you can follow its steps while you
+work. Press **Help** again (or the **✕**) to put it away; pressing Help always starts at its first screen.
+
+- **The first screen** greets you and has two things: **Ask a question**, and **Search the User Manual** with a few
+  popular sections under it. Your most recent conversation, if there is one, sits on top to pick up again.
+- **Help** (the left tab): your conversations with the **Crewdesk Assistant**. Press **Ask a question**, type what
+  you're trying to do ("How do I move work on the dispatch board?") and it answers with the steps, using this
+  manual. Under an answer, **From the User Manual** lists the sections it used; click one to read it. Ask follow-up
+  questions in the same conversation. Conversations are kept on this computer (the last 20), and the trash can at
+  the top deletes one.
+  - The assistant explains how Crewdesk works. It can't see or change your company's records, and it can be
+    wrong, so check anything important.
+  - It needs to be turned on once (an Anthropic API key on the server; your Crewdesk admin does this). Until it is,
+    asking a question shows the closest part of the User Manual instead.
+- **User Manual** (the right tab): this guide, a section to a line. **Search** finds the parts that have every word
+  you type, and opening one shows **the part that matches** first, then the whole section. The arrows at the top
+  make the window larger for reading, and **Open the full User Manual page** shows it as a page.
+- The **‹** at the top goes back a step. On a phone the window fills the screen.
+- The full-page version is still there: **Help** in the menu under your initials (top right) opens the Help page,
+  with **Ask the Assistant** and **User Manual** tabs.
 
 ## Finding your way: Operations and Team
 

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";
 import { pool } from "../src/db";
-import { HELP_MODEL, setHelpClient } from "../src/routes/help";
+import { HELP_MODEL, guideSections, setHelpClient, splitSources } from "../src/routes/help";
 
 let app: FastifyInstance;
 let token = "";
@@ -57,6 +57,26 @@ describe("help assistant", () => {
     expect(body.system[0].text).toContain("## Shifts");
     expect(body.system[1].text).toContain("role owner");
     expect(body.system[1].text).not.toContain("Help Co\n"); // per-person details stay out of the cached block
+  });
+
+  it("says which parts of the manual an answer used, and takes that line off the answer", async () => {
+    const titles = ["Shifts", "Time Clock", "Customers & Properties"];
+    expect(splitSources("1. Open **Shifts**.\n2. Click **+ Add shift**.\n\nSources: Shifts | Time Clock", titles)).toEqual({ answer: "1. Open **Shifts**.\n2. Click **+ Add shift**.", sources: ["Shifts", "Time Clock"] });
+    // However it's dressed up, only real section titles count, each once, three at most.
+    expect(splitSources("Done.\n**Sources:** \"shifts\"; ## Time Clock | Made-up section | Shifts.", titles).sources).toEqual(["Shifts", "Time Clock"]);
+    expect(splitSources("Hello! How can I help?", titles)).toEqual({ answer: "Hello! How can I help?", sources: [] });
+    // A "Sources:" in the middle of an answer is just words.
+    expect(splitSources("Sources: Shifts\nThen click **Save**.", titles)).toEqual({ answer: "Sources: Shifts\nThen click **Save**.", sources: [] });
+    expect(guideSections("# Guide\n\n## Shifts\n\ntext\n\n### Sub\n\n## Time Clock  \n")).toEqual(["Shifts", "Time Clock"]);
+
+    setHelpClient({ beta: { messages: { create: async (body) => (sent.push(body), { stop_reason: "end_turn", content: [{ type: "text", text: "Open **Shifts** and click **+ Add shift**.\n\nSources: Shifts | Not A Section" }] } as any) } } });
+    const res = await call("POST", "/help/ask", { messages: [{ role: "user", content: "How do I add a shift?" }] });
+    expect(res.body).toEqual({ answer: "Open **Shifts** and click **+ Add shift**.", sources: ["Shifts"] });
+    expect(sent.at(-1).system[0].text).toContain('starts with "Sources:"');
+    // A decline has no sources.
+    setHelpClient({ beta: { messages: { create: async () => ({ stop_reason: "refusal", content: [] } as any) } } });
+    expect((await call("POST", "/help/ask", { messages: [{ role: "user", content: "x" }] })).body.sources).toEqual([]);
+    setHelpClient({ beta: { messages: { create: async (body) => (sent.push(body), reply) } } });
   });
 
   it("serves the manual to read, even without the assistant", async () => {

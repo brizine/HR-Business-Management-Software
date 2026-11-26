@@ -52,7 +52,28 @@ const INSTRUCTIONS = `You are the help assistant inside Crewdesk, the HR, schedu
 - Mind the person's role (given below): if something needs a role they don't have, say who can do it.
 - You can't see or change the company's data, and you can't do things for them in Crewdesk. For questions about specific people, pay or records, tell them where to look.
 - Stay on Crewdesk and the work it supports (HR, schedules, time, fleet). Politely decline unrelated requests.
-- Plain text with simple Markdown (numbered lists, **bold** for menu and button names). No headings, no tables.`;
+- Plain text with simple Markdown (numbered lists, **bold** for menu and button names). No headings, no tables.
+- When your answer draws on the guide, finish with one last line that starts with "Sources:" and lists the exact titles of the guide sections you used (the lines that start with "## "), most useful first, separated by " | ". At most three. Leave the line out when you didn't use the guide (a greeting, a request you declined).`;
+
+/** The manual's section titles (its "## " headings). */
+export const guideSections = (markdown: string) => [...markdown.matchAll(/^## +(.+?)\s*$/gm)].map((m) => m[1]);
+
+/**
+ * The assistant ends an answer with "Sources: A | B": the manual sections it used. They come off
+ * the answer and go back as a list, so the Help window can show them as links into the User
+ * Manual. Only real section titles count; anything else on that line is dropped.
+ */
+export function splitSources(text: string, titles: string[]): { answer: string; sources: string[] } {
+  const lines = text.trimEnd().split("\n");
+  let at = lines.length - 1;
+  while (at >= 0 && !/^\s*\**sources\**\s*:/i.test(lines[at])) at--;
+  // The line counts only at the end of the answer (a "Sources:" mid-answer is just words).
+  if (at < 0 || lines.slice(at + 1).some((l) => l.trim())) return { answer: text.trim(), sources: [] };
+  const byName = new Map(titles.map((t) => [t.toLowerCase(), t]));
+  const named = lines[at].replace(/^\s*\**sources\**\s*:\**/i, "").split(/\s*\|\s*|\s*;\s*/).map((x) => x.replace(/^[\s"'`#*-]+|[\s"'`*.]+$/g, "").toLowerCase());
+  const sources = [...new Set(named.map((n) => byName.get(n)).filter((t): t is string => !!t))].slice(0, 3);
+  return { answer: lines.slice(0, at).join("\n").trim(), sources };
+}
 
 const messageSchema = z.object({
   messages: z
@@ -104,6 +125,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const areas = Object.entries(req.user.areas ?? {}).map(([area, level]) => `${area}: ${level}`).join(", ");
     const who = `The person asking: ${me?.firstName ?? "an employee"}, role ${req.user.role}${me?.title ? `, job title ${me.title}` : ""}, at ${company?.name ?? "their company"}.${areas ? ` Their access by area: ${areas}.` : ""}`;
 
+    const manual = (await companyGuide(req.user.companyId)).markdown;
     let response: Anthropic.Beta.Messages.BetaMessage;
     try {
       response = await ai.beta.messages.create({
@@ -115,7 +137,7 @@ const routes: FastifyPluginAsync = async (app) => {
         betas: ["server-side-fallback-2026-07-01"],
         fallbacks: "default",
         system: [
-          { type: "text", text: `${INSTRUCTIONS}\n\n<crewdesk_user_guide>\n${(await companyGuide(req.user.companyId)).markdown}\n</crewdesk_user_guide>`, cache_control: { type: "ephemeral" } },
+          { type: "text", text: `${INSTRUCTIONS}\n\n<crewdesk_user_guide>\n${manual}\n</crewdesk_user_guide>`, cache_control: { type: "ephemeral" } },
           { type: "text", text: who },
         ],
         messages,
@@ -133,10 +155,10 @@ const routes: FastifyPluginAsync = async (app) => {
     }
 
     if (response.stop_reason === "refusal") {
-      return { answer: "Sorry, I can't help with that one. Try asking about how to do something in Crewdesk." };
+      return { answer: "Sorry, I can't help with that one. Try asking about how to do something in Crewdesk.", sources: [] };
     }
-    const answer = response.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n\n").trim();
-    return { answer: answer || "Sorry, I don't have an answer for that. Try rephrasing, or ask your Crewdesk admin." };
+    const { answer, sources } = splitSources(response.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n\n"), guideSections(manual));
+    return { answer: answer || "Sorry, I don't have an answer for that. Try rephrasing, or ask your Crewdesk admin.", sources };
   });
 };
 
