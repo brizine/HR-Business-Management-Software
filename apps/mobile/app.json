@@ -3,7 +3,13 @@
     "name": "ProSpray",
     "slug": "crewdesk",
     "scheme": "crewdesk",
-    "version": "1.0.0",
+    "version": "1.1.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6af1de0c-3800-4a5a-bc73-83425b579167"
+    },
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "ios": {

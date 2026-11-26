@@ -5,6 +5,7 @@ import jwt from "@fastify/jwt";
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import { registerErrorHandler } from "./lib/errors";
+import { liveStamp } from "./lib/source-stamp";
 import { SESSION_COOKIE } from "./lib/auth";
 import authRoutes from "./routes/auth";
 import employeeRoutes from "./routes/employees";
@@ -121,7 +122,8 @@ export async function buildApp(opts: AppOptions = {}) {
 }
 
 async function apiRoutes(app: FastifyInstance) {
-  app.get("/health", async () => ({ ok: true }));
+  // `build` says which code this server is running (see lib/source-stamp.ts).
+  app.get("/health", async () => ({ ok: true, build: liveStamp() }));
 
   await app.register(authRoutes, { prefix: "/auth" });
   await app.register(employeeRoutes, { prefix: "/employees" });

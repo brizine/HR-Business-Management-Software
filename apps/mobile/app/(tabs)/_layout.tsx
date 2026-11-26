@@ -5,6 +5,7 @@ import { useUnread } from "@/lib/unread";
 import { useTextsUnread } from "@/lib/texts";
 import { CompanyLogo } from "@/components/company-logo";
 import { useAuth } from "@/lib/auth";
+import { UpdateButton } from "@/lib/updates";
 
 // Icons keep one size whatever the phone's text size (a larger text setting would make the emoji
 // overflow the tab bar and get cut off), centered in an equal-width box.
@@ -57,7 +58,7 @@ export default function TabsLayout() {
   // The bar at the top shows the company logo; the name only when there's no logo (they overlapped).
   const headerTitle = me?.company.hasLogo ? "" : me?.company.name ?? "";
   return (
-    <Tabs screenOptions={{ tabBarActiveTintColor: t.primary, headerStyle: { backgroundColor: t.surface }, headerTintColor: t.text, tabBarStyle: { backgroundColor: t.surface, paddingHorizontal: 0 }, tabBarItemStyle: { flex: 1, paddingHorizontal: 0, alignItems: "center" }, tabBarLabelPosition: "below-icon", tabBarLabelStyle: { fontSize: 11, textAlign: "center" }, tabBarAllowFontScaling: false, headerTitle, headerRight: () => <View style={{ flexDirection: "row", alignItems: "center" }}><TextsIcon /><Bell /></View>, headerLeft: () => <View style={{ marginLeft: 16 }}><CompanyLogo /></View> }}>
+    <Tabs screenOptions={{ tabBarActiveTintColor: t.primary, headerStyle: { backgroundColor: t.surface }, headerTintColor: t.text, tabBarStyle: { backgroundColor: t.surface, paddingHorizontal: 0 }, tabBarItemStyle: { flex: 1, paddingHorizontal: 0, alignItems: "center" }, tabBarLabelPosition: "below-icon", tabBarLabelStyle: { fontSize: 11, textAlign: "center" }, tabBarAllowFontScaling: false, headerTitle, headerRight: () => <View style={{ flexDirection: "row", alignItems: "center" }}><UpdateButton /><TextsIcon /><Bell /></View>, headerLeft: () => <View style={{ marginLeft: 16 }}><CompanyLogo /></View> }}>
       <Tabs.Screen name="index" options={{ title: "Clock", tabBarIcon: icon("⏱") }} />
       <Tabs.Screen name="schedule" options={{ title: "Schedule", tabBarIcon: icon("📅") }} />
       <Tabs.Screen name="fleet" options={{ title: "Fleet", tabBarIcon: icon("🚚") }} />

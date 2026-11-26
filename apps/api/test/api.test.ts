@@ -62,7 +62,8 @@ afterAll(async () => {
 describe("mounting", () => {
   it("serves the API under a prefix in production", async () => {
     const prefixed = await buildApp({ logger: false, prefix: "/api" });
-    expect((await prefixed.inject({ url: "/api/health" })).json()).toEqual({ ok: true });
+    // `build` is the stamp of the code that is running (lib/source-stamp.ts).
+    expect((await prefixed.inject({ url: "/api/health" })).json()).toEqual({ ok: true, build: expect.stringMatching(/^[0-9a-f]{16}$/) });
     expect((await prefixed.inject({ url: "/health" })).statusCode).toBe(404);
     await prefixed.close();
   });

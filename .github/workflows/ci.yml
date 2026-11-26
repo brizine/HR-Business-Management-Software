@@ -1,12 +1,16 @@
 # Runs the test suite on every push and pull request. When main passes, it
 # fast-forwards the `production` branch, which SiteGround deploys from, so a
-# broken commit never reaches the live site.
+# broken commit never reaches the live site. Then, when the phone app's code
+# changed, it sends the change to phones over the air (docs/phone-app-updates.md).
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+  # "Run workflow" in the Actions tab: runs the tests and sends the phone app
+  # update even when the phone app's code hasn't changed since the last one.
+  workflow_dispatch:
 
 jobs:
   test:
@@ -53,3 +57,52 @@ jobs:
           fetch-depth: 0
       - name: Fast-forward production to this commit
         run: git push origin HEAD:refs/heads/production
+
+  # Sends the phone app's screen changes to phones that already have the app, with no
+  # store build. Does nothing until the repository has an EXPO_TOKEN secret.
+  app-update:
+    needs: [test, promote]
+    # After a push, once the website's deploy has been started; on "Run workflow", where there is
+    # no deploy to start (promote is skipped), straight after the tests.
+    if: ${{ !cancelled() && needs.test.result == 'success' && (needs.promote.result == 'success' || needs.promote.result == 'skipped') && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    # One at a time, oldest first, so an older update can't land on top of a newer one.
+    concurrency:
+      group: app-update
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      # Each secret goes only to the step that needs it, so installed packages never see one.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Is there anything new for the phones?
+        id: plan
+        env:
+          # Only whether the secret exists.
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN != '' && 'set' || '' }}
+        run: node scripts/app-update.mjs plan
+      - uses: pnpm/action-setup@v4
+        if: steps.plan.outputs.publish == 'true'
+      - name: Install
+        if: steps.plan.outputs.publish == 'true'
+        run: pnpm install --frozen-lockfile
+      - name: Wait until the website runs this commit
+        id: live
+        if: steps.plan.outputs.publish == 'true'
+        run: node scripts/app-update.mjs wait
+      - name: Send the update to phones
+        if: steps.live.outputs.publish == 'true'
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: node scripts/app-update.mjs publish
+      - name: Remember which commit the phones have
+        if: steps.live.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:refs/heads/phone-app

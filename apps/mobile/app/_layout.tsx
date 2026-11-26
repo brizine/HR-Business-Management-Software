@@ -11,6 +11,7 @@ import { LocationRequired } from "@/lib/location";
 import { routeFor } from "@/lib/push";
 import { UnreadProvider, useUnread } from "@/lib/unread";
 import { TextsProvider } from "@/lib/texts";
+import { useAppUpdates } from "@/lib/updates";
 
 // The browser preview has no notifications (and the hook throws there).
 const useLastNotificationResponse = Platform.OS === "web" ? () => null : Notifications.useLastNotificationResponse;
@@ -74,6 +75,7 @@ function Gate() {
 }
 
 export default function RootLayout() {
+  useAppUpdates();
   return (
     <AuthProvider>
       <MenusProvider>

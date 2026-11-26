@@ -1622,6 +1622,11 @@ automatically.
 Location is required to use the app (it's recorded at clock in/out and every 5 minutes while
 clocked in with the app open). Clock in and out, schedule and open shifts, time off, assigned vehicles, meter readings, fuel (with receipt photos),
 inspections, issue reports, repair orders, work orders, to-dos, training, onboarding tasks and signing documents.
+- **Updates:** the app updates itself. A new version is downloaded in the background and used the next time
+  the app is opened; if the app was left open, a blue **Update** button shows at the top instead (tap it and the
+  app restarts on the new version in a few seconds; save what you're in the middle of first). The bottom of the
+  **Me** tab shows the version and when it was last updated, with **Check for updates**. Now and then a change
+  needs a new version from the App Store or Google Play; the office will say when.
 - **Work orders** (Tasks tab): yours for the next week with the customer, the address (tap it for directions), gate
   code, pets, the services, tags and notes, **Visit forms** to fill in and sign (tap one), **Add photo** (take one
   or choose several), and **Arrived**, **Completed** (with notes) and **Skip** (with a reason).

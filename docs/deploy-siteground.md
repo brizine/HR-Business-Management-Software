@@ -182,6 +182,9 @@ Push notifications and the camera scanner need the Crewdesk app built for your s
 2. Follow **Enabling push on phones** in the README (`eas init`, `eas build`).
 3. To put it in the App Store and Google Play you need an Apple Developer account ($99/year) and a
    Google Play developer account ($25 once). `eas submit` uploads the builds.
+4. After that, screen changes reach phones on their own, with no new build: see
+   [Phone app updates](phone-app-updates.md) for the one-time setup (a token from Expo, saved as a
+   GitHub secret).
 
 Everything except push and the in-app scanner also works in the phone's browser at your Crewdesk
 address. QR labels open in the browser without the app.

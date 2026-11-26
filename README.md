@@ -426,6 +426,16 @@ Push goes through Expo's push service, which relays to Apple (APNs) and Google (
 
 If you turn on "enhanced push security" for the Expo project, set `EXPO_ACCESS_TOKEN` in the API's `.env`.
 
+### Phone app updates
+
+Screen changes reach phones **over the air**, without a store build: after the tests pass on `main`
+and the website is running the new code, the `app-update` job publishes the phone app's change, and
+the app picks it up the next time it's opened (or offers an **Update** button if it was left open).
+It needs one store build made with updates switched on (version 1.1.0 or later) and an `EXPO_TOKEN`
+repository secret; until then nothing is sent. Changes to native parts (a new native library,
+permissions, the icon) still need a store build, and `pnpm typecheck` refuses them until the version
+in `apps/mobile/app.json` is raised. See [docs/phone-app-updates.md](docs/phone-app-updates.md).
+
 ## Payroll
 
 ### Pay schedule and approvals

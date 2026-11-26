@@ -1,7 +1,9 @@
 # App Store submission: ProSpray Management (iOS)
 
 Everything to paste into App Store Connect for the first release. Bundle ID `net.prospray.crewdesk`,
-version 1.0.0, iPhone only.
+the version in `apps/mobile/app.json` (1.1.0 at the time of writing), iPhone only. After the first
+release most changes reach phones without another submission: see
+[Phone app updates](phone-app-updates.md).
 
 ## App Review Information
 

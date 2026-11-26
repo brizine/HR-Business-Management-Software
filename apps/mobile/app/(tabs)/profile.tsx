@@ -7,6 +7,7 @@ import { useMenuLabel } from "@/lib/menus";
 import { Badge, Button, Card, Divider, Row, Screen, Txt } from "@/components/ui";
 import { MyPhoto } from "@/components/avatar";
 import { MyDocuments } from "@/components/my-documents";
+import { AppVersion } from "@/lib/updates";
 
 export default function Profile() {
   const { me, signOut } = useAuth();
@@ -38,6 +39,7 @@ export default function Profile() {
         ])} />
       <Txt muted style={{ fontSize: 12, textAlign: "center" }}>Password and two-factor settings are under Settings → Security on the website.</Txt>
       <Txt style={{ fontSize: 12, textAlign: "center", color: "#1f6feb" }} onPress={() => Linking.openURL(`${WEB_URL}/privacy`)}>Privacy Policy</Txt>
+      <AppVersion />
     </Screen>
   );
 }
