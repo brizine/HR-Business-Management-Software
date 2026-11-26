@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useRef, useState } from "react";
 import { API_URL, api } from "@/lib/api";
-import { shrink } from "@/components/avatar";
+import { fitLogo } from "@/lib/logo";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead, formValues } from "@/components/ui";
@@ -11,7 +11,7 @@ import { BusinessAddressFields, businessAddressValues } from "@/components/busin
 import { phoneInput } from "@/lib/phone-input";
 import { formatPhone } from "@crewdesk/shared";
 
-type Info = { hasLogo: boolean; logoUpdatedAt: string | null; name: string; legalName: string | null; ein: string | null; address: string | null; addressLine1: string | null; addressLine2: string | null; city: string | null; state: string | null; zip: string | null; phone: string | null; email: string | null; website: string | null; timezone: string; canEdit: boolean };
+type Info = { hasLogo: boolean; logoFitted?: boolean; logoUpdatedAt: string | null; name: string; legalName: string | null; ein: string | null; address: string | null; addressLine1: string | null; addressLine2: string | null; city: string | null; state: string | null; zip: string | null; phone: string | null; email: string | null; website: string | null; timezone: string; canEdit: boolean };
 
 const US_ZONES = [
   ["America/New_York", "Eastern"], ["America/Chicago", "Central"], ["America/Denver", "Mountain"], ["America/Phoenix", "Arizona (no daylight saving)"],
@@ -23,14 +23,24 @@ function LogoCard({ info, onChange }: { info: Info; onChange: (i: Info) => Promi
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const upload = async (file: File) => {
+  const [done, setDone] = useState<string | null>(null);
+  const version = info.logoUpdatedAt ? `&v=${encodeURIComponent(info.logoUpdatedAt)}` : "";
+  /** Fits the picture (blank border off, sized for print and for screens) and saves both copies. */
+  const upload = async (picture: () => Promise<Blob>) => {
     setBusy(true);
     setError(null);
+    setDone(null);
     try {
+      const fit = await fitLogo(await picture());
       const fd = new FormData();
-      // PNG keeps transparent backgrounds; 600px is plenty for a logo.
-      fd.append("file", await shrink(file, { max: 600, type: "image/png" }), "logo.png");
+      fd.append("file", fit.full, "logo.png");
+      fd.append("small", fit.small, "logo-small.png");
       await onChange(await api<Info>("/company/logo", { method: "PUT", body: fd }));
+      const f = fit.sizes.full, sm = fit.sizes.small;
+      // Smaller than a sharp screen draws it in the top bar: worth saying, since a larger original fixes it.
+      const soft = f.width < 440 && f.height < 80;
+      setDone(`${fit.trimmed ? "Trimmed the blank border and saved it" : "Saved it"} at ${f.width} × ${f.height} for print and emails${sm.width < f.width ? `, and ${sm.width} × ${sm.height} for screens` : ""}.`
+        + (soft ? " That is small, so it may look soft on sharp screens: upload a larger original if you have one." : ""));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -38,23 +48,39 @@ function LogoCard({ info, onChange }: { info: Info; onChange: (i: Info) => Promi
       if (input.current) input.current.value = "";
     }
   };
+  /** The logo as it is saved now, for one added before Crewdesk fitted them: nobody has to find the file again. */
+  const saved = async () => {
+    const res = await fetch(`${API_URL}/company/logo?size=full${version}`, { credentials: "include" });
+    if (!res.ok) throw new Error("Couldn't load the logo. Upload it again instead.");
+    return res.blob();
+  };
   return (
     <div className="card row" style={{ alignItems: "center", gap: 16 }}>
       <div className="logo-preview">
         {info.hasLogo
-          ? <img src={`${API_URL}/company/logo${info.logoUpdatedAt ? `?v=${encodeURIComponent(info.logoUpdatedAt)}` : ""}`} alt={`${info.name} logo`} />
+          ? <img src={`${API_URL}/company/logo?size=small${version}`} alt={`${info.name} logo`} />
           : <span className="muted">No logo</span>}
       </div>
       <div className="stack" style={{ flex: 1, minWidth: 200 }}>
         <strong>Company Logo</strong>
-        <span className="muted" style={{ fontSize: 13 }}>Shows at the left of everyone&apos;s top bar, in place of the company name. JPEG, PNG or WebP up to 5 MB; a transparent PNG looks best.</span>
+        <span className="muted" style={{ fontSize: 13 }}>
+          Shows at the left of everyone&apos;s top bar, in place of the company name. JPEG, PNG or WebP up to 5 MB; a transparent PNG looks best.
+          Upload it at any size: Crewdesk trims the blank border around it and saves it at the right sizes for the top bar, the customer portal, emails and printed invoices.
+        </span>
         {info.canEdit && (
           <div className="row">
-            <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
-            <button type="button" className="btn sm" disabled={busy} onClick={() => input.current?.click()}>{busy ? "Uploading…" : info.hasLogo ? "Change logo" : "Add logo"}</button>
-            {info.hasLogo && <button type="button" className="btn sm" disabled={busy} onClick={() => confirm("Remove the company logo?") && api<Info>("/company/logo", { method: "DELETE" }).then(onChange, (e) => setError(e.message))}>Remove</button>}
+            <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(async () => f); }} />
+            <button type="button" className="btn sm" disabled={busy} onClick={() => input.current?.click()}>{busy ? "Working…" : info.hasLogo ? "Change logo" : "Add logo"}</button>
+            {info.hasLogo && <button type="button" className="btn sm" disabled={busy} onClick={() => confirm("Remove the company logo?") && api<Info>("/company/logo", { method: "DELETE" }).then((i) => { setDone(null); return onChange(i); }, (e) => setError(e.message))}>Remove</button>}
           </div>
         )}
+        {info.canEdit && info.hasLogo && info.logoFitted === false && !busy && (
+          <div className="notice row" role="note" style={{ gap: 10, alignItems: "center" }}>
+            <span style={{ flex: 1, minWidth: 180 }}>This logo was added before Crewdesk trimmed and sized logos. Fit it now, or upload the original again for the sharpest result.</span>
+            <button type="button" className="btn sm" onClick={() => void upload(saved)}>Fit this logo</button>
+          </div>
+        )}
+        {done && <span className="muted" role="status" style={{ fontSize: 13 }}>{done}</span>}
         <ErrorBox error={error} />
       </div>
     </div>

@@ -8,6 +8,7 @@ import { authenticate, requireRole, roleIn } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { MAX_IMAGE_BYTES, imageType } from "../lib/images";
 import { storage } from "../lib/storage";
+import { FITTED, logoIsFitted, readLogo, smallLogoKey } from "../lib/logo";
 import { companyAddressUpdate, companyAddressView } from "../lib/companyAddress";
 
 type Company = typeof companies.$inferSelect;
@@ -25,6 +26,8 @@ function view(c: Company, req: FastifyRequest) {
     website: c.website,
     timezone: c.timezone,
     hasLogo: !!c.logoKey,
+    // False for a logo added before Crewdesk trimmed and sized them: the page offers to fit it.
+    logoFitted: logoIsFitted(c.logoKey),
     logoUpdatedAt: c.logoUpdatedAt,
     canEdit: hasRole(roleIn(req, "company"), "owner"),
   };
@@ -38,26 +41,41 @@ const routes: FastifyPluginAsync = async (app) => {
     return view(c, req);
   });
 
-  /** The logo, for everyone in the company. Add ?v=<logoUpdatedAt> so a new logo isn't served from cache. */
-  app.get("/logo", async (req, reply) => {
+  /**
+   * The logo, for everyone in the company. ?size=small is the copy sized for screens (the top bar);
+   * add ?v=<logoUpdatedAt> so a new logo isn't served from cache.
+   */
+  app.get<{ Querystring: { size?: string } }>("/logo", async (req, reply) => {
     const [c] = await db.select({ key: companies.logoKey }).from(companies).where(eq(companies.id, req.user.companyId));
     if (!c?.key) notFound("Logo");
-    const buf = await storage.get(c.key);
+    const buf = await readLogo(c.key, req.query.size);
     reply.header("Content-Type", imageType(buf) ?? "application/octet-stream");
     reply.header("Cache-Control", "private, max-age=86400");
     reply.header("X-Content-Type-Options", "nosniff");
     return reply.send(buf);
   });
 
-  /** multipart/form-data with one image (JPEG, PNG or WebP, up to 5 MB). */
+  /**
+   * multipart/form-data: "file" is the logo (JPEG, PNG or WebP, up to 5 MB). The website fits it
+   * first (blank border trimmed, sized for print) and sends "small" with it, the same logo sized
+   * for screens.
+   */
   app.put("/logo", { preHandler: requireRole("owner", "company") }, async (req) => {
-    const file = await req.file();
-    if (!file) throw new HttpError(400, "No logo uploaded");
-    const buf = await file.toBuffer();
-    if (buf.length > MAX_IMAGE_BYTES) throw new HttpError(400, "That image is too large (5 MB max)");
-    if (!imageType(buf)) throw new HttpError(400, "Use a JPEG, PNG or WebP image");
-    const key = `${req.user.companyId}/logo-${randomUUID()}`;
-    await storage.put(key, buf);
+    const sent: { file?: Buffer; small?: Buffer } = {};
+    for await (const part of req.parts()) {
+      if (part.type !== "file") continue;
+      const buf = await part.toBuffer();
+      if (part.fieldname === "file" || part.fieldname === "small") sent[part.fieldname] = buf;
+    }
+    if (!sent.file) throw new HttpError(400, "No logo uploaded");
+    for (const buf of [sent.file, sent.small]) {
+      if (!buf) continue;
+      if (buf.length > MAX_IMAGE_BYTES) throw new HttpError(400, "That image is too large (5 MB max)");
+      if (!imageType(buf)) throw new HttpError(400, "Use a JPEG, PNG or WebP image");
+    }
+    const key = `${req.user.companyId}${sent.small ? FITTED : "/logo-"}${randomUUID()}`;
+    await storage.put(key, sent.file);
+    if (sent.small) await storage.put(smallLogoKey(key), sent.small);
     const [c] = await db.update(companies).set({ logoKey: key, logoUpdatedAt: new Date() }).where(eq(companies.id, req.user.companyId)).returning();
     return view(c, req);
   });

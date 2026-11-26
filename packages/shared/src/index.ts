@@ -52,3 +52,4 @@ export * from "./docs";
 export * from "./emailDesign";
 export * from "./visitForms";
 export * from "./dispatch";
+export * from "./logo";

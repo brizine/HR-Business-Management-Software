@@ -310,7 +310,7 @@ export async function renderTemplateEmail(companyId: string, tpl: { subject: str
   const token = o.unsubscribeCustomerId ? customerUnsubscribeToken(o.unsubscribeCustomerId) : null;
   const unsubscribe = token ? `${WEB_URL}/unsubscribe?customer=${encodeURIComponent(token)}` : null;
   const footer = [co.name, vars.COMPANY_ADDRESS, vars.COMPANY_PHONE, co.website].filter(Boolean).join(" · ");
-  const logo = co.logoKey ? `<img src="${PUBLIC_API_URL}/public/company/${co.id}/logo" alt="${esc(co.name)}" style="max-height:64px;max-width:240px;margin:0 0 12px">` : `<div style="font-size:18px;font-weight:700;margin:0 0 12px">${esc(co.name)}</div>`;
+  const logo = co.logoKey ? `<img src="${PUBLIC_API_URL}/public/company/${co.id}/logo?size=small" alt="${esc(co.name)}" style="max-height:64px;max-width:240px;margin:0 0 12px">` : `<div style="font-size:18px;font-weight:700;margin:0 0 12px">${esc(co.name)}</div>`;
   const html = `<!doctype html><html><body style="margin:0;padding:24px 12px;background:#f5f6f8">
 <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:10px;padding:24px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:15px;line-height:1.55;color:#1d2939">
 ${logo}

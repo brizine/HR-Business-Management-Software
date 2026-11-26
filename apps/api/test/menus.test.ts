@@ -94,4 +94,39 @@ describe("drop-down menus", () => {
     expect(me).not.toHaveProperty("logoKey");
     expect((await call("DELETE", "/company/logo", "owner")).body.hasLogo).toBe(false);
   });
+
+  it("company logo: a fitted logo comes as two files, the smaller one for screens", async () => {
+    const boundary = "----crewdesklogo";
+    const part = (name: string, bytes: Buffer) => Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"; filename="${name}.png"\r\nContent-Type: image/png\r\n\r\n`), bytes, Buffer.from("\r\n")]);
+    const upload = (parts: Buffer[]) => app.inject({ method: "PUT", url: "/company/logo", payload: Buffer.concat([...parts, Buffer.from(`--${boundary}--\r\n`)]),
+      headers: { authorization: `Bearer ${T.owner}`, "content-type": `multipart/form-data; boundary=${boundary}` } });
+    const get = (url: string, who = "lead") => app.inject({ method: "GET", url, headers: { authorization: `Bearer ${T[who]}` } });
+    const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const full = Buffer.concat([sig, Buffer.alloc(64, 1)]), small = Buffer.concat([sig, Buffer.alloc(16, 2)]);
+
+    // The website sends both; either order.
+    const ok = await upload([part("small", small), part("file", full)]);
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toMatchObject({ hasLogo: true, logoFitted: true });
+    expect((await get("/company/logo")).rawPayload.equals(full)).toBe(true);
+    expect((await get("/company/logo?size=full")).rawPayload.equals(full)).toBe(true);
+    expect((await get("/company/logo?size=small")).rawPayload.equals(small)).toBe(true);
+    expect((await get("/company/logo?size=huge")).rawPayload.equals(full)).toBe(true);
+    // The public address (customer portal, emails, the phone app's sign-in screen) serves both as well.
+    const id = (await call("GET", "/auth/me", "owner")).body.company.id;
+    expect((await app.inject({ method: "GET", url: `/public/company/${id}/logo?size=small` })).rawPayload.equals(small)).toBe(true);
+    expect((await app.inject({ method: "GET", url: `/public/company/${id}/logo` })).rawPayload.equals(full)).toBe(true);
+
+    // The small copy is checked like the logo itself; a bad one saves nothing.
+    expect((await upload([part("file", full), part("small", Buffer.from("<svg onload=alert(1)>"))])).statusCode).toBe(400);
+    expect((await upload([part("small", small)])).statusCode).toBe(400);
+    expect((await get("/company/logo?size=small")).rawPayload.equals(small)).toBe(true);
+
+    // One file alone (an older app, or a logo from before): it serves at every size and can be fitted later.
+    const plain = await upload([part("file", full)]);
+    expect(plain.json()).toMatchObject({ hasLogo: true, logoFitted: false });
+    expect((await get("/company/logo?size=small")).rawPayload.equals(full)).toBe(true);
+    expect((await call("DELETE", "/company/logo", "owner")).body).toMatchObject({ hasLogo: false, logoFitted: false });
+    expect((await get("/company/logo?size=small")).statusCode).toBe(404);
+  });
 });

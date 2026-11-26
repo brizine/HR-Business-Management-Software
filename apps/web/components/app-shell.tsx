@@ -70,7 +70,7 @@ function Brand({ company }: { company: { name: string; hasLogo?: boolean; logoUp
   return (
     <Link href="/" className={`topbar-brand${logo ? " has-logo" : ""}${logo && plate ? " plate" : ""}`} title={`${company.name}: home`}>
       {logo ? (
-        <img src={`${API_URL}/company/logo${version ? `?v=${encodeURIComponent(version)}` : ""}`} alt={company.name} onError={() => setFailed(version)}
+        <img src={`${API_URL}/company/logo?size=small${version ? `&v=${encodeURIComponent(version)}` : ""}`} alt={company.name} onError={() => setFailed(version)}
           onLoad={(e) => {
             const need = needsPlate(e.currentTarget);
             setPlate(need);

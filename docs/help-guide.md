@@ -119,6 +119,15 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   **logo** is uploaded it takes the place of the company name at the left of everyone's top bar (remove the logo
   and the name comes back). A transparent PNG looks best; a logo with dark lettering on a see-through background
   is set on a white plate so it can still be read on the dark bar.
+  - **Upload the logo at any size.** Crewdesk fits it for you: it **trims the blank border** around the artwork
+    (see-through, or the plain white or colored background it was saved on), so the logo fills the room it's
+    given instead of sitting small in the middle, and saves it at two sizes: one for **print and emails**
+    (invoices, estimates, letters; up to 800 × 400) and a smaller one for **screens** (the top bar, the customer
+    portal, the header of plain emails; up to 480 × 160). It is never enlarged, so start from the largest copy
+    you have; the line under the buttons says what was saved, and warns when the result is small enough to look
+    soft.
+  - A logo added before Crewdesk did this shows a **Fit this logo** button, which does the same to the logo
+    that's already saved. Uploading the original file again gives a sharper result.
 - **Layout Editor** (owner): drag boxes and fields to rearrange pages, hide items, edit drop-down
   menus (job titles, departments and so on), set **Role access**, and edit the **User Manual**
   (**Edit the user manual**: change anything or add company procedures, check it on **Preview**,

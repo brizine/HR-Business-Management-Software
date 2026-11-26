@@ -33,7 +33,7 @@ export function PortalFrame({ company, right, children }: { company: PortalCompa
     <div className="pt-page">
       <header className="pt-head">
         <div className="pt-brand">
-          {company?.hasLogo && <img src={`${API_URL}/public/company/${company.id}/logo`} alt="" className="pt-logo" />}
+          {company?.hasLogo && <img src={`${API_URL}/public/company/${company.id}/logo?size=small`} alt="" className="pt-logo" />}
           <span className="pt-name">{company?.name ?? ""}</span>
         </div>
         {right}
