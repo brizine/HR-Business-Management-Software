@@ -20,7 +20,7 @@ const NEEDS_WORDS: Record<string, string> = { invoice: "an invoice", estimate: "
 /**
  * Email the customers picked on the list: subject and message with fill-in fields, a live preview
  * as the first customer will see it, a test to yourself, then send. The emails go out one by one in
- * the background; the Messages tab shows how it's going.
+ * the background; the Bulk emails tab shows how it's going.
  */
 export function EmailComposer({ selection, audience, onClose, onSent }: { selection: Selection; audience: string; onClose: () => void; onSent: (m: { id: string; sending: number }) => void }) {
   const [subject, setSubject] = useState("");

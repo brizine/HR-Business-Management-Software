@@ -27,14 +27,14 @@ export default function MessageDetail({ params }: { params: Promise<{ id: string
     const t = setInterval(() => msg.reload(), 3000);
     return () => clearInterval(t);
   }, [m?.status]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (msg.error) return <><PageHead title="Message" /><ErrorBox error={msg.error} /></>;
-  if (!m) return <PageHead title="Message" sub="Loading…" />;
+  if (msg.error) return <><PageHead title="Bulk email" /><ErrorBox error={msg.error} /></>;
+  if (!m) return <PageHead title="Bulk email" sub="Loading…" />;
   const c = m.counts ?? {};
   const left = (c.queued ?? 0) + (c.sending ?? 0);
   const rows = show === "all" ? m.recipients : m.recipients.filter((r) => r.status === show);
   return (
     <>
-      <PageHead title={m.subject} before={<Link className="btn" href="/customers/messages" aria-label="Back to messages">←</Link>}
+      <PageHead title={m.subject} before={<Link className="btn" href="/customers/messages" aria-label="Back to bulk emails">←</Link>}
         sub={<>{MESSAGE_STATUS[m.status] ?? m.status} · {fmtDate(m.createdAt)}{m.byName ? ` by ${m.byName}` : ""}{m.audience ? ` · ${m.audience}` : ""}</>}>
         {m.status === "sending" && (
           <button className="btn danger" disabled={stop.busy} onClick={() => confirm(`Stop sending? The ${left.toLocaleString()} not sent yet won't get it.`) && stop.run(async () => { await api(`/customer-messages/${id}/stop`, { method: "POST" }); msg.reload(); })}>Stop sending</button>

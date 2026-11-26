@@ -190,7 +190,7 @@ function Customers() {
             <button type="button" disabled={!sendCount} onClick={() => openSend("document")}>Document: email or print letters…</button>
             <button type="button" disabled={!sendCount} onClick={() => openSend(textKind)}>{textKind === "text" ? `Text ${sendCount.toLocaleString()} customer${sendCount === 1 ? "" : "s"}…` : "Text: copy their phone numbers…"}</button>
             <hr />
-            <Link href="/customers/messages">Sent messages</Link>
+            <Link href="/customers/messages">Bulk emails sent</Link>
           </div>
         </Popover>
         <button className="btn no-print" disabled={exporting.busy} onClick={() => exportCsv()}><Icon name="download" size={14} /> Export</button>
@@ -218,11 +218,11 @@ function Customers() {
       {notice && <div className="notice" role="status">{notice} <button type="button" className="linkbtn" onClick={() => setNotice(null)}>OK</button></div>}
       {sending === "email" && (
         <EmailComposer key={JSON.stringify(sendTo)} selection={sendTo} audience={audience} onClose={() => setSending(null)}
-          onSent={(m) => { setSending(null); clearSelection(); setNotice(`Sending to ${m.sending.toLocaleString()} customer${m.sending === 1 ? "" : "s"} now. Follow it under Messages.`); router.push(`/customers/messages/${m.id}`); }} />
+          onSent={(m) => { setSending(null); clearSelection(); setNotice(`Sending to ${m.sending.toLocaleString()} customer${m.sending === 1 ? "" : "s"} now. Follow it under Bulk emails.`); router.push(`/customers/messages/${m.id}`); }} />
       )}
       {sending === "document" && (
         <DocumentSender key={JSON.stringify(sendTo)} selection={sendTo} audience={audience} onClose={() => setSending(null)}
-          onSent={(m) => { setSending(null); clearSelection(); setNotice(`Sending to ${m.sending.toLocaleString()} customer${m.sending === 1 ? "" : "s"} now. Follow it under Messages.`); router.push(`/customers/messages/${m.id}`); }} />
+          onSent={(m) => { setSending(null); clearSelection(); setNotice(`Sending to ${m.sending.toLocaleString()} customer${m.sending === 1 ? "" : "s"} now. Follow it under Bulk emails.`); router.push(`/customers/messages/${m.id}`); }} />
       )}
       {sending === "phones" && <CopyPhones key={JSON.stringify(sendTo)} selection={sendTo} onClose={() => setSending(null)} />}
       {sending === "text" && <BulkText key={JSON.stringify(sendTo)} selection={sendTo} audience={audience} onClose={() => setSending(null)} />}

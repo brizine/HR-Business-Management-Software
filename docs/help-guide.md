@@ -316,7 +316,7 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
     - **Text N customers…** (once texting is connected) writes one text that goes to each of them from your
       Talkroute number, a few a minute, with tags filled in for each. Before texting is connected it's **Text: copy
       phone numbers…**, which lists the customers' numbers (each once) to copy or download.
-  - **Messages** (the tab next to Properties) lists every email sent this way, with how many were sent, didn't
+  - **Bulk emails** (the tab next to Properties) lists every email sent this way, with how many were sent, didn't
     go (and why) or were skipped. Open one to see each customer, or **Stop sending** while it's still going.
     A customer's page shows the emails they were sent and whether they've unsubscribed (with **Resubscribe** if
     they ask to be put back on). The **Unsubscribed from emails** filter and **Unsubscribed** column find them.
@@ -877,7 +877,7 @@ out like Homeworks' Documents: the form on the left, the list on the right, and 
   for customers with no email address or who unsubscribed, so everyone hears from you. Up to 5,000 customers per
   email and 2,000 letters per PDF.
 - **How emails go out:** one at a time in the background, so you can keep working. **See how it's going** (and
-  Customers → **Messages**) shows who it was sent to, who was skipped and anything that didn't go, with **Stop
+  Customers → **Bulk emails**) shows who it was sent to, who was skipped and anything that didn't go, with **Stop
   sending** while it's still going. Each email is also on the customer's own page and in Templates → Sent / History.
 - **History** shows who created and changed a document and each time it was emailed (how many were sent, failed
   or skipped, with a link to **who got it**) or printed.

@@ -425,10 +425,10 @@ export function writeLocal(key: string, value: unknown) {
 export function CrmTabs({ at }: { at: "customers" | "properties" | "messages" }) {
   const tab = (k: typeof at, href: string, label: string) => <Link href={href} aria-current={at === k ? "page" : undefined} className={at === k ? "on" : ""}>{label}</Link>;
   return (
-    <nav className="cal-seg crm-tabs" aria-label="Customers, properties or messages">
+    <nav className="cal-seg crm-tabs" aria-label="Customers, properties or bulk emails">
       {tab("customers", "/customers", "Customers")}
       {tab("properties", "/properties", "Properties")}
-      {tab("messages", "/customers/messages", "Messages")}
+      {tab("messages", "/customers/messages", "Bulk emails")}
     </nav>
   );
 }

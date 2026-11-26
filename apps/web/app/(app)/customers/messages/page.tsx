@@ -9,7 +9,7 @@ import { MESSAGE_STATUS } from "@/components/customer-messages";
 
 type Row = { id: string; subject: string; status: keyof typeof MESSAGE_STATUS; audience: string | null; byName: string | null; createdAt: string; counts: Record<string, number> | null };
 
-/** Emails sent to many customers from the Customers list, newest first. */
+/** Customers → Bulk emails: emails sent to many customers from the Customers list, newest first. */
 export default function Messages() {
   const [page, setPage] = useState(0);
   const size = 50;
