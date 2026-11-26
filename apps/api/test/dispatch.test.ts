@@ -184,7 +184,7 @@ describe("saved routes", () => {
     expect(b.routes[0].end.kind).toBe("none");
     expect(b.routes[0].stops.map((s: any) => [s.key, s.order])).toEqual([[v("a"), 1], [v("b"), 2], [v("c"), 3]]);
     expect(b.routes[0].stops[0].leg.seconds).toBeGreaterThan(0);
-    expect(b.events.find((e: any) => e.key === v("b")).route).toEqual({ id: ID.route, order: 2 });
+    expect(b.events.find((e: any) => e.key === v("b")).route).toEqual({ id: ID.route, order: 2, locked: false });
     expect(b.events.find((e: any) => e.key === v("d")).route).toBeNull();
   });
   it("edits the same route rather than making another", async () => {
@@ -233,7 +233,7 @@ describe("who does it", () => {
   });
   it("assigning the crew it already has leaves it on its route", async () => {
     expect((await call("POST", "/dispatch/assign", "mgr", { keys: [v("c")], crewId: ID.north })).body.unrouted).toBe(0);
-    expect((await event(v("c"))).route).toEqual({ id: ID.route, order: 1 });
+    expect((await event(v("c"))).route).toEqual({ id: ID.route, order: 1, locked: false });
   });
   it("people instead of a crew clears the crew; nobody at all unassigns", async () => {
     await call("POST", "/dispatch/assign", "mgr", { keys: [v("a")], employeeIds: [ID.ann, ID.bob] });
@@ -335,6 +335,29 @@ describe("the plan's board: a lane is a crew's day in order", () => {
     expect(again[0].id).toBe(south[0].id);
     expect(again[0].stops.map((s: any) => s.key)).toEqual([v("a"), v("d")]);
   });
+  it("locks a stop in place: a reorder keeps the lock, and optimizing orders the rest around it", async () => {
+    expect((await call("POST", "/dispatch/lock", "mgr", { key: v("d"), locked: true })).body).toEqual({ key: v("d"), locked: true });
+    expect(await event(v("d"))).toMatchObject({ route: { order: 2, locked: true } });
+    await call("POST", "/dispatch/lane", "mgr", { date: today, crewId: ID.south, keys: [v("d"), v("a")] });
+    expect(await event(v("d"))).toMatchObject({ route: { order: 1, locked: true } });
+    expect((await board()).routes.find((x: any) => x.crewId === ID.south).stops.map((s: any) => s.locked)).toEqual([true, false]);
+    // Optimizing leaves locked stops where they are in the list.
+    const keys = [v("a"), v("b"), v("c"), v("d")];
+    const one = (await call("POST", "/dispatch/routes/preview", "mgr", { date: today, keys, optimize: true, locked: [v("c")] })).body;
+    expect(one.keys[2]).toBe(v("c"));
+    expect([...one.keys].sort()).toEqual([...keys].sort());
+    const two = (await call("POST", "/dispatch/routes/preview", "mgr", { date: today, keys, optimize: true, locked: [v("a"), v("d")] })).body;
+    expect([two.keys[0], two.keys[3]]).toEqual([v("a"), v("d")]);
+    // One with no location can be locked too.
+    const lost = (await call("POST", "/dispatch/routes/preview", "mgr", { date: today, keys: [v("e"), v("a"), v("b"), v("c")], optimize: true, locked: [v("e")] })).body;
+    expect(lost.keys[0]).toBe(v("e"));
+    // Only a stop on a route can be locked; managers only.
+    const loose = (await board()).events.find((e: any) => !e.route);
+    expect((await call("POST", "/dispatch/lock", "mgr", { key: loose.key, locked: true })).status).toBe(400);
+    expect((await call("POST", "/dispatch/lock", "ann", { key: v("d"), locked: false })).status).toBe(403);
+    expect((await call("POST", "/dispatch/lock", "mgr", { key: v("d"), locked: false })).body.locked).toBe(false);
+    await call("POST", "/dispatch/lane", "mgr", { date: today, crewId: ID.south, keys: [v("a"), v("d")] });
+  });
   it("moves a work order to another day's lane, or back to No crew yet", async () => {
     await call("POST", "/dispatch/lane", "mgr", { date: plus(today, 1), crewId: ID.north, keys: [v("d")] });
     expect(await event(v("d"), plus(today, 1))).toMatchObject({ crewId: ID.north, assigneeIds: [ID.ann], route: { order: 1 } });
@@ -424,6 +447,10 @@ describe("settings", () => {
   });
   it("measures by real roads once a routing server is switched on, and falls back to estimates if it's down", async () => {
     await call("PUT", "/dispatch/settings", "owner", { routing: "road", roadUrl });
+    // The server's address is for admins: managers see that roads are on, not where it is, and it's not in the company everyone gets.
+    expect((await call("GET", "/dispatch", "owner")).body.settings).toMatchObject({ routing: "road", roadUrl });
+    expect((await call("GET", "/dispatch", "mgr")).body.settings).toMatchObject({ routing: "road", roadUrl: null });
+    expect((await call("GET", "/auth/me", "ann")).body.company.dispatchSettings).toBeUndefined();
     const day = plus(today, 14);
     const keys = (await board(day)).events.map((e: any) => e.key);
     const p = (await call("POST", "/dispatch/routes/preview", "mgr", { date: day, keys, optimize: true, steps: true })).body;

@@ -25,13 +25,13 @@ export type DEvent = {
   dispatchNotes: { id: string; body: string; by: string | null; at: string }[];
   fileCount: number; tagIds: string[]; priority: string; windowStart: string | null; windowEnd: string | null;
   custom: Record<string, unknown>;
-  route: { id: string; order: number } | null;
+  route: { id: string; order: number; locked: boolean } | null;
 };
 export type DPoint = { kind: string; label: string | null; lat: number | null; lng: number | null };
 export type DRoute = {
   id: string; date: string; crewId: string | null; startTime: string; pinnedFirst: boolean; start: DPoint; end: DPoint;
   totalMeters: number; totalDriveSeconds: number; endLeg: Leg | null; measured: "road" | "estimate"; geometry: [number, number][] | null;
-  stops: { key: string; order: number; leg: Leg | null }[];
+  stops: { key: string; order: number; leg: Leg | null; locked: boolean }[];
 };
 export type DCrew = { id: string; name: string; color: string; dailyHours: number; memberIds: string[]; truck: string | null };
 export type DPerson = { id: string; firstName: string; lastName: string; name: string; color: string; dailyHours: number; weeklyHours: number | null; excluded: boolean; hasAddress: boolean; status: string };
@@ -299,6 +299,7 @@ export const dispatchApi = {
   preview: (body: Record<string, unknown>) => post<Preview>("/routes/preview", body),
   saveRoute: (body: Record<string, unknown>) => post<{ id: string; stops: number; future: { days: number; stops: number } | null }>("/routes", body),
   future: (body: Record<string, unknown>) => post<{ days: { date: string; stops: number; different: number }[]; repeating: number }>("/routes/future", body),
+  lock: (key: string, locked: boolean) => post<{ key: string; locked: boolean }>("/lock", { key, locked }),
   lane: (date: string, crewId: string | null, keys: string[]) => post<{ stops: number; totalDriveSeconds?: number }>("/lane", { date, crewId, keys }),
   rain: (body: Record<string, unknown>) => post<{ moved: number; to: string | null; texted: number; notTexted: number; toCall: string[] }>("/rain", body),
   note: (key: string, body: string) => post<{ key: string; dispatchNotes: DEvent["dispatchNotes"] }>("/notes", { key, body }),

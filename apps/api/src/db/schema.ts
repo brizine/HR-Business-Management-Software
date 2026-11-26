@@ -3328,6 +3328,8 @@ export const dispatchStops = pgTable(
     /** The drive into this stop (null for a stop with no location, or the first stop of a route with no start). */
     driveSeconds: integer("drive_seconds"),
     driveMeters: doublePrecision("drive_meters"),
+    /** A locked stop keeps its place when the route is optimized. */
+    locked: boolean("locked").notNull().default(false),
   },
   (t) => [
     index("dispatch_stops_route_idx").on(t.routeId),

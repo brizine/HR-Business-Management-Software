@@ -93,13 +93,15 @@ export type DispatchEvent = {
   dispatchNotes: { id: string; body: string; by: string | null; at: string }[];
   fileCount: number; tagIds: string[]; priority: string; windowStart: string | null; windowEnd: string | null;
   custom: Record<string, unknown>;
-  route: { id: string; order: number } | null;
+  route: { id: string; order: number; locked: boolean } | null;
 };
 
 const within = (from: string, to: string, date: typeof visits.date | typeof todos.date, endDate: typeof visits.endDate | typeof todos.endDate) =>
   and(isNotNull(date), lte(date, to), gte(sql`coalesce(${endDate}, ${date})`, from));
 
 /** Which route each event is on and where in it: stops are numbered 1…n in their saved order. */
+/** Where an event sits on a route: which one, its stop number, and whether it's locked in place. */
+type RouteSpot = { id: string; order: number; locked: boolean };
 async function routeLookup(companyId: string, o: { visitIds?: string[]; todoIds?: string[]; from?: string; to?: string }) {
   const where = [eq(dispatchRoutes.companyId, companyId)];
   if (o.from && o.to) where.push(gte(dispatchRoutes.date, o.from), lte(dispatchRoutes.date, o.to));
@@ -107,18 +109,18 @@ async function routeLookup(companyId: string, o: { visitIds?: string[]; todoIds?
     const ors = [];
     if (o.visitIds?.length) ors.push(inArray(dispatchStops.visitId, o.visitIds));
     if (o.todoIds?.length) ors.push(inArray(dispatchStops.todoId, o.todoIds));
-    if (!ors.length) return { routes: [] as (Route & { stops: { key: string; order: number; leg: Leg | null }[] })[], byKey: new Map<string, { id: string; order: number }>() };
+    if (!ors.length) return { routes: [] as (Route & { stops: { key: string; order: number; leg: Leg | null; locked: boolean }[] })[], byKey: new Map<string, RouteSpot>() };
     where.push(inArray(dispatchRoutes.id, db.select({ id: dispatchStops.routeId }).from(dispatchStops).where(or(...ors))));
   }
   const routes = await db.select().from(dispatchRoutes).where(and(...where)).orderBy(asc(dispatchRoutes.date), asc(dispatchRoutes.createdAt));
   const ids = routes.map((r) => r.id);
   const stops = ids.length ? await db.select().from(dispatchStops).where(inArray(dispatchStops.routeId, ids)).orderBy(asc(dispatchStops.stopOrder)) : [];
-  const byKey = new Map<string, { id: string; order: number }>();
+  const byKey = new Map<string, RouteSpot>();
   const out = routes.map((r) => {
     const mine = stops.filter((s) => s.routeId === r.id).map((s, i) => {
       const key = s.visitId ? eventKey("visit", s.visitId) : eventKey("todo", s.todoId!);
-      byKey.set(key, { id: r.id, order: i + 1 });
-      return { key, order: i + 1, leg: s.driveSeconds != null && s.driveMeters != null ? { meters: s.driveMeters, seconds: s.driveSeconds } : null };
+      byKey.set(key, { id: r.id, order: i + 1, locked: s.locked });
+      return { key, order: i + 1, leg: s.driveSeconds != null && s.driveMeters != null ? { meters: s.driveMeters, seconds: s.driveSeconds } : null, locked: s.locked };
     });
     return { ...r, stops: mine };
   });
@@ -139,7 +141,7 @@ export async function routesBetween(companyId: string, from: string, to: string)
 }
 
 /** Work orders and to-dos, by row, as events. */
-async function asEvents(o: { visitRows: Visit[]; todoRows: Todo[]; showPrices: boolean; routeOf: Map<string, { id: string; order: number }> }): Promise<DispatchEvent[]> {
+async function asEvents(o: { visitRows: Visit[]; todoRows: Todo[]; showPrices: boolean; routeOf: Map<string, RouteSpot> }): Promise<DispatchEvent[]> {
   const { visitRows, todoRows } = o;
   const visitIds = visitRows.map((v) => v.id);
   const todoIds = todoRows.map((t) => t.id);
@@ -298,7 +300,7 @@ async function measure(settings: Pick<DispatchSettings, "routing" | "roadUrl">, 
 const onDay = (e: { date: string; endDate: string | null }, date: string) => e.date <= date && (e.endDate ?? e.date) >= date;
 
 /** A route before it's saved: the order (optimized when asked), each drive, the totals and the line to draw. */
-export async function previewRoute(companyId: string, b: { date: string; keys: string[]; start: RoutePointInput; end: RoutePointInput; optimize?: boolean; pinnedFirst?: boolean; steps?: boolean }, o: { estimateOnly?: boolean } = {}) {
+export async function previewRoute(companyId: string, b: { date: string; keys: string[]; start: RoutePointInput; end: RoutePointInput; optimize?: boolean; pinnedFirst?: boolean; locked?: string[]; steps?: boolean }, o: { estimateOnly?: boolean } = {}) {
   const settings = await dispatchSettings(companyId);
   const how = o.estimateOnly ? { routing: "estimate" as const, roadUrl: null } : settings;
   const events = await eventsFor(companyId, b.keys);
@@ -315,10 +317,13 @@ export async function previewRoute(companyId: string, b: { date: string; keys: s
     const matrix = await driveMatrix(how, all);
     const col = new Map(located.map((x, n) => [x.i, n + (start ? 1 : 0)]));
     const idx = (i: number) => (i === START ? 0 : i === END ? all.length - 1 : col.get(i)!);
+    const held = new Set(b.locked ?? []);
     const seq = optimizeOrder(events.length, (a, c) => matrix[idx(a)][idx(c)], {
       hasStart: !!start, hasEnd: !!end,
       first: b.pinnedFirst && pts[0] ? 0 : null,
       last: pts.map((p, i) => (p ? -1 : i)).filter((i) => i >= 0),
+      // Locked stops keep the place they have in the list; the rest are ordered around them.
+      fixed: events.map((e, i) => (held.has(e.key) ? i : -1)).filter((i) => i >= 0),
     });
     order = seq.map((i) => events[i]);
   }
@@ -371,6 +376,15 @@ export async function refreshRoutes(companyId: string, routeIds: string[], o: { 
       await tx.update(dispatchRoutes).set({ totalMeters: m.totalMeters, totalDriveSeconds: m.totalDriveSeconds, endMeters: m.endLeg?.meters ?? null, endSeconds: m.endLeg?.seconds ?? null, geometry: m.geometry, measured: m.measured, updatedAt: new Date() }).where(eq(dispatchRoutes.id, r.id));
     });
   }
+}
+
+/** Locks a routed stop in place (or frees it): Optimize orders the other stops around the locked ones. */
+export async function lockStop(companyId: string, b: { key: string; locked: boolean }) {
+  const k = parseEventKey(b.key);
+  await rowsFor(companyId, [b.key]);
+  const done = await db.update(dispatchStops).set({ locked: b.locked }).where(k.kind === "visit" ? eq(dispatchStops.visitId, k.id) : eq(dispatchStops.todoId, k.id)).returning({ id: dispatchStops.id });
+  if (!done.length) throw new HttpError(400, "Put it on a route first: only a stop with a place in the order can be locked there.");
+  return { key: b.key, locked: b.locked };
 }
 
 export async function unroute(companyId: string, keys: string[]) {
@@ -535,15 +549,18 @@ async function writeRoute(tx: Tx, o: {
     totalMeters: o.totalMeters, totalDriveSeconds: o.totalDriveSeconds, endMeters: o.endLeg?.meters ?? null, endSeconds: o.endLeg?.seconds ?? null, geometry: o.geometry, measured: o.measured, updatedAt: new Date(),
   };
   let id = o.id;
+  // Stops that were locked on this route stay locked through a reorder.
+  const locked = new Set<string>();
   if (id) {
     await tx.update(dispatchRoutes).set(values).where(eq(dispatchRoutes.id, id));
-    await tx.delete(dispatchStops).where(eq(dispatchStops.routeId, id));
+    const gone = await tx.delete(dispatchStops).where(eq(dispatchStops.routeId, id)).returning({ visitId: dispatchStops.visitId, todoId: dispatchStops.todoId, locked: dispatchStops.locked });
+    for (const g of gone) if (g.locked) locked.add((g.visitId ?? g.todoId)!);
   } else {
     [{ id }] = await tx.insert(dispatchRoutes).values({ ...values, companyId: o.companyId, createdById: o.by }).returning({ id: dispatchRoutes.id });
   }
   await tx.insert(dispatchStops).values(parsed.map((k, i) => ({
     routeId: id!, visitId: k.kind === "visit" ? k.id : null, todoId: k.kind === "todo" ? k.id : null, stopOrder: i + 1,
-    driveSeconds: o.legs[i]?.seconds ?? null, driveMeters: o.legs[i]?.meters ?? null,
+    driveSeconds: o.legs[i]?.seconds ?? null, driveMeters: o.legs[i]?.meters ?? null, locked: locked.has(k.id),
   })));
   return { id: id!, elsewhere };
 }

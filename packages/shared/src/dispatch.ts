@@ -68,7 +68,10 @@ export const END = -2;
  * the route's ends when it has them. `first` keeps one stop first (a pinned stop); `last` holds
  * stops that go at the end in the order given (ones with no location).
  */
-export function optimizeOrder(n: number, cost: (from: number, to: number) => number, o: { hasStart?: boolean; hasEnd?: boolean; first?: number | null; last?: number[] } = {}): number[] {
+export function optimizeOrder(n: number, cost: (from: number, to: number) => number, o: { hasStart?: boolean; hasEnd?: boolean; first?: number | null; last?: number[]; fixed?: number[] } = {}): number[] {
+  const locked = new Set((o.fixed ?? []).filter((i) => i >= 0 && i < n));
+  if (o.first === 0) locked.add(0);
+  if (o.fixed?.length && locked.size) return optimizeAround(n, cost, o, locked);
   const tail = (o.last ?? []).filter((i) => i >= 0 && i < n && i !== o.first);
   const held = new Set(tail);
   const free: number[] = [];
@@ -121,6 +124,71 @@ export function optimizeOrder(n: number, cost: (from: number, to: number) => num
     if (!improved) break;
   }
   return [...best, ...tail];
+}
+
+/**
+ * The same, with locked stops: each stop in `locked` keeps the place it has (its number is its place),
+ * and the others are ordered through the places left. Stops in `last` (no location) take the last
+ * free places and are skipped when the drive is added up.
+ */
+function optimizeAround(n: number, cost: (from: number, to: number) => number, o: { hasStart?: boolean; hasEnd?: boolean; last?: number[] }, locked: Set<number>): number[] {
+  const nowhere = new Set((o.last ?? []).filter((i) => i >= 0 && i < n));
+  const tail = [...nowhere].filter((i) => !locked.has(i));
+  const places: number[] = [];
+  for (let i = 0; i < n; i++) if (!locked.has(i)) places.push(i);
+  const open = places.slice(0, places.length - tail.length);
+  const tailPlaces = places.slice(places.length - tail.length);
+  /** The whole order, given the free stops in the order they fill the open places. */
+  const build = (seq: number[]) => {
+    const out: number[] = Array.from({ length: n }, (_, i) => i);
+    open.forEach((place, k) => { out[place] = seq[k]; });
+    tailPlaces.forEach((place, k) => { out[place] = tail[k]; });
+    return out;
+  };
+  const total = (seq: number[]) => {
+    const path = build(seq).filter((i) => !nowhere.has(i));
+    if (!path.length) return 0;
+    let t = o.hasStart ? cost(START, path[0]) : 0;
+    for (let i = 1; i < path.length; i++) t += cost(path[i - 1], path[i]);
+    if (o.hasEnd) t += cost(path[path.length - 1], END);
+    return t;
+  };
+  // Nearest neighbour through the places, from whatever comes before each one.
+  const left = new Set<number>();
+  for (let i = 0; i < n; i++) if (!locked.has(i) && !nowhere.has(i)) left.add(i);
+  const seq: number[] = [];
+  let at: number | null = o.hasStart ? START : null;
+  let k = 0;
+  for (let place = 0; place < n && left.size; place++) {
+    if (place !== open[k]) { if (locked.has(place) && !nowhere.has(place)) at = place; continue; }
+    let pick = -1, pickCost = Infinity;
+    for (const i of left) { const c = at === null ? 0 : cost(at, i); if (c < pickCost) { pickCost = c; pick = i; } }
+    seq.push(pick); left.delete(pick); at = pick; k++;
+  }
+  let best = seq;
+  let bestTotal = total(best);
+  for (let pass = 0; pass < 30; pass++) {
+    let improved = false;
+    for (let i = 0; i < best.length - 1; i++) {
+      for (let j = i + 1; j < best.length; j++) {
+        const next = [...best.slice(0, i), ...best.slice(i, j + 1).reverse(), ...best.slice(j + 1)];
+        const t = total(next);
+        if (t < bestTotal - 0.5) { best = next; bestTotal = t; improved = true; }
+      }
+    }
+    for (let i = 0; i < best.length; i++) {
+      for (let j = 0; j < best.length; j++) {
+        if (i === j) continue;
+        const next = best.slice();
+        const [moved] = next.splice(i, 1);
+        next.splice(j, 0, moved);
+        const t = total(next);
+        if (t < bestTotal - 0.5) { best = next; bestTotal = t; improved = true; }
+      }
+    }
+    if (!improved) break;
+  }
+  return build(best);
 }
 
 /* ───────────── A route's day ───────────── */
@@ -239,6 +307,8 @@ export const routePreviewSchema = z.object({
   /** Let Crewdesk order the stops (a pinned first stop stays first; stops with no location go last). */
   optimize: z.boolean().default(false),
   pinnedFirst: z.boolean().default(false),
+  /** Stops that keep the place they have in `keys` while the rest are ordered around them. */
+  locked: z.array(key).max(DISPATCH_ROUTE_MAX).default([]),
   /** Turn-by-turn steps too (for printed directions). */
   steps: z.boolean().default(false),
 });
@@ -276,6 +346,9 @@ export const rainDaySchema = z.object({
   /** Text the customers who asked for a text ahead (when texting is connected). */
   notify: z.boolean().default(false),
 });
+
+/** Lock a routed stop in place, or free it. */
+export const dispatchLockSchema = z.object({ key, locked: z.boolean() });
 
 export const dispatchNoteSchema = z.object({ key, body: z.string().trim().min(1, "Write the note").max(2000) });
 

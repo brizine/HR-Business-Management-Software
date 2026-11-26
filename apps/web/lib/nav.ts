@@ -9,7 +9,8 @@ export type Side = "operations" | "team";
 export const SIDES: { key: Side; label: string }[] = [{ key: "operations", label: "Operations" }, { key: "team", label: "Team" }];
 
 /** `gate: "chemical"`: only admins and the people they add to Chemical Tracking see it. */
-export type NavItem = { href: string; label: string; min?: Role; area?: PermissionArea; gate?: "chemical" | "texting" };
+/** `badge`: a small tag after the label (the second dispatch board is marked Beta, as in Homeworks). */
+export type NavItem = { href: string; label: string; min?: Role; area?: PermissionArea; gate?: "chemical" | "texting"; badge?: string };
 export type NavGroup = { key: string; label: string; icon: string; items: NavItem[] };
 
 export const NAV: Record<Side, NavGroup[]> = {
@@ -38,6 +39,9 @@ export const NAV: Record<Side, NavGroup[]> = {
       key: "schedule", label: "Schedule", icon: "calendar",
       items: [
         { href: "/calendar", label: "Calendar" },
+        // Two dispatch boards for now: the one from the Crewdesk plan and a copy of Homeworks' beta board. One will be kept.
+        { href: "/dispatch", label: "Dispatch", min: "manager", area: "customers" },
+        { href: "/dispatch-beta", label: "New Dispatch", badge: "Beta", min: "manager", area: "customers" },
         { href: "/visits", label: "Work orders" },
         { href: "/waitlist", label: "Waiting list", min: "manager", area: "customers" },
         { href: "/todos", label: "To-dos" },

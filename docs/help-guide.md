@@ -1085,6 +1085,88 @@ the list, then **Edit work orders** to schedule them.
 - **Inactive** crews aren't offered on new work orders. Deleting a crew leaves its work orders and their people as
   they are. Each crew card has **Work orders** to see that crew's.
 
+## Dispatch boards
+
+There are two dispatch boards for now, both under **Schedule** (Customers & billing managers): **Dispatch**, built
+from the Crewdesk plan, and **New Dispatch** with a **Beta** tag, a copy of Homeworks' New Dispatch. They show the
+same work orders, crews, routes and stop numbers, so a change made on one shows on the other. Use both; one will
+be kept.
+
+**How drive times are worked out:** to start, drive times and miles are **estimates** from the straight-line
+distance (the board says so). An admin can switch to **real roads** on the New Dispatch board: **View → Routing
+and capacity…**. Only map coordinates are sent to the routing service, never names or addresses. The same window
+sets where routes start and end (your company address unless you type another) and each person's daily hours.
+
+### Dispatch (the board from the Crewdesk plan)
+
+**Schedule → Dispatch** shows a day (or a week) with **one lane per crew**, a **No crew yet** lane for work orders
+nobody has, and a lane for anyone working without a crew.
+
+- **Day or Week**, the arrows, the date box and **Today** pick what you see. In the day view choose **Board**,
+  **Board + map** or **Map**.
+- **A lane** shows the crew's truck and people, its stops and square feet, and its day: hours on site plus the
+  drive against the crew's hours per day (set on the crew), e.g. "5.9 h on site + 1.4 h drive = 7.3 h of 8 h". It
+  turns red when the crew is over. It also shows when the crew leaves and gets back.
+- **To load:** each crew lane adds up the product and the tank mix its open stops need, from Chemical Tracking's
+  load sheet (people without Chemical Tracking access don't see it).
+- **Cards** are the work orders in route order. Each shows the customer, service, time on site, address and Map
+  Code, the drive from the stop before and about when the crew gets there, plus badges: its time window, **High
+  priority**, **Dog**, **Text ahead**, **Call ahead**, **Not on the map**, and **Done**, **On site** or **Skipped**
+  as the crew works (the board refreshes itself every minute). The speech bubble opens the notes between the
+  office and the field. The arrow opens the work order.
+- **Drag a card** up or down to change the route, onto another lane to give it to that crew (its people are put
+  on the work order), or onto **No crew yet**. In the week view, drag it to another day. While you hold a card over
+  a lane, the lane shows what the drop would do: the minutes and driving it adds, the new total against the
+  crew's hours, and any customer who would be reached after their time window.
+- **Routes three ways:** drag the stops yourself; **Optimize** on a lane (or **Optimize every route**) to let
+  Crewdesk order them from the shop and back with the least driving; or both: click the **lock** on a stop to keep
+  it at its place, and Optimize orders the others around it.
+- **The map** draws each crew's route in the crew's color with numbered pins and a flag at the shop. **Gray
+  pins with an hourglass are waiting-list services**: click one to add it to the day and a crew's route (it goes
+  at the end; drag it into place). Doing one before its eligible date asks for a reason, as on the waiting list.
+  Click a numbered pin to select that work order.
+- **Waiting list** (the button) shows the waiting list as the first lane: drag one onto a crew, or click **Add**.
+  It follows the Map Code filter and the search box.
+- **Map Code** filters the lanes, the map and the waiting list to one or more Map Codes, so you can see what's
+  waiting in the area a crew is already going to. The search box finds a customer, address or service.
+- **Click cards** (or pins) to select them, then **Give to a crew**, **Move to** another day, or **Back to the
+  waiting list**.
+- **Rain or wind day…** (or **Rain day** on a lane) moves the whole day's, or one crew's, open work orders in one
+  step: to another day (the next working day is filled in) or back to the waiting list, with why. Ones already
+  started, done or skipped stay. Tick the box and customers who asked for a text ahead are texted about the change
+  (when texting is connected), and the ones who want a call are listed for you.
+
+### New Dispatch (Beta)
+
+**Schedule → New Dispatch** is laid out like Homeworks' New Dispatch: a list or board of the day's events beside a
+map. It shows work orders and to-dos.
+
+- **Top row:** **Day ▾** (day, week, month or your own dates), the date, the arrows and **Today**; **Table/Board**,
+  **Split** or **Map**; the **waitlist** button; **Print**; a button to switch to the other board; and **View**.
+- **Table or Board:** the table has a row per event; **Board** groups them into a column per crew or person with
+  their hours against capacity, and you can drag a card to another column to reassign it.
+- **+ Filter** adds filters (status, assignment, service, tag, Map Code and more) as chips; the search box finds
+  events by name, customer or address.
+- **View:** show or hide columns and drag them into order, choose the details on the board's cards, **Color events
+  by…** (routing status, assignment, service, event type or weekday, with a legend on the map), show dispatch notes
+  in the list, and **Routing and capacity…**.
+- **A row's ⋮ menu** (or right-click a pin): open it, **Reschedule**, assign, **Move to waitlist**, **Duplicate**,
+  **Unassign**, **Remove from route**, contact the customer by text or email, or **Delete**. Click the status to mark
+  it Open, Complete or Skipped. Click a row to open the **Work View** panel with everything about it.
+- **Select** rows with the checkboxes, pins by clicking, or many pins with the **lasso** on the map. The bottom bar
+  then offers the same actions for all of them. With nothing selected it shows the day's totals.
+- **Route stops** (or **Assign**) builds a route from the selected events: drag the stops into order or use the
+  arrows, pick where it starts and ends (the company address, a person's home, a custom address or a spot on the
+  map), set the start time and how arrival times are shown, **Optimize** or **Reverse**, then **Save**. **Save and
+  apply to future weeks** copies the order to the same weekday in the weeks ahead for visits that repeat. A route
+  holds up to 100 stops.
+- **Moving a stop** to another day, another crew or the waitlist takes it off its route, and the rest renumber.
+  Stops with no route show **00**.
+- **Custom areas:** draw areas on the map, name and color them, and hide or show them; everyone sees the same ones.
+- **Waitlist panel:** the waiting list beside the day; add one to the day you're looking at.
+- **Print:** the route map, turn-by-turn directions (with real roads on), or the list of stops.
+- Not in this copy yet: opening the map in its own window, traffic, and custom-field columns.
+
 ## Calendar
 
 **Schedule → Calendar** (Operations) shows everything with a date in one place, laid out like Homeworks'

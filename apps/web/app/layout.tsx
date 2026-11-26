@@ -3,6 +3,7 @@ import { AuthProvider } from "@/lib/auth";
 import { MenusProvider } from "@/lib/menus";
 import { THEME_BOOT } from "@/lib/theme-boot";
 import "./globals.css";
+import "./dispatch.css";
 
 export const metadata: Metadata = { title: "Crewdesk", description: "HR and fleet maintenance for small businesses" };
 

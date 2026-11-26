@@ -1,0 +1,1 @@
+ALTER TABLE "dispatch_stops" ADD COLUMN "locked" boolean DEFAULT false NOT NULL;

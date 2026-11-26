@@ -3,14 +3,14 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import {
   MAP_AREAS_MAX, capacitySchema, dispatchAssignSchema, dispatchKeysSchema, dispatchNoteSchema, dispatchRescheduleSchema, dispatchSettingsSchema, dispatchToWaitlistSchema,
-  laneOrderSchema, mapAreaSchema, rainDaySchema, routePreviewSchema, routeSaveSchema,
+  dispatchLockSchema, hasRole, laneOrderSchema, mapAreaSchema, rainDaySchema, routePreviewSchema, routeSaveSchema,
 } from "@crewdesk/shared";
 import { db } from "../db";
 import { dispatchRoutes, dispatchStops, employees, mapAreas } from "../db/schema";
-import { authenticate, requireRole } from "../lib/auth";
+import { authenticate, requireRole, roleIn } from "../lib/auth";
 import {
   addDispatchNote, assignEvents, deleteEvents, dispatchPeople, dispatchSettings, duplicateEvents, employeePoint, eventsBetween, futureWeeks, holidaysOn, locateAddress,
-  nextWorkingDay, previewRoute, rainDay, rescheduleEvents, routesBetween, saveDispatchSettings, saveRoute, setLane, toWaitlist, trucks, unroute, waitingCount,
+  lockStop, nextWorkingDay, previewRoute, rainDay, rescheduleEvents, routesBetween, saveDispatchSettings, saveRoute, setLane, toWaitlist, trucks, unroute, waitingCount,
 } from "../lib/dispatch";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
@@ -44,7 +44,8 @@ const routes: FastifyPluginAsync = async (app) => {
       today, from, to, events, routes: routeRows, holidays, waiting,
       crews: crews.map((c) => ({ id: c.id, name: c.name, color: c.color, dailyHours: c.dailyHours, memberIds: c.memberIds, truck: c.assetName })),
       people,
-      settings: { routing: settings.routing, roadUrl: settings.roadUrl, startAddress: settings.start?.address ?? null, endAddress: settings.end?.address ?? null },
+      // The routing server's address is for admins only: a hosted one can carry a key.
+      settings: { routing: settings.routing, roadUrl: hasRole(roleIn(req, AREA), "admin") ? settings.roadUrl : null, startAddress: settings.start?.address ?? null, endAddress: settings.end?.address ?? null },
       start: settings.start ?? settings.depot, end: settings.end ?? settings.depot, depot: settings.depot,
     };
   });
@@ -87,6 +88,7 @@ const routes: FastifyPluginAsync = async (app) => {
   /* ── The plan's board ── */
 
   app.post("/lane", async (req) => setLane(req.user.companyId, req.user.sub, parse(laneOrderSchema, req.body)));
+  app.post("/lock", async (req) => lockStop(req.user.companyId, parse(dispatchLockSchema, req.body)));
   app.post("/rain", async (req) => {
     const b = parse(rainDaySchema.extend({ toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }), req.body);
     return rainDay(req.user.companyId, req.user.sub, b);

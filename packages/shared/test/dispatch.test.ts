@@ -62,6 +62,21 @@ describe("ordering stops", () => {
     expect(order[3]).toBe(2);
     expect([...order].sort()).toEqual([0, 1, 2, 3]);
   });
+  it("orders around locked stops, which keep their place", () => {
+    const order = optimizeOrder(4, cost, { hasStart: true, hasEnd: true, fixed: [2] });
+    expect(order[2]).toBe(2);
+    expect([...order].sort()).toEqual([0, 1, 2, 3]);
+    expect(total(order)).toBeLessThanOrEqual(total([0, 1, 2, 3]) + 0.5);
+    const ends = optimizeOrder(4, cost, { hasStart: true, hasEnd: true, fixed: [0, 3] });
+    expect([ends[0], ends[3]]).toEqual([0, 3]);
+    expect([...ends].sort()).toEqual([0, 1, 2, 3]);
+    // A stop with no location that isn't locked takes the last free place; a locked one stays put.
+    const lost = optimizeOrder(4, cost, { hasStart: true, hasEnd: true, fixed: [3], last: [1] });
+    expect([lost[2], lost[3]]).toEqual([1, 3]);
+    expect(optimizeOrder(4, cost, { hasStart: true, fixed: [1], last: [1] })[1]).toBe(1);
+    // Everything locked: nothing moves.
+    expect(optimizeOrder(3, cost, { hasStart: true, fixed: [0, 1, 2] })).toEqual([0, 1, 2]);
+  });
   it("works with no start or end, and with one stop or none", () => {
     expect([...optimizeOrder(4, cost)].sort()).toEqual([0, 1, 2, 3]);
     expect(optimizeOrder(1, cost, { hasStart: true })).toEqual([0]);
