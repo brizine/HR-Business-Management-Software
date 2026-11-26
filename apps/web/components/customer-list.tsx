@@ -241,33 +241,97 @@ export function Cell({ col, c, tags }: { col: Col; c: any; tags: Tag[] }) {
 }
 
 /**
+ * The "Shown, in order" list of a column editor: drag a row (mouse or touch) to put the columns in
+ * order; ✕ hides one. A row also takes the up and down arrow keys. The first `fixed` rows stay put.
+ */
+export function ColumnOrder({ keys, name, label, onChange, fixed = 0, canHide = () => true }: {
+  keys: string[]; name: (key: string) => string; label?: (key: string) => ReactNode; onChange: (keys: string[]) => void; fixed?: number; canHide?: (key: string) => boolean;
+}) {
+  const list = useRef<HTMLOListElement>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
+  // The order as of the last move, so a quick drag never works from a stale list between renders.
+  const order = useRef(keys);
+  order.current = keys;
+  const moveTo = (key: string, to: number) => {
+    const cur = order.current;
+    const from = cur.indexOf(key);
+    const at = Math.max(fixed, Math.min(cur.length - 1, to));
+    if (from < 0 || from === at) return;
+    const next = cur.filter((k) => k !== key);
+    next.splice(at, 0, key);
+    order.current = next;
+    onChange(next);
+  };
+  const start = (key: string, e: React.PointerEvent) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).focus({ preventScroll: true });
+    // The list itself holds the pointer for the drag: rows change places under it, the list doesn't.
+    try { list.current?.setPointerCapture(e.pointerId); } catch { /* not a live pointer */ }
+    setDragging(key);
+    let y = e.clientY;
+    const place = () => {
+      const ol = list.current;
+      if (!ol) return;
+      // Its place is however many of the other rows sit above the pointer.
+      const others = ([...ol.children] as HTMLElement[]).filter((r) => r.dataset.key !== key);
+      moveTo(key, others.filter((r) => { const b = r.getBoundingClientRect(); return b.top + b.height / 2 < y; }).length);
+    };
+    const move = (ev: PointerEvent) => { y = ev.clientY; place(); };
+    // A long list keeps scrolling while the row is held near its top or bottom edge.
+    const edge = setInterval(() => {
+      const ol = list.current;
+      if (!ol) return;
+      const box = ol.getBoundingClientRect();
+      const by = y < box.top + 22 ? -10 : y > box.bottom - 22 ? 10 : 0;
+      if (!by) return;
+      const before = ol.scrollTop;
+      ol.scrollTop += by;
+      if (ol.scrollTop !== before) place();
+    }, 40);
+    const stop = () => {
+      clearInterval(edge);
+      setDragging(null);
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); window.removeEventListener("pointercancel", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  };
+  return (
+    <ol className={`cl-shown${dragging ? " cl-sorting" : ""}`} ref={list}>
+      {keys.map((k, i) => (
+        <li key={k} data-key={k} className={dragging === k ? "dragging" : undefined}>
+          {i < fixed ? <span className="cl-grip fixed" title="Always first"><Icon name="grip" size={14} /><span>{label ? label(k) : name(k)}</span></span> : (
+            <button type="button" className="cl-grip" title="Drag to reorder" aria-label={`${name(k)}: drag to reorder, or press the up and down arrow keys`} onPointerDown={(e) => start(k, e)}
+              onKeyDown={(e) => { if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); moveTo(k, order.current.indexOf(k) + (e.key === "ArrowUp" ? -1 : 1)); } }}>
+              <Icon name="grip" size={14} /><span>{label ? label(k) : name(k)}</span>
+            </button>
+          )}
+          {i >= fixed && <button type="button" className="btn" aria-label={`Hide ${name(k)}`} disabled={!canHide(k)} onClick={() => onChange(keys.filter((x) => x !== k))}>✕</button>}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/**
  * Pick and order the columns (Homeworks' "9/9 Columns", with more to choose from): the shown ones
- * in order (↑ ↓ to move, ✕ to hide), then every other column by group, with a search.
+ * in order (drag to move, ✕ to hide), then every other column by group, with a search.
  */
 export function ColumnPicker({ cols, shown, onChange }: { cols: Col[]; shown: string[]; onChange: (keys: string[]) => void }) {
   const [q, setQ] = useState("");
   const byKey = new Map(cols.map((c) => [c.key, c]));
   const hidden = cols.filter((c) => !shown.includes(c.key) && (!q.trim() || `${c.label} ${c.group}`.toLowerCase().includes(q.trim().toLowerCase())));
   const groups = [...new Set(hidden.map((c) => c.group))];
-  const move = (i: number, d: -1 | 1) => { const n = [...shown]; [n[i], n[i + d]] = [n[i + d], n[i]]; onChange(n); };
   return (
     <div className="stack cl-columns">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <strong>Shown, in order</strong>
+        <span><strong>Shown, in order</strong> <span className="muted cl-drag-hint">drag to reorder</span></span>
         <button type="button" className="linkbtn" onClick={() => onChange(DEFAULT_CUSTOMER_COLUMNS)}>Reset</button>
       </div>
-      <ol className="cl-shown">
-        {shown.filter((k) => byKey.has(k)).map((k, i, arr) => (
-          <li key={k}>
-            <span>{byKey.get(k)!.label}<span className="muted"> · {byKey.get(k)!.group}</span></span>
-            <span className="row" style={{ gap: 2 }}>
-              <button type="button" className="btn" aria-label={`Move ${byKey.get(k)!.label} up`} disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
-              <button type="button" className="btn" aria-label={`Move ${byKey.get(k)!.label} down`} disabled={i === arr.length - 1} onClick={() => move(i, 1)}>↓</button>
-              <button type="button" className="btn" aria-label={`Hide ${byKey.get(k)!.label}`} disabled={k === "name"} onClick={() => onChange(shown.filter((x) => x !== k))}>✕</button>
-            </span>
-          </li>
-        ))}
-      </ol>
+      <ColumnOrder keys={shown.filter((k) => byKey.has(k))} name={(k) => byKey.get(k)!.label} label={(k) => <>{byKey.get(k)!.label}<span className="muted"> · {byKey.get(k)!.group}</span></>}
+        canHide={(k) => k !== "name"} onChange={onChange} />
       <input type="search" placeholder="Find a column to add" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Find a column" />
       <div className="cl-addcols">
         {groups.map((g) => (

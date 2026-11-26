@@ -204,7 +204,8 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
     sort and columns under a name. Your views are kept in this browser.
   - **Columns:** choose from about 25 columns (Homeworks offers 9), grouped (Customer, Contact, Address, Money,
     Service, custom fields) with a search.
-    - **↑ / ↓** set the order, **✕** hides one, and **Reset** goes back to the usual nine.
+    - **Drag a column's name** up or down to set the order (on a phone or tablet too; with a keyboard, the up and
+      down arrow keys move the one you're on), **✕** hides one, and **Reset** goes back to the usual nine.
     - Your choice is kept for you in this browser.
   - **Sorting:** click a column heading to sort by it, and again to reverse.
   - **Selecting:** tick customers (or the box at the top for the whole page) to **Add tag**, **Remove tag**,
@@ -1045,7 +1046,8 @@ the list, then **Edit work orders** to schedule them.
 - **Workload:** each crew's booked hours for each day of the week (time on site plus the drive on its route)
   against its **hours per day** (set on the crew), with holidays marked. With work orders selected, click a day
   (or a crew's day) to schedule them into it.
-- **The list:** **Columns** picks and orders them (Property stays first; **Reset** puts back service, MC,
+- **The list:** **Columns** picks and orders them: drag a column's name up or down to move it, **✕** hides it
+  (Property stays first; **Reset** puts back service, MC,
   eligible from, due by, est. hours, sq ft, price and badges); click a heading to sort. The top row totals what's
   shown; the bar above adds up what's selected, with **By crew and service**. **Export** downloads the shown (or
   selected) rows as a spreadsheet.
@@ -1127,7 +1129,7 @@ list, then **Edit work orders** to move them.
   crew's heading shows its truck and people, stops, square feet, and its day, e.g. "5.9 h on site + 1.4 h drive
   = 7.3 of 8 h" (red when over), when it leaves and gets back, and **To load** (the tank mix and products its
   open stops need, from Chemical Tracking). The **totals row** adds up what's shown; the selection's hours,
-  square feet and dollars show above the list. **Columns** picks and orders the columns (Property stays first);
+  square feet and dollars show above the list. **Columns** picks and orders the columns (drag a name to move it; Property stays first);
   besides the waiting list's there are **Arrives about**, **Status**, **Notes**, **Drive (min)**, **Truck / crew**,
   **Technicians** and **Date**. Click a column heading to sort by it (the grouping goes away;
   **Group by crew** or the **#** heading brings it back).

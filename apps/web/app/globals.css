@@ -1404,8 +1404,20 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .cl-chip-x { border: 0; background: transparent; color: var(--muted); padding: 3px 9px 3px 5px; cursor: pointer; font-size: 12px; }
 .cl-chip-x:hover { color: var(--bad); }
 .cl-columns { gap: 8px; }
-.cl-shown { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 220px; overflow-y: auto; }
-.cl-shown li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 2px 0; font-size: 14px; }
+.cl-shown { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: min(46vh, 440px); overflow-y: auto; }
+.cl-shown li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 1px 0; font-size: 14px; border-radius: 6px; }
+/* Rows drag into order by their name (mouse or touch); the arrow keys work on a focused row. */
+.cl-grip { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; padding: 4px 6px 4px 2px; border-radius: 6px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.cl-grip svg { flex: none; color: var(--muted); stroke-width: 2.8; }
+.cl-grip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cl-grip:hover, .cl-grip:focus-visible { background: var(--bg); }
+.cl-grip.fixed { cursor: default; }
+.cl-grip.fixed:hover { background: transparent; }
+.cl-grip.fixed svg { opacity: .35; }
+.cl-sorting, .cl-sorting .cl-grip { cursor: grabbing; }
+.cl-shown li.dragging { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); box-shadow: 0 1px 5px rgba(0, 0, 0, .2); position: relative; z-index: 1; }
+.cl-shown li.dragging .cl-grip { background: transparent; }
+.cl-drag-hint { font-size: 12px; font-weight: normal; }
 .cl-shown .btn { padding: 2px 7px; font-size: 12px; }
 .cl-addcols { display: grid; gap: 6px; max-height: 220px; overflow-y: auto; }
 .cl-addcol { display: inline-flex; align-items: center; gap: 4px; margin: 2px 4px 2px 0; padding: 3px 9px; border: 1px dashed var(--border); border-radius: 999px; background: transparent; color: var(--text); font-size: 13px; cursor: pointer; }

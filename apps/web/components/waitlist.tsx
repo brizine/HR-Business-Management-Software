@@ -8,7 +8,7 @@ import { NOTICE_CHANNELS, NOTICE_CHANNEL_LABELS,
 } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
-import { Popover, readLocal, writeLocal } from "./customer-list";
+import { ColumnOrder, Popover, readLocal, writeLocal } from "./customer-list";
 import { TagChip, type Tag } from "./customers";
 import { Icon } from "./icons";
 import { ErrorBox } from "./ui";
@@ -281,30 +281,17 @@ export function sortRows(rows: WaitRow[], sort: WaitView["sort"]) {
   });
 }
 
-/** Columns: the shown ones in order (Property always first), then the rest to add. */
+/** Columns: the shown ones in order (drag to reorder; Property always first), then the rest to add. */
 export function Columns({ shown, onChange, all = WL_COLUMNS, defaults = DEFAULT_WL_COLUMNS }: { shown: string[]; onChange: (keys: string[]) => void; all?: { key: string; label: string }[]; defaults?: string[] }) {
   const [open, setOpen] = useState(false);
   const colByKey = new Map(all.map((c) => [c.key, c]));
   const rest = all.filter((c) => !shown.includes(c.key));
-  const move = (i: number, d: -1 | 1) => { const n = [...shown]; [n[i], n[i + d]] = [n[i + d], n[i]]; onChange(n); };
   return (
     <Popover open={open} setOpen={setOpen} label={<><Icon name="list" size={14} /> Columns</>} className="cl-pop-wide" align="right">
       <div className="stack cl-columns">
-        <div className="row" style={{ justifyContent: "space-between" }}><strong>Shown, in order</strong><button type="button" className="linkbtn" onClick={() => onChange(defaults)}>Reset</button></div>
-        <ol className="cl-shown">
-          {shown.map((k, i) => (
-            <li key={k}>
-              <span>{colByKey.get(k)?.label}</span>
-              {k !== "property" && (
-                <span className="row" style={{ gap: 2 }}>
-                  <button type="button" className="btn" aria-label={`Move ${colByKey.get(k)?.label} up`} disabled={i <= 1} onClick={() => move(i, -1)}>↑</button>
-                  <button type="button" className="btn" aria-label={`Move ${colByKey.get(k)?.label} down`} disabled={i === shown.length - 1} onClick={() => move(i, 1)}>↓</button>
-                  <button type="button" className="btn" aria-label={`Hide ${colByKey.get(k)?.label}`} onClick={() => onChange(shown.filter((x) => x !== k))}>✕</button>
-                </span>
-              )}
-            </li>
-          ))}
-        </ol>
+        <div className="row" style={{ justifyContent: "space-between" }}><span><strong>Shown, in order</strong> <span className="muted cl-drag-hint">drag to reorder</span></span><button type="button" className="linkbtn" onClick={() => onChange(defaults)}>Reset</button></div>
+        {/* Property always stays first. */}
+        <ColumnOrder keys={shown.filter((k) => colByKey.has(k))} name={(k) => colByKey.get(k)!.label} fixed={shown[0] === "property" ? 1 : 0} onChange={onChange} />
         <div className="cl-addcols">
           {rest.map((c) => <button key={c.key} type="button" className="cl-addcol" onClick={() => onChange([...shown, c.key])}><Icon name="plus" size={12} /> {c.label}</button>)}
           {!rest.length && <p className="muted" style={{ margin: 0 }}>Every column is shown.</p>}
