@@ -9,6 +9,7 @@ import { NAV, pathMatches, sideOf, type NavGroup, type NavItem, type Side } from
 import { PageLayoutRoot } from "@/components/page-layout";
 import { Rail, TopBar } from "@/components/app-shell";
 import { HelpProvider } from "@/components/help-window";
+import { Tips } from "@/components/tips";
 
 const SIDE_KEY = "crewdesk.side";
 const RAIL_KEY = "crewdesk.menu-expanded";
@@ -132,6 +133,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {fullPage ? <main className="main main-full">{children}</main> : <main className="main"><Trail /><PageLayoutRoot>{children}</PageLayoutRoot></main>}
       </div>
     </div>
+    {/* Rest the pointer on any button and a line says what it does. */}
+    <Tips />
     </HelpProvider>
   );
 }

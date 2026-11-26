@@ -2637,3 +2637,11 @@ button.hp-card:hover { border-color: var(--primary); }
 .hp-full { display: inline-block; margin-top: 12px; font-size: 13px; }
 @media (max-width: 520px) { .hp, .hp.wide { inset: 0; width: 100%; max-width: none; height: 100%; border-radius: 0; border: 0; } }
 @media print { .hp { display: none; } }
+
+/* ───────────── Hover descriptions (components/tips.tsx) ───────────── */
+.tip { position: fixed; z-index: 3000; max-width: 280px; padding: 6px 10px; border-radius: 7px; background: #111827; color: #fff; border: 1px solid rgba(255, 255, 255, .16);
+  font-size: 12.5px; line-height: 1.35; font-weight: 500; text-align: left; box-shadow: 0 4px 14px rgba(0, 0, 0, .28); pointer-events: none; animation: tip-in .12s ease-out; }
+.tip::before { content: ""; position: absolute; left: var(--tip-arrow, 20px); top: -5px; width: 8px; height: 8px; margin-left: -4px; background: #111827; border-left: 1px solid rgba(255, 255, 255, .16); border-top: 1px solid rgba(255, 255, 255, .16); transform: rotate(45deg); }
+.tip.above::before { top: auto; bottom: -5px; transform: rotate(225deg); }
+@keyframes tip-in { from { opacity: 0; transform: translateY(2px); } }
+@media print { .tip { display: none; } }

@@ -124,6 +124,12 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
 - **Reports** on each side lists the reports you can see there, such as Fuel & Costs, Repair Orders and
   Inspections (Operations), or Attendance, Timesheets, Time Off, Training Progress and Payroll (Team).
 
+- **What does this button do?** Rest the pointer on any button for half a second and a small dark box says what
+  it does: "Download this list as a spreadsheet file (CSV)" on **Export**, "Move the whole day's open work…" on
+  **Rain or wind day…**, and so on. It works on the icons in the top bar and the left menu too (each page in the
+  menu says what it's for), on tabs and filter chips, and on column headings (which say they sort). Move straight
+  to the next button and its description shows at once. With a keyboard, **Tab** to a button to see it; **Esc**
+  or clicking puts it away. Phones and tablets have no pointer to rest, so they don't show these.
 - **Putting a list in order:** wherever a list has an order you can change (services on the price list,
   cancellation reasons, custom fields, job titles and departments, training lessons, application methods, spray
   mix products, and the columns of the Customers, Waiting list and Dispatch pages), each row has a **handle of six

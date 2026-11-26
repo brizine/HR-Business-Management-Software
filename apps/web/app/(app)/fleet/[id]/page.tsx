@@ -140,7 +140,7 @@ export default function AssetDetail({ params }: { params: Promise<{ id: string }
                 </td>
                 <td className="row">
                   {can("manager", "fleet") && <button className="btn sm" onClick={() => createWorkOrder(s)}>Create repair order</button>}
-                  {can("manager", "fleet") && <button className="btn sm danger" onClick={() => confirm("Delete schedule?") && api(`/assets/schedules/${s.id}`, { method: "DELETE" }).then(asset.reload)}>×</button>}
+                  {can("manager", "fleet") && <button className="btn sm danger" aria-label="Delete this service schedule" title="Delete this service schedule and its reminders" onClick={() => confirm("Delete schedule?") && api(`/assets/schedules/${s.id}`, { method: "DELETE" }).then(asset.reload)}>×</button>}
                 </td>
               </tr>,
               noteFor === s.id && (
