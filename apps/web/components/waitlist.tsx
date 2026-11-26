@@ -3,8 +3,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import "leaflet/dist/leaflet.css";
 import { NOTICE_CHANNELS, NOTICE_CHANNEL_LABELS,
-  BACK_REASONS, BACK_REASON_LABELS, BADGE_HINTS, BADGE_LABELS, NOTIFY_BEFORE, NOTIFY_BEFORE_LABELS, PRIORITIES, PRIORITY_LABELS,
-  formatMoney, visitNumber, type NotifyBefore, type Priority, type WaitBadge,
+  BACK_REASONS, BACK_REASON_LABELS, BADGE_HINTS, BADGE_LABELS, NOTIFY_BEFORE, NOTIFY_BEFORE_LABELS, PRIORITIES, PRIORITY_LABELS, ROUTE_ORDERS, ROUTE_ORDER_LABELS,
+  clock12, formatMoney, visitNumber, type NotifyBefore, type Priority, type RouteOrder, type WaitBadge,
 } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
@@ -26,7 +26,7 @@ export type WaitRow = {
 };
 export type Crew = { id: string; name: string; color: string; dailyHours: number };
 export type WaitData = { today: string; requireCard: boolean; rows: WaitRow[]; crews: Crew[] };
-type Workload = { dates: string[]; holidays: Record<string, string>; crews: { id: string | null; name: string; color: string; dailyHours: number | null; days: { count: number; hours: number }[] }[] };
+type Workload = { dates: string[]; holidays: Record<string, string>; crews: { id: string | null; name: string; color: string; dailyHours: number | null; days: { count: number; hours: number; drive?: number }[] }[] };
 export type Filter = { key: string; value: string };
 export type WaitView = { id?: string; name: string; shared?: boolean; mine?: boolean; filters: Filter[]; columns: string[]; sort: { key: string; dir: "asc" | "desc" } | null };
 
@@ -75,6 +75,9 @@ function EstHours({ r }: { r: WaitRow }) {
 
 /* ───────────── Filters ───────────── */
 
+export const STATUS_LABELS: Record<string, string> = { open: "Open", on_site: "On site", completed: "Done", skipped: "Skipped" };
+/** The dispatch board's own filters, offered there on top of the waiting list's. */
+export const BOARD_FILTER_KINDS: { key: string; label: string }[] = [{ key: "assigned", label: "Truck / crew" }, { key: "status", label: "Status" }];
 export const FILTER_KINDS: { key: string; label: string }[] = [
   { key: "service", label: "Service" }, { key: "tag", label: "Tag" }, { key: "mc", label: "Map Code" }, { key: "city", label: "City" }, { key: "zip", label: "ZIP" },
   { key: "priority", label: "Priority" }, { key: "badge", label: "Badge" }, { key: "crew", label: "Preferred crew" }, { key: "near", label: "Within miles of a property" },
@@ -100,6 +103,8 @@ export function describeFilter(f: Filter, ctx: { services: Map<string, string>; 
     case "due": return `Due by ${shortDay(f.value)} or sooner`;
     case "eligible": return `Eligible by ${shortDay(f.value)}`;
     case "upcoming": return "Including ones not released yet";
+    case "status": return `Status: ${STATUS_LABELS[f.value] ?? f.value}`;
+    case "assigned": return f.value === "none" ? "No crew yet" : `Crew: ${ctx.crews.find((c) => c.id === f.value)?.name ?? "a removed crew"}`;
     default: return `${f.key}: ${f.value}`;
   }
 }
@@ -123,6 +128,8 @@ function matches(r: WaitRow, f: Filter): boolean {
     }
     case "due": return !!r.dueBy && r.dueBy <= f.value;
     case "eligible": return !r.eligible || r.eligible <= f.value;
+    case "status": return r.status === f.value;
+    case "assigned": return f.value === "none" ? !r.crewId : r.crewId === f.value;
     default: return true;
   }
 }
@@ -134,9 +141,9 @@ export function applyFilters(rows: WaitRow[], filters: Filter[]) {
 }
 
 /** Adds one filter: pick the kind, then its value (choices come from what's on the list). */
-export function AddFilter({ rows, crews, tags, onAdd }: { rows: WaitRow[]; crews: Crew[]; tags: Tag[]; onAdd: (fs: Filter[]) => void }) {
+export function AddFilter({ rows, crews, tags, onAdd, kinds = FILTER_KINDS }: { rows: WaitRow[]; crews: Crew[]; tags: Tag[]; onAdd: (fs: Filter[]) => void; kinds?: { key: string; label: string }[] }) {
   const [open, setOpen] = useState(false);
-  const [key, setKey] = useState("service");
+  const [key, setKey] = useState(kinds[0]?.key ?? "service");
   const [value, setValue] = useState("");
   const [mi, setMi] = useState("2");
   const [mcOp, setMcOp] = useState<"is" | "starts">("is");
@@ -176,6 +183,8 @@ export function AddFilter({ rows, crews, tags, onAdd }: { rows: WaitRow[]; crews
     case "priority": input = <select aria-label="Priority" value={value} onChange={(e) => setValue(e.target.value)}><option value="">Pick</option>{PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}</select>; break;
     case "badge": input = <select aria-label="Badge" value={value} onChange={(e) => setValue(e.target.value)}><option value="">Pick a badge</option>{(Object.keys(BADGE_LABELS) as WaitBadge[]).map((b) => <option key={b} value={b}>{BADGE_LABELS[b]}</option>)}</select>; break;
     case "crew": input = <select aria-label="Crew" value={value} onChange={(e) => setValue(e.target.value)}><option value="">Pick</option><option value="none">No preferred crew</option>{crews.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>; break;
+    case "assigned": input = <select aria-label="Truck or crew" value={value} onChange={(e) => setValue(e.target.value)}><option value="">Pick</option><option value="none">No crew yet</option>{crews.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>; break;
+    case "status": input = <select aria-label="Status" value={value} onChange={(e) => setValue(e.target.value)}><option value="">Pick</option>{Object.entries(STATUS_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>; break;
     case "near": input = (
       <div className="row cl-between">
         <input aria-label="Miles" inputMode="decimal" value={mi} onChange={(e) => setMi(e.target.value)} style={{ width: 70 }} /> mi of
@@ -215,7 +224,7 @@ export function AddFilter({ rows, crews, tags, onAdd }: { rows: WaitRow[]; crews
     <Popover open={open} setOpen={setOpen} label={<><Icon name="sliders" size={14} /> Filter</>} className="cl-pop-wide">
       <form className="stack cl-editor" onSubmit={(e) => { e.preventDefault(); add(); }}>
         <select aria-label="Filter by" value={key} onChange={(e) => { setKey(e.target.value); setValue(""); }}>
-          {FILTER_KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+          {kinds.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
         </select>
         {input}
         <div className="row"><button className="btn primary" disabled={key === "tag" && !tagPicks.length}>Apply filter{key === "tag" && tagPicks.length > 1 ? ` (${tagPicks.length} tags)` : ""}</button><button type="button" className="btn" onClick={() => setOpen(false)}>Cancel</button></div>
@@ -226,7 +235,7 @@ export function AddFilter({ rows, crews, tags, onAdd }: { rows: WaitRow[]; crews
 
 /* ───────────── Columns ───────────── */
 
-type WCol = { key: string; label: string; group: string; num?: boolean; sort?: (r: WaitRow) => string | number | null; text: (r: WaitRow, crews: Crew[]) => string; cell?: (r: WaitRow, crews: Crew[]) => ReactNode };
+export type WCol = { key: string; label: string; group: string; num?: boolean; sort?: (r: WaitRow) => string | number | null; text: (r: WaitRow, crews: Crew[]) => string; cell?: (r: WaitRow, crews: Crew[]) => ReactNode };
 const crewName = (id: string | null, crews: Crew[]) => (id ? crews.find((c) => c.id === id)?.name ?? "" : "");
 export const WL_COLUMNS: WCol[] = [
   { key: "property", label: "Property", group: "Property", sort: (r) => r.property.street.toLowerCase(), text: (r) => r.property.address,
@@ -273,14 +282,15 @@ export function sortRows(rows: WaitRow[], sort: WaitView["sort"]) {
 }
 
 /** Columns: the shown ones in order (Property always first), then the rest to add. */
-export function Columns({ shown, onChange }: { shown: string[]; onChange: (keys: string[]) => void }) {
+export function Columns({ shown, onChange, all = WL_COLUMNS, defaults = DEFAULT_WL_COLUMNS }: { shown: string[]; onChange: (keys: string[]) => void; all?: { key: string; label: string }[]; defaults?: string[] }) {
   const [open, setOpen] = useState(false);
-  const rest = WL_COLUMNS.filter((c) => !shown.includes(c.key));
+  const colByKey = new Map(all.map((c) => [c.key, c]));
+  const rest = all.filter((c) => !shown.includes(c.key));
   const move = (i: number, d: -1 | 1) => { const n = [...shown]; [n[i], n[i + d]] = [n[i + d], n[i]]; onChange(n); };
   return (
     <Popover open={open} setOpen={setOpen} label={<><Icon name="list" size={14} /> Columns</>} className="cl-pop-wide" align="right">
       <div className="stack cl-columns">
-        <div className="row" style={{ justifyContent: "space-between" }}><strong>Shown, in order</strong><button type="button" className="linkbtn" onClick={() => onChange(DEFAULT_WL_COLUMNS)}>Reset</button></div>
+        <div className="row" style={{ justifyContent: "space-between" }}><strong>Shown, in order</strong><button type="button" className="linkbtn" onClick={() => onChange(defaults)}>Reset</button></div>
         <ol className="cl-shown">
           {shown.map((k, i) => (
             <li key={k}>
@@ -307,14 +317,21 @@ export function Columns({ shown, onChange }: { shown: string[]; onChange: (keys:
 /* ───────────── Map ───────────── */
 
 type MapPrefs = { height: number; collapsed: boolean };
+/** A numbered pin: a stop on a crew's route, in the crew's color. */
+export type NumberedPin = { label: string; color: string; dim?: boolean };
+export type MapLine = { color: string; points: [number, number][]; dashed?: boolean };
 /**
  * A pin per service (colored by service, red ring when its window is closing or missed), grouped
  * into numbered circles when close together. Click pins to select; "Draw a box" selects an area.
+ *
+ * The dispatch board uses the same map with `pinOf`: those rows become numbered pins in their crew's
+ * color, `lines` draw each route, `flag` marks the shop, and `ghosts` (waiting-list services) show gray.
  */
-export function WaitMap({ rows, colors, selected, onToggle, onSelect, fitKey, unmapped }: {
+export function WaitMap({ rows, colors, selected, onToggle, onSelect, fitKey, unmapped, pinOf, lines, flag, ghosts, legend, prefsKey = "wl-map", children }: {
   rows: WaitRow[]; colors: Map<string, string>; selected: Set<string>; onToggle: (ids: string[]) => void; onSelect: (ids: string[]) => void; fitKey: string; unmapped: number;
+  pinOf?: (r: WaitRow) => NumberedPin | null; lines?: MapLine[]; flag?: { lat: number; lng: number; label: string } | null; ghosts?: WaitRow[]; legend?: ReactNode; prefsKey?: string; children?: ReactNode;
 }) {
-  const [prefs, setPrefs] = useState<MapPrefs>(() => readLocal("wl-map", { height: 0, collapsed: false }));
+  const [prefs, setPrefs] = useState<MapPrefs>(() => readLocal(prefsKey, { height: 0, collapsed: false }));
   const [full, setFull] = useState(false);
   const [boxMode, setBoxMode] = useState(false);
   const [zoom, setZoom] = useState(0);
@@ -324,9 +341,11 @@ export function WaitMap({ rows, colors, selected, onToggle, onSelect, fitKey, un
   const map = useRef<import("leaflet").Map | null>(null);
   const layer = useRef<import("leaflet").LayerGroup | null>(null);
   const [ready, setReady] = useState(false);
-  const save = (p: MapPrefs) => { setPrefs(p); writeLocal("wl-map", p); };
+  const save = (p: MapPrefs) => { setPrefs(p); writeLocal(prefsKey, p); };
   const height = prefs.height || (typeof window !== "undefined" ? Math.max(280, Math.round(window.innerHeight * 0.45)) : 400);
   const mapped = rows.filter((r) => r.property.lat != null && r.property.lng != null);
+  const ghostRows = (ghosts ?? []).filter((r) => r.property.lat != null && r.property.lng != null);
+  const ghostIds = useMemo(() => new Set(ghostRows.map((r) => r.id)), [ghostRows]);
 
   // The map itself (made once while shown).
   useEffect(() => {
@@ -347,12 +366,14 @@ export function WaitMap({ rows, colors, selected, onToggle, onSelect, fitKey, un
     return () => { cancelled = true; map.current?.remove(); map.current = null; layer.current = null; setReady(false); };
   }, [prefs.collapsed]);
 
-  // Zoom to what's on the list when the filters change.
+  // Zoom to what's on the list when the filters change (gray waiting-list pins don't pull the view away).
   useEffect(() => {
     const m = map.current, Lf = L.current;
-    if (!ready || !m || !Lf || !mapped.length) return;
-    const b = Lf.latLngBounds(mapped.map((r) => [r.property.lat!, r.property.lng!] as [number, number]));
-    if (mapped.length === 1) m.setView(b.getCenter(), 16); else m.fitBounds(b, { padding: [30, 30], maxZoom: 16 });
+    const pts: [number, number][] = [...mapped.map((r) => [r.property.lat!, r.property.lng!] as [number, number]), ...(flag && mapped.length ? [[flag.lat, flag.lng] as [number, number]] : [])];
+    const all = pts.length ? pts : ghostRows.map((r) => [r.property.lat!, r.property.lng!] as [number, number]);
+    if (!ready || !m || !Lf || !all.length) return;
+    const b = Lf.latLngBounds(all);
+    if (all.length === 1) m.setView(b.getCenter(), 16); else m.fitBounds(b, { padding: [30, 30], maxZoom: 16 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, fitKey]);
 
@@ -362,10 +383,33 @@ export function WaitMap({ rows, colors, selected, onToggle, onSelect, fitKey, un
     if (!ready || !m || !Lf || !g) return;
     g.clearLayers();
     const z = m.getZoom();
+    const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+    for (const l of lines ?? []) if (l.points.length > 1) Lf.polyline(l.points, { color: l.color, weight: 3, opacity: 0.85, dashArray: l.dashed ? "6 8" : undefined, interactive: false }).addTo(g);
+    if (flag) {
+      Lf.marker([flag.lat, flag.lng], { icon: Lf.divIcon({ className: "", iconSize: [26, 26], iconAnchor: [13, 13], html: `<div class="wl-shop" aria-hidden="true">⌂</div>` }), keyboard: false, zIndexOffset: -200 }).bindTooltip(flag.label).addTo(g);
+    }
+    // Stops on a route: one numbered pin each, in the crew's color (ones at the same spot share a pin).
+    const numbered = pinOf ? mapped.filter((r) => pinOf(r)) : [];
+    const spots = new Map<string, WaitRow[]>();
+    for (const r of numbered) { const k = `${r.property.lat},${r.property.lng}`; spots.set(k, [...(spots.get(k) ?? []), r]); }
+    for (const rs of spots.values()) {
+      const pins = rs.map((r) => pinOf!(r)!);
+      const first = pins[0];
+      const picked = rs.some((r) => selected.has(r.id));
+      const closing = rs.some((r) => r.badges.includes("closing") || r.badges.includes("missed"));
+      const label = rs.length > 1 && pins.some((p) => p.label !== first.label) ? pins.map((p) => p.label).filter(Boolean).join("·") : first.label;
+      const icon = Lf.divIcon({ className: "", iconSize: [28, 28], iconAnchor: [14, 14], html: `<div class="wl-pin${picked ? " picked" : ""}${first.dim ? " dim" : ""}${closing ? " closing" : ""}${label.length > 2 ? " wide" : ""}" style="background:${first.color}">${esc(label)}</div>` });
+      Lf.marker([rs[0].property.lat!, rs[0].property.lng!], { icon, keyboard: true, zIndexOffset: picked ? 400 : 100, title: rs.map((r) => r.property.street).join(", ") })
+        .bindTooltip(rs.map((r) => `${r.property.street} · ${r.service.name}${r.estMinutes ? ` · ${hoursText(r.estMinutes)} h` : ""}`).join("<br>"))
+        .on("click", () => onToggle(rs.map((r) => r.id)))
+        .addTo(g);
+    }
+    // Everything else groups into numbered circles when close together.
+    const loose = [...mapped.filter((r) => !numbered.includes(r)), ...ghostRows];
     const cells = new Map<string, WaitRow[]>();
-    for (const r of mapped) {
+    for (const r of loose) {
       const p = m.project([r.property.lat!, r.property.lng!], z);
-      const k = z >= 17 ? `${r.property.lat},${r.property.lng}` : `${Math.floor(p.x / 48)}:${Math.floor(p.y / 48)}`;
+      const k = `${ghostIds.has(r.id) ? "g" : ""}${z >= 17 ? `${r.property.lat},${r.property.lng}` : `${Math.floor(p.x / 48)}:${Math.floor(p.y / 48)}`}`;
       cells.set(k, [...(cells.get(k) ?? []), r]);
     }
     for (const rs of cells.values()) {
@@ -373,11 +417,12 @@ export function WaitMap({ rows, colors, selected, onToggle, onSelect, fitKey, un
       const lng = rs.reduce((a, r) => a + r.property.lng!, 0) / rs.length;
       const picked = rs.filter((r) => selected.has(r.id)).length;
       const closing = rs.some((r) => r.badges.includes("closing") || r.badges.includes("missed"));
+      const ghost = ghostIds.has(rs[0].id);
       if (rs.length === 1) {
         const r = rs[0];
         if (picked) Lf.circleMarker([lat, lng], { radius: 13, color: "#111827", weight: 3, fill: false, interactive: false }).addTo(g);
-        Lf.circleMarker([lat, lng], { radius: 8, fillColor: colors.get(serviceKey(r)) ?? "#2563eb", fillOpacity: 0.95, color: closing ? "#dc2626" : "#ffffff", weight: closing ? 4 : 2 })
-          .bindTooltip(`${r.property.street} · ${r.service.name}${r.dueBy ? ` · due ${shortDay(r.dueBy)}` : ""}${r.estMinutes ? ` · ${hoursText(r.estMinutes)} h` : ""}`)
+        Lf.circleMarker([lat, lng], { radius: ghost ? 7 : 8, fillColor: ghost ? "#94a3b8" : colors.get(serviceKey(r)) ?? "#2563eb", fillOpacity: ghost ? 0.85 : 0.95, color: closing ? "#dc2626" : "#ffffff", weight: closing ? (ghost ? 3 : 4) : 2 })
+          .bindTooltip(`${ghost ? "Waiting list: " : ""}${r.property.street} · ${r.service.name}${r.dueBy ? ` · due ${shortDay(r.dueBy)}` : ""}${r.estMinutes ? ` · ${hoursText(r.estMinutes)} h` : ""}`)
           .on("click", () => onToggle([r.id]))
           .addTo(g);
         continue;
@@ -386,9 +431,9 @@ export function WaitMap({ rows, colors, selected, onToggle, onSelect, fitKey, un
       const size = rs.length < 10 ? 30 : rs.length < 100 ? 36 : 42;
       const icon = Lf.divIcon({
         className: "", iconSize: [size, size],
-        html: `<div class="wl-cluster${picked ? " picked" : ""}${closing ? " closing" : ""}" style="width:${size}px;height:${size}px">${rs.length}${picked ? `<small>${picked}✓</small>` : ""}</div>`,
+        html: `<div class="wl-cluster${ghost ? " ghost" : ""}${picked ? " picked" : ""}${closing ? " closing" : ""}" style="width:${size}px;height:${size}px">${rs.length}${picked ? `<small>${picked}✓</small>` : ""}</div>`,
       });
-      Lf.marker([lat, lng], { icon, keyboard: true, title: `${rs.length} services${picked ? `, ${picked} selected` : ""}` })
+      Lf.marker([lat, lng], { icon, keyboard: true, zIndexOffset: ghost ? -100 : 0, title: `${rs.length} ${ghost ? "waiting " : ""}services${picked ? `, ${picked} selected` : ""}` })
         .on("click", () => {
           if (sameSpot || z >= 17) onToggle(rs.map((r) => r.id));
           else m.fitBounds(Lf.latLngBounds(rs.map((r) => [r.property.lat!, r.property.lng!] as [number, number])), { padding: [40, 40], maxZoom: 18 });
@@ -396,7 +441,7 @@ export function WaitMap({ rows, colors, selected, onToggle, onSelect, fitKey, un
         .addTo(g);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, rows, selected, zoom, colors]);
+  }, [ready, rows, ghosts, lines, flag, selected, zoom, colors]);
 
   // Draw a box: drag on the map to select every pin inside.
   useEffect(() => {
@@ -417,7 +462,7 @@ export function WaitMap({ rows, colors, selected, onToggle, onSelect, fitKey, un
       if (!start || !rect) return;
       const b = Lf.latLngBounds(start, at(e));
       rect.remove(); rect = null; start = null;
-      onSelect(mapped.filter((r) => b.contains([r.property.lat!, r.property.lng!])).map((r) => r.id));
+      onSelect([...mapped, ...ghostRows].filter((r) => b.contains([r.property.lat!, r.property.lng!])).map((r) => r.id));
       setBoxMode(false);
     };
     box.addEventListener("pointerdown", down);
@@ -428,7 +473,7 @@ export function WaitMap({ rows, colors, selected, onToggle, onSelect, fitKey, un
       rect?.remove(); m.dragging.enable(); box.style.cursor = "";
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, boxMode, rows]);
+  }, [ready, boxMode, rows, ghosts]);
 
   // Full screen: Esc leaves; the map re-measures after any size change.
   useEffect(() => {
@@ -443,18 +488,19 @@ export function WaitMap({ rows, colors, selected, onToggle, onSelect, fitKey, un
   const startResize = (e: React.PointerEvent) => {
     const y0 = e.clientY, h0 = height;
     const mv = (ev: PointerEvent) => setPrefs((p) => ({ ...p, height: Math.max(200, Math.min(window.innerHeight - 120, h0 + ev.clientY - y0)) }));
-    const done = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", done); setPrefs((p) => { writeLocal("wl-map", p); return p; }); };
+    const done = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", done); setPrefs((p) => { writeLocal(prefsKey, p); return p; }); };
     window.addEventListener("pointermove", mv);
     window.addEventListener("pointerup", done);
   };
 
-  const legend = [...colors.entries()].filter(([k]) => rows.some((r) => serviceKey(r) === k));
+  const services = [...colors.entries()].filter(([k]) => rows.some((r) => serviceKey(r) === k));
   return (
     <div className={`card wl-map-card${full ? " wl-map-full" : ""}`} ref={wrap}>
       <div className="wl-map-bar">
         <strong>Map</strong>
         <span className="muted">{mapped.length} on the map{unmapped ? ` · ${unmapped} without a map location` : ""}</span>
         <span className="row" style={{ gap: 6, marginLeft: "auto" }}>
+          {children}
           {!prefs.collapsed && <button type="button" className={`btn sm${boxMode ? " primary" : ""}`} aria-pressed={boxMode} onClick={() => setBoxMode(!boxMode)} title="Drag a box on the map to select every pin inside">{boxMode ? "Drag on the map…" : "Draw a box"}</button>}
           {!prefs.collapsed && <button type="button" className="btn sm" onClick={() => setFull(!full)} aria-pressed={full}>{full ? "Exit full screen" : "Full screen"}</button>}
           {!full && <button type="button" className="btn sm" onClick={() => save({ ...prefs, collapsed: !prefs.collapsed })} aria-expanded={!prefs.collapsed}>{prefs.collapsed ? "Show map" : "Hide map"}</button>}
@@ -465,7 +511,7 @@ export function WaitMap({ rows, colors, selected, onToggle, onSelect, fitKey, un
           <div ref={el} className="wl-map" style={{ height: full ? undefined : height }} />
           {!full && <div className="wl-resize" role="separator" aria-label="Drag to resize the map" onPointerDown={startResize} />}
           <div className="wl-legend muted">
-            {legend.map(([k, c]) => <span key={k}><span className="wl-dot" style={{ background: c }} />{rows.find((r) => serviceKey(r) === k)?.service.name}</span>)}
+            {legend ?? services.map(([k, c]) => <span key={k}><span className="wl-dot" style={{ background: c }} />{rows.find((r) => serviceKey(r) === k)?.service.name}</span>)}
             <span><span className="wl-dot wl-dot-closing" />Red ring: closing or missed</span>
             <span><span className="wl-dot wl-dot-picked" />Selected</span>
           </div>
@@ -477,18 +523,25 @@ export function WaitMap({ rows, colors, selected, onToggle, onSelect, fitKey, un
 
 /* ───────────── Workload strip ───────────── */
 
-/** Hours booked per crew each day of the week against their day; click a day to schedule the selection into it. */
-export function WorkloadStrip({ today, selectedMinutes, onPick, reloadKey }: { today: string; selectedMinutes: number; onPick: (date: string, crewId: string | null) => void; reloadKey: number }) {
-  const [from, setFrom] = useState(today);
+/**
+ * Hours booked per crew each day of the week (on site plus the drive on their route) against their
+ * day; click a day to schedule the selection into it. On the dispatch board `day` is the day shown:
+ * it's highlighted, and the strip keeps its week in view.
+ */
+export function WorkloadStrip({ today, selectedMinutes, onPick, reloadKey, day, start, hint }: { today: string; selectedMinutes: number; onPick: (date: string, crewId: string | null) => void; reloadKey: number; day?: string; start?: string; hint?: string }) {
+  const [from, setFrom] = useState(start ?? (day && day < today ? day : today));
+  // Follow the day being looked at when it leaves the week shown (or the week the board shows).
+  useEffect(() => { if (start) setFrom(start); else if (day && (day < from || day > plusDays(from, 6))) setFrom(day); }, [day, start]); // eslint-disable-line react-hooks/exhaustive-deps
   const w = useApi<Workload>(`/waitlist/workload?from=${from}&days=7&k=${reloadKey}`);
   const d = w.data;
+  const past = day !== undefined || start !== undefined;
   return (
     <div className="card wl-work">
       <div className="wl-map-bar">
         <strong>Workload</strong>
-        <span className="muted">Hours booked against each crew&apos;s day{selectedMinutes ? ` · click a day to schedule the selected (${hoursText(selectedMinutes)} h)` : ""}</span>
+        <span className="muted">Hours booked (on site + drive) against each crew&apos;s day{selectedMinutes ? ` · click a day to schedule the selected (${hoursText(selectedMinutes)} h)` : hint ? ` · ${hint}` : ""}</span>
         <span className="row" style={{ gap: 4, marginLeft: "auto" }}>
-          <button type="button" className="btn sm" aria-label="Previous week" disabled={from <= today} onClick={() => setFrom(plusDays(from, -7) < today ? today : plusDays(from, -7))}>‹</button>
+          <button type="button" className="btn sm" aria-label="Previous week" disabled={!past && from <= today} onClick={() => setFrom(!past && plusDays(from, -7) < today ? today : plusDays(from, -7))}>‹</button>
           <button type="button" className="btn sm" onClick={() => setFrom(today)} disabled={from === today}>This week</button>
           <button type="button" className="btn sm" aria-label="Next week" onClick={() => setFrom(plusDays(from, 7))}>›</button>
         </span>
@@ -501,8 +554,8 @@ export function WorkloadStrip({ today, selectedMinutes, onPick, reloadKey }: { t
               <tr>
                 <th />
                 {d.dates.map((x) => (
-                  <th key={x} className={d.holidays[x] ? "holiday" : undefined}>
-                    <button type="button" className="cl-sort" onClick={() => onPick(x, null)} title={selectedMinutes ? "Schedule the selected on this day" : "Pick this day"}>{dayLabel(x)}</button>
+                  <th key={x} className={[d.holidays[x] ? "holiday" : "", x === day ? "wl-on" : ""].filter(Boolean).join(" ") || undefined} aria-current={x === day ? "date" : undefined}>
+                    <button type="button" className="cl-sort" onClick={() => onPick(x, null)} title={selectedMinutes ? "Schedule the selected on this day" : day ? "Show this day" : "Pick this day"}>{dayLabel(x)}</button>
                     {d.holidays[x] && <div className="wl-hol">{d.holidays[x]}</div>}
                   </th>
                 ))}
@@ -513,12 +566,13 @@ export function WorkloadStrip({ today, selectedMinutes, onPick, reloadKey }: { t
                 <tr key={c.id ?? "none"}>
                   <th scope="row"><span className="wl-dot" style={{ background: c.color }} />{c.name}{c.dailyHours ? <span className="muted"> · {c.dailyHours} h</span> : null}</th>
                   {c.days.map((x, i) => {
-                    const pct = c.dailyHours ? Math.min(100, (x.hours / c.dailyHours) * 100) : 0;
-                    const over = !!c.dailyHours && x.hours > c.dailyHours;
+                    const total = Math.round((x.hours + (x.drive ?? 0)) * 10) / 10;
+                    const pct = c.dailyHours ? Math.min(100, (total / c.dailyHours) * 100) : 0;
+                    const over = !!c.dailyHours && total > c.dailyHours;
                     return (
-                      <td key={i} className={d.holidays[d.dates[i]] ? "holiday" : undefined}>
-                        <button type="button" className="wl-day" onClick={() => onPick(d.dates[i], c.id)} title={`${x.count} work order${x.count === 1 ? "" : "s"}, ${x.hours} h${c.dailyHours ? ` of ${c.dailyHours} h` : ""}`}>
-                          <span className={over ? "bad-text" : undefined}>{x.hours}{c.dailyHours ? ` / ${c.dailyHours}` : ""} h</span>
+                      <td key={i} className={[d.holidays[d.dates[i]] ? "holiday" : "", d.dates[i] === day ? "wl-on" : ""].filter(Boolean).join(" ") || undefined}>
+                        <button type="button" className="wl-day" onClick={() => onPick(d.dates[i], c.id)} title={`${x.count} work order${x.count === 1 ? "" : "s"}: ${x.hours} h on site${x.drive ? ` + ${x.drive} h drive = ${total} h` : ""}${c.dailyHours ? ` of ${c.dailyHours} h` : ""}`}>
+                          <span className={over ? "bad-text" : undefined}>{total}{c.dailyHours ? ` / ${c.dailyHours}` : ""} h</span>
                           {c.dailyHours ? <span className="wl-bar"><span style={{ width: `${pct}%`, background: over ? "var(--bad)" : c.color }} /></span> : <span className="muted wl-count">{x.count} booked</span>}
                         </button>
                       </td>
@@ -537,43 +591,79 @@ export function WorkloadStrip({ today, selectedMinutes, onPick, reloadKey }: { t
 
 /* ───────────── Edit work orders ───────────── */
 
+type EditPreview = { crew: string; capacityHours: number; addsMinutes: number; addsDriveSeconds: number; beforeMinutes: number; afterMinutes: number; driveSeconds: number; stops: number; measured: "road" | "estimate"; late: { name: string; at: number; windowEnd: string }[] };
+const KEEP = "keep";
+
 /**
- * Schedules the selected work orders in one step: the date, crew and appointment window, and
- * optionally the crew as each property's preferred crew and a heads-up by each customer's preference.
+ * Edit work orders (the window from the plan): moves the selection to the dispatch board in one step,
+ * with the date, the truck or crew, the appointment window and where they go in the route, or back
+ * to the waiting list with why. Options: the crew as each property's preferred crew, and a heads-up
+ * by each customer's preference. On the waiting list there's nothing to send back, so only the
+ * board half shows.
  */
-export function EditWorkOrders({ rows, crews, today, initial, onClose, onDone }: {
-  rows: WaitRow[]; crews: Crew[]; today: string; initial?: { date?: string; crewId?: string | null };
-  onClose: () => void; onDone: (message: string) => void;
+export function EditWorkOrders({ rows, crews, today, initial, onClose, onDone, board }: {
+  rows: WaitRow[]; crews: Crew[]; today: string; initial?: { date?: string; crewId?: string | null; to?: "board" | "waitlist" };
+  onClose: () => void; onDone: (message: string) => void; board?: boolean;
 }) {
   const common = rows.every((r) => r.preferredCrewId && r.preferredCrewId === rows[0].preferredCrewId) ? rows[0].preferredCrewId : null;
-  const [date, setDate] = useState(initial?.date ?? today);
-  const [crewId, setCrewId] = useState<string>(initial?.crewId ?? common ?? "");
+  const scheduled = rows.filter((r) => r.date);
+  const sameCrew = rows.length > 0 && rows.every((r) => r.crewId === rows[0].crewId) ? rows[0].crewId : undefined;
+  const [to, setTo] = useState<"board" | "waitlist">(initial?.to ?? "board");
+  const [date, setDate] = useState(initial?.date ?? (scheduled.length && scheduled.every((r) => r.date === scheduled[0].date) ? scheduled[0].date! : today));
+  // On the board, work orders keep the crew they have unless one is picked.
+  const [crewId, setCrewId] = useState<string>(initial?.crewId !== undefined ? initial.crewId ?? "" : scheduled.length ? (sameCrew !== undefined ? sameCrew ?? "" : KEEP) : common ?? "");
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
+  // Until one is picked: work that's moving is optimized into the crew's route; work that stays where it is keeps its order.
+  const [routePick, setRouteOrder] = useState<RouteOrder | null>(null);
   const [makePreferred, setMakePreferred] = useState(false);
   const [notify, setNotify] = useState(rows.some((r) => r.badges.includes("text_ahead") || r.badges.includes("call_ahead")));
   const [earlyReason, setEarlyReason] = useState("");
+  const [reason, setReason] = useState<(typeof BACK_REASONS)[number]>("rain");
+  const [note, setNote] = useState("");
   const act = useAction();
   const w = useApi<Workload>(date ? `/waitlist/workload?from=${date}&days=1` : null);
   const t = totalsOf(rows);
-  const needCard = rows.filter((r) => r.needsCard);
-  const early = rows.filter((r) => r.eligible && date < r.eligible);
-  const missed = rows.filter((r) => r.dueBy && date > r.dueBy);
-  const lane = w.data?.crews.find((c) => (c.id ?? "") === crewId);
-  const booked = lane?.days[0]?.hours ?? 0;
-  const after = Math.round((booked + t.minutes / 60) * 10) / 10;
+  const aCrew = crewId && crewId !== KEEP ? crewId : "";
+  const routeOrder: RouteOrder = routePick ?? (rows.some((r) => r.date !== date || (crewId !== KEEP && (crewId || null) !== r.crewId)) ? "optimize" : "keep");
+  const [fit, setFit] = useState<EditPreview | null>(null);
+  // What it would do to that crew's day: the drive it adds, how full the day gets, and anyone reached after their window.
+  useEffect(() => {
+    setFit(null);
+    if (to !== "board" || !aCrew || !date || !rows.length) return;
+    let live = true;
+    const timer = setTimeout(() => {
+      api<EditPreview>("/dispatch/edit/preview", { method: "POST", body: { visitIds: rows.map((r) => r.id), date, crewId: aCrew, routeOrder } }).then((p) => { if (live) setFit(p); }).catch(() => {});
+    }, 200);
+    return () => { live = false; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [to, aCrew, date, routeOrder]);
+  const moving = rows.filter((r) => r.date !== date);
+  const needCard = to === "board" ? moving.filter((r) => r.needsCard) : [];
+  const early = to === "board" ? moving.filter((r) => r.eligible && date < r.eligible) : [];
+  const missed = to === "board" ? rows.filter((r) => r.dueBy && date > r.dueBy) : [];
+  const closed = rows.filter((r) => r.status === "completed" || (to === "board" && r.status !== "open"));
+  const lane = w.data?.crews.find((c) => (c.id ?? "") === aCrew);
   const holiday = w.data?.holidays[date];
-  const toText = rows.filter((r) => r.badges.includes("text_ahead")).length;
-  const toCall = rows.filter((r) => r.badges.includes("call_ahead")).length;
+  const hear = to === "board" ? moving : scheduled;
+  const toText = hear.filter((r) => r.badges.includes("text_ahead")).length;
+  const toCall = hear.filter((r) => r.badges.includes("call_ahead")).length;
   const windows = rows.filter((r) => r.windowStart && windowStart && windowStart < r.windowStart);
+  const capacity = fit?.capacityHours ?? lane?.dailyHours ?? null;
+  const afterHours = fit ? Math.round((fit.afterMinutes / 60) * 10) / 10 : null;
+  const over = capacity != null && afterHours != null && afterHours > capacity + 0.04;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     act.run(async () => {
-      const r = await api<{ scheduled: number; early: number; texted: number; notTexted: number; toCall: string[] }>("/waitlist/schedule", {
-        method: "POST", body: { visitIds: rows.map((x) => x.id), date, crewId: crewId || null, windowStart: windowStart || null, windowEnd: windowStart ? windowEnd || null : null, makePreferred, notify, earlyReason: early.length ? earlyReason : null },
-      });
-      const parts = [`Scheduled ${r.scheduled} for ${dayLabel(date, { weekday: "long", month: "short", day: "numeric" })}${crewId ? ` (${crewName(crewId, crews)})` : ""}.`];
+      const body = to === "waitlist"
+        ? { visitIds: scheduled.map((x) => x.id), to, reason, note, notify }
+        : { visitIds: rows.map((x) => x.id), to, date, ...(crewId === KEEP ? {} : { crewId: crewId || null }), ...(windowStart ? { windowStart, windowEnd: windowEnd || null } : {}), routeOrder, makePreferred: makePreferred && !!aCrew, notify, earlyReason: early.length ? earlyReason : null };
+      const r = await api<{ to: "board" | "waitlist"; moved: number; scheduled: number; early: number; texted: number; notTexted: number; toCall: string[] }>("/dispatch/edit", { method: "POST", body });
+      const where = dayLabel(date, { weekday: "long", month: "short", day: "numeric" });
+      const parts = [r.to === "waitlist" ? `${r.moved} back on the waiting list (${BACK_REASON_LABELS[reason].toLowerCase()}).`
+        : scheduled.length === rows.length ? `Updated ${r.scheduled} for ${where}${aCrew ? ` (${crewName(aCrew, crews)})` : ""}.`
+        : `Scheduled ${r.scheduled} for ${where}${aCrew ? ` (${crewName(aCrew, crews)})` : ""}.`];
       if (r.texted) parts.push(`Texted ${r.texted}.`);
       if (r.notTexted) parts.push(`${r.notTexted} want a text but it wasn't sent (texting isn't connected or they have no mobile number).`);
       if (r.toCall.length) parts.push(`Call ahead: ${r.toCall.join(", ")}.`);
@@ -585,49 +675,82 @@ export function EditWorkOrders({ rows, crews, today, initial, onClose, onDone }:
     <div className="cal-modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form className="cal-modal card stack wl-edit" role="dialog" aria-label="Edit work orders" onSubmit={submit}>
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <h2 style={{ margin: 0 }}>Edit work orders</h2>
+          <h2 style={{ margin: 0 }}>Edit {rows.length} work order{rows.length === 1 ? "" : "s"}</h2>
           <button type="button" className="btn sm" onClick={onClose} aria-label="Close"><Icon name="close" size={14} /></button>
         </div>
         <p className="muted" style={{ margin: 0 }}>{totalsText(t)}</p>
-        {needCard.length > 0 && (
-          <div className="alert bad">
-            <strong>Needs a card on file:</strong> {[...new Set(needCard.map((r) => r.customer.name))].join(", ")}. Add a card on their customer page, or turn the requirement off for them there, then schedule. Or unselect them.
+        {board && scheduled.length > 0 && (
+          <div className="wl-moveto" role="group" aria-label="Move to">
+            <span className="muted">Move to</span>
+            <span className="wl-seg">
+              <button type="button" aria-pressed={to === "board"} className={to === "board" ? "on" : ""} onClick={() => setTo("board")}>Dispatch board</button>
+              <button type="button" aria-pressed={to === "waitlist"} className={to === "waitlist" ? "on" : ""} onClick={() => setTo("waitlist")}>Waiting list</button>
+            </span>
           </div>
         )}
-        <div className="formgrid">
-          <label>Date *<input type="date" required min={today} value={date} onChange={(e) => setDate(e.target.value)} /></label>
-          <label>Crew
-            <select value={crewId} onChange={(e) => setCrewId(e.target.value)}>
-              <option value="">No crew yet</option>
-              {crews.map((c) => <option key={c.id} value={c.id}>{c.name}{c.id === common ? " (preferred)" : ""}</option>)}
-            </select>
-          </label>
-          <label>Appointment window from<input type="time" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} /></label>
-          {windowStart && <label>Until (optional)<input type="time" min={windowStart} value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} /></label>}
-        </div>
-        {w.data && (
-          <p className={`muted wl-adds${lane?.dailyHours && after > lane.dailyHours ? " bad-text" : ""}`} style={{ margin: 0 }}>
-            {crewId
-              ? <>Adds {hoursText(t.minutes)} h on site: {crewName(crewId, crews)} goes from {booked} to {after} h{lane?.dailyHours ? ` of ${lane.dailyHours} h` : ""} on {dayLabel(date)}.{lane?.dailyHours && after > lane.dailyHours ? " That's over their day." : ""}</>
-              : <>Adds {hoursText(t.minutes)} h on site. Pick a crew to see how it fits their day.</>}
-          </p>
-        )}
-        {holiday && <div className="alert warn">{dayLabel(date)} is a holiday ({holiday}).</div>}
-        {missed.length > 0 && <div className="alert warn">{missed.length} will be after {missed.length === 1 ? "its" : "their"} due-by date.</div>}
-        {windows.length > 0 && <div className="alert warn">{windows.length} already {windows.length === 1 ? "has" : "have"} a later appointment window; this replaces it.</div>}
-        {early.length > 0 && (
-          <div className="alert warn stack" style={{ gap: 6 }}>
-            <span>{early.length === 1 ? "This isn't" : `${early.length} aren't`} eligible until later (minimum days since the last service): {early.slice(0, 5).map((r) => `${r.property.street} (${shortDay(r.eligible)})`).join(", ")}{early.length > 5 ? "…" : ""}.</span>
-            <label>Why it&apos;s OK to do {early.length === 1 ? "it" : "them"} sooner *<input required value={earlyReason} maxLength={300} onChange={(e) => setEarlyReason(e.target.value)} placeholder="Customer asked; label allows 14 days…" /></label>
-          </div>
+        {closed.length > 0 && <div className="alert bad">{closed.length} of these {closed.length === 1 ? "is" : "are"} already {to === "board" ? "started, done or skipped" : "done"}: {closed.slice(0, 5).map((r) => r.property.street).join(", ")}{closed.length > 5 ? "…" : ""}. Unselect {closed.length === 1 ? "it" : "them"} first.</div>}
+        {to === "waitlist" ? (
+          <>
+            <div className="formgrid">
+              <label>Why<select value={reason} onChange={(e) => setReason(e.target.value as (typeof BACK_REASONS)[number])}>{BACK_REASONS.map((r) => <option key={r} value={r}>{BACK_REASON_LABELS[r]}</option>)}</select></label>
+              <label>Note (optional)<input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder="Gusts over 20 mph" /></label>
+            </div>
+            <p className="muted wl-adds" style={{ margin: 0 }}>{scheduled.length} go{scheduled.length === 1 ? "es" : ""} back to the waiting list and come{scheduled.length === 1 ? "s" : ""} off {scheduled.length === 1 ? "its route" : "their routes"}. Who does {scheduled.length === 1 ? "it" : "them"} stays the same, and the reason shows on the waiting list.</p>
+          </>
+        ) : (
+          <>
+            {needCard.length > 0 && (
+              <div className="alert bad">
+                <strong>Needs a card on file:</strong> {[...new Set(needCard.map((r) => r.customer.name))].join(", ")}. Add a card on their customer page, or turn the requirement off for them there, then schedule. Or unselect them.
+              </div>
+            )}
+            <div className="formgrid">
+              <label>Date *<input type="date" required min={today} value={date} onChange={(e) => setDate(e.target.value)} /></label>
+              <label>Truck / crew
+                <select value={crewId} onChange={(e) => setCrewId(e.target.value)}>
+                  {scheduled.length > 0 && <option value={KEEP}>Keep each one&apos;s crew</option>}
+                  <option value="">No crew yet</option>
+                  {crews.map((c) => <option key={c.id} value={c.id}>{c.name}{c.id === common ? " (preferred)" : ""}</option>)}
+                </select>
+              </label>
+              <label>Appointment window from<input type="time" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} /><span className="muted wl-sub">Left empty, each keeps its own.</span></label>
+              {windowStart ? <label>Until (optional)<input type="time" min={windowStart} value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} /></label> : null}
+              {crewId !== "" && (
+                <label>Route order
+                  <select value={routeOrder} onChange={(e) => setRouteOrder(e.target.value as RouteOrder)}>{ROUTE_ORDERS.map((o) => <option key={o} value={o}>{ROUTE_ORDER_LABELS[o]}</option>)}</select>
+                </label>
+              )}
+            </div>
+            {aCrew ? (
+              <p className={`wl-adds${over ? " bad-text" : " muted"}`} style={{ margin: 0 }}>
+                {fit ? (
+                  <>
+                    {fit.addsMinutes || fit.addsDriveSeconds ? <>Adds {hoursText(fit.addsMinutes)} h on site{routeOrder !== "keep" ? ` + ${Math.round(fit.addsDriveSeconds / 60)} min drive` : ""}. </> : <>Already on this crew&apos;s day. </>}
+                    <strong>{fit.crew} {dayLabel(date, { weekday: "short", month: "short", day: "numeric" })}: {afterHours} of {fit.capacityHours} h</strong>{over ? " — over their day." : "."}
+                    {routeOrder === "keep" ? " They'll have no place in the route until you order them." : fit.measured === "estimate" ? " Drive times are estimates." : ""}
+                  </>
+                ) : <>Working out how it fits {crewName(aCrew, crews)}&apos;s day…</>}
+              </p>
+            ) : <p className="muted wl-adds" style={{ margin: 0 }}>{crewId === KEEP ? `Each stays with its crew${moving.length ? `; ${hoursText(totalsOf(moving).minutes)} h moves to ${dayLabel(date)}` : ""}.` : `${hoursText(t.minutes)} h on site. Pick a crew to see how it fits their day.`}</p>}
+            {fit && fit.late.length > 0 && <div className="alert warn">Reached after their time window: {fit.late.slice(0, 6).map((l) => `${l.name} (about ${clock12(l.at)}, wanted by ${time12(l.windowEnd)})`).join("; ")}{fit.late.length > 6 ? "…" : ""}.</div>}
+            {holiday && <div className="alert warn">{dayLabel(date)} is a holiday ({holiday}).</div>}
+            {missed.length > 0 && <div className="alert warn">{missed.length} will be after {missed.length === 1 ? "its" : "their"} due-by date.</div>}
+            {windows.length > 0 && <div className="alert warn">{windows.length} already {windows.length === 1 ? "has" : "have"} a later appointment window; this replaces it.</div>}
+            {early.length > 0 && (
+              <div className="alert warn stack" style={{ gap: 6 }}>
+                <span>{early.length === 1 ? "This isn't" : `${early.length} aren't`} eligible until later (minimum days since the last service): {early.slice(0, 5).map((r) => `${r.property.street} (${shortDay(r.eligible)})`).join(", ")}{early.length > 5 ? "…" : ""}.</span>
+                <label>Why it&apos;s OK to do {early.length === 1 ? "it" : "them"} sooner *<input required value={earlyReason} maxLength={300} onChange={(e) => setEarlyReason(e.target.value)} placeholder="Customer asked; label allows 14 days…" /></label>
+              </div>
+            )}
+          </>
         )}
         <div className="stack" style={{ gap: 4 }}>
-          {crewId && <label className="check"><input type="checkbox" checked={makePreferred} onChange={(e) => setMakePreferred(e.target.checked)} /> Make {crewName(crewId, crews)} the preferred crew for {rows.length === 1 ? "this property" : "these properties"}</label>}
-          <label className="check"><input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} disabled={!toText && !toCall} /> Notify customers by their preference{toText || toCall ? ` (${[toText && `${toText} by text`, toCall && `${toCall} to call`].filter(Boolean).join(", ")})` : " (none asked for notice)"}</label>
+          {to === "board" && aCrew && <label className="check"><input type="checkbox" checked={makePreferred} onChange={(e) => setMakePreferred(e.target.checked)} /> Make {crewName(aCrew, crews)} the preferred crew for {rows.length === 1 ? "this property" : "these properties"}</label>}
+          <label className="check"><input type="checkbox" checked={notify && (toText + toCall > 0)} onChange={(e) => setNotify(e.target.checked)} disabled={!toText && !toCall} /> Notify customers by their preference{toText || toCall ? ` (${[toText && `${toText} by text`, toCall && `${toCall} to call`].filter(Boolean).join(", ")})` : to === "board" && !moving.length ? " (nobody's day changes)" : " (none asked for notice)"}</label>
         </div>
         <ErrorBox error={act.error} />
         <div className="row">
-          <button className="btn primary" disabled={act.busy || needCard.length > 0 || !rows.length}>Schedule {rows.length}</button>
+          <button className="btn primary" disabled={act.busy || needCard.length > 0 || closed.length > 0 || !rows.length || (to === "waitlist" && !scheduled.length)}>{to === "waitlist" ? `Move ${scheduled.length} to the waiting list` : scheduled.length === rows.length ? `Update ${rows.length}` : `Schedule ${rows.length}`}</button>
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
         </div>
       </form>
@@ -862,6 +985,39 @@ export function BulkMenu({ busy, isAdmin, onPriority, onSkip, onDelete }: { busy
       <button type="button" disabled={busy} onClick={() => setSkipping(true)}>Skip…</button>
       {isAdmin && <button type="button" className="bad-text" disabled={busy} onClick={onDelete}>Delete</button>}
     </div>
+  );
+}
+
+export type SavedView = { id: string; name: string; shared: boolean; mine: boolean; config: Pick<WaitView, "filters" | "columns" | "sort"> };
+/**
+ * The view picker at the top of the waiting list and the dispatch board (one drop-down, as in the
+ * plan): the two boards, then this page's ready-made views and the saved ones.
+ */
+export function BoardPicker({ here, view, builtIn, saved, defaults, isAdmin, onPick, onDelete }: {
+  here: "waitlist" | "dispatch"; view: WaitView; builtIn: WaitView[]; saved: SavedView[] | null | undefined; defaults: string[];
+  isAdmin: boolean; onPick: (v: WaitView) => void; onDelete: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const boards = [{ key: "waitlist", href: "/waitlist", label: "Waiting list" }, { key: "dispatch", href: "/dispatch", label: "Dispatch board" }] as const;
+  return (
+    <Popover open={open} setOpen={setOpen} label={<><Icon name="layers" size={14} /> {view.name} ▾</>}>
+      <div className="cl-menu">
+        <div className="todo-label">Boards</div>
+        {boards.map((b) => <Link key={b.key} href={b.href} className={b.key === here ? "wl-here" : undefined} aria-current={b.key === here ? "page" : undefined} onClick={() => setOpen(false)}>{b.label}</Link>)}
+        <hr />
+        <div className="todo-label">Ready-made</div>
+        {builtIn.map((v) => <button key={v.name} type="button" onClick={() => { onPick(v); setOpen(false); }}>{v.name}</button>)}
+        {!!saved?.length && <><hr /><div className="todo-label">Saved</div></>}
+        {saved?.map((v) => (
+          <div key={v.id} className="cl-menu-row">
+            <button type="button" onClick={() => { const c = v.config; onPick({ ...c, id: v.id, name: v.name, shared: v.shared, mine: v.mine, filters: c.filters ?? [], sort: c.sort ?? null, columns: c.columns?.length ? c.columns : defaults }); setOpen(false); }}>
+              {v.name}{v.shared ? <span className="muted"> · everyone</span> : null}
+            </button>
+            {(v.mine || (v.shared && isAdmin)) && <button type="button" className="btn sm" aria-label={`Delete the view ${v.name}`} onClick={() => onDelete(v.id)}>✕</button>}
+          </div>
+        ))}
+      </div>
+    </Popover>
   );
 }
 

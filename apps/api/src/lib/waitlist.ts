@@ -4,7 +4,7 @@ import {
   type NotifyBefore, type Priority, type WaitBadge,
 } from "@crewdesk/shared";
 import { db } from "../db";
-import { crews, customerPaymentMethods, customers, holidays, properties, serviceTypes, visitLines, visits } from "../db/schema";
+import { crews, customerPaymentMethods, customers, dispatchRoutes, holidays, properties, serviceTypes, visitLines, visits } from "../db/schema";
 import { billingSettings } from "./invoices";
 import { companyToday } from "./payRates";
 
@@ -118,9 +118,14 @@ export async function workload(companyId: string, from: string, days: number) {
     .where(and(eq(visits.companyId, companyId), gte(visits.date, from), lte(visits.date, to), ne(visits.status, "skipped")));
   const est = await estimateMinutes(booked.map((b) => ({ id: b.id, propertyId: b.propertyId, budgetedHours: b.budgetedHours })));
   const dates = Array.from({ length: days }, (_, i) => new Date(Date.parse(`${from}T12:00:00Z`) + i * 86_400_000).toISOString().slice(0, 10));
+  // The drive on each crew's route that day (from the shop, between stops and back).
+  const drives = await db.select({ date: dispatchRoutes.date, crewId: dispatchRoutes.crewId, seconds: dispatchRoutes.totalDriveSeconds }).from(dispatchRoutes)
+    .where(and(eq(dispatchRoutes.companyId, companyId), gte(dispatchRoutes.date, from), lte(dispatchRoutes.date, to), isNotNull(dispatchRoutes.crewId)));
   const cell = (crewId: string | null, d: string) => {
     const vs = booked.filter((b) => b.date === d && (b.crewId ?? null) === crewId);
-    return { count: vs.length, hours: Math.round((vs.reduce((s, b) => s + (est.get(b.id)?.minutes ?? 0), 0) / 60) * 10) / 10 };
+    const drive = crewId ? drives.filter((r) => r.date === d && r.crewId === crewId).reduce((s, r) => s + (r.seconds ?? 0), 0) / 3600 : 0;
+    // hours: on site. drive: on the road. A crew's day is the two together.
+    return { count: vs.length, hours: Math.round((vs.reduce((s, b) => s + (est.get(b.id)?.minutes ?? 0), 0) / 60) * 10) / 10, drive: Math.round(drive * 10) / 10 };
   };
   const hol = holidaysBetween((await db.select().from(holidays).where(eq(holidays.companyId, companyId))).map((h) => ({ ...h, observe: h.observe as "none" | "nearest" })), from, to);
   return {

@@ -1042,8 +1042,9 @@ the list, then **Edit work orders** to schedule them.
   group into numbered circles (click one to zoom in). Click pins to select them, or **Draw a box** and drag around
   a neighborhood. It zooms to whatever the filters show. Drag its bottom edge to resize it, use **Full screen**
   (Esc leaves) or **Hide map**; it remembers your choice. Properties without a map location are counted above it.
-- **Workload:** each crew's booked hours for each day of the week against its **hours per day** (set on the crew),
-  with holidays marked. With work orders selected, click a day (or a crew's day) to schedule them into it.
+- **Workload:** each crew's booked hours for each day of the week (time on site plus the drive on its route)
+  against its **hours per day** (set on the crew), with holidays marked. With work orders selected, click a day
+  (or a crew's day) to schedule them into it.
 - **The list:** **Columns** picks and orders them (Property stays first; **Reset** puts back service, MC,
   eligible from, due by, est. hours, sq ft, price and badges); click a heading to sort. The top row totals what's
   shown; the bar above adds up what's selected, with **By crew and service**. **Export** downloads the shown (or
@@ -1055,11 +1056,14 @@ the list, then **Edit work orders** to schedule them.
     or two visits are blended with the size estimate; from three on, the history takes over. A visit far off the
     usual (a breakdown, a Completed tapped hours late) is left out and marked **!**.
   - **0.5 🔒**: the work order's own budgeted hours.
-- **Edit work orders** schedules the selection in one step: the **date**, **crew** and **appointment window**. It shows
-  what it adds to that crew's day ("from 5.1 to 7.5 of 8 h") and warns about holidays, missed windows and
+- **Edit work orders** schedules the selection in one step: the **date**, **truck / crew**, **appointment window**
+  (left empty, each keeps its own) and **route order** (**Optimize into the route**, **Add to the end**, or **Keep
+  the current order**). It shows what it adds to that crew's day ("Adds 1.8 h on site + 14 min drive. Truck 2 Tue
+  Nov 24: 5.3 of 8 h") and warns about holidays, missed windows, anyone reached after their time window, and
   ones that aren't eligible yet (those need a reason). Options: **Make the crew the preferred crew** for those
   properties, and **Notify customers by their preference** (a text to those who want one, when texting is
   connected; the ones to call are listed for you). The crew's people are put on any work order with nobody on it.
+  The same window is on the Dispatch board, where it can also send work back to the waiting list.
 - **More (on a selection):** set the **priority**, **Skip** (with why), or **Delete** (admins; ones on an invoice stay).
 - **Back to waiting list:** on a scheduled work order, choose why (rain, wind, no access, customer asked, other) with
   a note. It goes back with its date cleared, and the reason shows on the list.
@@ -1088,7 +1092,8 @@ the list, then **Edit work orders** to schedule them.
 ## Dispatch boards
 
 There are two dispatch boards for now, both under **Schedule** (Customers & billing managers): **Dispatch**, built
-from the Crewdesk plan, and **New Dispatch** with a **Beta** tag, a copy of Homeworks' New Dispatch. They show the
+from the Crewdesk plan (laid out like the waiting list), and **New Dispatch** with a **Beta** tag, a copy of
+Homeworks' New Dispatch. They show the
 same work orders, crews, routes and stop numbers, so a change made on one shows on the other. Use both; one will
 be kept.
 
@@ -1097,44 +1102,59 @@ distance (the board says so). An admin can switch to **real roads** on the New D
 and capacity…**. Only map coordinates are sent to the routing service, never names or addresses. The same window
 sets where routes start and end (your company address unless you type another) and each person's daily hours.
 
-### Dispatch (the board from the Crewdesk plan)
+### Dispatch board (from the Crewdesk plan)
 
-**Schedule → Dispatch** shows a day (or a week) with **one lane per crew**, a **No crew yet** lane for work orders
-nobody has, and a lane for anyone working without a crew.
+**Schedule → Dispatch** is the waiting list's page for the work that has a day. It's laid out the same way: the view
+picker and filters on top, then the map, the week's workload, and the list. Select work orders on the map or the
+list, then **Edit work orders** to move them.
 
-- **Day or Week**, the arrows, the date box and **Today** pick what you see. In the day view choose **Board**,
-  **Board + map** or **Map**.
-- **A lane** shows the crew's truck and people, its stops and square feet, and its day: hours on site plus the
-  drive against the crew's hours per day (set on the crew), e.g. "5.9 h on site + 1.4 h drive = 7.3 h of 8 h". It
-  turns red when the crew is over. It also shows when the crew leaves and gets back.
-- **To load:** each crew lane adds up the product and the tank mix its open stops need, from Chemical Tracking's
-  load sheet (people without Chemical Tracking access don't see it).
-- **Cards** are the work orders in route order. Each shows the customer, service, time on site, address and Map
-  Code, the drive from the stop before and about when the crew gets there, plus badges: its time window, **High
-  priority**, **Dog**, **Text ahead**, **Call ahead**, **Not on the map**, and **Done**, **On site** or **Skipped**
-  as the crew works (the board refreshes itself every minute). The speech bubble opens the notes between the
-  office and the field. The arrow opens the work order.
-- **Drag a card** up or down to change the route, onto another lane to give it to that crew (its people are put
-  on the work order), or onto **No crew yet**. In the week view, drag it to another day. While you hold a card over
-  a lane, the lane shows what the drop would do: the minutes and driving it adds, the new total against the
-  crew's hours, and any customer who would be reached after their time window.
-- **Routes three ways:** drag the stops yourself; **Optimize** on a lane (or **Optimize every route**) to let
-  Crewdesk order them from the shop and back with the least driving; or both: click the **lock** on a stop to keep
-  it at its place, and Optimize orders the others around it.
-- **The map** draws each crew's route in the crew's color with numbered pins and a flag at the shop. **Gray
-  pins with an hourglass are waiting-list services**: click one to add it to the day and a crew's route (it goes
-  at the end; drag it into place). Doing one before its eligible date asks for a reason, as on the waiting list.
-  Click a numbered pin to select that work order.
-- **Waiting list** (the button) shows the waiting list as the first lane: drag one onto a crew, or click **Add**.
-  It follows the Map Code filter and the search box.
-- **Map Code** filters the lanes, the map and the waiting list to one or more Map Codes, so you can see what's
-  waiting in the area a crew is already going to. The search box finds a customer, address or service.
-- **Click cards** (or pins) to select them, then **Give to a crew**, **Move to** another day, or **Back to the
-  waiting list**.
-- **Rain or wind day…** (or **Rain day** on a lane) moves the whole day's, or one crew's, open work orders in one
-  step: to another day (the next working day is filled in) or back to the waiting list, with why. Ones already
-  started, done or skipped stay. Tick the box and customers who asked for a text ahead are texted about the change
-  (when texting is connected), and the ones who want a call are listed for you.
+- **The view picker** (top left) switches between the two boards, **Waiting list** and **Dispatch board**, and
+  holds this page's views: ready-made ones (Dispatch board, Not done yet, No crew yet, Done or skipped) and your
+  own. **Save view** keeps the filters, columns and sort, just for you or shared with everyone.
+- **The day:** the arrows, the date box and **Today** pick the day; **Week** shows seven days at once. Clicking a
+  day in the workload strip opens that day.
+- **Filters** show as chips (✕ removes one). They're the waiting list's (service, tag, Map Code, city, ZIP,
+  priority, badge and so on) plus **Truck / crew** and **Status**. They apply to the map and the list.
+- **The map:** each stop is a **numbered pin in its crew's color** (the number is its place in the route), each
+  crew's route is drawn as a line, and the shop is marked. Click pins to select them, or **Draw a box**. **Full
+  screen**, **Hide map** and dragging the bottom edge work as on the waiting list. With **Waiting list pins**
+  ticked, waiting-list services that match the filters show as **gray pins**: select them the same way and Edit
+  work orders puts them on the day.
+- **Workload:** each crew's hours for each day of the week, time on site plus the drive on its route, against its
+  hours per day. The day you're looking at is highlighted. With work orders selected, clicking a day (or a
+  crew's day) opens Edit work orders for that day.
+- **The list** is grouped by truck or crew, each crew's stops in route order with the stop number first. Each
+  crew's heading shows its truck and people, stops, square feet, and its day, e.g. "5.9 h on site + 1.4 h drive
+  = 7.3 of 8 h" (red when over), when it leaves and gets back, and **To load** (the tank mix and products its
+  open stops need, from Chemical Tracking). The **totals row** adds up what's shown; the selection's hours,
+  square feet and dollars show above the list. **Columns** picks and orders the columns (Property stays first);
+  besides the waiting list's there are **Arrives about**, **Status**, **Notes**, **Drive (min)**, **Truck / crew**,
+  **Technicians** and **Date**. Click a column heading to sort by it (the grouping goes away;
+  **Group by crew** or the **#** heading brings it back).
+- **Status and notes update on their own** every minute as crews start and finish (Open, On site, Done, Skipped).
+  **Notes** opens the notes between the office and the crew on that work order.
+- **Edit work orders** (the window): **Move to** the **Dispatch board** or the **Waiting list**.
+  - Dispatch board: the **date**, the **truck / crew** (or keep each one's), an **appointment window**, and the
+    **route order**: **Optimize into the route**, **Add to the end**, or **Keep the current order**. Before you
+    save it shows what that adds ("Adds 1.8 h on site + 14 min drive. Truck 2 Tue Nov 24: 5.3 of 8 h"), in red
+    when the crew would be over, and lists anyone who would be reached after their time window. Options: make
+    the crew the properties' **preferred crew**, and **notify customers** by their preference when their day
+    changes.
+  - Waiting list: why (rain, wind, no access, customer asked, other) and a note. They come off their routes.
+- **Drag a row** onto another row to change its place in the route, or onto another crew's heading (or its rows)
+  to give it to that crew; in the week view that can also be another day. The crew's heading shows what the drop
+  would do while you hold it there.
+- **Routes three ways:** by hand (drag the stops, or click pins on the map in the order they should be visited
+  and choose **More → Route in the order selected**); **Optimize** on a crew's heading (or **Optimize routes**
+  for every crew) to order them from the shop and back with the least driving; or click the **lock** by a stop
+  number to keep that stop at its place, and Optimize orders the others around it.
+- **More** (on a selection): back to the waiting list, route in the order selected, lock or unlock, set the
+  priority, skip (with why), or delete (admins).
+- **Rain or wind day…** (or **Rain day** on a crew's heading) moves the whole day's, or one crew's, open work
+  orders in one step: to another day (the next working day is filled in) or back to the waiting list, with why.
+  Ones already started, done or skipped stay.
+- **Waiting list** (the last heading in the list): **Show them** lists the waiting-list services that match the
+  filters under the day's work, so you can pick from them; filtering by Map Code shows them automatically.
 
 ### New Dispatch (Beta)
 

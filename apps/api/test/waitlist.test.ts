@@ -117,8 +117,9 @@ describe("waiting list", () => {
     const north = w.crews.find((c: any) => c.id === ID.crew);
     expect(north.dailyHours).toBe(6);
     // Ann (40 min) + Bob (17 min) on day 3, to the tenth of an hour.
-    expect(north.days[2]).toEqual({ count: 2, hours: 1 });
-    expect(north.days[0]).toEqual({ count: 0, hours: 0 });
+    // (No route yet, so no drive to add to the time on site.)
+    expect(north.days[2]).toEqual({ count: 2, hours: 1, drive: 0 });
+    expect(north.days[0]).toEqual({ count: 0, hours: 0, drive: 0 });
   });
 
   it("goes back to the list with a reason (rain)", async () => {

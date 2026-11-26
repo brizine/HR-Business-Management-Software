@@ -473,3 +473,125 @@ describe("settings", () => {
     await call("PUT", "/dispatch/settings", "owner", { routing: "estimate" });
   });
 });
+
+describe("the Dispatch board from the plan: the scheduled work as a list, edited like the waiting list", () => {
+  const day = () => plus(today, 40);
+  const P: Record<string, { c: string; p: string }> = {};
+  const W: Record<string, string> = {};
+  const list = async (d = day()) => (await call("GET", `/dispatch/list?from=${d}&to=${d}`, "mgr")).body;
+  const row = async (id: string, d = day()) => (await list(d)).rows.find((r: any) => r.id === id);
+  const edit = (body: Record<string, unknown>) => call("POST", "/dispatch/edit", "mgr", body);
+
+  beforeAll(async () => {
+    const mk = async (first: string, street: string, spot: { lat: number; lng: number }, n: number) => {
+      const c = (await call("POST", "/customers", "owner", { firstName: first, lastName: "Board", email: email(`board-${first.toLowerCase()}`), phone: `405-555-02${n}0`, property: { street, city: "Norman", zip: "73069", lawnSqFt: 10000 } })).body.id as string;
+      const p = (await call("GET", `/customers/${c}`, "owner")).body.properties[0].id as string;
+      await db.update(properties).set(spot).where(eq(properties.id, p));
+      return { c, p };
+    };
+    P.k = await mk("Kay", "10 Elm St", SPOTS.a, 1); P.l = await mk("Lou", "20 Oak St", SPOTS.b, 2); P.m = await mk("Mia", "30 Ash St", SPOTS.c, 3); P.n = await mk("Ned", "40 Fir St", SPOTS.d, 4);
+    const wo = async (title: string, who: string, extra: Record<string, unknown> = {}) =>
+      (await call("POST", "/visits", "owner", { title, customerId: P[who].c, propertyId: P[who].p, scheduling: extra.date === null ? "waitlist" : "single", date: day(), lines: [{ serviceTypeId: ID.fert, description: "Fertilizer", quantity: 1, unitPriceCents: 5000 }], ...extra })).body.id as string;
+    W.k = await wo("Kay round", "k", { crewId: ID.north, assigneeIds: [ID.ann] });
+    W.l = await wo("Lou round", "l", { crewId: ID.north, assigneeIds: [ID.ann] });
+    W.m = await wo("Mia round", "m", { date: null });
+    W.n = await wo("Ned round", "n", { date: null });
+  });
+
+  it("lists the day's work orders in the waiting list's shape, with the crew, the place in the route and the status", async () => {
+    const b = await list();
+    expect(b.rows.map((r: any) => r.id).sort()).toEqual([W.k, W.l].sort());
+    expect(b.rows.find((r: any) => r.id === W.k)).toMatchObject({
+      status: "open", date: day(), crewId: ID.north, assigneeIds: [ID.ann], route: null, estMinutes: 35, estSource: "size", totalCents: 5000,
+      property: { street: "10 Elm St", sqFt: 10000 }, service: { name: "Fertilizer" }, customer: { name: "Kay Board" },
+    });
+    expect(b.crews.find((c: any) => c.id === ID.north)).toMatchObject({ name: "North", dailyHours: 6, memberIds: [ID.ann] });
+    expect(b.start).toMatchObject({ lat: SHOP.lat });
+    expect(b.routes).toEqual([]);
+    expect(b.today).toBe(today);
+    expect((await call("GET", `/dispatch/list?from=${day()}`, "ann")).status).toBe(403);
+  });
+
+  it("Edit work orders puts waiting ones on the day, optimized into the crew's route, and says first what that adds", async () => {
+    const pre = (await call("POST", "/dispatch/edit/preview", "mgr", { visitIds: [W.m, W.n], date: day(), crewId: ID.north, routeOrder: "optimize" })).body;
+    expect(pre).toMatchObject({ crew: "North", capacityHours: 6, addsMinutes: 70, stops: 4, beforeMinutes: 70 });
+    expect(pre.addsDriveSeconds).toBeGreaterThan(0);
+    expect(pre.afterMinutes).toBe(140 + Math.round(pre.driveSeconds / 60));
+    const r = (await edit({ visitIds: [W.m, W.n], to: "board", date: day(), crewId: ID.north, routeOrder: "optimize", windowStart: "13:00" })).body;
+    expect(r).toMatchObject({ to: "board", scheduled: 2, moved: 2, texted: 0 });
+    const b = await list();
+    expect(b.rows).toHaveLength(4);
+    expect(b.rows.map((x: any) => x.route?.order).sort()).toEqual([1, 2, 3, 4]);
+    expect(b.routes).toHaveLength(1);
+    expect(b.routes[0]).toMatchObject({ crewId: ID.north, date: day() });
+    expect(b.routes[0].totalDriveSeconds).toBe(pre.driveSeconds);
+    expect(await row(W.m)).toMatchObject({ crewId: ID.north, assigneeIds: [ID.ann], windowStart: "13:00", date: day(), backReason: null });
+    // A window after 1 pm on a route that starts at 8: nobody is late for an open-ended window.
+    expect(pre.late).toEqual([]);
+  });
+
+  it("re-optimizing a crew's day leaves its locked stops where they are, whatever order they're sent in", async () => {
+    const before = (await list()).routes[0].stops.map((x: any) => x.key);
+    await call("POST", "/dispatch/lock", "mgr", { key: before[0], locked: true });
+    await call("POST", "/dispatch/lock", "mgr", { key: before[2], locked: true });
+    const ids = [...before].reverse().map((k: string) => k.slice(2));
+    expect((await edit({ visitIds: ids, to: "board", date: day(), routeOrder: "optimize" })).body).toMatchObject({ scheduled: 4, moved: 0 });
+    const after = (await list()).routes[0].stops;
+    expect([after[0].key, after[2].key]).toEqual([before[0], before[2]]);
+    expect(after.map((x: any) => x.locked)).toEqual([true, false, true, false]);
+    // "Add to the end" puts the picked ones behind the rest, in the order they had.
+    await edit({ visitIds: [before[2].slice(2), before[0].slice(2)], to: "board", date: day(), routeOrder: "end" });
+    const moved = (await list()).routes[0].stops.map((x: any) => x.key);
+    expect(moved.slice(2)).toEqual([before[0], before[2]]);
+    for (const k of [before[0], before[2]]) await call("POST", "/dispatch/lock", "mgr", { key: k, locked: false });
+  });
+
+  it("moves work orders to another crew at the end of its route, keeps the order, or keeps the crew and changes the day", async () => {
+    expect((await edit({ visitIds: [W.k], to: "board", date: day(), crewId: ID.south, routeOrder: "end" })).body).toMatchObject({ scheduled: 1, moved: 1 });
+    expect(await row(W.k)).toMatchObject({ crewId: ID.south, assigneeIds: [ID.bob], route: { order: 1 } });
+    let b = await list();
+    // North's route closed up behind it.
+    expect(b.rows.filter((x: any) => x.crewId === ID.north).map((x: any) => x.route.order).sort()).toEqual([1, 2, 3]);
+    await edit({ visitIds: [W.l], to: "board", date: day(), crewId: ID.south, routeOrder: "end" });
+    expect((await row(W.l)).route).toMatchObject({ order: 2 });
+    // "Keep the current order": it joins the crew with no place in the route yet.
+    await edit({ visitIds: [W.m], to: "board", date: day(), crewId: ID.south, routeOrder: "keep" });
+    expect(await row(W.m)).toMatchObject({ crewId: ID.south, route: null });
+    b = await list();
+    expect(b.routes.find((x: any) => x.crewId === ID.south).stops.map((s: any) => s.key)).toEqual([`v:${W.k}`, `v:${W.l}`]);
+    // With no crew named, each keeps its crew; a new day starts that crew's route there.
+    const next = plus(day(), 1);
+    expect((await edit({ visitIds: [W.n], to: "board", date: next, routeOrder: "end" })).body.moved).toBe(1);
+    expect(await row(W.n, next)).toMatchObject({ crewId: ID.north, date: next, route: { order: 1 } });
+    expect((await list()).routes.some((x: any) => x.crewId === ID.north)).toBe(false);
+    // The week's workload counts the drive with the time on site.
+    const w = (await call("GET", `/waitlist/workload?from=${day()}&days=2`, "mgr")).body;
+    const south = w.crews.find((c: any) => c.id === ID.south).days[0];
+    expect(south).toMatchObject({ count: 3, hours: 1.8 });
+    expect(south.drive).toBeGreaterThan(0);
+    expect(w.crews.find((c: any) => c.id === ID.north).days[1]).toMatchObject({ count: 1 });
+  });
+
+  it("sends them back to the waiting list with why, and won't move ones already done", async () => {
+    expect((await edit({ visitIds: [W.m], to: "waitlist" })).status).toBe(400);
+    expect((await edit({ visitIds: [W.m], to: "board" })).status).toBe(400);
+    expect((await edit({ visitIds: [W.m], to: "waitlist", reason: "wind", note: "Gusts over 20" })).body).toMatchObject({ to: "waitlist", moved: 1 });
+    const [m] = await db.select().from(visits).where(eq(visits.id, W.m));
+    expect(m).toMatchObject({ date: null, backReason: "Wind: Gusts over 20", releaseOn: day() });
+    expect(await row(W.m)).toBeUndefined();
+    expect((await edit({ visitIds: [W.m], to: "waitlist", reason: "rain" })).status).toBe(400);
+    await db.update(visits).set({ status: "completed", completedAt: new Date() }).where(eq(visits.id, W.k));
+    expect((await row(W.k)).status).toBe("completed");
+    expect((await edit({ visitIds: [W.k], to: "board", date: plus(day(), 2) })).status).toBe(400);
+    expect((await edit({ visitIds: [W.k], to: "waitlist", reason: "rain" })).status).toBe(400);
+    expect((await edit({ visitIds: [W.l], to: "board", date: day(), crewId: ID.north }, )).status).toBe(200);
+    expect((await call("POST", "/dispatch/edit", "ann", { visitIds: [W.l], to: "waitlist", reason: "rain" })).status).toBe(403);
+  });
+
+  it("saves the board's own views (filters, columns and sort), apart from the waiting list's", async () => {
+    const saved = (await call("POST", "/waitlist/views", "mgr", { page: "dispatch", name: "Not done yet", shared: false, config: { filters: [{ key: "status", value: "open" }], columns: ["property", "service", "status"], sort: { key: "route", dir: "asc" } } })).body;
+    expect(saved).toMatchObject({ name: "Not done yet", mine: true });
+    expect((await call("GET", "/waitlist/views?page=dispatch", "mgr")).body.map((x: any) => x.name)).toContain("Not done yet");
+    expect((await call("GET", "/waitlist/views?page=waitlist", "mgr")).body.map((x: any) => x.name)).not.toContain("Not done yet");
+  });
+});

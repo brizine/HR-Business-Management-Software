@@ -1,7 +1,7 @@
 import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import {
-  BACK_REASON_LABELS, DISPATCH_ROUTE_MAX, END, START, customerName, eventKey, formatAddress, holidaysBetween, laneKeyOf, optimizeOrder, parseEventKey, personColor,
-  type DispatchSettings, type DispatchSettingsInput, type EventKind, type Leg, type Pt, type RoutePointInput, type RouteSaveInput,
+  BACK_REASON_LABELS, DISPATCH_ROUTE_MAX, END, START, customerName, eventKey, formatAddress, holidaysBetween, laneKeyOf, optimizeOrder, parseEventKey, personColor, routeTimeline,
+  type DispatchEditInput, type DispatchSettings, type DispatchSettingsInput, type EventKind, type Leg, type Pt, type RouteOrder, type RoutePointInput, type RouteSaveInput,
 } from "@crewdesk/shared";
 import { db } from "../db";
 import {
@@ -13,7 +13,9 @@ import { HttpError } from "./errors";
 import { geocode } from "./geocode";
 import { driveMatrix, measureLegs, type Step } from "./routing";
 import { sendCustomerText, textingConfig } from "./texting";
-import { estimateMinutes } from "./waitlist";
+import { billingSettings } from "./invoices";
+import { companyToday } from "./payRates";
+import { estimateMinutes, waitingList, type WaitRow } from "./waitlist";
 
 /**
  * Dispatch, for both boards: the day's (or week's) work orders and to-dos as "events", the routes
@@ -300,11 +302,12 @@ async function measure(settings: Pick<DispatchSettings, "routing" | "roadUrl">, 
 const onDay = (e: { date: string; endDate: string | null }, date: string) => e.date <= date && (e.endDate ?? e.date) >= date;
 
 /** A route before it's saved: the order (optimized when asked), each drive, the totals and the line to draw. */
-export async function previewRoute(companyId: string, b: { date: string; keys: string[]; start: RoutePointInput; end: RoutePointInput; optimize?: boolean; pinnedFirst?: boolean; locked?: string[]; steps?: boolean }, o: { estimateOnly?: boolean } = {}) {
+export async function previewRoute(companyId: string, b: { date: string; keys: string[]; start: RoutePointInput; end: RoutePointInput; optimize?: boolean; pinnedFirst?: boolean; locked?: string[]; steps?: boolean }, o: { estimateOnly?: boolean; anyDay?: boolean } = {}) {
   const settings = await dispatchSettings(companyId);
   const how = o.estimateOnly ? { routing: "estimate" as const, roadUrl: null } : settings;
   const events = await eventsFor(companyId, b.keys);
-  const missing = events.find((e) => !onDay(e, b.date));
+  // "What if these went on that day": work orders still on the waiting list or another day are fine to measure.
+  const missing = o.anyDay ? undefined : events.find((e) => !onDay(e, b.date));
   if (missing) throw new HttpError(409, `“${missing.title}” isn't scheduled on ${longDay(b.date)} any more. Take it off the route, then save again.`);
   const start = await resolvePoint(settings, b.start, "start");
   const end = await resolvePoint(settings, b.end, "end");
@@ -771,6 +774,176 @@ export async function rainDay(companyId: string, by: string, b: { date: string; 
     }
   }
   return { moved: rows.length, to: toDate, texted, notTexted, toCall: [...new Set(toCall)] };
+}
+
+/* ───────────── The dispatch board's list, and Edit work orders ───────────── */
+
+/** A scheduled work order as the dispatch board lists it: the waiting list's row, plus who does it, its place in the route and how it's going. */
+export type BoardRow = Omit<WaitRow, "status"> & {
+  status: DispatchEvent["status"]; assigneeIds: string[]; route: RouteSpot | null; startTime: string | null;
+  finishedAt: string | null; skipReason: string | null; notes: DispatchEvent["dispatchNotes"];
+};
+
+/** The work orders scheduled on the days given (every status), in the waiting list's shape so both pages share their columns, filters and totals. */
+export async function dispatchList(companyId: string, from: string, to: string): Promise<{ today: string; requireCard: boolean; rows: BoardRow[] }> {
+  const ids = (await db.select({ id: visits.id }).from(visits).where(and(eq(visits.companyId, companyId), gte(visits.date, from), lte(visits.date, to))).limit(5000)).map((r) => r.id);
+  if (!ids.length) return { today: await companyToday(companyId), requireCard: !!(await billingSettings(companyId)).requireCardOnFile, rows: [] };
+  const base = await waitingList(companyId, { ids });
+  const events = new Map((await eventsFor(companyId, base.rows.map((r) => eventKey("visit", r.id)), false)).map((e) => [e.id, e]));
+  return {
+    today: base.today, requireCard: base.requireCard,
+    rows: base.rows.map((r) => {
+      const e = events.get(r.id);
+      return { ...r, status: e?.status ?? (r.status as BoardRow["status"]), assigneeIds: e?.assigneeIds ?? [], route: e?.route ?? null, startTime: e?.startTime ?? null, finishedAt: e?.finishedAt ?? null, skipReason: e?.skipReason ?? null, notes: e?.dispatchNotes ?? [] };
+    }),
+  };
+}
+
+const time12 = (t: string) => { const [h, m] = t.split(":").map(Number); return `${h % 12 === 0 ? 12 : h % 12}${m ? `:${String(m).padStart(2, "0")}` : ""} ${h < 12 ? "AM" : "PM"}`; };
+
+/** A crew's work orders on a day, in the order the board shows them: the route's stops in order, then the rest by time. */
+async function laneEvents(companyId: string, date: string, crewId: string) {
+  const all = (await eventsBetween(companyId, date, date, false)).filter((e) => e.kind === "visit" && e.crewId === crewId && e.date === date);
+  return all.sort((a, b) => (a.route && b.route ? a.route.id.localeCompare(b.route.id) || a.route.order - b.route.order : a.route ? -1 : b.route ? 1 : (a.startTime ?? "99").localeCompare(b.startTime ?? "99") || (a.number ?? 0) - (b.number ?? 0)));
+}
+const laneEnds = (r: Route | undefined) => ({
+  start: r && r.startKind !== "company" ? { kind: r.startKind as "custom", label: r.startLabel, lat: r.startLat, lng: r.startLng } : { kind: "company" as const },
+  end: r && r.endKind !== "company" ? { kind: r.endKind as "custom", label: r.endLabel, lat: r.endLat, lng: r.endLng } : { kind: "company" as const },
+});
+const laneRoute = async (companyId: string, date: string, crewId: string) =>
+  (await db.select().from(dispatchRoutes).where(and(eq(dispatchRoutes.companyId, companyId), eq(dispatchRoutes.date, date), eq(dispatchRoutes.crewId, crewId))).orderBy(asc(dispatchRoutes.createdAt)))[0];
+
+/** The order a crew's day would have with these work orders put in: optimized around the locked stops, added to the end, or left as it is. */
+async function orderWith(companyId: string, o: { date: string; crewId: string; keys: string[]; routeOrder: RouteOrder }) {
+  const lane = await laneEvents(companyId, o.date, o.crewId);
+  const route = await laneRoute(companyId, o.date, o.crewId);
+  const picked = new Set(o.keys);
+  const laneKeys = lane.map((e) => e.key);
+  const there = new Set(laneKeys);
+  const joining = o.keys.filter((k) => !there.has(k));
+  if (o.routeOrder === "keep") return { keys: lane.filter((e) => e.route).map((e) => e.key), lane, route, preview: null };
+  // Stops already on the crew's day stay in the order they have (so a locked one keeps its place when the rest are
+  // optimized); "Add to the end" moves the picked ones behind the others. Newcomers start at the end either way.
+  const keys = o.routeOrder === "end" ? [...laneKeys.filter((k) => !picked.has(k)), ...laneKeys.filter((k) => picked.has(k)), ...joining] : [...laneKeys, ...joining];
+  if (keys.length > DISPATCH_ROUTE_MAX) throw new HttpError(400, `A route is limited to ${DISPATCH_ROUTE_MAX} stops. Split the day between crews.`);
+  const preview = await previewRoute(companyId, { date: o.date, keys, ...laneEnds(route), optimize: o.routeOrder === "optimize", locked: lane.filter((e) => e.route?.locked).map((e) => e.key) }, { anyDay: true });
+  return { keys: preview.keys, lane, route, preview };
+}
+
+/** Before an edit is saved: what it adds to the crew's day (time on site and driving), how full the day gets, and who would be reached after their time window. */
+export async function editPreview(companyId: string, b: { visitIds: string[]; date: string; crewId: string; routeOrder: RouteOrder }) {
+  const [crew] = await db.select({ id: crews.id, name: crews.name, dailyHours: crews.dailyHours }).from(crews).where(and(eq(crews.id, b.crewId), eq(crews.companyId, companyId)));
+  if (!crew) throw new HttpError(400, "That crew isn't in your company");
+  const keys = b.visitIds.map((id) => eventKey("visit", id));
+  const picked = await eventsFor(companyId, keys, false);
+  const w = await orderWith(companyId, { date: b.date, crewId: b.crewId, keys, routeOrder: b.routeOrder });
+  const there = new Set(w.lane.map((e) => e.key));
+  const joining = picked.filter((e) => !there.has(e.key));
+  const minutes = (es: { estMinutes: number | null; budgetedHours: number | null }[]) => es.reduce((s, e) => s + (e.estMinutes ?? Math.round((e.budgetedHours ?? 0) * 60)), 0);
+  const driveBefore = w.route?.totalDriveSeconds ?? 0;
+  const driveAfter = w.preview ? w.preview.totalDriveSeconds : driveBefore;
+  const late: { name: string; at: number; windowEnd: string }[] = [];
+  if (w.preview) {
+    const t = routeTimeline({ startTime: w.route?.startTime ?? "08:00", minutes: w.preview.events.map((e) => e.estMinutes ?? Math.round((e.budgetedHours ?? 0) * 60)), legs: w.preview.stops.map((s) => s.leg), endLeg: w.preview.endLeg });
+    w.preview.events.forEach((e, i) => {
+      if (e.status !== "open" || !e.windowEnd) return;
+      const [h, m] = e.windowEnd.split(":").map(Number);
+      if (t.arrive[i] > h * 60 + m) late.push({ name: e.customer?.name ?? e.title, at: Math.round(t.arrive[i]), windowEnd: e.windowEnd });
+    });
+  }
+  return {
+    crew: crew.name, capacityHours: crew.dailyHours, addsMinutes: minutes(joining), addsDriveSeconds: Math.max(0, Math.round(driveAfter - driveBefore)),
+    beforeMinutes: minutes(w.lane) + Math.round(driveBefore / 60), afterMinutes: minutes(w.lane) + minutes(joining) + Math.round(driveAfter / 60),
+    driveSeconds: Math.round(driveAfter), stops: w.lane.length + joining.length, measured: w.preview?.measured ?? (w.route?.measured ?? "estimate"), late,
+  };
+}
+
+/**
+ * Edit work orders: puts the selection on a day (keeping or changing the crew, with an appointment
+ * window and a place in the crew's route), or sends it back to the waiting list with why. Refuses
+ * ones that need a card on file, and ones before their eligible date unless a reason is given.
+ */
+export async function editWorkOrders(companyId: string, by: string, b: DispatchEditInput) {
+  const base = await waitingList(companyId, { ids: b.visitIds });
+  if (base.rows.length !== new Set(b.visitIds).size) throw new HttpError(404, "Some of those work orders weren't found. Reload the page.");
+  const rows = base.rows;
+  const [co] = await db.select({ name: companies.name }).from(companies).where(eq(companies.id, companyId));
+  /** A text to each customer who asked for one (once each); the ones who want a call are listed. */
+  const tell = async (list: WaitRow[], body: (r: WaitRow) => string) => {
+    let texted = 0, notTexted = 0;
+    const toCall: string[] = [];
+    if (!b.notify || !list.length) return { texted, notTexted, toCall };
+    const texting = !!(await textingConfig(companyId));
+    const prefs = new Map((await db.select({ id: properties.id, p: properties.notifyBefore }).from(properties).where(inArray(properties.id, list.map((r) => r.property.id)))).map((p) => [p.id, p.p]));
+    const told = new Set<string>();
+    for (const r of list) {
+      const pref = prefs.get(r.property.id) ?? r.customer.notifyBefore;
+      if (pref === "call") toCall.push(r.customer.name);
+      if (pref !== "text" || told.has(r.customer.id)) continue;
+      told.add(r.customer.id);
+      if (!texting) { notTexted++; continue; }
+      const s = await sendCustomerText(companyId, r.customer.id, body(r), { by, source: "office" });
+      if (s.text && s.text.status !== "failed") texted++; else notTexted++;
+    }
+    return { texted, notTexted, toCall: [...new Set(toCall)] };
+  };
+
+  if (b.to === "waitlist") {
+    const scheduled = rows.filter((r) => r.date);
+    if (!scheduled.length) throw new HttpError(400, "Those are on the waiting list already");
+    const why = `${BACK_REASON_LABELS[b.reason!]}${b.note ? `: ${b.note}` : ""}`;
+    const done = await toWaitlist(companyId, { keys: scheduled.map((r) => eventKey("visit", r.id)), dueBy: "keep" }, why);
+    const told = await tell(scheduled, (r) => `${co.name}: because of ${BACK_REASON_LABELS[b.reason!].toLowerCase()}, we couldn't get to your ${r.service.name.toLowerCase()} on ${longDay(r.date!)}. We'll be in touch with a new day. Reply STOP to opt out.`);
+    return { to: "waitlist" as const, moved: done.moved, scheduled: 0, early: 0, ...told };
+  }
+
+  const date = b.date!;
+  const closed = rows.filter((r) => r.status !== "open");
+  if (closed.length) throw new HttpError(400, `${closed.length} of those ${closed.length === 1 ? "is" : "are"} already started, done or skipped. Take ${closed.length === 1 ? "it" : "them"} out of the selection.`);
+  const needCard = rows.filter((r) => r.needsCard && r.date !== date);
+  if (needCard.length) throw new HttpError(409, `No card on file for ${[...new Set(needCard.map((r) => r.customer.name))].slice(0, 5).join(", ")}${needCard.length > 5 ? "…" : ""}. Add one, or turn the requirement off for them, first`);
+  // Only a change of day needs the reason again: one already on the board early was explained when it was put there.
+  const early = rows.filter((r) => r.eligible && date < r.eligible && r.date !== date);
+  if (early.length && !b.earlyReason) {
+    throw new HttpError(400, `${early.length} ${early.length === 1 ? "isn't" : "aren't"} eligible until later (minimum days since the last service). Give a reason to schedule ${early.length === 1 ? "it" : "them"} early`);
+  }
+  const to = b.crewId ? await checkAssignment(companyId, { crewId: b.crewId, employeeIds: [] }) : null;
+  const crewAfter = (r: WaitRow) => (b.crewId !== undefined ? b.crewId ?? null : r.crewId);
+  const moved = rows.filter((r) => r.date !== date || crewAfter(r) !== r.crewId);
+  const done = await db.transaction(async (tx) => {
+    for (const r of rows) {
+      const crewChanged = crewAfter(r) !== r.crewId;
+      await tx.update(visits).set({
+        date, ...(r.date !== date ? { endDate: null } : {}), waitingSince: null, backReason: null,
+        ...(b.crewId !== undefined ? { crewId: b.crewId ?? null } : {}),
+        ...(b.windowStart !== undefined ? { windowStart: b.windowStart ?? null, windowEnd: b.windowStart ? b.windowEnd ?? null : null } : {}),
+        ...(early.some((e) => e.id === r.id) ? { earlyReason: b.earlyReason!, earlyById: by, earlyAt: new Date() } : {}),
+        updatedAt: new Date(),
+      }).where(eq(visits.id, r.id));
+      // A new crew's people do it now; with the same crew, its people fill in only when nobody was picked.
+      if (crewChanged) await tx.delete(visitAssignees).where(eq(visitAssignees.visitId, r.id));
+      if (to?.people.length) {
+        const has = crewChanged ? [] : await tx.select({ id: visitAssignees.employeeId }).from(visitAssignees).where(eq(visitAssignees.visitId, r.id));
+        if (!has.length) await tx.insert(visitAssignees).values(to.people.map((employeeId) => ({ visitId: r.id, employeeId }))).onConflictDoNothing();
+      }
+      if (b.makePreferred && b.crewId) await tx.update(properties).set({ preferredCrewId: b.crewId }).where(eq(properties.id, r.property.id));
+    }
+    // One that changes day or crew leaves the route it was on.
+    return unrouteIn(tx, { visitIds: moved.map((r) => r.id) });
+  });
+  await refreshRoutes(companyId, done.routeIds);
+  // Then each crew's route for the day takes them in, the way that was asked.
+  if (b.routeOrder !== "keep") {
+    const byCrew = new Map<string, string[]>();
+    for (const r of rows) { const c = crewAfter(r); if (c) byCrew.set(c, [...(byCrew.get(c) ?? []), eventKey("visit", r.id)]); }
+    for (const [crewId, keys] of byCrew) {
+      const w = await orderWith(companyId, { date, crewId, keys, routeOrder: b.routeOrder });
+      await setLane(companyId, by, { date, crewId, keys: w.keys });
+    }
+  }
+  const window = b.windowStart ? ` ${b.windowEnd ? `between ${time12(b.windowStart)} and ${time12(b.windowEnd)}` : `after ${time12(b.windowStart)}`}` : "";
+  const told = await tell(rows.filter((r) => r.date !== date), (r) => `${co.name}: we're scheduled for ${r.service.name.toLowerCase()} at ${r.property.street} on ${longDay(date)}${window}. Reply STOP to opt out.`);
+  return { to: "board" as const, moved: moved.length, scheduled: rows.length, early: early.length, ...told };
 }
 
 /* ───────────── Notes, trucks, people ───────────── */

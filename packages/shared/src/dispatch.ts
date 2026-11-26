@@ -347,6 +347,43 @@ export const rainDaySchema = z.object({
   notify: z.boolean().default(false),
 });
 
+/** Where the work orders go in the crew's route when "Edit work orders" puts them on a day. */
+export const ROUTE_ORDERS = ["optimize", "end", "keep"] as const;
+export type RouteOrder = (typeof ROUTE_ORDERS)[number];
+export const ROUTE_ORDER_LABELS: Record<RouteOrder, string> = { optimize: "Optimize into the route", end: "Add to the end", keep: "Keep the current order" };
+
+const visitIds = z.array(uuid).min(1, "Select at least one").max(500);
+/**
+ * "Edit work orders" on the dispatch board and the waiting list: put the selection on a day (with a
+ * crew, a window and a place in the route), or send it back to the waiting list with why.
+ */
+export const dispatchEditSchema = z.object({
+  visitIds,
+  to: z.enum(["board", "waitlist"]),
+  date: isoDate.optional(),
+  /** Left out: each keeps the crew it has. Empty: no crew. */
+  crewId: z.preprocess(blankToNull, uuid.nullable()).optional(),
+  /** Left out: each keeps its window. Empty: any time. */
+  windowStart: z.preprocess(blankToNull, hhmm.nullable()).optional(),
+  windowEnd: z.preprocess(blankToNull, hhmm.nullable()).optional(),
+  routeOrder: z.enum(ROUTE_ORDERS).default("optimize"),
+  /** Make the crew the property's preferred crew. */
+  makePreferred: z.boolean().default(false),
+  /** Tell the customers who asked to hear ahead (a text when texting is connected; the ones to call are listed). */
+  notify: z.boolean().default(false),
+  /** Needed when any are before their eligible-from date: why it's OK. */
+  earlyReason: z.preprocess(blankToNull, z.string().trim().max(300).nullable()).optional(),
+  /** Back to the waiting list: why. */
+  reason: z.enum(BACK_REASONS).optional(),
+  note: z.preprocess(blankToNull, z.string().trim().max(300).nullable()).optional(),
+}).superRefine((v, ctx) => {
+  if (v.to === "board" && !v.date) ctx.addIssue({ code: "custom", path: ["date"], message: "Pick the date" });
+  if (v.to === "waitlist" && !v.reason) ctx.addIssue({ code: "custom", path: ["reason"], message: "Say why they're going back to the waiting list" });
+});
+export type DispatchEditInput = z.infer<typeof dispatchEditSchema>;
+/** What an edit would do to the crew's day, before it's saved. */
+export const dispatchEditPreviewSchema = z.object({ visitIds, date: isoDate, crewId: uuid, routeOrder: z.enum(ROUTE_ORDERS).default("optimize") });
+
 /** Lock a routed stop in place, or free it. */
 export const dispatchLockSchema = z.object({ key, locked: z.boolean() });
 

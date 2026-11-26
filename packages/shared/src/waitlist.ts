@@ -142,7 +142,7 @@ export const waitBulkSchema = z.object({
 
 /** A saved view of a list: its filters, columns and sort, for everyone or just you. */
 export const savedViewSchema = z.object({
-  page: z.enum(["waitlist"]),
+  page: z.enum(["waitlist", "dispatch"]),
   name: z.string().trim().min(1, "Name the view").max(80),
   shared: z.boolean().default(false),
   config: z.object({

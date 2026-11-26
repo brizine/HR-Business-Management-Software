@@ -1605,6 +1605,58 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .wl-legend-list { display: grid; gap: 6px; font-size: 13px; }
 .wl-adds { font-size: 13px; }
 @media (max-width: 700px) { .wl-search { width: 100%; } .wl-table-wrap { max-height: none; } .wl-map-bar .row { margin-left: 0 !important; } }
+/* Shared by the waiting list and the dispatch board. */
+.wl-here { font-weight: 600; }
+.wl-here::after { content: " ✓"; color: var(--primary); }
+.wl-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.wl-seg button { border: 0; background: transparent; color: var(--text); padding: 6px 12px; font: inherit; font-size: 14px; cursor: pointer; }
+.wl-seg button + button { border-left: 1px solid var(--border); }
+.wl-seg button.on { background: var(--primary); color: var(--primary-ink); font-weight: 600; }
+.wl-moveto { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.wl-work-grid .wl-on { background: color-mix(in srgb, var(--primary) 9%, transparent); }
+.wl-work-grid thead .wl-on .cl-sort { color: var(--primary); }
+.wl-pin { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font: 700 12px/1 system-ui, sans-serif; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .4); font-variant-numeric: tabular-nums; }
+.wl-pin.wide { font-size: 9.5px; }
+.wl-pin.dim { opacity: .55; }
+.wl-pin.closing { border-color: #dc2626; }
+.wl-pin.picked { outline: 3px solid #111827; outline-offset: 1px; }
+.wl-shop { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: #fff; color: #111827; border: 2px solid #111827; font-size: 16px; line-height: 1; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
+.wl-cluster.ghost { background: #94a3b8; }
+.wl-cluster.ghost.picked { background: #111827; }
+
+/* The dispatch board: the waiting list's page for scheduled work, grouped by truck or crew. */
+.db-dates { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.db-dates input[type="date"] { width: auto; }
+.db-pins { margin: 0; font-size: 13px; }
+.db-table .db-stop { width: 1%; white-space: nowrap; padding-right: 2px; }
+.db-num { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 5px; border-radius: 999px; color: #fff; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; vertical-align: middle; }
+.db-num-wait { background: #94a3b8; }
+.db-lock { width: 22px; height: 22px; margin-left: 2px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; opacity: .35; }
+.db-table tr:hover .db-lock, .db-lock:focus-visible { opacity: 1; }
+.db-lock.on { opacity: 1; background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn) 40%, var(--border)); color: var(--warn); }
+.db-table tbody tr[draggable="true"] { cursor: grab; }
+.db-table tr.db-dragging { opacity: .4; }
+.db-table tr.db-drop-before > td { box-shadow: inset 0 3px 0 var(--primary); }
+.db-table tr.db-done > td { color: var(--muted); }
+.db-table tr.db-done .db-num { opacity: .6; }
+.db-table tr.db-waiting > td { background: color-mix(in srgb, var(--bg) 55%, var(--surface)); }
+.db-table tr.db-group > td { background: var(--bg); border-top: 2px solid var(--border); border-bottom: 1px solid var(--border); padding-top: 7px; padding-bottom: 7px; font-size: 13.5px; }
+.db-table tr.db-group.over > td { background: color-mix(in srgb, var(--primary) 10%, var(--bg)); box-shadow: inset 0 -2px 0 var(--primary); }
+.db-table tr.db-group.busy > td { opacity: .6; }
+.db-group-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
+.db-group-name { display: inline-flex; align-items: baseline; gap: 6px; }
+.db-group-name strong { font-size: 14.5px; }
+.db-group-acts { margin-left: auto; display: inline-flex; gap: 14px; align-items: baseline; }
+.db-warn { color: var(--warn); }
+.db-st-open { color: var(--muted); }
+.db-st-on_site { background: var(--info-bg); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+.db-st-completed { background: var(--ok-bg); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); color: var(--ok); }
+.db-st-skipped { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn) 40%, var(--border)); color: var(--warn); }
+.db-notes { font-size: 13px; }
+.db-notes:not(.has) { color: var(--muted); }
+.db-note { font-size: 13.5px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.db-note span { font-size: 12px; }
+@media print { .wl-toolbar, .wl-map-card, .wl-work, .db-lock, .db-group-acts { display: none !important; } .wl-table-wrap { max-height: none; overflow: visible; } }
 .wl-tag-list { display: grid; gap: 4px; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
 .wl-tag-list .check { display: flex; align-items: center; gap: 6px; }
 

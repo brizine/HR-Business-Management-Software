@@ -105,7 +105,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return !e;
     });
   };
-  const fullPage = pathMatches(path, "/dispatch") || pathMatches(path, "/dispatch-beta");
+  const fullPage = pathMatches(path, "/dispatch-beta");
   const renderItem = (i: NavItem, onPick: () => void) => {
     const active = pathMatches(path, i.href) || (i.href === "/payroll" && (path.startsWith("/pay-periods") || path.startsWith("/tax-forms")));
     if (i.href === "/accounting" && booksUrl) {
@@ -125,7 +125,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <TopBar side={side} onSwitch={switchTo} unread={unread} onMenu={() => setDrawer(true)} onToggleRail={toggleRail} railExpanded={expanded} visibleItems={(s) => groupsFor(s).flatMap((g) => g.items)} />
       <div className="shell">
         <Rail side={side} groups={groupsFor(side)} expanded={expanded} drawer={drawer} onCloseDrawer={() => setDrawer(false)} onSwitch={switchTo} renderItem={renderItem} />
-        {/* The dispatch boards fill the window: no margins, no breadcrumb. */}
+        {/* The beta dispatch board fills the window: no margins, no breadcrumb. */}
         {fullPage ? <main className="main main-full">{children}</main> : <main className="main"><Trail /><PageLayoutRoot>{children}</PageLayoutRoot></main>}
       </div>
     </div>

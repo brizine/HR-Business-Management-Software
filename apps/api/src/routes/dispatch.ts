@@ -3,13 +3,13 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import {
   MAP_AREAS_MAX, capacitySchema, dispatchAssignSchema, dispatchKeysSchema, dispatchNoteSchema, dispatchRescheduleSchema, dispatchSettingsSchema, dispatchToWaitlistSchema,
-  dispatchLockSchema, hasRole, laneOrderSchema, mapAreaSchema, rainDaySchema, routePreviewSchema, routeSaveSchema,
+  dispatchEditPreviewSchema, dispatchEditSchema, dispatchLockSchema, hasRole, laneOrderSchema, mapAreaSchema, rainDaySchema, routePreviewSchema, routeSaveSchema,
 } from "@crewdesk/shared";
 import { db } from "../db";
 import { dispatchRoutes, dispatchStops, employees, mapAreas } from "../db/schema";
 import { authenticate, requireRole, roleIn } from "../lib/auth";
 import {
-  addDispatchNote, assignEvents, deleteEvents, dispatchPeople, dispatchSettings, duplicateEvents, employeePoint, eventsBetween, futureWeeks, holidaysOn, locateAddress,
+  addDispatchNote, assignEvents, deleteEvents, dispatchList, dispatchPeople, dispatchSettings, duplicateEvents, editPreview, editWorkOrders, employeePoint, eventsBetween, futureWeeks, holidaysOn, locateAddress,
   lockStop, nextWorkingDay, previewRoute, rainDay, rescheduleEvents, routesBetween, saveDispatchSettings, saveRoute, setLane, toWaitlist, trucks, unroute, waitingCount,
 } from "../lib/dispatch";
 import { HttpError, notFound, parse } from "../lib/errors";
@@ -58,6 +58,30 @@ const routes: FastifyPluginAsync = async (app) => {
   app.post("/duplicate", async (req) => duplicateEvents(req.user.companyId, req.user.sub, parse(dispatchKeysSchema, req.body).keys));
   app.post("/delete", async (req) => deleteEvents(req.user.companyId, parse(dispatchKeysSchema, req.body).keys));
   app.post("/unroute", async (req) => unroute(req.user.companyId, parse(dispatchKeysSchema, req.body).keys));
+
+  /* ── The Dispatch board (the Crewdesk plan's): the scheduled work as a list, like the waiting list ── */
+
+  /** The work orders scheduled on a day (or a range), with the crews, their routes and where routes start. */
+  app.get<{ Querystring: { from?: string; to?: string } }>("/list", async (req) => {
+    const { companyId } = req.user;
+    const today = await companyToday(companyId);
+    const from = isDay(req.query.from) ? req.query.from! : today;
+    const to = isDay(req.query.to) && req.query.to! >= from ? req.query.to! : from;
+    if (daysApart(from, to) > 62) throw new HttpError(400, "Pick a range of two months or less");
+    const settings = await dispatchSettings(companyId);
+    const [list, routeRows, crews, people, holidays, waiting] = await Promise.all([
+      dispatchList(companyId, from, to), routesBetween(companyId, from, to), crewList(companyId, true), dispatchPeople(companyId), holidaysOn(companyId, from, to), waitingCount(companyId, today),
+    ]);
+    return {
+      ...list, from, to, routes: routeRows.filter((r) => r.crewId), holidays, waiting,
+      crews: crews.map((c) => ({ id: c.id, name: c.name, color: c.color, dailyHours: c.dailyHours, memberIds: c.memberIds, truck: c.assetName })),
+      people: people.map((p) => ({ id: p.id, firstName: p.firstName, name: p.name, color: p.color })),
+      routing: settings.routing, start: settings.start ?? settings.depot,
+    };
+  });
+  /** Edit work orders: onto a day (crew, window, place in the route), or back to the waiting list. */
+  app.post("/edit", async (req) => editWorkOrders(req.user.companyId, req.user.sub, parse(dispatchEditSchema, req.body)));
+  app.post("/edit/preview", async (req) => editPreview(req.user.companyId, parse(dispatchEditPreviewSchema, req.body)));
 
   /* ── Routes ── */
 

@@ -1,7 +1,7 @@
 "use client";
-import { PlanDispatch } from "@/components/dispatch/plan";
+import { DispatchBoard } from "@/components/dispatch/board";
 
-/** Schedule → Dispatch: the dispatch board from the Crewdesk plan (a lane per crew, with a map). */
+/** Schedule → Dispatch: the dispatch board from the Crewdesk plan (the waiting list's page, for the work that has a day). */
 export default function DispatchPage() {
-  return <PlanDispatch />;
+  return <DispatchBoard />;
 }

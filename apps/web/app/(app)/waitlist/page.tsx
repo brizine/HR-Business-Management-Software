@@ -10,9 +10,9 @@ import { Icon } from "@/components/icons";
 import { useTags } from "@/components/customers";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
 import {
-  AddFilter, BUILT_IN_WAIT_VIEWS, BulkMenu, Columns, DEFAULT_WL_COLUMNS, EditWorkOrders, SaveView, SelectionBreakdown, WaitMap, WaitTable, WorkloadStrip,
+  AddFilter, BUILT_IN_WAIT_VIEWS, BoardPicker, BulkMenu, Columns, DEFAULT_WL_COLUMNS, EditWorkOrders, SaveView, SelectionBreakdown, WaitMap, WaitTable, WorkloadStrip,
   applyFilters, badgeLegend, describeFilter, exportCsv, serviceColors, sortRows, totalsOf,
-  type Filter, type WaitData, type WaitView,
+  type Filter, type SavedView, type WaitData, type WaitView,
 } from "@/components/waitlist";
 
 const hours = (min: number) => (min / 60).toFixed(1);
@@ -29,14 +29,13 @@ export default function WaitingListPage() {
   const setView = (v: WaitView) => { setViewState(v); writeLocal("wl-view", v); };
   const upcoming = view.filters.some((f) => f.key === "upcoming");
   const data = useApi<WaitData>(`/waitlist${upcoming ? "?upcoming=1" : ""}`);
-  const views = useApi<{ id: string; name: string; shared: boolean; mine: boolean; config: Pick<WaitView, "filters" | "columns" | "sort"> }[]>("/waitlist/views?page=waitlist");
+  const views = useApi<SavedView[]>("/waitlist/views?page=waitlist");
   const [q, setQ] = useState(() => view.filters.find((f) => f.key === "q")?.value ?? "");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [edit, setEdit] = useState<{ date?: string; crewId?: string | null } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [limit, setLimit] = useState(300);
   const [workKey, setWorkKey] = useState(0);
-  const [viewsOpen, setViewsOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
@@ -111,21 +110,8 @@ export default function WaitingListPage() {
       {notice && <div className="alert ok row" style={{ justifyContent: "space-between" }}><span>{notice}</span><button type="button" className="linkbtn" onClick={() => setNotice(null)}>Dismiss</button></div>}
 
       <div className="wl-toolbar">
-        <Popover open={viewsOpen} setOpen={setViewsOpen} label={<><Icon name="layers" size={14} /> {view.name} ▾</>}>
-          <div className="cl-menu">
-            <div className="todo-label">Ready-made</div>
-            {BUILT_IN_WAIT_VIEWS.map((v) => <button key={v.name} type="button" onClick={() => { setView(v); setQ(""); setViewsOpen(false); }}>{v.name}</button>)}
-            {!!views.data?.length && <><hr /><div className="todo-label">Saved</div></>}
-            {views.data?.map((v) => (
-              <div key={v.id} className="cl-menu-row">
-                <button type="button" onClick={() => { const c = v.config; setView({ ...c, id: v.id, name: v.name, shared: v.shared, mine: v.mine, columns: c.columns?.length ? c.columns : DEFAULT_WL_COLUMNS }); setQ(c.filters?.find((f) => f.key === "q")?.value ?? ""); setViewsOpen(false); }}>
-                  {v.name}{v.shared ? <span className="muted"> · everyone</span> : null}
-                </button>
-                {(v.mine || (v.shared && isAdmin)) && <button type="button" className="btn sm" aria-label={`Delete the view ${v.name}`} onClick={() => deleteView(v.id)}>✕</button>}
-              </div>
-            ))}
-          </div>
-        </Popover>
+        <BoardPicker here="waitlist" view={view} builtIn={BUILT_IN_WAIT_VIEWS} saved={views.data} defaults={DEFAULT_WL_COLUMNS} isAdmin={isAdmin}
+          onPick={(v) => { setView(v); setQ(v.filters.find((f) => f.key === "q")?.value ?? ""); }} onDelete={deleteView} />
         <input type="search" className="wl-search" placeholder="Search customer, address, service, WO-…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search the waiting list" />
         <AddFilter rows={all} crews={crews} tags={tags} onAdd={(fs: Filter[]) => setView({ ...view, filters: [...view.filters, ...fs.filter((f) => !view.filters.some((x) => x.key === f.key && x.value === f.value))] })} />
         {!upcoming && <button type="button" className="btn" onClick={() => setView({ ...view, filters: [...view.filters, { key: "upcoming", value: "1" }] })} title="Also show work orders whose release date hasn't come yet">Include not released yet</button>}
