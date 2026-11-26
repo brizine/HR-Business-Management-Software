@@ -45,7 +45,7 @@ export const companies = pgTable("companies", {
   /** The company's colour for emails made in the builder (its header band, new buttons). */
   emailBrandColor: text("email_brand_color"),
   /** Weather on chemical applications: automatic, manual or off. */
-  weather: jsonb("weather").$type<WeatherSettings>(),
+  weather: jsonb("weather").$type<Partial<WeatherSettings> & { links?: import("@crewdesk/shared").WeatherLink[] }>(),
   /** Chemical application records: the company's pesticide license number (on every record). */
   pesticideLicenseNo: text("pesticide_license_no"),
   /** Set on a test company: the real company it's a sandbox for (sample customers, test mode payments). */

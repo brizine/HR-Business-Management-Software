@@ -20,7 +20,9 @@ const routes: FastifyPluginAsync = async (app) => {
   app.get("/settings", async (req) => weatherSettings(req.user.companyId));
   app.put("/settings", { preHandler: requireRole("admin", AREA) }, async (req) => {
     const b = parse(weatherSettingsSchema, req.body);
-    await db.update(companies).set({ weather: b }).where(eq(companies.id, req.user.companyId));
+    // The forecast box's links live beside the mode: they stay as they are.
+    const [co] = await db.select({ weather: companies.weather }).from(companies).where(eq(companies.id, req.user.companyId));
+    await db.update(companies).set({ weather: { ...(co?.weather ?? {}), ...b } }).where(eq(companies.id, req.user.companyId));
     return b;
   });
 

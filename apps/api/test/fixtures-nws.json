@@ -1,0 +1,513 @@
+{
+ "point": {
+  "properties": {
+   "forecast": "https://api.weather.gov/gridpoints/OUN/100,83/forecast",
+   "forecastHourly": "https://api.weather.gov/gridpoints/OUN/100,83/forecast/hourly",
+   "radarStation": "KTLX",
+   "relativeLocation": {
+    "properties": {
+     "city": "Norman",
+     "state": "OK"
+    }
+   }
+  }
+ },
+ "daily": {
+  "properties": {
+   "updateTime": "2026-11-26T06:26:58+00:00",
+   "generatedAt": "2026-11-26T12:04:24+00:00",
+   "periods": [
+    {
+     "number": 1,
+     "name": "Thanksgiving Day",
+     "startTime": "2026-11-26T06:00:00-06:00",
+     "endTime": "2026-11-26T18:00:00-06:00",
+     "isDaytime": true,
+     "temperature": 47,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "windSpeed": "7 to 12 mph",
+     "windDirection": "NNW",
+     "icon": "https://api.weather.gov/icons/land/day/skc?size=medium",
+     "shortForecast": "Sunny",
+     "detailedForecast": "Sunny, with a high near 47. North northwest wind 7 to 12 mph."
+    },
+    {
+     "number": 2,
+     "name": "Tonight",
+     "startTime": "2026-11-26T18:00:00-06:00",
+     "endTime": "2026-11-27T06:00:00-06:00",
+     "isDaytime": false,
+     "temperature": 30,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "windSpeed": "5 mph",
+     "windDirection": "WNW",
+     "icon": "https://api.weather.gov/icons/land/night/few?size=medium",
+     "shortForecast": "Mostly Clear",
+     "detailedForecast": "Mostly clear, with a low around 30. West northwest wind around 5 mph."
+    },
+    {
+     "number": 3,
+     "name": "Friday",
+     "startTime": "2026-11-27T06:00:00-06:00",
+     "endTime": "2026-11-27T18:00:00-06:00",
+     "isDaytime": true,
+     "temperature": 60,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "windSpeed": "3 to 12 mph",
+     "windDirection": "SW",
+     "icon": "https://api.weather.gov/icons/land/day/few?size=medium",
+     "shortForecast": "Sunny",
+     "detailedForecast": "Sunny, with a high near 60. Southwest wind 3 to 12 mph."
+    },
+    {
+     "number": 4,
+     "name": "Friday Night",
+     "startTime": "2026-11-27T18:00:00-06:00",
+     "endTime": "2026-11-28T06:00:00-06:00",
+     "isDaytime": false,
+     "temperature": 38,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "windSpeed": "2 to 7 mph",
+     "windDirection": "SW",
+     "icon": "https://api.weather.gov/icons/land/night/few?size=medium",
+     "shortForecast": "Mostly Clear",
+     "detailedForecast": "Mostly clear, with a low around 38. Southwest wind 2 to 7 mph."
+    }
+   ]
+  }
+ },
+ "hourly": {
+  "properties": {
+   "periods": [
+    {
+     "number": 1,
+     "name": "",
+     "startTime": "2026-11-26T09:00:00-06:00",
+     "endTime": "2026-11-26T10:00:00-06:00",
+     "isDaytime": true,
+     "temperature": 32,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "dewpoint": {
+      "unitCode": "wmoUnit:degC",
+      "value": -3.888888888888889
+     },
+     "relativeHumidity": {
+      "unitCode": "wmoUnit:percent",
+      "value": 75
+     },
+     "windSpeed": "9 mph",
+     "windDirection": "NNW",
+     "icon": "https://api.weather.gov/icons/land/day/skc?size=small",
+     "shortForecast": "Sunny",
+     "detailedForecast": ""
+    },
+    {
+     "number": 2,
+     "name": "",
+     "startTime": "2026-11-26T10:00:00-06:00",
+     "endTime": "2026-11-26T11:00:00-06:00",
+     "isDaytime": true,
+     "temperature": 36,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "dewpoint": {
+      "unitCode": "wmoUnit:degC",
+      "value": -3.3333333333333335
+     },
+     "relativeHumidity": {
+      "unitCode": "wmoUnit:percent",
+      "value": 67
+     },
+     "windSpeed": "12 mph",
+     "windDirection": "NNW",
+     "icon": "https://api.weather.gov/icons/land/day/skc?size=small",
+     "shortForecast": "Sunny",
+     "detailedForecast": ""
+    },
+    {
+     "number": 3,
+     "name": "",
+     "startTime": "2026-11-26T11:00:00-06:00",
+     "endTime": "2026-11-26T12:00:00-06:00",
+     "isDaytime": true,
+     "temperature": 39,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "dewpoint": {
+      "unitCode": "wmoUnit:degC",
+      "value": -3.3333333333333335
+     },
+     "relativeHumidity": {
+      "unitCode": "wmoUnit:percent",
+      "value": 59
+     },
+     "windSpeed": "12 mph",
+     "windDirection": "NNW",
+     "icon": "https://api.weather.gov/icons/land/day/skc?size=small",
+     "shortForecast": "Sunny",
+     "detailedForecast": ""
+    },
+    {
+     "number": 4,
+     "name": "",
+     "startTime": "2026-11-26T12:00:00-06:00",
+     "endTime": "2026-11-26T13:00:00-06:00",
+     "isDaytime": true,
+     "temperature": 43,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "dewpoint": {
+      "unitCode": "wmoUnit:degC",
+      "value": -3.3333333333333335
+     },
+     "relativeHumidity": {
+      "unitCode": "wmoUnit:percent",
+      "value": 51
+     },
+     "windSpeed": "12 mph",
+     "windDirection": "NNW",
+     "icon": "https://api.weather.gov/icons/land/day/skc?size=small",
+     "shortForecast": "Sunny",
+     "detailedForecast": ""
+    },
+    {
+     "number": 5,
+     "name": "",
+     "startTime": "2026-11-26T13:00:00-06:00",
+     "endTime": "2026-11-26T14:00:00-06:00",
+     "isDaytime": true,
+     "temperature": 45,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "dewpoint": {
+      "unitCode": "wmoUnit:degC",
+      "value": -2.7777777777777777
+     },
+     "relativeHumidity": {
+      "unitCode": "wmoUnit:percent",
+      "value": 49
+     },
+     "windSpeed": "12 mph",
+     "windDirection": "NNW",
+     "icon": "https://api.weather.gov/icons/land/day/skc?size=small",
+     "shortForecast": "Sunny",
+     "detailedForecast": ""
+    },
+    {
+     "number": 6,
+     "name": "",
+     "startTime": "2026-11-26T14:00:00-06:00",
+     "endTime": "2026-11-26T15:00:00-06:00",
+     "isDaytime": true,
+     "temperature": 46,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "dewpoint": {
+      "unitCode": "wmoUnit:degC",
+      "value": -2.7777777777777777
+     },
+     "relativeHumidity": {
+      "unitCode": "wmoUnit:percent",
+      "value": 47
+     },
+     "windSpeed": "12 mph",
+     "windDirection": "NNW",
+     "icon": "https://api.weather.gov/icons/land/day/skc?size=small",
+     "shortForecast": "Sunny",
+     "detailedForecast": ""
+    },
+    {
+     "number": 7,
+     "name": "",
+     "startTime": "2026-11-26T15:00:00-06:00",
+     "endTime": "2026-11-26T16:00:00-06:00",
+     "isDaytime": true,
+     "temperature": 47,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "dewpoint": {
+      "unitCode": "wmoUnit:degC",
+      "value": -3.3333333333333335
+     },
+     "relativeHumidity": {
+      "unitCode": "wmoUnit:percent",
+      "value": 44
+     },
+     "windSpeed": "10 mph",
+     "windDirection": "NNW",
+     "icon": "https://api.weather.gov/icons/land/day/skc?size=small",
+     "shortForecast": "Sunny",
+     "detailedForecast": ""
+    },
+    {
+     "number": 8,
+     "name": "",
+     "startTime": "2026-11-26T16:00:00-06:00",
+     "endTime": "2026-11-26T17:00:00-06:00",
+     "isDaytime": true,
+     "temperature": 46,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "dewpoint": {
+      "unitCode": "wmoUnit:degC",
+      "value": -2.7777777777777777
+     },
+     "relativeHumidity": {
+      "unitCode": "wmoUnit:percent",
+      "value": 47
+     },
+     "windSpeed": "9 mph",
+     "windDirection": "NNW",
+     "icon": "https://api.weather.gov/icons/land/day/skc?size=small",
+     "shortForecast": "Sunny",
+     "detailedForecast": ""
+    },
+    {
+     "number": 9,
+     "name": "",
+     "startTime": "2026-11-26T17:00:00-06:00",
+     "endTime": "2026-11-26T18:00:00-06:00",
+     "isDaytime": true,
+     "temperature": 45,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "dewpoint": {
+      "unitCode": "wmoUnit:degC",
+      "value": -2.7777777777777777
+     },
+     "relativeHumidity": {
+      "unitCode": "wmoUnit:percent",
+      "value": 49
+     },
+     "windSpeed": "7 mph",
+     "windDirection": "NNW",
+     "icon": "https://api.weather.gov/icons/land/day/skc?size=small",
+     "shortForecast": "Sunny",
+     "detailedForecast": ""
+    },
+    {
+     "number": 10,
+     "name": "",
+     "startTime": "2026-11-26T18:00:00-06:00",
+     "endTime": "2026-11-26T19:00:00-06:00",
+     "isDaytime": false,
+     "temperature": 41,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "dewpoint": {
+      "unitCode": "wmoUnit:degC",
+      "value": -2.2222222222222223
+     },
+     "relativeHumidity": {
+      "unitCode": "wmoUnit:percent",
+      "value": 59
+     },
+     "windSpeed": "5 mph",
+     "windDirection": "NW",
+     "icon": "https://api.weather.gov/icons/land/night/few?size=small",
+     "shortForecast": "Mostly Clear",
+     "detailedForecast": ""
+    },
+    {
+     "number": 11,
+     "name": "",
+     "startTime": "2026-11-26T19:00:00-06:00",
+     "endTime": "2026-11-26T20:00:00-06:00",
+     "isDaytime": false,
+     "temperature": 37,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "dewpoint": {
+      "unitCode": "wmoUnit:degC",
+      "value": -2.2222222222222223
+     },
+     "relativeHumidity": {
+      "unitCode": "wmoUnit:percent",
+      "value": 70
+     },
+     "windSpeed": "5 mph",
+     "windDirection": "NW",
+     "icon": "https://api.weather.gov/icons/land/night/skc?size=small",
+     "shortForecast": "Clear",
+     "detailedForecast": ""
+    },
+    {
+     "number": 12,
+     "name": "",
+     "startTime": "2026-11-26T20:00:00-06:00",
+     "endTime": "2026-11-26T21:00:00-06:00",
+     "isDaytime": false,
+     "temperature": 36,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "dewpoint": {
+      "unitCode": "wmoUnit:degC",
+      "value": -1.6666666666666667
+     },
+     "relativeHumidity": {
+      "unitCode": "wmoUnit:percent",
+      "value": 75
+     },
+     "windSpeed": "3 mph",
+     "windDirection": "WNW",
+     "icon": "https://api.weather.gov/icons/land/night/few?size=small",
+     "shortForecast": "Mostly Clear",
+     "detailedForecast": ""
+    },
+    {
+     "number": 13,
+     "name": "",
+     "startTime": "2026-11-26T21:00:00-06:00",
+     "endTime": "2026-11-26T22:00:00-06:00",
+     "isDaytime": false,
+     "temperature": 34,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "dewpoint": {
+      "unitCode": "wmoUnit:degC",
+      "value": -2.2222222222222223
+     },
+     "relativeHumidity": {
+      "unitCode": "wmoUnit:percent",
+      "value": 78
+     },
+     "windSpeed": "3 mph",
+     "windDirection": "WNW",
+     "icon": "https://api.weather.gov/icons/land/night/few?size=small",
+     "shortForecast": "Mostly Clear",
+     "detailedForecast": ""
+    },
+    {
+     "number": 14,
+     "name": "",
+     "startTime": "2026-11-26T22:00:00-06:00",
+     "endTime": "2026-11-26T23:00:00-06:00",
+     "isDaytime": false,
+     "temperature": 33,
+     "temperatureUnit": "F",
+     "temperatureTrend": null,
+     "probabilityOfPrecipitation": {
+      "unitCode": "wmoUnit:percent",
+      "value": 0
+     },
+     "dewpoint": {
+      "unitCode": "wmoUnit:degC",
+      "value": -2.2222222222222223
+     },
+     "relativeHumidity": {
+      "unitCode": "wmoUnit:percent",
+      "value": 82
+     },
+     "windSpeed": "3 mph",
+     "windDirection": "WNW",
+     "icon": "https://api.weather.gov/icons/land/night/few?size=small",
+     "shortForecast": "Mostly Clear",
+     "detailedForecast": ""
+    }
+   ]
+  }
+ },
+ "alerts": {
+  "features": [
+   {
+    "properties": {
+     "id": "urn:oid:2.49.0.1.840.0.c67307bbc4254892f30402442152ef446eeefc85.001.2",
+     "event": "Winter Storm Warning",
+     "severity": "Severe",
+     "status": "Actual",
+     "messageType": "Alert",
+     "headline": "Winter Storm Warning issued November 26 at 10:08AM CST until November 26 at 9:00PM CST by NWS Nashville TN",
+     "onset": "2026-11-26T18:00:00-06:00",
+     "ends": "2026-11-26T21:00:00-06:00",
+     "expires": "2026-11-26T18:15:00-06:00"
+    }
+   },
+   {
+    "properties": {
+     "id": "urn:oid:2.49.0.1.840.0.12d1301a13a4c066a5701316775d1f92b129ba00.001.2",
+     "event": "Freeze Warning",
+     "severity": "Severe",
+     "status": "Actual",
+     "messageType": "Alert",
+     "headline": "Freeze Warning issued November 26 at 9:59AM CST until November 27 at 9:00AM CST by NWS Lake Charles LA",
+     "onset": "2026-11-27T00:00:00-06:00",
+     "ends": "2026-11-27T09:00:00-06:00",
+     "expires": "2026-11-27T02:00:00-06:00"
+    }
+   }
+  ]
+ }
+}

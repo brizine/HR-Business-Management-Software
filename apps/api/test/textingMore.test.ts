@@ -8,7 +8,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { clockIn } from "@crewdesk/shared";
 import { buildApp } from "../src/app";
-import { pool } from "../src/db";
+import { eq } from "drizzle-orm";
+import { db, pool } from "../src/db";
+import { phoneCalls } from "../src/db/schema";
 import { TEXT_QUEUE, flushTextJobs, receiveCall, receiveText, releaseScheduledTexts, runTextQueue, setTextingProvider, type Inbound } from "../src/lib/texting";
 import { flushNotifications, setPushTransport, type PushMessage } from "../src/lib/notify";
 
@@ -202,6 +204,45 @@ describe("texting, the additions", () => {
     expect((await call("GET", `/texting/calls/${calls[0].id}/audio`, "office")).body.url).toBe("https://media.example.test/voicemail-1.mp3");
     expect((await call("GET", `/texting/calls/${calls[1].id}/audio`, "office")).status).toBe(404);
     expect((await call("GET", `/texting/calls?customerId=${ID.amy}`, "tia")).status).toBe(403);
+  });
+
+  it("the caller box: calls that just came in, with who they were", async () => {
+    // Opening the page gets the time and nothing else: only calls from here on pop up.
+    const first = (await call("GET", "/texting/calls/recent", "office")).body;
+    expect(first.calls).toEqual([]);
+    expect(Number.isNaN(Date.parse(first.now))).toBe(false);
+    expect((await call("GET", "/texting/calls/recent?after=yesterday-ish", "office")).body.calls).toEqual([]);
+    expect((await call("POST", "/properties", "office", { street: "12 Aster Ln", city: "Norman", zip: "73069", billToCustomerId: ID.amy })).status).toBe(200);
+    const start = new Date().toISOString();
+    await receiveCall(companyId, { id: `c_${suffix}_20`, kind: "call", phone: "+14055550201", direction: "in", result: "answered", durationSeconds: 61, callerName: "ASTER AMY", transcript: null, at: new Date(Date.now() - 61_000) });
+    await receiveCall(companyId, { id: `c_${suffix}_21`, kind: "call", phone: "+14055559876", direction: "in", result: "missed", durationSeconds: 0, callerName: "WIRELESS CALLER", transcript: null, at: new Date() });
+    await receiveCall(companyId, { id: `c_${suffix}_22`, kind: "call", phone: "+14055550242", direction: "in", result: "answered", durationSeconds: 20, callerName: null, transcript: null, at: new Date() });
+    // One the office made isn't an incoming call.
+    await receiveCall(companyId, { id: `c_${suffix}_23`, kind: "call", phone: "+14055550202", direction: "out", result: "answered", durationSeconds: 30, callerName: null, transcript: null, at: new Date() });
+    const r = (await call("GET", `/texting/calls/recent?after=${encodeURIComponent(start)}`, "office")).body;
+    expect(r.calls.map((c: any) => [c.who, c.name, c.result, c.seconds, c.phoneText, c.callerName])).toEqual([
+      ["customer", "Amy Aster", "answered", 61, "(405) 555-0201", "ASTER AMY"],
+      ["unknown", null, "missed", 0, "(405) 555-9876", "WIRELESS CALLER"],
+      ["employee", "Tia Tech", "answered", 20, "(405) 555-0242", null],
+    ]);
+    expect(r.calls[0]).toMatchObject({ customerId: ID.amy, status: "active" });
+    expect(r.calls[0].address).toMatch(/12 Aster Ln, Norman/);
+    expect(r.calls[1]).toMatchObject({ customerId: null, address: null });
+    // Asking again from the time just given: nothing new. A voicemail after that comes with its words.
+    expect((await call("GET", `/texting/calls/recent?after=${encodeURIComponent(r.now)}`, "office")).body.calls).toEqual([]);
+    await receiveCall(companyId, { id: `c_${suffix}_24`, kind: "voicemail", phone: "+14055550202", direction: "in", result: "missed", durationSeconds: 9, callerName: null, transcript: "It's Bo. Please skip this week.", at: new Date() });
+    const next = (await call("GET", `/texting/calls/recent?after=${encodeURIComponent(r.now)}`, "office")).body.calls;
+    expect(next.map((c: any) => [c.kind, c.name, c.transcript])).toEqual([["voicemail", "Bo Birch", "It's Bo. Please skip this week."]]);
+    // Someone picked to answer texts who isn't a Customers manager sees who called, without a way into the customer's page.
+    const tia = (await call("GET", `/texting/calls/recent?after=${encodeURIComponent(start)}`, "tia")).body.calls;
+    expect(tia[0]).toMatchObject({ who: "customer", name: "Amy Aster", customerId: null });
+    // Nothing older than ten minutes, however far back the page asks.
+    await receiveCall(companyId, { id: `c_${suffix}_25`, kind: "call", phone: "+14055550201", direction: "in", result: "missed", durationSeconds: 0, callerName: null, transcript: null, at: new Date() });
+    await db.update(phoneCalls).set({ createdAt: new Date(Date.now() - 11 * 60_000) }).where(eq(phoneCalls.providerId, `c_${suffix}_25`));
+    const [gone] = await db.select({ id: phoneCalls.id }).from(phoneCalls).where(eq(phoneCalls.providerId, `c_${suffix}_25`));
+    const old = (await call("GET", `/texting/calls/recent?after=${encodeURIComponent(new Date(Date.now() - 3_600_000).toISOString())}`, "office")).body.calls;
+    expect(old.length).toBeGreaterThan(0);
+    expect(old.some((c: any) => c.id === gone.id)).toBe(false);
   });
 
   it("a text can be written to go later, and taken back before it does", async () => {

@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { API_URL, api } from "@/lib/api";
 import { fitLogo } from "@/lib/logo";
 import { useAuth } from "@/lib/auth";
@@ -9,7 +9,8 @@ import { SettingsTabs } from "@/components/settings-tabs";
 import { TestCompanyCard } from "@/components/test-company";
 import { BusinessAddressFields, businessAddressValues } from "@/components/business-address-fields";
 import { phoneInput } from "@/lib/phone-input";
-import { formatPhone } from "@crewdesk/shared";
+import { MAX_WEATHER_LINKS, formatPhone, weatherLinkSchema, type WeatherLink } from "@crewdesk/shared";
+import { Grip, useDragOrder } from "@/components/drag-order";
 
 type Info = { hasLogo: boolean; logoFitted?: boolean; logoUpdatedAt: string | null; name: string; legalName: string | null; ein: string | null; address: string | null; addressLine1: string | null; addressLine2: string | null; city: string | null; state: string | null; zip: string | null; phone: string | null; email: string | null; website: string | null; timezone: string; canEdit: boolean };
 
@@ -17,6 +18,66 @@ const US_ZONES = [
   ["America/New_York", "Eastern"], ["America/Chicago", "Central"], ["America/Denver", "Mountain"], ["America/Phoenix", "Arizona (no daylight saving)"],
   ["America/Los_Angeles", "Pacific"], ["America/Anchorage", "Alaska"], ["Pacific/Honolulu", "Hawaii"],
 ];
+
+type LinkRow = WeatherLink & { key: string };
+let linkKey = 0;
+const asRows = (links: WeatherLink[]): LinkRow[] => links.map((l) => ({ ...l, key: `w${linkKey++}` }));
+
+/**
+ * The other weather sites listed in the top bar's forecast box (the weather icon, left of the
+ * search box): a name and a web address each, opened in a new window. Drag to set their order.
+ */
+function WeatherLinksCard() {
+  const box = useApi<{ links: WeatherLink[] }>("/company/forecast");
+  const [rows, setRows] = useState<LinkRow[] | null>(null);
+  const [saved, setSaved] = useState(false);
+  const { busy, error, run } = useAction();
+  useEffect(() => { if (box.data && rows === null) setRows(asRows(box.data.links)); }, [box.data, rows]);
+  const list = rows ?? [];
+  const change = (next: LinkRow[]) => { setRows(next); setSaved(false); };
+  const drag = useDragOrder(list.map((r) => r.key), (keys) => change(keys.map((k) => list.find((r) => r.key === k)!).filter(Boolean)), { busy });
+  const save = () => run(async () => {
+    // A row left empty is a row not wanted.
+    const links = list.filter((r) => r.label.trim() || r.url.trim()).map(({ label, url }) => ({ label, url }));
+    // Said about the link by name, before anything is sent.
+    for (const l of links) {
+      const check = weatherLinkSchema.safeParse(l);
+      if (!check.success) throw new Error(`${l.label.trim() || l.url.trim()}: ${check.error.issues[0].message}`);
+    }
+    const r = await api<{ links: WeatherLink[] }>("/company/weather-links", { method: "PUT", body: { links } });
+    setRows(asRows(r.links));
+    setSaved(true);
+    // The forecast box in the top bar picks them up straight away.
+    window.dispatchEvent(new Event("crewdesk:weather-links"));
+  });
+  return (
+    <div className="card stack" id="weather-links">
+      <strong>Weather links</strong>
+      <span className="muted" style={{ fontSize: 13 }}>
+        The weather icon in the top bar shows the National Weather Service&apos;s forecast for your business address, with links to its forecast, hourly graph and radar.
+        List the other weather sites you like to check here (a wind map, a local station, another radar): they show in that box for everyone and open in a new window.
+      </span>
+      {rows && list.length > 0 && (
+        <ol className="plain-list drag-list wxl-list" ref={drag.box}>
+          {drag.sorted(list, (r) => r.key).map((r) => (
+            <li key={r.key} {...drag.row(r.key, "row")}>
+              <Grip drag={drag} id={r.key} name={r.label || "Link"} />
+              <input value={r.label} maxLength={40} placeholder="Name, like Radar" aria-label="Name" onChange={(e) => change(list.map((x) => (x.key === r.key ? { ...x, label: e.target.value } : x)))} />
+              <input value={r.url} maxLength={300} placeholder="Web address, like www.example.com" aria-label="Web address" inputMode="url" onChange={(e) => change(list.map((x) => (x.key === r.key ? { ...x, url: e.target.value } : x)))} />
+              <button type="button" className="btn sm" aria-label={`Remove ${r.label || "this link"}`} onClick={() => change(list.filter((x) => x.key !== r.key))}>✕</button>
+            </li>
+          ))}
+        </ol>
+      )}
+      <div className="row">
+        <button type="button" className="btn sm" disabled={!rows || list.length >= MAX_WEATHER_LINKS} onClick={() => change([...list, { key: `w${linkKey++}`, label: "", url: "" }])}>Add a link</button>
+        <button type="button" className="btn sm primary" disabled={!rows || busy} onClick={save}>{busy ? "Saving…" : "Save links"}</button>
+        {saved && <span className="muted" role="status">Saved.</span>}
+      </div>
+      <ErrorBox error={error ?? box.error} />
+    </div>
+  );
+}
 
 /** The company logo: shown here and in everyone's top bar, in place of the company name. The owner adds, changes or removes it. */
 function LogoCard({ info, onChange }: { info: Info; onChange: (i: Info) => Promise<void> }) {
@@ -147,6 +208,7 @@ export default function CompanyInfo() {
           ) : <p className="muted" style={{ margin: 0 }}>Only the owner can change company info.</p>}
         </form>
       )}
+      {d?.canEdit && <WeatherLinksCard />}
       {d?.canEdit && <TestCompanyCard />}
     </>
   );

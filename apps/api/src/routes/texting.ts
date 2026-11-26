@@ -6,7 +6,7 @@ import {
   textQuickReplySchema, textQuietSchema, textSendSchema, textingChoices, textingOptionsSchema, toE164, hasRole, type TextFilter,
 } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, crewMembers, crews, customerTexts, customers, employees, phoneCalls, pushTokens, textBatches, textGroupMembers, textGroups, textMedia, textQuickReplies, textThreads } from "../db/schema";
+import { companies, crewMembers, crews, customerTexts, customers, employees, phoneCalls, properties, propertyAssignments, pushTokens, textBatches, textGroupMembers, textGroups, textMedia, textQuickReplies, textThreads } from "../db/schema";
 import { authenticate, isManager, requireRole, roleIn } from "../lib/auth";
 import { customerInCompany } from "../lib/crm";
 import { HttpError, parse } from "../lib/errors";
@@ -322,6 +322,49 @@ const routes: FastifyPluginAsync = async (app) => {
     const rows = await db.select().from(phoneCalls).where(and(eq(phoneCalls.companyId, companyId), c ? eq(phoneCalls.customerId, c.id) : undefined)).orderBy(desc(phoneCalls.at)).limit(c ? 50 : 100);
     const cfg = await textingConfig(companyId);
     return { on: !!cfg?.calls, rows: rows.map((r) => ({ id: r.id, kind: r.kind, direction: r.direction, result: r.result, seconds: r.durationSeconds, phone: r.phone, callerName: r.callerName, transcript: r.transcript, at: r.at })) };
+  });
+
+  /**
+   * Calls that just came in, for the caller box in the top bar: who it was (the customer or
+   * employee the number belongs to), and how the call went. The phone service reports a call when
+   * it is over, so this is "who just called", seconds after they hang up. The page asks every few
+   * seconds, passing back the `now` it was given last time; with no `after` it gets nothing but the time.
+   */
+  app.get<{ Querystring: { after?: string } }>("/calls/recent", async (req) => {
+    const { companyId } = req.user;
+    const now = new Date();
+    const cfg = await textingConfig(companyId);
+    const after = req.query.after ? new Date(req.query.after) : null;
+    // `on`: whether the phone service is set to report calls at all (Settings → Integrations).
+    const on = !!cfg?.calls;
+    if (!after || Number.isNaN(+after)) return { on, now, calls: [] };
+    // No further back than ten minutes: a computer waking from sleep doesn't pop the morning's calls.
+    const since = new Date(Math.max(+after, +now - 10 * 60_000));
+    const rows = await db.select({ p: phoneCalls, c: customers, e: { firstName: employees.firstName, lastName: employees.lastName } }).from(phoneCalls)
+      .leftJoin(customers, eq(customers.id, phoneCalls.customerId)).leftJoin(employees, eq(employees.id, phoneCalls.employeeId))
+      .where(and(eq(phoneCalls.companyId, companyId), eq(phoneCalls.direction, "in"), sql`${phoneCalls.createdAt} > ${since.toISOString()}`, sql`${phoneCalls.at} > ${new Date(+since - 86_400_000).toISOString()}`))
+      .orderBy(asc(phoneCalls.createdAt)).limit(5);
+    const canSeeCustomers = isManager(req, AREA);
+    // Where the customer's service is, to tell two Smiths apart at a glance.
+    const ids = [...new Set(rows.map((r) => r.c?.id).filter((x): x is string => !!x))];
+    const places = ids.length ? await db.select({ customerId: propertyAssignments.customerId, street: properties.street, city: properties.city }).from(propertyAssignments)
+      .innerJoin(properties, eq(properties.id, propertyAssignments.propertyId))
+      .where(and(inArray(propertyAssignments.customerId, ids), isNull(propertyAssignments.endDate), eq(properties.status, "active"))).orderBy(asc(properties.createdAt)) : [];
+    return {
+      on, now,
+      calls: rows.map(({ p, c, e }) => {
+        const at = c ? places.filter((x) => x.customerId === c.id) : [];
+        return {
+          id: p.id, kind: p.kind, result: p.result, seconds: p.durationSeconds, phone: p.phone, phoneText: formatPhone(p.phone), callerName: p.callerName, at: p.at,
+          transcript: p.kind === "voicemail" ? p.transcript : null,
+          who: c ? "customer" as const : e ? "employee" as const : "unknown" as const,
+          name: c ? customerName(c) : e ? fullName(e) : null,
+          customerId: c && canSeeCustomers ? c.id : null,
+          address: at[0] ? [at[0].street, at[0].city].filter(Boolean).join(", ") + (at.length > 1 ? ` (+${at.length - 1} more)` : "") : null,
+          status: c?.status ?? null,
+        };
+      }),
+    };
   });
 
   /** Where a voicemail's recording can be played from (Talkroute's own short-lived address). */

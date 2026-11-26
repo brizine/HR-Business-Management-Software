@@ -14,11 +14,40 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
 
 - **Top bar** (laid out like Homeworks, left to right): the **menu button** (shows or hides the page names in the
   left menu); your company's **logo**, or its name until a logo is added in **Settings → Company Info** (click
-  it for the home page); the **Operations | Team** switch; **Search** in
-  the middle (click it or press **Ctrl+K**, **⌘K** on a Mac); **Clocked out** / **Clocked in** (click to clock
+  it for the home page); the **Operations | Team** switch; the **weather** icon; **Search** in
+  the middle (click it or press **Ctrl+K**, **⌘K** on a Mac); the **phone**, **Text** and **email** icons;
+  **Clocked out** / **Clocked in** (click to clock
   in or out after a quick "are you sure?"; it shows how long you've been on and follows your company's location
-  rules like the Time Clock page); the **Text** chat bubble (for the people who answer texts; the red number is
-  how many conversations have something unread); **To-dos**; the **Notifications** bell; **+ New**; and your initials.
+  rules like the Time Clock page); **To-dos**; the **Notifications** bell; **+ New**; and your initials.
+- **Weather** (left of Search, for everyone): the icon shows this hour's weather and temperature at your business
+  address. Click it for the **National Weather Service's forecast**: any warnings or advisories in effect (red or
+  amber, at the top), this hour's wind, chance of rain and humidity, the next twelve hours (temperature, wind
+  speed and the direction it comes from, chance of rain), and the week ahead, a day to a line. Click a day for
+  the Weather Service's full wording. At the bottom are links that open in a new window: the Weather Service's
+  own **7-day forecast**, **Hourly graph** and **Radar** for your spot, and under **More weather** the sites
+  your company has listed.
+  - The owner lists those in **Settings → Company Info → Weather links** (a name and a web address each; drag
+    them into order; up to 12). **Edit links** in the box goes there.
+  - The forecast is for the business address in Settings → Company Info, so it needs one. Crewdesk asks the
+    Weather Service every 15 minutes at most; if it can't be reached, the last forecast shows, marked as such.
+  - A red dot on the icon means a warning or advisory is in effect.
+- **Phone** (right of Search, for the people who answer texts): click it to open **Talkroute's desktop app**.
+  It opens your computer's calling app, so set Talkroute as the default app for calls once (Windows: Settings →
+  Apps → Default apps → search **TEL**; Mac: FaceTime → Settings → **Default for calls**), and tick "always
+  allow" the first time your browser asks.
+  - **The caller box:** when a call comes in to your Talkroute number, a box pops up under the phone icon on
+    whatever page you're on: the customer's name (or "Unknown caller" and the caller ID), their number and
+    service address, and how the call went (**Answered** and how long, **Missed call**, or **Left a voicemail**
+    with its words). **Open customer** goes to their page, **Call back** dials them in Talkroute, **Text** opens
+    the conversation. It stays until you close it (✕), up to four at a time, newest on top.
+  - Talkroute tells Crewdesk about a call **when it ends**, not while it's ringing. So the box appears a few
+    seconds after the caller hangs up or goes unanswered. While the phone is ringing, the caller's name shows
+    in Talkroute's own app; **Copy customers to Talkroute** (Settings → Integrations) puts your customers' names
+    there. Calls need to be reported for any of this: Settings → Integrations shows whether they are.
+- **Text** (right of Search, for the people who answer texts): opens the Text page; the red number is how many
+  conversations have something unread.
+- **Email** (right of Search, for Customers & billing managers): opens **Marketing → Templates** on its
+  **Sent / History** tab: every email Crewdesk has sent, with the email templates one tab over.
 - **To-dos button:** the red number is how many of your to-dos are due today or overdue. Click it to see them,
   tick them off, add one (**+ New to-do**) or open the To-dos page (**View all**).
 - **Search:** click it before typing for quick links (Customers, Team, Shifts and Account settings). Then type and
@@ -128,6 +157,8 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
     soft.
   - A logo added before Crewdesk did this shows a **Fit this logo** button, which does the same to the logo
     that's already saved. Uploading the original file again gives a sharper result.
+  - **Weather links** (owner): the other weather sites listed in the top bar's weather box. See **Weather**
+    under "Finding your way".
 - **Layout Editor** (owner): drag boxes and fields to rearrange pages, hide items, edit drop-down
   menus (job titles, departments and so on), set **Role access**, and edit the **User Manual**
   (**Edit the user manual**: change anything or add company procedures, check it on **Preview**,

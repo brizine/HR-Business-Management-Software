@@ -778,6 +778,69 @@ kbd { font: 11px ui-monospace, monospace; padding: 1px 6px; border-radius: 4px; 
 .topbar-icon:hover { background: rgba(255,255,255,.08); color: #fff; }
 .topbar-count { position: absolute; top: 1px; right: -2px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; background: var(--bad); color: #fff;
   font-size: 10px; font-weight: 700; line-height: 17px; text-align: center; }
+/* Around the search box: the weather to its left; phone, texts and email to its right. */
+.topbar-weather-btn.with-temp { width: auto; padding: 0 8px; gap: 5px; font: inherit; font-size: 13px; font-weight: 600; color: #fff; }
+.topbar-weather-temp { font-variant-numeric: tabular-nums; }
+.topbar-dot { position: absolute; top: 4px; right: 3px; width: 10px; height: 10px; border-radius: 50%; background: #ef4444; border: 2px solid var(--sidebar); }
+.topbar-popover.wx-box { width: min(430px, calc(100vw - 16px)); max-width: none; max-height: calc(100vh - 76px); overflow-y: auto; gap: 10px; padding: 12px; }
+.wx-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.wx-head strong { font-size: 15px; }
+.wx-head a { font-size: 12px; text-decoration: none; display: inline-flex; gap: 3px; align-items: center; white-space: nowrap; }
+.wx-head a:hover { color: var(--primary); }
+.wx-problem { margin: 0; }
+.wx-alert { display: flex; gap: 8px; align-items: center; padding: 7px 9px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); text-decoration: none; font-size: 13px; }
+.wx-alert.severe { background: var(--bad-bg); color: var(--bad); }
+.wx-alert svg { flex: none; }
+.wx-now { display: flex; align-items: center; gap: 10px; }
+.wx-now svg { flex: none; color: var(--primary); }
+.wx-now-temp { font-size: 30px; font-weight: 700; line-height: 1; }
+.wx-now-words { display: grid; font-size: 13px; min-width: 0; }
+.wx-now-words span { color: var(--muted); }
+.wx-hours { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+.wx-hours > div { display: grid; justify-items: center; gap: 1px; padding: 5px 2px; border-radius: 8px; background: var(--bg); font-size: 12px; }
+.wx-hours svg { color: var(--muted); }
+.wx-hour { color: var(--muted); }
+.wx-wind small { color: var(--muted); font-size: 10px; }
+.wx-rain { color: var(--muted); font-size: 11px; min-height: 14px; }
+.wx-rain.wet { color: var(--primary); font-weight: 600; }
+.wx-key { font-size: 11px; margin-top: -4px; }
+.wx-days { display: grid; }
+.wx-days details { border-top: 1px solid var(--border); }
+.wx-days summary { display: grid; grid-template-columns: minmax(118px, 1.3fr) 20px 68px minmax(0, 1.6fr) 34px; gap: 8px; align-items: center; padding: 6px 2px; cursor: pointer; list-style: none; font-size: 13px; border-radius: 6px; }
+.wx-days summary::-webkit-details-marker { display: none; }
+.wx-days summary:hover { background: var(--bg); }
+.wx-days summary svg { color: var(--muted); }
+.wx-day { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-short { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-temps { white-space: nowrap; }
+.wx-days .wx-rain { text-align: right; }
+.wx-days p { margin: 0 2px 8px; font-size: 13px; color: var(--muted); }
+.wx-foot { font-size: 11px; }
+.wx-links { display: grid; gap: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
+.wx-links > div { display: flex; flex-wrap: wrap; gap: 5px 6px; align-items: center; }
+.wx-links .todo-label { flex-basis: 100%; }
+.wx-links a { padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; text-decoration: none; color: var(--text); }
+.wx-links a:hover { border-color: var(--primary); color: var(--primary); }
+.wx-links a.wx-edit { border-style: dashed; color: var(--muted); }
+/* The caller box: who just called, under the phone icon. */
+.call-stack { position: absolute; top: calc(100% + 8px); left: 0; z-index: 65; width: min(330px, calc(100vw - 16px)); display: grid; gap: 8px; }
+.call-box { display: grid; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-left: 4px solid var(--ok);
+  box-shadow: 0 10px 30px rgba(0,0,0,.24); font-size: 13px; }
+.call-box.missed { border-left-color: var(--bad); }
+.call-top { display: flex; gap: 8px; align-items: flex-start; }
+.call-top > svg { flex: none; margin-top: 2px; color: var(--ok); }
+.call-box.missed .call-top > svg { color: var(--bad); }
+.call-who { flex: 1; min-width: 0; display: grid; }
+.call-who strong { font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
+.call-who span { color: var(--muted); }
+.call-x { display: inline-flex; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 3px; border-radius: 6px; }
+.call-x:hover { background: var(--bg); color: var(--text); }
+.call-how.bad { color: var(--bad); font-weight: 600; }
+.call-words { font-style: italic; color: var(--muted); max-height: 5.4em; overflow: auto; }
+.call-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.call-actions .btn { text-decoration: none; }
+/* Settings → Company Info: the weather links, a name and an address each. */
+.wxl-list > li { display: grid; grid-template-columns: auto minmax(110px, 1fr) minmax(160px, 2fr) auto; gap: 8px; }
 .topbar-clock { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.22);
   background: transparent; color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .topbar-clock:hover { background: rgba(255,255,255,.08); }
@@ -886,9 +949,21 @@ kbd { font: 11px ui-monospace, monospace; padding: 1px 6px; border-radius: 4px; 
 .rail-flyout .theme-option:hover { background: var(--info-bg); }
 .rail-flyout .theme-option[aria-checked="true"] { color: var(--primary); font-weight: 600; }
 
+/* As the window narrows, the bar sheds words before it sheds buttons, and the logo keeps its size. */
+@media (max-width: 1200px) {
+  .topbar { gap: 8px; }
+  .topbar-weather-temp { display: none; }
+  .topbar-weather-btn.with-temp { width: 36px; padding: 0; }
+  .topbar-new span, .topbar-new-caret { display: none; }
+}
 @media (max-width: 1100px) {
   .topbar-search kbd { display: none; }
-  .topbar-clock-time { display: none; }
+  .topbar-clock-time, .topbar-clock-label { display: none; }
+  .topbar-clock { padding: 0 9px; }
+}
+@media (max-width: 960px) {
+  .topbar-search { display: none; }
+  .topbar-search-btn { display: inline-flex; }
 }
 @media (max-width: 800px) {
   .topbar { padding: 0 8px; gap: 6px; }
@@ -901,6 +976,7 @@ kbd { font: 11px ui-monospace, monospace; padding: 1px 6px; border-radius: 4px; 
   .topbar-popover.new-mega { position: fixed; top: 60px; left: 8px; right: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .new-col button { white-space: normal; }
   .topbar-popover.bell-pop { position: fixed; top: 60px; left: 8px; right: 8px; width: auto; max-width: none; }
+  .topbar-popover.wx-box, .call-stack { position: fixed; top: 60px; left: 8px; right: 8px; width: auto; }
   .rail { display: none; }
   .rail.drawer { display: flex; position: fixed; top: 0; left: 0; bottom: 0; height: 100vh; width: 270px; z-index: 100; overflow-y: auto; }
   .app > .shell { flex-direction: row; }
@@ -911,8 +987,10 @@ kbd { font: 11px ui-monospace, monospace; padding: 1px 6px; border-radius: 4px; 
 @media (max-width: 520px) {
   .topbar-clock-label, .topbar-clock-time { display: none; }
   .topbar-brand { max-width: 110px; }
-  /* A phone's bar is all buttons: close them up so the logo (or name) has what room there is. */
+  /* A phone's bar is all buttons: close them up so the logo (or name) has what room there is. The
+     weather, phone and email icons are for the office's bigger screens. */
   .topbar { gap: 2px; padding: 0 6px; }
+  .topbar-weather, .topbar-phone, .topbar-email { display: none; }
   .topbar-brand.plate { padding: 2px 4px; }
 }
 

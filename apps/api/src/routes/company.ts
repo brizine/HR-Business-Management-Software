@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { eq } from "drizzle-orm";
-import { companyInfoSchema, hasRole } from "@crewdesk/shared";
+import { companyInfoSchema, hasRole, weatherLinksSchema } from "@crewdesk/shared";
 import { db } from "../db";
 import { companies } from "../db/schema";
 import { authenticate, requireRole, roleIn } from "../lib/auth";
@@ -9,6 +9,7 @@ import { HttpError, notFound, parse } from "../lib/errors";
 import { MAX_IMAGE_BYTES, imageType } from "../lib/images";
 import { storage } from "../lib/storage";
 import { FITTED, logoIsFitted, readLogo, smallLogoKey } from "../lib/logo";
+import { companyForecast, saveWeatherLinks } from "../lib/forecast";
 import { companyAddressUpdate, companyAddressView } from "../lib/companyAddress";
 
 type Company = typeof companies.$inferSelect;
@@ -83,6 +84,18 @@ const routes: FastifyPluginAsync = async (app) => {
   app.delete("/logo", { preHandler: requireRole("owner", "company") }, async (req) => {
     const [c] = await db.update(companies).set({ logoKey: null, logoUpdatedAt: new Date() }).where(eq(companies.id, req.user.companyId)).returning();
     return view(c, req);
+  });
+
+  /**
+   * The forecast box (the weather icon in everyone's top bar): the National Weather Service's
+   * forecast for the business address, and the company's own links to other weather sites.
+   */
+  app.get("/forecast", async (req) => ({ ...(await companyForecast(req.user.companyId)), canEdit: hasRole(roleIn(req, "company"), "owner") }));
+
+  /** The other weather sites listed in the forecast box (Settings → Company Info). */
+  app.put("/weather-links", { preHandler: requireRole("owner", "company") }, async (req) => {
+    const b = parse(weatherLinksSchema, req.body);
+    return { links: await saveWeatherLinks(req.user.companyId, b.links) };
   });
 
   /** The owner (or owner-level Company settings access) edits the company's details. */

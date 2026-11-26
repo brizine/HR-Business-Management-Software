@@ -25,6 +25,68 @@ export const weatherSettingsSchema = z.object({
 export type WeatherSettings = z.infer<typeof weatherSettingsSchema>;
 export const DEFAULT_WEATHER_SETTINGS: WeatherSettings = { mode: "auto" };
 
+/* ───────────── The forecast box (the weather icon in the top bar) ───────────── */
+
+/** A weather site the company likes to check (radar, a wind map…): opened in a new window from the forecast box. */
+export const weatherLinkSchema = z.object({
+  label: z.string().trim().min(1, "Give the link a name").max(40),
+  url: z.string().trim().max(300).transform((v) => (/^[a-z][a-z0-9+.-]*:/i.test(v) ? v : `https://${v}`))
+    .refine((v) => { try { const u = new URL(v); return (u.protocol === "https:" || u.protocol === "http:") && u.hostname.includes("."); } catch { return false; } }, "Enter a web address, like www.weather.gov"),
+});
+export type WeatherLink = z.infer<typeof weatherLinkSchema>;
+export const MAX_WEATHER_LINKS = 12;
+export const weatherLinksSchema = z.object({ links: z.array(weatherLinkSchema).max(MAX_WEATHER_LINKS, `Up to ${MAX_WEATHER_LINKS} links`) });
+
+/** The pictures the forecast is drawn with. */
+export const FORECAST_ICONS = ["sun", "moon", "partly", "partly-night", "cloud", "rain", "storm", "snow", "fog", "wind"] as const;
+export type ForecastIcon = (typeof FORECAST_ICONS)[number];
+
+/** One line of the 7-day forecast ("Tonight", "Friday"). */
+export type ForecastPeriod = {
+  name: string; start: string; end: string; day: boolean; tempF: number | null; rainPct: number | null;
+  /** As the Weather Service words it: "7 to 12 mph". */
+  wind: string; windDir: string; short: string; detail: string; icon: ForecastIcon;
+};
+/** One hour ahead. */
+export type ForecastHour = { at: string; day: boolean; tempF: number | null; rainPct: number | null; windMph: number | null; windDir: string; humidity: number | null; short: string; icon: ForecastIcon };
+/** A warning, watch or advisory in effect for the spot. */
+export type ForecastAlert = { event: string; severity: string; headline: string; ends: string | null; url: string | null };
+export type Forecast = {
+  /** "Norman, OK" */
+  place: string; lat: number; lng: number;
+  /** When the Weather Service last wrote the forecast. */
+  updatedAt: string | null;
+  periods: ForecastPeriod[]; hours: ForecastHour[]; alerts: ForecastAlert[];
+  /** The Weather Service's own pages for this spot. */
+  pages: { forecast: string; hourly: string; radar: string };
+};
+
+/**
+ * The picture for one of the Weather Service's forecast icons. Its address names the weather
+ * ("…/icons/land/day/tsra_hi,40?size=medium"; two when it changes during the period), and the
+ * worst of what it names is what the picture shows.
+ */
+export function forecastIcon(iconUrl: string | null | undefined, day: boolean): ForecastIcon {
+  const codes = (iconUrl ?? "").split("?")[0].split("/").slice(-2).map((part) => part.split(",")[0].toLowerCase()).filter((c) => c && c !== "day" && c !== "night" && c !== "land");
+  const kind = (c: string): [number, ForecastIcon] => {
+    if (/tsra|tornado|hurricane|tropical/.test(c)) return [6, "storm"];
+    if (/snow|sleet|blizzard|fzra/.test(c)) return [5, "snow"];
+    if (/rain|shower/.test(c)) return [4, "rain"];
+    if (/fog|haze|smoke|dust/.test(c)) return [3, "fog"];
+    if (/ovc|bkn/.test(c)) return [2, "cloud"];
+    if (/sct/.test(c)) return [1, day ? "partly" : "partly-night"];
+    if (/^wind/.test(c)) return [1, "wind"];
+    return [0, day ? "sun" : "moon"];
+  };
+  return codes.map(kind).sort((a, b) => b[0] - a[0])[0]?.[1] ?? (day ? "sun" : "moon");
+}
+
+/** "7 to 12 mph" → 12; "5 mph" → 5. The top of the range, which is what matters before spraying. */
+export function windTopMph(text: string | null | undefined): number | null {
+  const nums = (text ?? "").match(/\d+(\.\d+)?/g)?.map(Number) ?? [];
+  return nums.length ? Math.max(...nums) : null;
+}
+
 const blankToNull = (v: unknown) => (typeof v === "string" && v.trim() === "" ? null : v);
 const num = (min: number, max: number, msg: string) => z.preprocess(blankToNull, z.coerce.number().min(min, msg).max(max, msg).nullable()).optional();
 

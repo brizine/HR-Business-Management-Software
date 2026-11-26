@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { NAV, NEW_MENU, SIDES, pathMatches, type NavGroup, type NavItem, type Side } from "@/lib/nav";
 import { Icon } from "@/components/icons";
 import { TextsButton } from "./texting";
+import { EmailButton, PhoneButton, WeatherButton } from "./topbar-extras";
 import { useClockPunch } from "@/components/clock-card";
 import { TestBadge, backToRealCompany, openTestCompany } from "@/components/test-company";
 import { THEME_CHOICES, setTheme, useTheme } from "@/lib/theme";
@@ -97,13 +98,16 @@ export function TopBar(props: {
     const onKey = (e: KeyboardEvent) => {
       if (!((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k")) return;
       e.preventDefault();
-      if (isNarrow() || !searchInput.current) setSearching(true);
+      // The search box folds into its icon on a narrow window: then search opens full screen.
+      if (isNarrow() || !searchInput.current || searchInput.current.offsetParent === null) setSearching(true);
       else searchInput.current.focus();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
   if (!me) return null;
+  // The envelope is for people who can open the email page (Marketing → Templates).
+  const canEmail = SIDES.some((s) => props.visibleItems(s.key).some((i) => i.href === "/templates"));
   return (
     <header className={`topbar${me.company.isTest ? " is-test" : ""}`}>
       <button type="button" className="topbar-icon topbar-toggle" aria-label={props.railExpanded ? "Narrow the menu" : "Expand the menu"} title="Show or hide the menu"
@@ -116,11 +120,15 @@ export function TopBar(props: {
         ))}
       </div>
       <div className="topbar-spacer" />
+      {/* Around the search box: the weather to its left; phone, texts and email to its right. */}
+      <WeatherButton />
       <InlineSearch inputRef={searchInput} visibleItems={props.visibleItems} />
       <button type="button" className="topbar-icon topbar-search-btn" aria-label="Search" onClick={() => setSearching(true)}><Icon name="search" /></button>
+      <PhoneButton />
+      <TextsButton />
+      {canEmail && <EmailButton />}
       <div className="topbar-spacer" />
       <ClockButton />
-      <TextsButton />
       <TodosButton />
       <NotificationsBell unread={props.unread} />
       <NewMenu />
