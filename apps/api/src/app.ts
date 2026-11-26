@@ -51,6 +51,7 @@ import textingRoutes, { textingHookRoutes } from "./routes/texting";
 import automationRoutes from "./routes/automations";
 import myDayRoutes from "./routes/myDay";
 import waitlistRoutes from "./routes/waitlist";
+import dispatchRoutes from "./routes/dispatch";
 import weatherRoutes from "./routes/weather";
 import templateRoutes, { emailImageRoutes, trackRoutes } from "./routes/templates";
 import docRoutes from "./routes/docs";
@@ -172,6 +173,7 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(automationRoutes, { prefix: "/automations" });
   await app.register(myDayRoutes, { prefix: "/my-day" });
   await app.register(waitlistRoutes, { prefix: "/waitlist" });
+  await app.register(dispatchRoutes, { prefix: "/dispatch" });
   await app.register(weatherRoutes, { prefix: "/weather" });
   await app.register(templateRoutes, { prefix: "/templates" });
   await app.register(docRoutes, { prefix: "/docs" });

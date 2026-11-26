@@ -85,6 +85,8 @@ export const companies = pgTable("companies", {
   textingNotifyIds: uuid("texting_notify_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
   /** The office's texting choices (after-hours reply, missed-call text) and how its long jobs are going. See shared/texting. */
   textingOptions: jsonb("texting_options").$type<import("@crewdesk/shared").TextingOptions>(),
+  /** Dispatch: how drive times are measured, where routes start and end, and the business address located (lib/dispatch). */
+  dispatchSettings: jsonb("dispatch_settings").$type<Partial<import("@crewdesk/shared").DispatchSettings>>(),
   /** Grace periods, alerts and points for attendance (see attendance.ts in @crewdesk/shared). */
   attendanceRules: jsonb("attendance_rules").$type<AttendanceRules>(),
   /** The company's own edited copy of the user manual (Markdown); null = the standard docs/help-guide.md. */
@@ -149,6 +151,10 @@ export const employees = pgTable(
     phone: text("phone"),
     /** "Don't tell me about incoming texts between these times" (the company's time zone): { start: "21:00", end: "07:00" }. */
     textQuiet: jsonb("text_quiet").$type<{ start: string; end: string }>(),
+    /** Dispatch capacity: budgeted hours they can take in a day and (when set) in a week; excluded people don't count toward a crew's. */
+    dailyCapacityHours: doublePrecision("daily_capacity_hours").notNull().default(8),
+    weeklyCapacityHours: doublePrecision("weekly_capacity_hours"),
+    capacityExcluded: boolean("capacity_excluded").notNull().default(false),
     passwordHash: text("password_hash"),
     role: text("role").notNull().default("employee"),
     title: text("title"),
@@ -3268,4 +3274,95 @@ export const emailImages = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("email_images_company_idx").on(t.companyId, t.createdAt)],
+);
+
+/**
+ * Dispatch: a route is an ordered set of stops that one crew (or set of people) does in a day. Its
+ * start, end and start time are saved with it, so anyone who opens it sees the same route.
+ */
+export const dispatchRoutes = pgTable(
+  "dispatch_routes",
+  {
+    id: id(),
+    companyId: companyId(),
+    date: date("date").notNull(),
+    crewId: uuid("crew_id").references(() => crews.id, { onDelete: "set null" }),
+    /** "company" | "crew" | "employee" | "custom" | "none" (an open end), with where that was when it was saved. */
+    startKind: text("start_kind").notNull().default("company"),
+    startLabel: text("start_label"),
+    startLat: doublePrecision("start_lat"),
+    startLng: doublePrecision("start_lng"),
+    endKind: text("end_kind").notNull().default("company"),
+    endLabel: text("end_label"),
+    endLat: doublePrecision("end_lat"),
+    endLng: doublePrecision("end_lng"),
+    /** "HH:MM" in the company's time zone. */
+    startTime: text("start_time").notNull().default("08:00"),
+    /** The first stop holds its place when the route is optimized or reversed. */
+    pinnedFirst: boolean("pinned_first").notNull().default(false),
+    totalMeters: doublePrecision("total_meters"),
+    totalDriveSeconds: integer("total_drive_seconds"),
+    /** The drive from the last stop back to the end. */
+    endMeters: doublePrecision("end_meters"),
+    endSeconds: integer("end_seconds"),
+    /** "road" (from a routing server) or "estimate". */
+    measured: text("measured"),
+    /** The line to draw, as [lat, lng] points (road routes only). */
+    geometry: jsonb("geometry").$type<[number, number][]>(),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("dispatch_routes_company_date_idx").on(t.companyId, t.date)],
+);
+
+/** One stop on a route: a work order or a to-do (each can be on one route). `stopOrder` only sorts; stops are numbered 1…n when shown. */
+export const dispatchStops = pgTable(
+  "dispatch_stops",
+  {
+    id: id(),
+    routeId: uuid("route_id").notNull().references(() => dispatchRoutes.id, { onDelete: "cascade" }),
+    visitId: uuid("visit_id").references(() => visits.id, { onDelete: "cascade" }),
+    todoId: uuid("todo_id").references(() => todos.id, { onDelete: "cascade" }),
+    stopOrder: integer("stop_order").notNull(),
+    /** The drive into this stop (null for a stop with no location, or the first stop of a route with no start). */
+    driveSeconds: integer("drive_seconds"),
+    driveMeters: doublePrecision("drive_meters"),
+  },
+  (t) => [
+    index("dispatch_stops_route_idx").on(t.routeId),
+    uniqueIndex("dispatch_stops_visit_idx").on(t.visitId),
+    uniqueIndex("dispatch_stops_todo_idx").on(t.todoId),
+  ],
+);
+
+/** Dispatch notes on a work order: short messages between the office and the field. Never edited or deleted. (To-dos have todo_notes.) */
+export const visitDispatchNotes = pgTable(
+  "visit_dispatch_notes",
+  {
+    id: id(),
+    companyId: companyId(),
+    visitId: uuid("visit_id").notNull().references(() => visits.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    authorId: uuid("author_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("visit_dispatch_notes_visit_idx").on(t.visitId)],
+);
+
+/** Shapes drawn on the dispatch map (territories, neighbourhoods), shared by the whole company. */
+export const mapAreas = pgTable(
+  "map_areas",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull(),
+    color: text("color").notNull().default("#2563eb"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    /** Corners as [lat, lng]. */
+    points: jsonb("points").$type<[number, number][]>().notNull(),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("map_areas_company_idx").on(t.companyId)],
 );

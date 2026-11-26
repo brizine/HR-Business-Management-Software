@@ -51,3 +51,4 @@ export * from "./templates";
 export * from "./docs";
 export * from "./emailDesign";
 export * from "./visitForms";
+export * from "./dispatch";
