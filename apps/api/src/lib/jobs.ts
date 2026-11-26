@@ -1,5 +1,5 @@
 import { applyLateFees, runAutoSend } from "./billingJobs";
-import { pollInboundTexts } from "./texting";
+import { pollInboundTexts, resumeTextQueue } from "./texting";
 import { runAutomations } from "./automations";
 import { pruneEmailLog } from "./emailHealth";
 import { runWeather } from "./weather";
@@ -48,6 +48,8 @@ export async function runScheduledChecks(now = new Date()) {
   await applyLateFees(now).catch((err) => console.error("late fees failed", err));
   await runAutoSend(now).catch((err) => console.error("auto-send failed", err));
   await pollInboundTexts().catch((err) => console.error("checking texts failed", err));
+  // Texts lined up in a send to many that a restart left waiting (not waited for: they go out a few a minute).
+  await resumeTextQueue().catch((err) => console.error("sending queued texts failed", err));
   await runAutomations(now).catch((err) => console.error("automations failed", err));
   await pruneEmailLog(now).catch((err) => console.error("email log prune failed", err));
   // Weather for chemical applications whose station hadn't reported yet.

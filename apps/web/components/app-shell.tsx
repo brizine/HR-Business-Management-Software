@@ -8,6 +8,7 @@ import { hrefFor } from "@/lib/links";
 import { useAuth } from "@/lib/auth";
 import { NAV, NEW_MENU, SIDES, pathMatches, type NavGroup, type NavItem, type Side } from "@/lib/nav";
 import { Icon } from "@/components/icons";
+import { TextsButton } from "./texting";
 import { useClockPunch } from "@/components/clock-card";
 import { TestBadge, backToRealCompany, openTestCompany } from "@/components/test-company";
 import { THEME_CHOICES, setTheme, useTheme } from "@/lib/theme";
@@ -69,6 +70,7 @@ export function TopBar(props: {
       <button type="button" className="topbar-icon topbar-search-btn" aria-label="Search" onClick={() => setSearching(true)}><Icon name="search" /></button>
       <div className="topbar-spacer" />
       <ClockButton />
+      <TextsButton />
       <TodosButton />
       <NotificationsBell unread={props.unread} />
       <NewMenu />

@@ -10,6 +10,7 @@ import { MenusProvider } from "@/lib/menus";
 import { LocationRequired } from "@/lib/location";
 import { routeFor } from "@/lib/push";
 import { UnreadProvider, useUnread } from "@/lib/unread";
+import { TextsProvider } from "@/lib/texts";
 
 // The browser preview has no notifications (and the hook throws there).
 const useLastNotificationResponse = Platform.OS === "web" ? () => null : Notifications.useLastNotificationResponse;
@@ -65,6 +66,8 @@ function Gate() {
       <Stack.Screen name="training/[id]" options={{ title: "Course" }} />
       <Stack.Screen name="training/lesson/[id]" options={{ title: "Lesson" }} />
       <Stack.Screen name="asset/[id]" options={{ title: "Asset" }} />
+      <Stack.Screen name="texts/index" options={{ title: "Text Messages" }} />
+      <Stack.Screen name="texts/[id]" options={{ title: "" }} />
       <Stack.Screen name="inspect/[id]" options={{ title: "Inspection", presentation: "modal" }} />
     </Stack>
   );
@@ -75,9 +78,11 @@ export default function RootLayout() {
     <AuthProvider>
       <MenusProvider>
         <UnreadProvider>
-          <StatusBar style="auto" />
-          <Gate />
-          <LocationRequired />
+          <TextsProvider>
+            <StatusBar style="auto" />
+            <Gate />
+            <LocationRequired />
+          </TextsProvider>
         </UnreadProvider>
       </MenusProvider>
     </AuthProvider>

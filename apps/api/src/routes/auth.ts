@@ -7,6 +7,7 @@ import { z } from "zod";
 import { db } from "../db";
 import { companies, employees, passwordResets, recoveryCodes } from "../db/schema";
 import { hasChemicalAccess } from "../lib/chemicalAccess";
+import { hasTextingAccess } from "../lib/texting";
 import {
   TWO_FACTOR_POLICIES,
   clearSessionCookie,
@@ -160,7 +161,9 @@ async function newRecoveryCodes(employeeId: string) {
  * accounting connection (or its encrypted key), or the edited manual (the Help page loads that).
  */
 function publicCompany(company: typeof companies.$inferSelect) {
-  const { logoKey, accountingKey, accounting, helpGuide, helpGuideBase, reviewProgram, stripe, stripeSecret, stripeWebhookSecret, billing, ...companyInfo } = company;
+  // Connections and their keys stay on the server (each has its own settings route for the people allowed to see it).
+  const { logoKey, accountingKey, accounting, helpGuide, helpGuideBase, reviewProgram, stripe, stripeSecret, stripeWebhookSecret, billing,
+    texting, textingKey, textingHookSecret, textingHookToken, textingNotifyIds, ...companyInfo } = company;
   return { ...companyInfo, hasLogo: !!logoKey, isTest: !!company.testOfCompanyId };
 }
 
@@ -396,7 +399,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const [company] = await db.select().from(companies).where(eq(companies.id, user.companyId));
     // Access by area (Permissions page), so the website and app show only what this person can use.
     // Not for every signed-in person: the storage key, and the accounting connection (and its encrypted key).
-    return { user: publicEmployee(user), company: publicCompany(company), access: { areas: req.user.areas ?? {}, managesPermissions: !!req.user.managesPermissions, chemicalTracking: await hasChemicalAccess(req) } };
+    return { user: publicEmployee(user), company: publicCompany(company), access: { areas: req.user.areas ?? {}, managesPermissions: !!req.user.managesPermissions, chemicalTracking: await hasChemicalAccess(req), texting: await hasTextingAccess(req) } };
   });
 
   /** What the Security settings page shows. */

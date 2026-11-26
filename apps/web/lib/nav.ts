@@ -9,7 +9,7 @@ export type Side = "operations" | "team";
 export const SIDES: { key: Side; label: string }[] = [{ key: "operations", label: "Operations" }, { key: "team", label: "Team" }];
 
 /** `gate: "chemical"`: only admins and the people they add to Chemical Tracking see it. */
-export type NavItem = { href: string; label: string; min?: Role; area?: PermissionArea; gate?: "chemical" };
+export type NavItem = { href: string; label: string; min?: Role; area?: PermissionArea; gate?: "chemical" | "texting" };
 export type NavGroup = { key: string; label: string; icon: string; items: NavItem[] };
 
 export const NAV: Record<Side, NavGroup[]> = {
@@ -30,7 +30,8 @@ export const NAV: Record<Side, NavGroup[]> = {
         { href: "/automations", label: "Automations", min: "manager", area: "customers" },
         { href: "/docs", label: "Documents", min: "manager", area: "customers" },
         { href: "/visit-forms", label: "Visit Forms", min: "manager", area: "customers" },
-        { href: "/texts", label: "Texts", min: "manager", area: "customers" },
+        // Customers & billing managers, and anyone picked to answer texts.
+        { href: "/texts", label: "Text", gate: "texting" },
       ],
     },
     {

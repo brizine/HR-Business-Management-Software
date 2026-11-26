@@ -14,6 +14,7 @@ import {
 } from "@/components/customer-list";
 import { openTestCompany, useTestCompany } from "@/components/test-company";
 import { CopyPhones, EmailComposer } from "@/components/customer-messages";
+import { BulkText } from "@/components/texting";
 import { DocumentSender } from "@/components/marketing-docs";
 import { CancelForm, CustomerFields, PropertyFields, customerBody, customerFormValue, propertyBody, propertyFormValue, useTags } from "@/components/customers";
 
@@ -120,7 +121,10 @@ function Customers() {
   const selCount = allMatching ? list.data?.total ?? 0 : picked.length;
   const clearSelection = () => { setPicked([]); setAllMatching(false); setCancelling(false); };
   // Send: to the selection, or (nothing ticked) everyone the list matches.
-  const [sending, setSending] = useState<null | "email" | "phones" | "document">(null);
+  const [sending, setSending] = useState<null | "email" | "phones" | "document" | "text">(null);
+  // Texting from here needs Talkroute connected; until then the numbers can be copied out.
+  const texting = useApi<{ connected: boolean }>("/texting/settings");
+  const textKind = texting.data?.connected ? "text" as const : "phones" as const;
   const sendTo = selCount > 0 ? selection : { match: { status: matchStatus, q: params.get("q") ?? undefined, filters } };
   const sendCount = selCount > 0 ? selCount : list.data?.total ?? 0;
   const audience = (() => {
@@ -132,7 +136,7 @@ function Customers() {
     if (params.get("q")) parts.push(`search "${params.get("q")}"`);
     return parts.join(" · ").slice(0, 300);
   })();
-  const openSend = (k: "email" | "phones" | "document") => { setSending(k); setOpen(null); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const openSend = (k: "email" | "phones" | "document" | "text") => { setSending(k); setOpen(null); window.scrollTo({ top: 0, behavior: "smooth" }); };
   const bulk = useAction();
   const runBulk = (body: Record<string, unknown>, done: string) => bulk.run(async () => {
     const r = await api<{ changed: number; skipped: number; propertiesCancelled: number }>("/customers/bulk", { body: { ...selection, ...body } });
@@ -184,7 +188,7 @@ function Customers() {
           <div className="cl-menu">
             <button type="button" disabled={!sendCount} onClick={() => openSend("email")}>Email {sendCount.toLocaleString()} customer{sendCount === 1 ? "" : "s"}…</button>
             <button type="button" disabled={!sendCount} onClick={() => openSend("document")}>Document: email or print letters…</button>
-            <button type="button" disabled={!sendCount} onClick={() => openSend("phones")}>Text: copy their phone numbers…</button>
+            <button type="button" disabled={!sendCount} onClick={() => openSend(textKind)}>{textKind === "text" ? `Text ${sendCount.toLocaleString()} customer${sendCount === 1 ? "" : "s"}…` : "Text: copy their phone numbers…"}</button>
             <hr />
             <Link href="/customers/messages">Sent messages</Link>
           </div>
@@ -221,6 +225,7 @@ function Customers() {
           onSent={(m) => { setSending(null); clearSelection(); setNotice(`Sending to ${m.sending.toLocaleString()} customer${m.sending === 1 ? "" : "s"} now. Follow it under Messages.`); router.push(`/customers/messages/${m.id}`); }} />
       )}
       {sending === "phones" && <CopyPhones key={JSON.stringify(sendTo)} selection={sendTo} onClose={() => setSending(null)} />}
+      {sending === "text" && <BulkText key={JSON.stringify(sendTo)} selection={sendTo} audience={audience} onClose={() => setSending(null)} />}
 
       <section className="card cl-bar no-print" aria-label="Find customers">
         <div className="cl-bar-row">
@@ -301,7 +306,7 @@ function Customers() {
               <div className="cl-menu">
                 <button type="button" onClick={() => openSend("email")}>Email…</button>
                 <button type="button" onClick={() => openSend("document")}>Document: email or print letters…</button>
-                <button type="button" onClick={() => openSend("phones")}>Text: copy phone numbers…</button>
+                <button type="button" onClick={() => openSend(textKind)}>{textKind === "text" ? "Text…" : "Text: copy phone numbers…"}</button>
               </div>
             </Popover>
             <button type="button" className="btn" disabled={exporting.busy} onClick={() => exportCsv(allMatching ? undefined : picked)}>Export selected</button>

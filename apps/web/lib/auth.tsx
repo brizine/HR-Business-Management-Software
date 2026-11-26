@@ -8,7 +8,7 @@ export interface Me {
   user: { id: string; firstName: string; lastName: string; email: string; role: Role; employmentType?: string };
   company: { id: string; name: string; hasLogo?: boolean; logoUpdatedAt?: string | null; isTest?: boolean };
   /** Access by area from the Permissions page (levels that differ from their role). */
-  access?: { areas: AreaLevels; managesPermissions: boolean; /** Admins, and people an admin added to Chemical Tracking. */ chemicalTracking?: boolean };
+  access?: { areas: AreaLevels; managesPermissions: boolean; /** Admins, and people an admin added to Chemical Tracking. */ chemicalTracking?: boolean; /** Customers & billing managers, and people picked to answer texts. */ texting?: boolean };
 }
 
 interface AuthCtx {

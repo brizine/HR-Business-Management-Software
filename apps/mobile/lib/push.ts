@@ -73,6 +73,7 @@ export function routeFor(link: NotificationLink | null | undefined): string | nu
     case "reviews": return `/reviews?open=${link.id}`;
     case "review-due": return "/reviews";
     case "training": return `/training/${link.courseId}`;
+    case "texts": return link.threadId ? `/texts/${link.threadId}` : "/texts";
     // Approving a pay period happens on the website (it's a wide table); the email/text link opens it.
     default: return "/notifications";
   }

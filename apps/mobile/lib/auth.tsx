@@ -8,7 +8,7 @@ interface Me {
   user: { id: string; firstName: string; lastName: string; email: string; role: Role; employmentType?: string };
   company: { id: string; name: string; hasLogo?: boolean; logoUpdatedAt?: string | null };
   /** Access by area from the Permissions page (levels that differ from their role). */
-  access?: { areas: AreaLevels; managesPermissions: boolean };
+  access?: { areas: AreaLevels; managesPermissions: boolean; /** Customers & billing managers, and people picked to answer texts. */ texting?: boolean };
 }
 
 export type SignInStep = { kind: "done" } | { kind: "code"; mfaToken: string; method: "app" | "email"; emailHint: string } | { kind: "setup"; setupToken: string };

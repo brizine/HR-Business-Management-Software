@@ -50,7 +50,7 @@ describe("permissions", () => {
     const saved = await call("PUT", `/permissions/${ID.crew}`, "owner", { areas: { ...allDefault, payroll: "admin" } });
     expect(saved.body.areas).toEqual({ payroll: "admin" });
     expect((await call("GET", "/payroll/preview?periodStart=2026-10-01&periodEnd=2026-10-07", "crew")).status).toBe(200);
-    expect((await call("GET", "/auth/me", "crew")).body.access).toEqual({ areas: { payroll: "admin" }, managesPermissions: false, chemicalTracking: false });
+    expect((await call("GET", "/auth/me", "crew")).body.access).toEqual({ areas: { payroll: "admin" }, managesPermissions: false, chemicalTracking: false, texting: false });
     // Still basic everywhere else.
     expect((await call("GET", "/dashboard", "crew")).status).toBe(403);
     // Payroll settings stay owner-level.

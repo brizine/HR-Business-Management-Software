@@ -16,7 +16,8 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   left menu); your company's name (click it for the home page); the **Operations | Team** switch; **Search** in
   the middle (click it or press **Ctrl+K**, **⌘K** on a Mac); **Clocked out** / **Clocked in** (click to clock
   in or out after a quick "are you sure?"; it shows how long you've been on and follows your company's location
-  rules like the Time Clock page); **To-dos**; the **Notifications** bell; **+ New**; and your initials.
+  rules like the Time Clock page); the **Text** chat bubble (for the people who answer texts; the red number is
+  how many conversations have something unread); **To-dos**; the **Notifications** bell; **+ New**; and your initials.
 - **To-dos button:** the red number is how many of your to-dos are due today or overdue. Click it to see them,
   tick them off, add one (**+ New to-do**) or open the To-dos page (**View all**).
 - **Search:** click it before typing for quick links (Customers, Team, Shifts and Account settings). Then type and
@@ -56,7 +57,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   see Invoices, Estimates and Sales tax report, and click it again to fold it away. The section you're in starts
   open, and the menu remembers which ones you opened or closed.
 - **Operations:** **Customers** (Customers, Properties), **Schedule** (Calendar, Work orders, To-dos), **Billing** (Invoices,
-  Estimates, Sales tax report), **Marketing** (Templates, Automations, Documents, Visit Forms, Texts), **Resources** (Products & services, Custom fields, Tags; like Homeworks' Resources), **Field**
+  Estimates, Sales tax report), **Marketing** (Templates, Automations, Documents, Visit Forms, Text), **Resources** (Products & services, Custom fields, Tags; like Homeworks' Resources), **Field**
   (Property Measure, Spray Mix Calculator), **Fleet** (Assets, Repair Orders, Inspections) and **Reports**
   (managers).
 - **Team:** **Dashboard** (managers), **People** (Team, Shifts, Crews, Time Clock, Attendance, Time Off, Reviews &
@@ -235,9 +236,9 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
     - The emails go out one at a time in the background (about four a second), from your company name, with
       replies going to your company email. Each has your company's name, address and phone and an
       **Unsubscribe** link at the bottom. Customers who unsubscribe still get invoices and receipts.
-    - **Text: copy phone numbers…** lists the customers' phone numbers (each number once) to copy, or download
-      with names, and paste into Talkroute's bulk texting. Texting straight from Crewdesk needs API access from
-      Talkroute.
+    - **Text N customers…** (once texting is connected) writes one text that goes to each of them from your
+      Talkroute number, a few a minute, with tags filled in for each. Before texting is connected it's **Text: copy
+      phone numbers…**, which lists the customers' numbers (each once) to copy or download.
   - **Messages** (the tab next to Properties) lists every email sent this way, with how many were sent, didn't
     go (and why) or were skipped. Open one to see each customer, or **Stop sending** while it's still going.
     A customer's page shows the emails they were sent and whether they've unsubscribed (with **Resubscribe** if
@@ -615,18 +616,52 @@ template builder. **Text Templates** and **Defaults** follow.
 
 ### Texting customers
 
-Texts go from your **Talkroute number**, so customers keep texting the number they know.
+Texts go from your **Talkroute number**, so customers keep texting the number they know. **Marketing → Text** (and
+the chat bubble at the top right, which shows how many conversations have something unread) is laid out like
+Homeworks' Text page.
 
-- **Connecting:** **Settings → Integrations → Texting (Talkroute)**. The owner pastes the API key from Talkroute and your
-  number. Until Talkroute's API connection is finished in Crewdesk, the card says **Not available yet**.
-- **On a customer's page:** **Communication** shows their texts as a conversation with a box to write one. It counts
-  characters and says when a long text goes as more than one. **Send ▾ → Text…** jumps there once texting is
-  connected; before that it shows their number to copy into Talkroute.
+- **Connecting:** **Settings → Integrations → Texting (Talkroute)**. The owner pastes the **API key** from Talkroute
+  (it starts with `tr_live_`) and presses **Find my numbers**; Crewdesk lists the Talkroute numbers that can text,
+  and the owner picks the one customers text and presses **Connect**. Crewdesk then asks Talkroute to tell it about
+  every new text, so texts arrive as they're sent. **Send a test text to my phone** checks it end to end.
+  - Reading texts works with any Talkroute API access. **Sending** through the API needs Talkroute's **bulk
+    texting plan**; without it a send fails with a message saying so.
+  - A number Talkroute lists as *not registered for business texting* can connect, but carriers may block its texts
+    until it's registered with Talkroute (10DLC).
+  - Texts sent from Talkroute's own app or website show up in the Crewdesk conversation too.
+- **Who's told when a text comes in:** on the same card, tick the people. Each one gets a notification on their
+  phone (and in their Crewdesk inbox) for every incoming text; tapping it opens the conversation. The people ticked
+  can read and answer texts on Marketing → Text and in the phone app even if they aren't Customers & billing
+  managers (they see the customer's name, not the customer's page). With nobody ticked, the Customers & billing
+  managers are told. Each person can still tune it under **Notification settings → Text messages**.
+- **Text Messages** (the first tab): every conversation, newest first, with the open one beside the list.
+  - **All / Unread / Open / Done** narrows the list; the search box finds a name, a number or words in a text.
+  - Click a conversation to read it. Type in the box and press **Send**. **Insert Customer / Company Info** adds a
+    tag (filled in for that customer), **Insert Template** drops in a text template, and the line underneath counts
+    words and characters and says when a long text will go as more than one.
+  - **Mark unread** puts it back under Unread for later. **Open / Done** marks a conversation dealt with; a new
+    reply opens it again. **Delete Messages** (admins) removes the conversation from Crewdesk (it stays in
+    Talkroute).
+  - A text from a number that isn't on a customer shows the number; **File the conversation under a customer…**
+    attaches it. A text from someone on your team is filed under their name.
+  - The round **+** starts a new conversation with a customer, an employee or a number you type.
+- **Send Text Messages** (the second tab): pick a **Template** or write the message, then pick who gets it in the
+  box on the right: **Customers**, **Groups**, **Employees**, **Crews** or a **Number**. Add as many as you like.
+  One person's text goes right away. More than one are lined up and go out a few a minute (carriers slow or block a
+  burst); **Messages History** shows how many have gone, any that didn't, and who was left out and why (no mobile
+  number, replied STOP, a sample customer, or the same number twice). **Stop** drops what hasn't gone yet.
+  - **Groups:** on the Groups tab, type a name under **Add Customer Group** and press **Add Group**. The person
+    icon opens its members (add customers or employees with **+**, take them out with **×**), the pencil renames
+    it, and the red × deletes it.
+- **Text Message Templates** opens Marketing → Templates, where text templates are kept.
+- **Error Log:** texts that didn't go, with the date, what Talkroute said, and the number.
+- **From the Customers page:** **Send ▾ → Text N customers…** texts the customers ticked (or everyone the list
+  matches), each with their own tags filled in. Until texting is connected it offers their phone numbers to copy.
+- **On a customer's page:** **Communication** shows their texts as a conversation with a box to write one.
 - **Who can be texted:** their phone (or other phone) on file. A customer who replies **STOP** isn't texted again
-  until they reply **START**; their page says so.
-- **Replies** are filed under the customer with that number (or a contact's) and come to managers as notifications.
-  **Customers → Texts** lists every conversation, newest first, with unread ones marked. A reply from a number that
-  isn't on file can be filed under a customer from there.
+  until they reply **START**; their page and the conversation say so.
+- **Texts are plain text.** A picture a customer sends shows as "[Picture or attachment. Open Talkroute to see
+  it.]" for now.
 
 ### Automations
 
@@ -1558,6 +1593,10 @@ inspections, issue reports, repair orders, work orders, to-dos, training, onboar
 - **Work orders** (Tasks tab): yours for the next week with the customer, the address (tap it for directions), gate
   code, pets, the services, tags and notes, **Visit forms** to fill in and sign (tap one), **Add photo** (take one
   or choose several), and **Arrived**, **Completed** (with notes) and **Skip** (with a reason).
+- **Text messages** (the 💬 by the bell, for the people picked to answer texts and Customers & billing managers):
+  every conversation on the company's number, newest first, with unread ones marked. Tap one to read it and answer
+  from the phone; **Mark unread** and **Mark done** are at the top. A notification for an incoming text opens its
+  conversation.
 - **To-dos** (Tasks tab): yours for the next week with the category and repeat, the customer, the address (tap
   it for directions), gate code and notes; **Start work** / **Stop work** (time tracking), **Done**, **Add photo**
   and **Note for office** (a note for the dispatcher). **Quick add** makes one for yourself for today or tomorrow.

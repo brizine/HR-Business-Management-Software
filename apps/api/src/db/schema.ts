@@ -68,8 +68,19 @@ export const companies = pgTable("companies", {
   /** Texting customers from the company's own number (Talkroute); the API key is encrypted in textingKey. */
   /** After-application customer notices (Chemical Tracking): on or off, and the wording. */
   chemicalNotices: jsonb("chemical_notices").$type<Partial<ChemicalNoticeSettings>>(),
-  texting: jsonb("texting").$type<{ provider: "talkroute"; fromNumber: string; connectedAt: string; accountName?: string | null; inboundSince?: string | null }>(),
+  texting: jsonb("texting").$type<{
+    provider: "talkroute"; fromNumber: string; connectedAt: string; accountName?: string | null; inboundSince?: string | null;
+    /** The provider's id for "tell Crewdesk about new texts" (so it can be taken off again). */
+    subscriptionId?: string | null;
+    /** When the provider last told Crewdesk about a text, and when Crewdesk last asked it for missed ones. */
+    hookAt?: string | null; polledAt?: string | null;
+  }>(),
   textingKey: text("texting_key"),
+  /** What signs the provider's "new text" calls (encrypted), and the unguessable part of the address it calls. */
+  textingHookSecret: text("texting_hook_secret"),
+  textingHookToken: text("texting_hook_token").unique(),
+  /** Who is told (phone and inbox) when a text comes in, and so can read and answer texts. Empty: Customers & billing managers. */
+  textingNotifyIds: uuid("texting_notify_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
   /** Grace periods, alerts and points for attendance (see attendance.ts in @crewdesk/shared). */
   attendanceRules: jsonb("attendance_rules").$type<AttendanceRules>(),
   /** The company's own edited copy of the user manual (Markdown); null = the standard docs/help-guide.md. */
@@ -2515,23 +2526,93 @@ export const visitFormHistory = pgTable(
 );
 
 /** Texts with customers: sent from the office or automations, and their replies. */
+/**
+ * One conversation by text: the company's number and one other number (a customer's, an
+ * employee's, or one nobody's been matched to yet). Holds what the Text Messages list shows.
+ */
+export const textThreads = pgTable(
+  "text_threads",
+  {
+    id: id(),
+    companyId: companyId(),
+    /** The other number (+1…). */
+    phone: text("phone").notNull(),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    /** "open" or "done" (Homeworks' Open / Done); a new reply opens it again. */
+    status: text("status").notNull().default("open"),
+    /** Replies nobody has opened yet (or 1 after "Mark unread"). */
+    unread: integer("unread").notNull().default(0),
+    lastAt: timestamp("last_at", { withTimezone: true }).notNull().defaultNow(),
+    lastBody: text("last_body").notNull().default(""),
+    lastDirection: text("last_direction").notNull().default("out"),
+    lastStatus: text("last_status").notNull().default("sent"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("text_threads_phone_idx").on(t.companyId, t.phone), index("text_threads_last_idx").on(t.companyId, t.lastAt), index("text_threads_customer_idx").on(t.customerId)],
+);
+
+/** A send to many at once (Send Text Messages, or the Customers page): its texts go out a few a minute. */
+export const textBatches = pgTable(
+  "text_batches",
+  {
+    id: id(),
+    companyId: companyId(),
+    /** As written, tags and all; each text is filled in for its customer. */
+    body: text("body").notNull(),
+    /** Who it's to, in words ("Group: Spring specials", "12 customers"). */
+    label: text("label").notNull().default(""),
+    total: integer("total").notNull().default(0),
+    /** People left out and why: [{ name, reason }]. */
+    skipped: jsonb("skipped").$type<{ name: string; reason: string }[]>().notNull().default([]),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    stoppedAt: timestamp("stopped_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("text_batches_company_idx").on(t.companyId, t.createdAt)],
+);
+
+/** Named lists of customers and employees to text together (Homeworks' text message groups). */
+export const textGroups = pgTable(
+  "text_groups",
+  { id: id(), companyId: companyId(), name: text("name").notNull(), createdAt: createdAt() },
+  (t) => [uniqueIndex("text_groups_name_idx").on(t.companyId, sql`lower(${t.name})`)],
+);
+export const textGroupMembers = pgTable(
+  "text_group_members",
+  {
+    id: id(),
+    groupId: uuid("group_id").notNull().references(() => textGroups.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("text_group_members_customer_idx").on(t.groupId, t.customerId), uniqueIndex("text_group_members_employee_idx").on(t.groupId, t.employeeId)],
+);
+
 export const customerTexts = pgTable(
   "customer_texts",
   {
     id: id(),
     companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+    /** The conversation it's part of. */
+    threadId: uuid("thread_id").references(() => textThreads.id, { onDelete: "cascade" }),
     /** Null for a reply from a number that isn't a customer's. */
     customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    /** A text to or from someone on the team. */
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    /** The send-to-many it went out with, if any. */
+    batchId: uuid("batch_id").references(() => textBatches.id, { onDelete: "set null" }),
     /** "out" or "in". */
     direction: text("direction").notNull(),
     /** The customer's number (+1…). */
     phone: text("phone").notNull(),
     body: text("body").notNull(),
-    /** Out: "sending", "sent", "delivered" or "failed". In: "received". */
+    /** Out: "queued" (waiting its turn in a send to many), "sending", "sent", "delivered" or "failed". In: "received". */
     status: text("status").notNull(),
     error: text("error"),
     providerId: text("provider_id"),
-    /** "office", "automation" or "test". */
+    /** "office", "automation", "test", or "talkroute" (sent from Talkroute's own app). */
     source: text("source").notNull().default("office"),
     sentById: uuid("sent_by_id").references(() => employees.id, { onDelete: "set null" }),
     readAt: timestamp("read_at", { withTimezone: true }),
@@ -2541,6 +2622,8 @@ export const customerTexts = pgTable(
     index("customer_texts_customer_idx").on(t.customerId, t.createdAt),
     index("customer_texts_company_idx").on(t.companyId, t.createdAt),
     index("customer_texts_phone_idx").on(t.companyId, t.phone),
+    index("customer_texts_thread_idx").on(t.threadId, t.createdAt),
+    index("customer_texts_status_idx").on(t.companyId, t.status),
     uniqueIndex("customer_texts_provider_idx").on(t.companyId, t.providerId),
   ],
 );

@@ -1,57 +1,220 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { TEXT_MAX, formatPhone, textSegments } from "@crewdesk/shared";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { TEXT_MAX, formatPhone, textInitials, textSegments, textWords, type TextFilter } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox } from "@/components/ui";
+import { ConfirmDialog } from "./automation-bits";
+import { Icon } from "./icons";
+import { TagMenu } from "./templates";
 
-/** Texting customers from your own number: the connection, a customer's conversation, and the inbox. */
+/**
+ * Texting from the company's own number (Talkroute), laid out like Homeworks' Marketing → Text:
+ * Text Messages (every conversation, with the one that's open beside the list), Send Text Messages
+ * (to customers, groups, the team, crews or a number), and the Error Log. Also the connection on
+ * Settings → Integrations, with who's told when a text comes in, and a customer's texts on their page.
+ */
 
-type Settings = { available: boolean; connected: boolean; provider: string; fromNumber?: string; connectedAt?: string; accountName?: string | null };
+type Settings = {
+  available: boolean; connected: boolean; provider: string; fromNumber?: string; connectedAt?: string; accountName?: string | null; webhook?: boolean; hookAt?: string | null;
+  notify: { picked: boolean; people: { id: string; name: string }[] };
+};
+type Text = { id: string; direction: "in" | "out"; body: string; status: string; error: string | null; source: string; by: string | null; at: string };
+type ThreadRow = {
+  id: string; phone: string; kind: "customer" | "employee" | "unknown"; name: string | null; customerId: string | null; employeeId: string | null;
+  status: "open" | "done"; unread: number; optedOut: string | null; last: { body: string; direction: "in" | "out"; status: string; at: string };
+};
+type ThreadList = { total: number; page: number; pageSize: number; unread: number; threads: ThreadRow[] };
+type ThreadFull = ThreadRow & { connected: boolean; fromNumber: string | null; texts: Text[] };
+type Template = { id: string; channel: string; audience: string; name: string; body: string };
 
-/** Settings → Integrations. */
+const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+/** Today's texts show the time; older ones the date (as Homeworks' list does). */
+const shortWhen = (iso: string) => { const d = new Date(iso); return d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
+const who = (t: { name: string | null; phone: string }) => t.name ?? formatPhone(t.phone);
+
+/** Tells the chat bubble on the top bar to count again (something was read or arrived). */
+const changed = () => window.dispatchEvent(new Event("crewdesk:texts"));
+
+/* ───────────── Settings → Integrations ───────────── */
+
+type NumberRow = { number: string; label: string | null; canSend: boolean; registered?: boolean | null };
+
 export function TextingCard() {
   const { can } = useAuth();
-  const owner = can("owner", "customers");
+  const owner = can("owner", "customers"), admin = can("admin", "customers");
   const s = useApi<Settings>("/texting/settings");
   const [key, setKey] = useState("");
+  const [numbers, setNumbers] = useState<NumberRow[] | null>(null);
   const [from, setFrom] = useState("");
+  const [note, setNote] = useState<string | null>(null);
   const { busy, error, run } = useAction();
   const d = s.data;
+  const find = () => run(async () => {
+    const r = await api<{ numbers: NumberRow[] }>("/texting/settings/numbers", { body: { apiKey: key } });
+    setNumbers(r.numbers);
+    setFrom(r.numbers.find((n) => n.canSend)?.number ?? "");
+  });
+  const connect = () => run(async () => {
+    const r = await api<{ webhook: boolean; webhookError?: string }>("/texting/settings", { method: "PUT", body: { apiKey: key, fromNumber: from } });
+    setKey(""); setNumbers(null);
+    setNote(r.webhook ? null : `Connected. Talkroute couldn't be set to tell Crewdesk about new texts${r.webhookError ? ` (${r.webhookError})` : ""}, so Crewdesk checks for them every few minutes instead.`);
+    await s.reload();
+  });
   return (
     <div className="card stack">
       <div>
         <h2 style={{ margin: 0 }}>Texting (Talkroute)</h2>
-        <p className="muted" style={{ margin: "4px 0 0" }}>Text customers from your Talkroute number, so they keep texting the number they know. Texts and replies show on the customer&apos;s page, and replies come to you as notifications.</p>
+        <p className="muted" style={{ margin: "4px 0 0" }}>Text customers from your Talkroute number, so they keep texting the number they know. Conversations are on <Link href="/texts">Marketing → Text</Link> and each customer&apos;s page, and the people you pick are told on their phones when a text comes in.</p>
       </div>
       <ErrorBox error={s.error} />
       {d?.connected ? (
         <>
-          <div className="row" style={{ gap: 8 }}><span className="badge ok">Connected</span><span>{formatPhone(d.fromNumber)}{d.accountName ? ` · ${d.accountName}` : ""}</span></div>
-          {owner && <div><button className="btn danger" disabled={busy} onClick={() => confirm("Disconnect texting? Automations that text will skip their texts until it's connected again.") && run(async () => { await api("/texting/settings", { method: "DELETE" }); s.reload(); })}>Disconnect</button></div>}
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <span className="badge ok">Connected</span>
+            <span>{formatPhone(d.fromNumber)}{d.accountName ? ` · ${d.accountName}` : ""}</span>
+            <span className="muted" style={{ fontSize: 13 }}>{d.webhook ? "New texts arrive as they're sent" : "New texts are checked for every few minutes"}{d.hookAt ? ` · last one ${when(d.hookAt)}` : ""}</span>
+          </div>
+          {note && <p className="notice" style={{ margin: 0 }}>{note}</p>}
+          {admin && (
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <button className="btn" disabled={busy} onClick={() => run(async () => { const r = await api<{ to: string }>("/texting/settings/test", { method: "POST" }); setNote(`A test text is on its way to ${r.to}.`); })}>Send a test text to my phone</button>
+              {owner && <button className="btn danger" disabled={busy} onClick={() => confirm("Disconnect texting? Automations that text will skip their texts until it's connected again.") && run(async () => { await api("/texting/settings", { method: "DELETE" }); setNote(null); await s.reload(); })}>Disconnect</button>}
+            </div>
+          )}
         </>
       ) : d && !d.available ? (
-        <p className="notice" style={{ margin: 0 }}>Not available yet. Talkroute gives API access on request (with a plan that includes texting through the API). Once you have an API key from Talkroute, the connection can be finished and turned on here.</p>
+        <p className="notice" style={{ margin: 0 }}>Not available yet.</p>
       ) : d && owner ? (
-        <form className="stack" onSubmit={(e) => { e.preventDefault(); run(async () => { await api("/texting/settings", { method: "PUT", body: { apiKey: key, fromNumber: from } }); setKey(""); s.reload(); }); }}>
-          <label>Talkroute API key<input type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} required /></label>
-          <label>Your Talkroute number<input inputMode="tel" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="(405) 555-0100" required /></label>
-          <div><button className="btn primary" disabled={busy}>Connect</button></div>
-        </form>
+        <div className="stack">
+          <label>Talkroute API key<input type="password" autoComplete="off" value={key} onChange={(e) => { setKey(e.target.value); setNumbers(null); }} placeholder="tr_live_…" /></label>
+          {!numbers ? (
+            <div><button className="btn primary" disabled={busy || key.trim().length < 8} onClick={find}>{busy ? "Asking Talkroute…" : "Find my numbers"}</button></div>
+          ) : (
+            <>
+              <fieldset className="stack" style={{ gap: 6, border: 0, padding: 0, margin: 0 }}>
+                <legend style={{ fontWeight: 600, padding: 0, marginBottom: 4 }}>Which number do customers text?</legend>
+                {numbers.map((n) => (
+                  <label key={n.number} className="check" style={{ alignItems: "baseline" }}>
+                    <input type="radio" name="texting-number" disabled={!n.canSend} checked={from === n.number} onChange={() => setFrom(n.number)} />
+                    <span>{formatPhone(n.number)}{n.label ? ` · ${n.label}` : ""}
+                      {!n.canSend ? <span className="muted"> · texting isn&apos;t turned on for this number in Talkroute</span> : n.registered === false ? <span className="muted"> · not registered for business texting yet (carriers may block its texts)</span> : null}</span>
+                  </label>
+                ))}
+                {!numbers.length && <p className="muted" style={{ margin: 0 }}>This Talkroute account has no number that can text yet.</p>}
+              </fieldset>
+              <div><button className="btn primary" disabled={busy || !from} onClick={connect}>{busy ? "Connecting…" : "Connect"}</button></div>
+            </>
+          )}
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>The key comes from your Talkroute account (it starts with tr_live_). It&apos;s stored encrypted and never shown again. Reading texts works with any API access; <strong>sending</strong> through the API needs Talkroute&apos;s bulk texting plan.</p>
+        </div>
       ) : d ? <p className="muted" style={{ margin: 0 }}>Only the owner can connect texting.</p> : null}
       <ErrorBox error={error} />
+      {d && admin && <NotifyPicker settings={d} onSaved={s.reload} />}
+      {d && !admin && d.notify.people.length > 0 && <p className="muted" style={{ margin: 0, fontSize: 13 }}>Told when a text comes in: {d.notify.people.map((p) => p.name).join(", ")}.</p>}
     </div>
   );
 }
 
-type Text = { id: string; direction: "in" | "out"; body: string; status: string; error: string | null; source: string; by: string | null; at: string };
-type Conversation = { connected: boolean; number: string | null; optedOut: string | null; texts: Text[] };
+/** Who's told (phone and inbox) when a text comes in. The people picked can also read and answer texts. */
+function NotifyPicker({ settings, onSaved }: { settings: Settings; onSaved: () => void }) {
+  const people = useApi<{ picked: string[]; people: { id: string; name: string; role: string; hasApp: boolean }[] }>("/texting/settings/people");
+  const [ids, setIds] = useState<string[] | null>(null);
+  const [saved, setSaved] = useState(false);
+  const { busy, error, run } = useAction();
+  useEffect(() => { if (people.data && ids === null) setIds(people.data.picked); }, [people.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const picked = ids ?? [];
+  const dirty = !!people.data && JSON.stringify([...picked].sort()) !== JSON.stringify([...people.data.picked].sort());
+  const toggle = (id: string) => { setSaved(false); setIds(picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id]); };
+  return (
+    <div className="stack" style={{ gap: 8, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+      <div>
+        <h3 style={{ margin: 0, fontSize: 15 }}>Who&apos;s told when a text comes in</h3>
+        <p className="muted" style={{ margin: "2px 0 0", fontSize: 13 }}>
+          Each person ticked gets a notification on their phone (and in their Crewdesk inbox) for every incoming text, and can read and answer texts on Marketing → Text and in the phone app, even if they aren&apos;t a Customers &amp; billing manager.
+          {!settings.notify.picked && " Nobody is ticked yet, so the Customers & billing managers are told."}
+        </p>
+      </div>
+      <ErrorBox error={people.error ?? error} />
+      <div className="txt-people">
+        {(people.data?.people ?? []).map((p) => (
+          <label key={p.id} className="check">
+            <input type="checkbox" checked={picked.includes(p.id)} onChange={() => toggle(p.id)} />
+            <span>{p.name} <span className="muted">· {p.role.charAt(0).toUpperCase() + p.role.slice(1)}{p.hasApp ? "" : " · no phone signed in to the app yet"}</span></span>
+          </label>
+        ))}
+      </div>
+      <div className="row" style={{ gap: 8 }}>
+        <button className="btn primary" disabled={busy || !dirty} onClick={() => run(async () => { await api("/texting/settings/notify", { method: "PUT", body: { employeeIds: picked } }); setSaved(true); await people.reload(); onSaved(); })}>{busy ? "Saving…" : "Save who's told"}</button>
+        {saved && !dirty && <span className="muted" role="status">Saved.</span>}
+        {picked.some((id) => people.data?.people.find((p) => p.id === id && !p.hasApp)) && <span className="muted" style={{ fontSize: 13 }}>Someone without the app on their phone still gets it in their Crewdesk inbox (and by email, if their notification settings say so).</span>}
+      </div>
+    </div>
+  );
+}
 
-const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+/* ───────────── The top bar's chat bubble ───────────── */
 
-/** The box under "Write a text": counts characters and how many texts it'll be sent as. */
+/** Homeworks' chat bubble: opens Text, with how many conversations have something unread. */
+export function TextsButton() {
+  const { me } = useAuth();
+  const allowed = !!me?.access?.texting;
+  const [unread, setUnread] = useState(0);
+  const load = useCallback(() => { if (allowed) api<{ unread: number }>("/texting/unread").then((r) => setUnread(r.unread), () => {}); }, [allowed]);
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 45_000);
+    window.addEventListener("crewdesk:texts", load);
+    window.addEventListener("focus", load);
+    return () => { clearInterval(t); window.removeEventListener("crewdesk:texts", load); window.removeEventListener("focus", load); };
+  }, [load]);
+  if (!allowed) return null;
+  return (
+    <Link href="/texts" className="topbar-icon" aria-label={`Text messages, ${unread} unread`} title="Text messages">
+      <Icon name="messages" />
+      {unread > 0 && <span className="topbar-count" aria-hidden="true">{unread > 99 ? "99+" : unread}</span>}
+    </Link>
+  );
+}
+
+/* ───────────── Writing a text ───────────── */
+
+/** The message box, as Homeworks has it: Insert Customer / Company Info, Insert Template, and the count underneath. */
+function MessageBox({ value, onChange, disabled, rows = 4, templates, placeholder = "Type your message..." }: { value: string; onChange: (v: string) => void; disabled?: boolean; rows?: number; templates?: Template[]; placeholder?: string }) {
+  const box = useRef<HTMLTextAreaElement>(null);
+  const insert = (text: string) => {
+    const el = box.current;
+    const at = el ? el.selectionStart ?? value.length : value.length, end = el ? el.selectionEnd ?? at : at;
+    onChange((value.slice(0, at) + text + value.slice(end)).slice(0, TEXT_MAX));
+    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(at + text.length, at + text.length); });
+  };
+  const seg = textSegments(value);
+  return (
+    <div className={`txt-box${disabled ? " off" : ""}`}>
+      <textarea ref={box} rows={rows} maxLength={TEXT_MAX} value={value} disabled={disabled} placeholder={placeholder} aria-label="Message" onChange={(e) => onChange(e.target.value)} />
+      <div className="txt-box-tools">
+        <TagMenu label="Insert Customer / Company Info" onPick={(tag) => insert(`{{${tag}}}`)} />
+        {templates && templates.length > 0 && (
+          <select aria-label="Insert Template" value="" disabled={disabled} onChange={(e) => { const t = templates.find((x) => x.id === e.target.value); if (t) onChange(value.trim() ? `${value.trimEnd()}\n${t.body}`.slice(0, TEXT_MAX) : t.body.slice(0, TEXT_MAX)); }}>
+            <option value="">Insert Template</option>
+            {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        )}
+      </div>
+      <div className="txt-box-count">
+        <span>Words: {textWords(value)}</span><span>Characters: {seg.length}</span>
+        <span>{seg.segments > 1 ? `Sent as ${seg.segments} texts` : "1 text"}{seg.unicode ? " (emoji or special characters make texts shorter)" : ""}</span>
+      </div>
+    </div>
+  );
+}
+
+const useTextTemplates = () => (useApi<Template[]>("/templates").data ?? []).filter((t) => t.channel === "text");
+
+/** The box under "Write a text" on a customer's page: counts characters and how many texts it'll be sent as. */
 export function TextComposer({ onSend, disabled, placeholder }: { onSend: (body: string) => Promise<void>; disabled?: boolean; placeholder?: string }) {
   const [body, setBody] = useState("");
   const { busy, error, run } = useAction();
@@ -68,13 +231,31 @@ export function TextComposer({ onSend, disabled, placeholder }: { onSend: (body:
   );
 }
 
-/** A customer's texts, oldest at the top, with a box to send one. */
-export function CustomerTexts({ customerId, focus }: { customerId: string; focus?: boolean }) {
-  const conv = useApi<Conversation>(`/texting/customers/${customerId}`);
+function Bubbles({ texts }: { texts: Text[] }) {
   const end = useRef<HTMLDivElement>(null);
+  useEffect(() => { end.current?.scrollIntoView({ block: "nearest" }); }, [texts.length]);
+  return (
+    <>
+      {texts.map((t) => (
+        <div key={t.id} className={`sms ${t.direction}${t.status === "failed" ? " failed" : ""}`}>
+          <div className="sms-body">{t.body}</div>
+          <div className="sms-meta">
+            {when(t.at)}
+            {t.direction === "out" ? ` · ${t.source === "automation" ? "automation" : t.source === "talkroute" ? "sent from Talkroute" : t.by ?? "office"}${t.status === "failed" ? ` · not sent: ${t.error ?? ""}` : t.status === "queued" ? " · waiting to send" : ""}` : ""}
+          </div>
+        </div>
+      ))}
+      <div ref={end} />
+    </>
+  );
+}
+
+/** A customer's texts on their page, oldest at the top, with a box to send one. */
+export function CustomerTexts({ customerId, focus }: { customerId: string; focus?: boolean }) {
+  const conv = useApi<{ connected: boolean; number: string | null; optedOut: string | null; texts: Text[] }>(`/texting/customers/${customerId}`);
   const card = useRef<HTMLDivElement>(null);
-  useEffect(() => { end.current?.scrollIntoView({ block: "nearest" }); }, [conv.data?.texts.length]);
   useEffect(() => { if (focus) card.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [focus]);
+  useEffect(() => { if (conv.data) changed(); }, [conv.data?.texts.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const d = conv.data;
   return (
     <div className="card" ref={card}>
@@ -82,17 +263,7 @@ export function CustomerTexts({ customerId, focus }: { customerId: string; focus
       <ErrorBox error={conv.error} />
       {d && (
         <>
-          {d.texts.length > 0 ? (
-            <div className="sms-thread" role="log" aria-label="Texts">
-              {d.texts.map((t) => (
-                <div key={t.id} className={`sms ${t.direction}${t.status === "failed" ? " failed" : ""}`}>
-                  <div className="sms-body">{t.body}</div>
-                  <div className="sms-meta">{when(t.at)}{t.direction === "out" ? ` · ${t.source === "automation" ? "automation" : t.by ?? "office"}${t.status === "failed" ? ` · not sent: ${t.error ?? ""}` : ""}` : ""}</div>
-                </div>
-              ))}
-              <div ref={end} />
-            </div>
-          ) : <p className="muted" style={{ margin: "6px 0" }}>No texts yet.</p>}
+          {d.texts.length > 0 ? <div className="sms-thread" role="log" aria-label="Texts"><Bubbles texts={d.texts} /></div> : <p className="muted" style={{ margin: "6px 0" }}>No texts yet.</p>}
           {!d.connected ? <p className="muted" style={{ margin: 0 }}>Texting isn&apos;t connected yet (Settings → Integrations).</p>
             : d.optedOut ? <p className="bad-text" style={{ margin: 0 }}>They replied STOP on {new Date(d.optedOut).toLocaleDateString()}, so they can&apos;t be texted until they reply START.</p>
             : !d.number ? <p className="muted" style={{ margin: 0 }}>Add a mobile number to text them.</p>
@@ -103,42 +274,139 @@ export function CustomerTexts({ customerId, focus }: { customerId: string; focus
   );
 }
 
-type Inbox = { unread: number; conversations: { customerId: string | null; name: string | null; phone: string; last: { body: string; direction: string; status: string; at: string }; unread: number }[] };
+/* ───────────── Text Messages: the list and the open conversation ───────────── */
 
-/** The Texts page: every conversation, newest first, unread ones marked. */
-export function TextInbox() {
-  const [unreadOnly, setUnreadOnly] = useState(false);
-  const inbox = useApi<Inbox>(`/texting/conversations${unreadOnly ? "?unread=1" : ""}`);
+const FILTERS: [TextFilter, string][] = [["all", "All"], ["unread", "Unread"], ["open", "Open"], ["done", "Done"]];
+
+export function TextMessagesTab() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const { can } = useAuth();
+  const [filter, setFilter] = useState<TextFilter>("all");
+  const [q, setQ] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [open, setOpen] = useState<string | null>(params.get("thread"));
+  const [starting, setStarting] = useState(false);
+  const list = useApi<ThreadList>(`/texting/threads?filter=${filter}&page=${page}${search ? `&q=${encodeURIComponent(search)}` : ""}`);
   const settings = useApi<Settings>("/texting/settings");
-  const [assigning, setAssigning] = useState<string | null>(null);
-  const { error, run } = useAction();
-  const d = inbox.data;
+  // New texts show up without a refresh.
+  useEffect(() => { const t = setInterval(() => void list.reload(), 20_000); return () => clearInterval(t); }, [list.reload]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const id = params.get("thread"); if (id) setOpen(id); }, [params]);
+  const pick = (id: string | null) => { setOpen(id); router.replace(id ? `/texts?thread=${id}` : "/texts", { scroll: false }); };
+  const d = list.data;
+  const first = d && d.total ? (d.page - 1) * d.pageSize + 1 : 0, last = d ? Math.min(d.page * d.pageSize, d.total) : 0;
+  const pages = d ? Math.max(1, Math.ceil(d.total / d.pageSize)) : 1;
   return (
-    <div className="stack">
-      {settings.data && !settings.data.connected && <p className="notice" style={{ margin: 0 }}>Texting isn&apos;t connected yet, so nothing new comes in here. See Settings → Integrations.</p>}
-      <div className="row"><label className="check"><input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} /> Unread only</label>{d && d.unread > 0 && <span className="badge warn">{d.unread} unread</span>}</div>
-      <ErrorBox error={inbox.error ?? error} />
-      <div className="card" style={{ padding: 0 }}>
-        {d?.conversations.length ? (
-          <ul className="plain-list sms-inbox">
-            {d.conversations.map((c) => (
-              <li key={c.customerId ?? c.phone} className={c.unread ? "unread" : ""}>
-                <div className="row" style={{ justifyContent: "space-between" }}>
-                  <strong>{c.customerId ? <Link href={`/customers/${c.customerId}?tab=communication&texts=1`}>{c.name}</Link> : formatPhone(c.phone)}</strong>
-                  <span className="muted" style={{ fontSize: 12 }}>{when(c.last.at)}{c.unread ? ` · ${c.unread} new` : ""}</span>
-                </div>
-                <div className="muted sms-preview">{c.last.direction === "out" ? "You: " : ""}{c.last.body}</div>
-                {!c.customerId && (
-                  assigning === c.phone
-                    ? <CustomerPick onPick={(id) => run(async () => { await api("/texting/assign", { body: { phone: c.phone, customerId: id } }); setAssigning(null); inbox.reload(); })} onCancel={() => setAssigning(null)} />
-                    : <button type="button" className="linkbtn" onClick={() => setAssigning(c.phone)}>Not a customer yet. File under a customer…</button>
-                )}
+    <>
+      {settings.data && !settings.data.connected && <p className="notice" style={{ margin: 0 }}>Texting isn&apos;t connected yet, so nothing new comes in here. {can("owner", "customers") ? <Link href="/settings/integrations">Connect Talkroute</Link> : "The owner connects it under Settings → Integrations."}</p>}
+      <div className="card txt-pane" data-lkeep="">
+        <aside className={`txt-list${open ? " has-open" : ""}`} aria-label="Conversations">
+          <div className="txt-seg" role="tablist" aria-label="Show">
+            {FILTERS.map(([k, label]) => (
+              <button key={k} type="button" role="tab" aria-selected={filter === k} className={filter === k ? "on" : ""} onClick={() => { setFilter(k); setPage(1); }}>
+                {label}{k === "unread" && d && d.unread > 0 ? <span className="txt-dot">{d.unread}</span> : null}
+              </button>
+            ))}
+          </div>
+          <form className="txt-search" role="search" onSubmit={(e) => { e.preventDefault(); setSearch(q.trim()); setPage(1); }}>
+            <input type="search" placeholder="Search for messages or users..." aria-label="Search for messages or users" value={q} onChange={(e) => { setQ(e.target.value); if (!e.target.value) { setSearch(""); setPage(1); } }} />
+            <button type="submit" aria-label="Search"><Icon name="search" size={16} /></button>
+          </form>
+          <ErrorBox error={list.error} />
+          <ul className="txt-rows">
+            {(d?.threads ?? []).map((t) => (
+              <li key={t.id}>
+                <button type="button" className={`${open === t.id ? "on" : ""}${t.unread ? " unread" : ""}`} onClick={() => pick(t.id)} aria-current={open === t.id ? "true" : undefined}>
+                  <span className="txt-avatar" aria-hidden="true">{textInitials(t.name)}</span>
+                  <span className="txt-row-main">
+                    <span className="txt-row-top"><strong>{who(t)}</strong><span className="txt-row-when">{shortWhen(t.last.at)}</span></span>
+                    <span className="txt-row-preview">{t.last.direction === "out" ? "You: " : ""}{t.last.body}</span>
+                  </span>
+                  {t.unread > 0 && <span className="txt-dot" aria-label={`${t.unread} unread`}>{t.unread}</span>}
+                </button>
               </li>
             ))}
           </ul>
-        ) : <p className="muted" style={{ padding: 16, margin: 0 }}>{inbox.loading ? "Loading…" : unreadOnly ? "Nothing unread." : "No texts yet."}</p>}
+          {d && !d.threads.length && <p className="muted txt-empty">{search ? "No conversations match." : filter === "unread" ? "Nothing unread." : filter === "done" ? "Nothing marked done." : "No texts yet."}</p>}
+          {d && d.total > 0 && (
+            <div className="txt-pager">
+              <div className="txt-pager-btns">
+                <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
+                <span aria-current="page">{page}</span>
+                <button type="button" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button>
+              </div>
+              <span className="muted">{first}-{last} of {d.total}</span>
+            </div>
+          )}
+          <button type="button" className="txt-new" onClick={() => setStarting(true)} aria-label="New message" title="New message"><Icon name="plus" size={20} /></button>
+        </aside>
+        <section className={`txt-thread${open ? " is-open" : ""}`} aria-label="Conversation">
+          {open ? <Conversation key={open} id={open} onBack={() => pick(null)} onChanged={() => { void list.reload(); changed(); }} onGone={() => { pick(null); void list.reload(); changed(); }} />
+            : <div className="txt-hello"><span className="txt-avatar big" aria-hidden="true"><Icon name="messages" size={26} /></span><strong>Select a conversation to start messaging.</strong><span className="muted">Or press + to start a new one.</span></div>}
+        </section>
       </div>
-    </div>
+      {starting && <NewConversation onClose={() => setStarting(false)} onOpen={(id) => { setStarting(false); pick(id); void list.reload(); }} />}
+    </>
+  );
+}
+
+function Conversation({ id, onBack, onChanged, onGone }: { id: string; onBack: () => void; onChanged: () => void; onGone: () => void }) {
+  const { can } = useAuth();
+  const conv = useApi<ThreadFull>(`/texting/threads/${id}`);
+  const templates = useTextTemplates();
+  const [body, setBody] = useState("");
+  const [filing, setFiling] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const { busy, error, run } = useAction();
+  const count = conv.data?.texts.length ?? 0;
+  // Opening it marked its replies read; tell the list and the bubble.
+  useEffect(() => { if (conv.data) onChanged(); }, [count]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const t = setInterval(() => void conv.reload(), 10_000); return () => clearInterval(t); }, [conv.reload]); // eslint-disable-line react-hooks/exhaustive-deps
+  const d = conv.data;
+  const act = (path: string, payload?: unknown) => run(async () => { await api(`/texting/threads/${id}/${path}`, { method: "POST", body: payload ?? {} }); await conv.reload(); onChanged(); });
+  const send = () => run(async () => { await api(`/texting/threads/${id}`, { body: { body: body.trim() } }); setBody(""); await conv.reload(); onChanged(); });
+  if (conv.error && !d) return <div className="txt-hello"><ErrorBox error={conv.error} /><button type="button" className="btn" onClick={onBack}>Back</button></div>;
+  if (!d) return <div className="txt-hello"><span className="muted">Loading…</span></div>;
+  return (
+    <>
+      <header className="txt-head">
+        <button type="button" className="txt-back" onClick={onBack} aria-label="Back to conversations"><Icon name="left" size={18} /></button>
+        <span className="txt-avatar" aria-hidden="true">{textInitials(d.name)}</span>
+        <div className="txt-head-who">
+          {d.customerId ? <Link href={`/customers/${d.customerId}`}>{d.name}</Link> : <strong>{who(d)}</strong>}
+          <span className="muted">{formatPhone(d.phone)}{d.kind === "employee" ? " · on your team" : d.kind === "unknown" ? " · not a customer yet" : ""}</span>
+        </div>
+        <div className="txt-head-tools">
+          <button type="button" className="btn sm" disabled={busy} onClick={() => run(async () => { await api(`/texting/threads/${id}/unread`, { method: "POST" }); onChanged(); onBack(); })}>Mark unread</button>
+          <button type="button" className={`btn sm txt-state ${d.status}`} disabled={busy} aria-pressed={d.status === "done"} title={d.status === "done" ? "Marked done. Click to open it again." : "Open. Click when it's been dealt with."}
+            onClick={() => act("status", { status: d.status === "done" ? "open" : "done" })}>{d.status === "done" ? "Done" : "Open"}</button>
+          {can("admin", "customers") && <button type="button" className="btn sm" disabled={busy} onClick={() => setDeleting(true)}>Delete Messages</button>}
+        </div>
+      </header>
+      {d.kind === "unknown" && can("manager", "customers") && (
+        <div className="txt-file">
+          {filing ? <CustomerPick onCancel={() => setFiling(false)} onPick={(customerId) => run(async () => { await api("/texting/assign", { body: { phone: d.phone, customerId } }); setFiling(false); await conv.reload(); onChanged(); })} />
+            : <button type="button" className="linkbtn" onClick={() => setFiling(true)}>This number isn&apos;t on a customer yet. File the conversation under a customer…</button>}
+        </div>
+      )}
+      <div className="txt-bubbles sms-thread" role="log" aria-label="Texts">
+        {d.texts.length ? <Bubbles texts={d.texts} /> : <p className="muted" style={{ margin: "auto" }}>No texts yet. Write the first one below.</p>}
+      </div>
+      <footer className="txt-foot">
+        {!d.connected ? <p className="muted" style={{ margin: 0 }}>Texting isn&apos;t connected yet (Settings → Integrations).</p>
+          : d.optedOut ? <p className="bad-text" style={{ margin: 0 }}>They replied STOP on {new Date(d.optedOut).toLocaleDateString()}, so they can&apos;t be texted until they reply START.</p>
+          : (
+            <form onSubmit={(e) => { e.preventDefault(); if (body.trim()) send(); }}>
+              <MessageBox value={body} onChange={setBody} templates={templates} rows={3} />
+              <div className="txt-foot-send"><ErrorBox error={error} /><button className="btn hw-and" disabled={busy || !body.trim()}>{busy ? "Sending…" : "Send"}</button></div>
+            </form>
+          )}
+      </footer>
+      {deleting && <ConfirmDialog title="Delete Messages" busy={busy} onNo={() => setDeleting(false)}
+        message={<>Delete the whole conversation with <strong>{who(d)}</strong> from Crewdesk? Its texts are removed here (they stay in Talkroute).</>}
+        onYes={() => run(async () => { await api(`/texting/threads/${id}`, { method: "DELETE" }); setDeleting(false); onGone(); })} />}
+    </>
   );
 }
 
@@ -146,9 +414,296 @@ function CustomerPick({ onPick, onCancel }: { onPick: (id: string) => void; onCa
   const [q, setQ] = useState("");
   const res = useApi<{ rows: { id: string; name: string; number: number }[] }>(q.trim().length >= 2 ? `/customers?status=all&limit=8&q=${encodeURIComponent(q.trim())}` : null);
   return (
-    <div className="stack" style={{ gap: 4, marginTop: 6 }}>
+    <div className="stack" style={{ gap: 4 }}>
       <div className="row"><input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Customer name" aria-label="Find a customer" /><button type="button" className="btn" onClick={onCancel}>Cancel</button></div>
       {(res.data?.rows ?? []).map((r) => <button key={r.id} type="button" className="linkbtn" style={{ textAlign: "left" }} onClick={() => onPick(r.id)}>{r.name} <span className="muted">#{r.number}</span></button>)}
     </div>
+  );
+}
+
+function Dialog({ title, children, onClose, wide }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
+  useEffect(() => { const key = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", key); return () => window.removeEventListener("keydown", key); }, [onClose]);
+  return (
+    <div className="hw-dialog-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className={`hw-dialog txt-dialog${wide ? " wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
+        <div className="hw-dialog-head"><span>{title}</span><button type="button" className="hw-dialog-x" aria-label="Close" onClick={onClose}>×</button></div>
+        <div className="hw-dialog-body">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+type Recipient = { id: string; name: string; detail: string; ok: boolean };
+type Kind = "customers" | "groups" | "employees" | "crews";
+
+/** One of the pick lists (customers, groups, the team, crews), searched as you type. */
+function RecipientList({ kind, q, onPick, picked, extra }: { kind: Kind; q: string; onPick: (r: Recipient) => void; picked: (id: string) => boolean; extra?: (r: Recipient) => ReactNode }) {
+  const [term, setTerm] = useState(q);
+  useEffect(() => { const t = setTimeout(() => setTerm(q), 250); return () => clearTimeout(t); }, [q]);
+  const list = useApi<{ rows: Recipient[] }>(`/texting/recipients?kind=${kind}${term.trim() ? `&q=${encodeURIComponent(term.trim())}` : ""}`);
+  const rows = list.data?.rows ?? [];
+  return (
+    <ul className="txt-pick" aria-label={kind}>
+      {rows.map((r) => (
+        <li key={r.id} className={r.ok ? "" : "off"}>
+          <span className="txt-pick-name">{r.name}<span className="muted"> · {r.detail}</span></span>
+          {extra?.(r)}
+          <button type="button" className="hw-icon-btn" disabled={!r.ok || picked(r.id)} aria-label={`Add ${r.name}`} title={picked(r.id) ? "Already on it" : r.ok ? "Add" : r.detail} onClick={() => onPick(r)}><Icon name="plus" size={16} /></button>
+        </li>
+      ))}
+      {list.data && !rows.length && <li className="none">{kind === "groups" ? "(No groups found)" : kind === "customers" && !term.trim() ? "Type a name to find a customer." : "Nothing matches."}</li>}
+    </ul>
+  );
+}
+
+/** Start a conversation: with a customer, someone on the team, or a number typed in. */
+function NewConversation({ onClose, onOpen }: { onClose: () => void; onOpen: (id: string) => void }) {
+  const [kind, setKind] = useState<"customers" | "employees" | "number">("customers");
+  const [q, setQ] = useState("");
+  const { busy, error, run } = useAction();
+  const open = (payload: Record<string, string>) => run(async () => onOpen((await api<{ id: string }>("/texting/threads/open", { body: payload })).id));
+  return (
+    <Dialog title="New message" onClose={onClose}>
+      <div className="stack" style={{ gap: 10 }}>
+        <div className="txt-seg" role="tablist" aria-label="Who to">
+          {([["customers", "Customers"], ["employees", "Employees"], ["number", "A number"]] as const).map(([k, label]) => <button key={k} type="button" role="tab" aria-selected={kind === k} className={kind === k ? "on" : ""} onClick={() => { setKind(k); setQ(""); }}>{label}</button>)}
+        </div>
+        {kind === "number" ? (
+          <form className="row" onSubmit={(e) => { e.preventDefault(); open({ phone: q }); }}>
+            <input autoFocus inputMode="tel" placeholder="(405) 555-0100" aria-label="Mobile number" value={q} onChange={(e) => setQ(e.target.value)} />
+            <button className="btn hw-and" disabled={busy || q.replace(/\D/g, "").length < 10}>Start</button>
+          </form>
+        ) : (
+          <>
+            <input autoFocus type="search" placeholder={kind === "customers" ? "Search customers..." : "Search employees..."} aria-label="Search" value={q} onChange={(e) => setQ(e.target.value)} />
+            <RecipientList kind={kind} q={q} picked={() => false} onPick={(r) => open(kind === "customers" ? { customerId: r.id } : { employeeId: r.id })} />
+          </>
+        )}
+        <ErrorBox error={error} />
+      </div>
+    </Dialog>
+  );
+}
+
+/* ───────────── Send Text Messages ───────────── */
+
+type Picked = { kind: Kind | "phones"; id: string; name: string };
+type Batch = { id: string; at: string; by: string | null; label: string; body: string; total: number; stopped: boolean; sent: number; failed: number; waiting: number; skipped: { name: string; reason: string }[] };
+
+export function SendTextsTab() {
+  const settings = useApi<Settings>("/texting/settings");
+  const batches = useApi<{ rows: Batch[] }>("/texting/batches");
+  const templates = useTextTemplates();
+  const [kind, setKind] = useState<Kind | "phones">("customers");
+  const [q, setQ] = useState("");
+  const [to, setTo] = useState<Picked[]>([]);
+  const [body, setBody] = useState("");
+  const [template, setTemplate] = useState("");
+  const [done, setDone] = useState<{ text: string; skipped: { name: string; reason: string }[] } | null>(null);
+  const [groupName, setGroupName] = useState("");
+  const [groupsKey, setGroupsKey] = useState(0);
+  const [editing, setEditing] = useState<Recipient | null>(null);
+  const [phone, setPhone] = useState("");
+  const { busy, error, run } = useAction();
+  const group = useAction();
+  const sending = batches.data?.rows.some((b) => b.waiting > 0 && !b.stopped);
+  // While a send to many is going out, show it counting up.
+  useEffect(() => { if (!sending) return; const t = setInterval(() => void batches.reload(), 5000); return () => clearInterval(t); }, [sending, batches.reload]); // eslint-disable-line react-hooks/exhaustive-deps
+  const add = (k: Picked["kind"], r: { id: string; name: string }) => { setDone(null); setTo((cur) => (cur.some((x) => x.kind === k && x.id === r.id) ? cur : [...cur, { kind: k, id: r.id, name: r.name }])); };
+  const ids = (k: Picked["kind"]) => to.filter((x) => x.kind === k).map((x) => x.id);
+  const send = () => run(async () => {
+    const r = await api<{ sent: number; queued: number; skipped: { name: string; reason: string }[] }>("/texting/send", { body: { body: body.trim(), customerIds: ids("customers"), employeeIds: ids("employees"), groupIds: ids("groups"), crewIds: ids("crews"), phones: ids("phones") } });
+    setDone({ text: r.queued ? `${r.queued} texts are lined up and going out a few a minute. Watch them under Messages History.` : "Sent.", skipped: r.skipped });
+    setBody(""); setTemplate(""); setTo([]);
+    await batches.reload();
+  });
+  const sendLabel = kind === "groups" ? "Send Messages To" : "Send Message To";
+  return (
+    <div className="txt-send" data-lkeep="">
+      <div className="txt-send-main">
+        <div className="card txt-card">
+          <h3>Messages History</h3>
+          <div className="txt-history">
+            {(batches.data?.rows ?? []).map((b) => (
+              <div key={b.id} className="txt-batch">
+                <div className="row" style={{ justifyContent: "space-between", gap: 8 }}>
+                  <strong>{b.label}</strong>
+                  <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{when(b.at)}{b.by ? ` · ${b.by}` : ""}</span>
+                </div>
+                <div className="txt-batch-body">{b.body}</div>
+                <div className="row" style={{ gap: 10, fontSize: 13, flexWrap: "wrap" }}>
+                  <span>{b.sent} of {b.total} sent</span>
+                  {b.waiting > 0 && !b.stopped && <span className="hwf-tag warn" style={{ marginLeft: 0 }}>{b.waiting} waiting</span>}
+                  {b.failed > 0 && <Link href="/texts?tab=errors" className="bad-text">{b.failed} didn&apos;t go</Link>}
+                  {b.skipped.length > 0 && <span className="muted" title={b.skipped.slice(0, 30).map((s) => `${s.name}: ${s.reason}`).join("\n")}>{b.skipped.length} left out</span>}
+                  {b.stopped && <span className="muted">Stopped</span>}
+                  {b.waiting > 0 && !b.stopped && <button type="button" className="linkbtn" onClick={() => confirm("Stop this send? Texts that haven't gone yet won't be sent.") && run(async () => { await api(`/texting/batches/${b.id}/stop`, { method: "POST" }); await batches.reload(); })}>Stop</button>}
+                </div>
+              </div>
+            ))}
+            {batches.data && !batches.data.rows.length && <p className="muted" style={{ margin: 0 }}>Texts sent to several people at once are listed here. One-to-one texts are under Text Messages.</p>}
+          </div>
+        </div>
+        <div className="card txt-card">
+          {settings.data && !settings.data.connected && <p className="notice" style={{ margin: 0 }}>Texting isn&apos;t connected yet (Settings → Integrations).</p>}
+          <label>Template
+            <select value={template} onChange={(e) => { setTemplate(e.target.value); const t = templates.find((x) => x.id === e.target.value); if (t) setBody(t.body.slice(0, TEXT_MAX)); }}>
+              <option value="">--- Select Template ---</option>
+              {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </label>
+          <div className="txt-field">
+            <span>{sendLabel} <span className="hwf-star">*</span></span>
+            <div className="txt-to">
+              {to.map((x) => <span className="hwf-chip" key={`${x.kind}:${x.id}`}><button type="button" aria-label={`Remove ${x.name}`} onClick={() => setTo(to.filter((y) => y !== x))}>×</button>{x.kind === "groups" ? "Group: " : x.kind === "crews" ? "Crew: " : ""}{x.name}</span>)}
+              {!to.length && <span className="muted">{kind === "groups" ? "(Please select a group at the right box)" : "(Please select a customer / employee at the upper right box)"}</span>}
+            </div>
+          </div>
+          <div className="txt-field">
+            <span>Message <span className="hwf-star">*</span></span>
+            <MessageBox value={body} onChange={setBody} rows={6} />
+          </div>
+          <ErrorBox error={error} />
+          {done && (
+            <div className="hwd-success" role="status">
+              <div>{done.text}{done.skipped.length > 0 && <> Left out: {done.skipped.slice(0, 6).map((s) => `${s.name} (${s.reason.toLowerCase()})`).join(", ")}{done.skipped.length > 6 ? ` and ${done.skipped.length - 6} more` : ""}.</>}</div>
+              <button type="button" aria-label="Close" onClick={() => setDone(null)}>×</button>
+            </div>
+          )}
+          <div className="txt-send-btn"><button type="button" className="btn hw-and" disabled={busy || !body.trim() || !to.length || !settings.data?.connected} onClick={send}>{busy ? "Sending…" : "Send"}</button></div>
+        </div>
+      </div>
+      <div className="txt-send-side">
+        <div className="card txt-card">
+          <div className="txt-seg" role="tablist" aria-label="Send to">
+            {([["customers", "Customers"], ["groups", "Groups"], ["employees", "Employees"], ["crews", "Crews"], ["phones", "Number"]] as const).map(([k, label]) => <button key={k} type="button" role="tab" aria-selected={kind === k} className={kind === k ? "on" : ""} onClick={() => { setKind(k); setQ(""); }}>{label}</button>)}
+          </div>
+          {kind === "phones" ? (
+            <form className="row" onSubmit={(e) => { e.preventDefault(); if (phone.replace(/\D/g, "").length >= 10) { add("phones", { id: phone.trim(), name: formatPhone(phone) }); setPhone(""); } }}>
+              <input inputMode="tel" placeholder="(405) 555-0100" aria-label="Mobile number" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <button className="btn" disabled={phone.replace(/\D/g, "").length < 10}>Add</button>
+            </form>
+          ) : (
+            <>
+              <input type="search" placeholder={kind === "groups" ? "search for group..." : `search for ${kind === "customers" ? "customer" : kind === "employees" ? "employee" : "crew"}...`} aria-label="Search" value={q} onChange={(e) => setQ(e.target.value)} />
+              <RecipientList key={`${kind}:${groupsKey}`} kind={kind} q={q} picked={(id) => to.some((x) => x.kind === kind && x.id === id)} onPick={(r) => add(kind, r)}
+                extra={kind === "groups" ? (r) => (
+                  <>
+                    <button type="button" className="hw-icon-btn" aria-label={`Members of ${r.name}`} title="Group members" onClick={() => setEditing(r)}><Icon name="user" size={16} /></button>
+                    <button type="button" className="hw-icon-btn" aria-label={`Rename ${r.name}`} title="Rename" onClick={() => { const name = prompt("Group name", r.name)?.trim(); if (name && name !== r.name) group.run(async () => { await api(`/texting/groups/${r.id}`, { method: "PUT", body: { name } }); setGroupsKey((k) => k + 1); }); }}><Icon name="pencil" size={15} /></button>
+                    <button type="button" className="hw-icon-btn danger" aria-label={`Delete ${r.name}`} title="Delete group" onClick={() => confirm(`Delete the group "${r.name}"? The customers in it aren't touched.`) && group.run(async () => { await api(`/texting/groups/${r.id}`, { method: "DELETE" }); setTo((cur) => cur.filter((x) => !(x.kind === "groups" && x.id === r.id))); setGroupsKey((k) => k + 1); })}>×</button>
+                  </>
+                ) : undefined} />
+            </>
+          )}
+        </div>
+        {kind === "groups" && (
+          <div className="card txt-card">
+            <h3>Add Customer Group</h3>
+            <form className="stack" style={{ gap: 8 }} onSubmit={(e) => { e.preventDefault(); group.run(async () => { await api("/texting/groups", { body: { name: groupName } }); setGroupName(""); setGroupsKey((k) => k + 1); }); }}>
+              <label><span>Group Name <span className="hwf-star">*</span></span><input value={groupName} maxLength={80} onChange={(e) => setGroupName(e.target.value)} /></label>
+              <ErrorBox error={group.error} />
+              <div className="txt-send-btn"><button className="btn hw-and" disabled={group.busy || !groupName.trim()}>Add Group</button></div>
+            </form>
+          </div>
+        )}
+        <div className="card txt-card txt-number"><strong>Your Phone Number:</strong> {settings.data?.connected ? formatPhone(settings.data.fromNumber) : "not connected yet"}</div>
+      </div>
+      {editing && <GroupMembers group={editing} onClose={() => { setEditing(null); setGroupsKey((k) => k + 1); }} />}
+    </div>
+  );
+}
+
+/** A group's members: customers and people on the team, added with + and taken off with ×. */
+function GroupMembers({ group, onClose }: { group: Recipient; onClose: () => void }) {
+  const data = useApi<{ members: { id: string; kind: string; name: string; detail: string }[] }>(`/texting/groups/${group.id}`);
+  const [kind, setKind] = useState<"customers" | "employees">("customers");
+  const [q, setQ] = useState("");
+  const { error, run } = useAction();
+  const add = (r: Recipient) => run(async () => { await api(`/texting/groups/${group.id}/members`, { body: kind === "customers" ? { customerId: r.id } : { employeeId: r.id } }); await data.reload(); });
+  const names = new Set((data.data?.members ?? []).map((m) => m.name));
+  return (
+    <Dialog title={`Group members: ${group.name}`} onClose={onClose} wide>
+      <div className="txt-members">
+        <div className="stack" style={{ gap: 8 }}>
+          <div className="txt-seg" role="tablist" aria-label="Add">
+            {([["customers", "Customers"], ["employees", "Employees"]] as const).map(([k, label]) => <button key={k} type="button" role="tab" aria-selected={kind === k} className={kind === k ? "on" : ""} onClick={() => { setKind(k); setQ(""); }}>{label}</button>)}
+          </div>
+          <input autoFocus type="search" placeholder={`Search ${kind}...`} aria-label="Search" value={q} onChange={(e) => setQ(e.target.value)} />
+          <RecipientList kind={kind} q={q} picked={() => false} onPick={add} extra={(r) => (names.has(r.name) ? <span className="muted" style={{ fontSize: 12 }}>in the group</span> : null)} />
+        </div>
+        <div className="stack" style={{ gap: 6 }}>
+          <strong>In the group ({data.data?.members.length ?? 0})</strong>
+          <ErrorBox error={data.error ?? error} />
+          <ul className="txt-pick">
+            {(data.data?.members ?? []).map((m) => (
+              <li key={m.id}>
+                <span className="txt-pick-name">{m.name}<span className="muted"> · {m.kind === "employee" ? "team · " : ""}{m.detail}</span></span>
+                <button type="button" className="hw-icon-btn danger" aria-label={`Remove ${m.name}`} title="Take out of the group" onClick={() => run(async () => { await api(`/texting/groups/${group.id}/members/${m.id}`, { method: "DELETE" }); await data.reload(); })}>×</button>
+              </li>
+            ))}
+            {data.data && !data.data.members.length && <li className="none">Nobody yet. Add customers or employees with +.</li>}
+          </ul>
+        </div>
+      </div>
+      <div className="hw-dialog-foot" style={{ margin: "12px -16px -16px" }}><button type="button" className="btn hw-and" onClick={onClose}>Close</button></div>
+    </Dialog>
+  );
+}
+
+/* ───────────── Error Log ───────────── */
+
+export function TextErrorsTab() {
+  const data = useApi<{ rows: { id: string; at: string; error: string; phone: string; name: string | null; threadId: string | null; body: string }[] }>("/texting/errors");
+  const rows = data.data?.rows ?? [];
+  return (
+    <div className="card hw-table-card">
+      <ErrorBox error={data.error} />
+      <div className="tablewrap">
+        <table className="hw-table">
+          <thead><tr><th>Date</th><th>Error Message</th><th>Number</th></tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td style={{ whiteSpace: "nowrap" }}>{when(r.at)}</td>
+                <td>{r.error}<div className="muted" style={{ fontSize: 13 }}>&ldquo;{r.body}&rdquo;</div></td>
+                <td style={{ whiteSpace: "nowrap" }}>{r.threadId ? <Link href={`/texts?thread=${r.threadId}`}>{r.name ?? formatPhone(r.phone)}</Link> : r.name ?? formatPhone(r.phone)}{r.name ? <div className="muted" style={{ fontSize: 13 }}>{formatPhone(r.phone)}</div> : null}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {data.data && !rows.length && <div className="hwf-none">No texts have failed.</div>}
+    </div>
+  );
+}
+
+/* ───────────── The Customers page: text the customers ticked (or all that match) ───────────── */
+
+export function BulkText({ selection, audience, onClose }: { selection: Record<string, unknown>; audience: string; onClose: () => void }) {
+  const templates = useTextTemplates();
+  const [body, setBody] = useState("");
+  const [done, setDone] = useState<{ sent: number; queued: number; skipped: { name: string; reason: string }[] } | null>(null);
+  const { busy, error, run } = useAction();
+  return (
+    <section className="card stack" aria-label="Text these customers">
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <h2 style={{ fontSize: 16, margin: 0 }}>Text {audience}</h2>
+        <button type="button" className="btn" onClick={onClose} aria-label="Close">✕</button>
+      </div>
+      {done ? (
+        <>
+          <p style={{ margin: 0 }}>{done.queued ? `${done.queued} texts are lined up and going out a few a minute.` : "Sent."} <Link href="/texts?tab=send">See how it's going</Link></p>
+          {done.skipped.length > 0 && <p className="muted" style={{ margin: 0 }}>Left out ({done.skipped.length}): {done.skipped.slice(0, 8).map((s) => `${s.name} (${s.reason.toLowerCase()})`).join(", ")}{done.skipped.length > 8 ? "…" : ""}</p>}
+        </>
+      ) : (
+        <>
+          <MessageBox value={body} onChange={setBody} templates={templates} rows={5} />
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>Each customer gets their own text (tags are filled in for them), from your Talkroute number. Customers who replied STOP, have no mobile number, or are samples are left out.</p>
+          <ErrorBox error={error} />
+          <div><button type="button" className="btn primary" disabled={busy || !body.trim()} onClick={() => run(async () => setDone(await api("/texting/send", { body: { ...selection, body: body.trim(), audience } })))}>{busy ? "Sending…" : "Send text"}</button></div>
+        </>
+      )}
+    </section>
   );
 }

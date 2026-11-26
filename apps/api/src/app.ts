@@ -46,7 +46,7 @@ import customerMessageRoutes from "./routes/customerMessages";
 import paymentMethodRoutes from "./routes/paymentMethods";
 import customerPageRoutes from "./routes/customerPage";
 import estimateRoutes, { publicEstimateRoutes } from "./routes/estimates";
-import textingRoutes from "./routes/texting";
+import textingRoutes, { textingHookRoutes } from "./routes/texting";
 import automationRoutes from "./routes/automations";
 import myDayRoutes from "./routes/myDay";
 import waitlistRoutes from "./routes/waitlist";
@@ -165,6 +165,7 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(paymentMethodRoutes, { prefix: "/customers" });
   await app.register(customerPageRoutes, { prefix: "/customers" });
   await app.register(estimateRoutes, { prefix: "/estimates" });
+  await app.register(textingHookRoutes, { prefix: "/texting/hooks" });
   await app.register(textingRoutes, { prefix: "/texting" });
   await app.register(automationRoutes, { prefix: "/automations" });
   await app.register(myDayRoutes, { prefix: "/my-day" });

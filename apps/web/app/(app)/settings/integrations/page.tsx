@@ -8,7 +8,7 @@ import { TextingCard } from "@/components/texting";
 
 /** Integrations: connections to other systems: Bigcapital (accounting), Stripe (online payments) and Talkroute (texting). */
 export default function Integrations() {
-  const { can } = useAuth();
+  const { can, me } = useAuth();
   return (
     <>
       <SettingsTabs />
@@ -19,7 +19,7 @@ export default function Integrations() {
       <h2 style={{ fontSize: 16, margin: "20px 0 8px" }}>Online payments (Stripe)</h2>
       {can("admin", "customers") ? <StripeCard /> : <p className="muted">Only Customers &amp; billing admins can see payment settings.</p>}
       <h2 style={{ fontSize: 16, margin: "20px 0 8px" }}>Texting (Talkroute)</h2>
-      {can("manager", "customers") ? <TextingCard /> : <p className="muted">Only Customers &amp; billing managers can see texting.</p>}
+      {can("manager", "customers") || me?.access?.texting ? <TextingCard /> : <p className="muted">Only Customers &amp; billing managers can see texting.</p>}
     </>
   );
 }
