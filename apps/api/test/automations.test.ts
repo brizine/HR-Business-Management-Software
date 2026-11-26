@@ -6,9 +6,9 @@
  * password on a sequence, the checks on saving and turning on, the Homeworks import (all off,
  * keeping their Homeworks Ids and tags), and quiet hours for texts.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, like, sql } from "drizzle-orm";
 import { buildApp } from "../src/app";
 import { db, pool } from "../src/db";
 import { automationRuns, automationSteps, automations, customers, estimates, todos } from "../src/db/schema";
@@ -40,6 +40,10 @@ const today = () => localParts(new Date(), TZ).date;
 const plus = (d: string, n: number) => new Date(Date.parse(`${d}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 /** A time company time, `days` from today. */
 const at = (days: number, time = "10:00") => zonedTime(plus(today(), days), time, TZ);
+/** A Wednesday noon in the company's time zone. A test whose answer depends on the day holds the clock here, so it's the same whenever the suite runs. */
+const MIDDAY = new Date("2026-06-17T12:00:00-05:00");
+/** Holds `Date` at mid-day for the rest of the test (timers and the database carry on as they are). */
+const holdClockAtMidday = () => { vi.useFakeTimers({ toFake: ["Date"], now: MIDDAY }); };
 
 async function call(method: string, url: string, who: string | null, payload?: unknown) {
   const res = await app.inject({ method: method as never, url, payload: payload as never, headers: who ? { authorization: `Bearer ${T[who]}` } : {} });
@@ -90,6 +94,8 @@ beforeAll(async () => {
   ID.tplOwner = await template("email", "Estimate news (internal)", "{{CUSTOMER_NAME}}: estimate {{ESTIMATE_NUMBER}}", "<p>Check on it.</p>", "internal");
   ID.tplReminder = await template("email", "Visit reminder", "See you {{EVENT_DATE}}", "<p>We'll be at {{EVENT_PROPERTY_ADDRESS}}.</p>");
 });
+
+afterEach(() => { vi.useRealTimers(); });
 
 afterAll(async () => {
   setEmailTransport(null);
@@ -320,6 +326,7 @@ describe("automations v2", () => {
   });
 
   it("a to-do action: due 8 AM the next day, for the chosen person", async () => {
+    holdClockAtMidday();
     const seq = await call("POST", "/automations", "owner", {
       kind: "sequence", name: "Call about the estimate", enabled: true,
       blocks: [{ trigger: cond("estimate_changes"), actions: [act("create_assign_todo", { todoTitle: "Call {{CUSTOMER_NAME}} about estimate {{ESTIMATE_NUMBER}}", employeeIds: [ID.office] })] }],
@@ -333,6 +340,33 @@ describe("automations v2", () => {
     expect(t.title).toMatch(/^Call Bob Birch about estimate \d+$/);
     expect(t.startTime).toBe("08:00");
     expect(t.date).toBe(plus(localParts(now, TZ).date, 1));
+    expect(t.date).toBe("2026-06-18");
+  });
+
+  it("a to-do action late at night: due the day after its wait ended, not the day after that", async () => {
+    holdClockAtMidday();
+    const seq = await call("POST", "/automations", "owner", {
+      kind: "sequence", name: "Call about the changes", enabled: true,
+      blocks: [{ trigger: cond("estimate_changes"), actions: [act("create_assign_todo", { todoTitle: "Late call for {{CUSTOMER_NAME}}", employeeIds: [ID.office] })] }],
+    });
+    expect(seq.status).toBe(200);
+    // On since 11 PM, so only tonight's answers start it.
+    await onSince(seq.body.id, at(0, "23:00"));
+    const asksForChanges = async (customerId: string, when: Date) => {
+      const est = await sentEstimate(customerId);
+      await db.update(estimates).set({ status: "changes", respondedAt: when }).where(eq(estimates.id, est));
+    };
+    const dueDates = async (customerId: string) => (await db.select().from(todos).where(and(eq(todos.companyId, companyId), eq(todos.customerId, customerId), like(todos.title, "Late call for %")))).map((t) => `${t.date} ${t.startTime}`);
+    // Asked for at 11:55 PM and done a minute later: due tomorrow. (A check claims a step by moving its
+    // time on ten minutes, which here is past midnight; that mustn't move the to-do a day.)
+    await asksForChanges(ID.amy, at(0, "23:55"));
+    await runAutomations(at(0, "23:56"));
+    expect(await dueDates(ID.amy)).toEqual(["2026-06-18 08:00"]);
+    // Asked for at 11:58 PM, and the check comes round at 12:02 AM: still the day after it was asked for.
+    await asksForChanges(ID.bob, at(0, "23:58"));
+    await runAutomations(at(1, "00:02"));
+    expect(await dueDates(ID.bob)).toEqual(["2026-06-18 08:00"]);
+    await call("POST", `/automations/${seq.body.id}/enabled`, "owner", { enabled: false });
   });
 
   it("turning one off stops its runs; a template in use can't be deleted", async () => {

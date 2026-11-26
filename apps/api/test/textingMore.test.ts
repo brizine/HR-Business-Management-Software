@@ -4,7 +4,7 @@
  * replies, bringing in past conversations, copying customers to the phone service, calls on the
  * customer's page, and a to-do from a text. Against a pretend provider.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { clockIn } from "@crewdesk/shared";
 import { buildApp } from "../src/app";
@@ -49,6 +49,8 @@ const picture = (who: string, threadId: string, type = "image/png", caption = ""
 ]), { "content-type": `multipart/form-data; boundary=${boundary}` });
 const thread = async (id: string, who = "office") => (await call("GET", `/texting/threads/${id}?peek=1`, who)).body;
 const titles = async (who: string) => { await flushNotifications(); const r = (await call("GET", "/notifications", who)).body; return (r.items ?? r).map((n: any) => n.title) as string[]; };
+/** A Wednesday noon in the company's time zone, for holding the clock where the time of day decides the answer. */
+const MIDDAY = new Date("2026-06-17T12:00:00-05:00");
 /** "HH:MM" in the company's time zone, some minutes from now. */
 const clock = (plusMinutes: number) => { const m = (clockIn(new Date(), "America/Chicago").minutes + plusMinutes + 1440) % 1440; return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
 
@@ -73,6 +75,8 @@ beforeAll(async () => {
   await call("POST", "/notifications/devices", "tia", { token: `ExponentPushToken[tia-${suffix}]`, platform: "ios" });
   await call("POST", "/notifications/devices", "office", { token: `ExponentPushToken[olive-${suffix}]`, platform: "ios" });
 });
+
+afterEach(() => { vi.useRealTimers(); });
 
 afterAll(async () => {
   setTextingProvider(null);
@@ -174,7 +178,9 @@ describe("texting, the additions", () => {
     await receiveText(companyId, { id: `p_${suffix}_9`, from: "+14055550242", body: "Running late", at: new Date() });
     await receiveText(companyId, { id: `p_${suffix}_10`, from: "+14055550288", body: "From yesterday", at: new Date(Date.now() - 86_400_000) });
     expect(sent.length).toBe(n);
-    // With the office open, nothing is sent back.
+    // With the office open, nothing is sent back. The clock (`Date` only) is held at mid-day for this:
+    // closing can't be set later than 11:59 PM, so even "open all day" is closed in the day's last minute.
+    vi.useFakeTimers({ toFake: ["Date"], now: MIDDAY });
     const open = { open: "00:00", close: "23:59" };
     await call("PUT", "/texting/settings/options", "owner", { ...options, autoReply: { ...options.autoReply, hours: { sun: open, mon: open, tue: open, wed: open, thu: open, fri: open, sat: open } } });
     await receiveText(companyId, { id: `p_${suffix}_11`, from: "+14055550277", body: "New here", at: new Date() });

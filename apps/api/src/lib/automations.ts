@@ -644,7 +644,9 @@ async function processDueSteps(now: Date) {
     // The run may have changed (stopped by an earlier step this round).
     const [fresh] = await db.select().from(automationRuns).where(eq(automationRuns.id, run.id));
     try {
-      await processStep(claimed, fresh ?? run, a, { id: a.companyId, tz, testOf }, now);
+      // Claiming it moved its time on ten minutes; what it does still goes by when its wait ended
+      // (a to-do made at 11:55 PM is due the next morning, not the morning after).
+      await processStep({ ...claimed, dueAt: step.dueAt }, fresh ?? run, a, { id: a.companyId, tz, testOf }, now);
     } catch (e) {
       console.error(`Automation step ${step.id} failed:`, (e as Error).message);
       await db.update(automationSteps).set({ status: "failed", detail: (e as Error).message.slice(0, 300), doneAt: now, dueAt: null }).where(eq(automationSteps.id, step.id));
