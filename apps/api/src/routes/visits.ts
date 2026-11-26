@@ -7,14 +7,14 @@ import { and, asc, desc, eq, exists, gte, ilike, inArray, isNull, lte, max, notI
 import { z } from "zod";
 import {
   INACTIVE_STATUSES, VISIT_FILES_MAX, VISIT_STATUS_LABELS, customerName, describeRepeat, formatAddress, formatMoney, formatTodoTime, invoiceTotals, lineAmount,
-  cleanFormAnswers, formAnswersSchema, isSigned,
+  cleanFormAnswers, cleanFormSignatures, formAnswersSchema, formChanges, formFields, isImageType, isSigned, missingRequired,
   visitCompleteSchema, visitDates, visitLineHours, visitNumber, visitSchema, visitSkipSchema, visitTotal, visitUpdateSchema,
   type VisitStatus, type VisitUpdate,
 } from "@crewdesk/shared";
 import { db } from "../db";
 import type { Tx } from "../lib/crm";
 import { crews, crmTags, customers, employees, estimates, invoiceLines, invoices, properties, propertyAssignments, serviceTypes, visitAssignees, visitFiles, visitFormEntries, visitLines, visitProducts, visitWeather, visits } from "../db/schema";
-import { autoFormIds, formsByVisit, formsFor, syncVisitForms } from "../lib/visitForms";
+import { addFormHistory, applyFlags, autoFormIds, emailCopiesAfter, emailEntry, entryPdf, formHistory, formsByVisit, formsFor, formsLocked, formsStillNeeded, syncVisitForms } from "../lib/visitForms";
 import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { addDays, billingSettings } from "../lib/invoices";
@@ -260,7 +260,8 @@ const routes: FastifyPluginAsync = async (app) => {
     const { companyId, sub: me } = req.user;
     const crew = await checkInput(companyId, body);
     // The forms picked for it; when the form isn't asked (not from the work order form), the ones set to attach to every new work order.
-    const forms = await formsFor(companyId, body.formIds ?? await autoFormIds(companyId));
+    // (Automatic ones: set for every work order, or tied to one of its services.)
+    const forms = await formsFor(companyId, body.formIds ?? await autoFormIds(companyId, body.lines.map((l) => l.serviceTypeId).filter((x): x is string => !!x)));
     const dates: (string | null)[] = body.scheduling === "waitlist" ? [null]
       : body.scheduling === "repeat" ? visitDates(body.date!, body.repeatUnit, body.repeatEvery, body.repeatUntil, body.offMonths) : [body.date!];
     if (!dates.length) throw new HttpError(400, "Every date in that series falls in the off-season");
@@ -360,6 +361,9 @@ const routes: FastifyPluginAsync = async (app) => {
     const v = await crewAction(req, req.params.id);
     const { notes, lat, lng, accuracy, chemicals } = parse(visitCompleteSchema, req.body ?? {});
     if (v.status === "completed" || v.status === "skipped") throw new HttpError(400, `This work order is already ${VISIT_STATUS_LABELS[v.status as VisitStatus].toLowerCase()}`);
+    // Forms marked "must be submitted" come first.
+    const needed = await formsStillNeeded(v.id);
+    if (needed.length) throw new HttpError(400, `Submit ${needed.length === 1 ? "the form" : "these forms"} before marking it Completed: ${needed.join(", ")}`);
     const gps = lat != null && lng != null ? { completedLat: lat, completedLng: lng, completedAccuracy: accuracy ?? null } : { completedLat: null, completedLng: null, completedAccuracy: null };
     await db.transaction(async (tx) => {
       await tx.update(visits).set({ status: "completed", completedAt: new Date(), finishedById: req.user.sub, completionNotes: notes ?? null, ...gps, updatedAt: new Date() }).where(eq(visits.id, v.id));
@@ -374,6 +378,8 @@ const routes: FastifyPluginAsync = async (app) => {
     weatherAfterComplete(v.id, v.companyId);
     // And the customer's after-application notice, the way their property chooses.
     noticeAfterComplete(v.id, v.companyId);
+    // Forms set to email the customer a copy send it now.
+    emailCopiesAfter(v.id);
     return reply(req, v.id);
   });
   app.post<{ Params: { id: string } }>("/:id/skip", async (req) => {
@@ -406,35 +412,82 @@ const routes: FastifyPluginAsync = async (app) => {
     if (!e) notFound("Form");
     return e;
   };
-  const showEntry = async (e: typeof visitFormEntries.$inferSelect, canFill: boolean) => {
+  const showEntry = async (req: FastifyRequest, v: Visit, e: typeof visitFormEntries.$inferSelect) => {
     const who = [e.submittedById, e.updatedById].filter((x): x is string => !!x);
     const es = who.length ? await db.select({ id: employees.id, firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(inArray(employees.id, who)) : [];
     const nameOf = (id: string | null) => { const p = es.find((x) => x.id === id); return p ? `${p.firstName} ${p.lastName}` : null; };
+    const manager = canManageVisits(req);
+    const locked = await formsLocked(v);
     return {
-      id: e.id, formId: e.formId, name: e.name, def: e.def, answers: e.answers ?? {}, signature: e.signature ?? null,
+      id: e.id, formId: e.formId, name: e.name, def: e.def, answers: e.answers ?? {}, signature: e.signature ?? null, signatures: e.signatures ?? {},
       submitted: !!e.submittedAt, submittedAt: e.submittedAt, submittedBy: nameOf(e.submittedById),
-      updatedAt: e.submittedAt ? e.updatedAt : null, updatedBy: e.submittedAt ? nameOf(e.updatedById) : null, canFill,
+      updatedAt: e.submittedAt ? e.updatedAt : null, updatedBy: e.submittedAt ? nameOf(e.updatedById) : null,
+      /** Locked once the work order is on an invoice. */
+      locked, canFill: !locked && (manager || await isCrew(v.id, req.user.sub)),
+      emailedAt: e.emailedAt, emailedTo: manager ? e.emailedTo : null, canEmail: manager && !!e.submittedAt,
+      history: await formHistory(e.id),
     };
   };
 
-  /** One of its forms, with what's been answered so far. */
+  /** One of its forms, with what's been answered so far and what's happened to it. */
   app.get<{ Params: { id: string; entryId: string } }>("/:id/forms/:entryId", async (req) => {
     const v = await findVisit(req, req.params.id);
-    return showEntry(await findEntry(v.id, req.params.entryId), canManageVisits(req) || await isCrew(v.id, req.user.sub));
+    return showEntry(req, v, await findEntry(v.id, req.params.entryId));
   });
 
-  /** Submit a form, or change what was submitted (the crew on the work order, or a manager). */
+  /**
+   * Submit a form, or change what was submitted (the crew on the work order, or a manager).
+   * Required questions must be answered; once the work order is invoiced its forms are locked.
+   */
   app.put<{ Params: { id: string; entryId: string } }>("/:id/forms/:entryId", async (req) => {
     const v = await crewAction(req, req.params.id);
     const e = await findEntry(v.id, req.params.entryId);
+    if (await formsLocked(v)) throw new HttpError(400, "This work order is on an invoice, so its forms are locked. Void the invoice to change them.");
     const b = parse(formAnswersSchema, req.body);
+    // A photo question's pictures are the work order's own photos.
+    const photoIds = formFields(e.def).some((f) => f.type === "photo")
+      ? new Set((await db.select({ id: visitFiles.id, contentType: visitFiles.contentType }).from(visitFiles).where(eq(visitFiles.visitId, v.id))).filter((f) => isImageType(f.contentType)).map((f) => f.id)) : new Set<string>();
+    const answers = cleanFormAnswers(e.def, b.answers, photoIds);
     const signature = e.def.signature && isSigned(b.signature) ? b.signature : null;
+    const signatures = cleanFormSignatures(e.def, b.signatures);
+    const missing = missingRequired(e.def, answers, signature, signatures);
+    if (missing.length) throw new HttpError(400, `Still needed: ${missing.join(", ")}`);
+    const changes = e.submittedAt ? formChanges(e.def, { answers: e.answers ?? {}, signature: e.signature, signatures: e.signatures }, { answers, signature, signatures }) : [];
     const now = new Date();
-    const [saved] = await db.update(visitFormEntries).set({
-      answers: cleanFormAnswers(e.def, b.answers), signature,
-      submittedAt: e.submittedAt ?? now, submittedById: e.submittedById ?? req.user.sub, updatedAt: now, updatedById: req.user.sub,
-    }).where(eq(visitFormEntries.id, e.id)).returning();
-    return showEntry(saved, true);
+    const saved = await db.transaction(async (tx) => {
+      const [row] = await tx.update(visitFormEntries).set({
+        answers, signature, signatures,
+        submittedAt: e.submittedAt ?? now, submittedById: e.submittedById ?? req.user.sub, updatedAt: now, updatedById: req.user.sub,
+      }).where(eq(visitFormEntries.id, e.id)).returning();
+      if (!e.submittedAt) await addFormHistory(tx, { companyId: e.companyId, entryId: e.id, action: "submitted", byId: req.user.sub });
+      else if (changes.length) await addFormHistory(tx, { companyId: e.companyId, entryId: e.id, action: "updated", byId: req.user.sub, changes });
+      return row;
+    });
+    // Flagged answers: their tag, their to-do (once each).
+    const flagged = await applyFlags(saved, v, answers, req.user.sub);
+    // Submitted after the work order was already completed: the customer's copy goes now.
+    if (v.status === "completed") emailCopiesAfter(v.id);
+    const [fresh] = await db.select().from(visitFormEntries).where(eq(visitFormEntries.id, e.id));
+    return { ...(await showEntry(req, v, fresh)), flagged };
+  });
+
+  /** The form as a PDF (blank until it's submitted). */
+  app.get<{ Params: { id: string; entryId: string }; Querystring: { download?: string } }>("/:id/forms/:entryId/pdf", async (req, reply) => {
+    const v = await findVisit(req, req.params.id);
+    const { pdf, fileName } = await entryPdf(await findEntry(v.id, req.params.entryId));
+    reply.header("Content-Type", "application/pdf");
+    reply.header("Content-Disposition", `${req.query.download ? "attachment" : "inline"}; filename="${fileName}"`);
+    return reply.send(Buffer.from(pdf));
+  });
+
+  /** Email the customer a copy now (the office; forms set to do it by themselves send when the work order is completed). */
+  app.post<{ Params: { id: string; entryId: string } }>("/:id/forms/:entryId/email", async (req) => {
+    requireManager(req);
+    const v = await findVisit(req, req.params.id);
+    const e = await findEntry(v.id, req.params.entryId);
+    const r = await emailEntry(e.id, req.user.sub);
+    if (!r.sent) throw new HttpError(400, r.reason ?? "It couldn't be emailed");
+    return r;
   });
 
   /** For the tech completing it: the products to confirm, how they can be applied, and any product to add. */

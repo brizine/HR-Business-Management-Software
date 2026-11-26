@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { AutomationAction, AutomationDef, CustomValues, FormAnswers, FormDef, FormSignature, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings, WeatherSettings, ChemicalNoticeSettings, TemplateDefaults } from "@crewdesk/shared";
+import type { AutomationAction, AutomationDef, CustomValues, FormAnswers, FormChange, FormDef, FormSignature, FormSignatures, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings, WeatherSettings, ChemicalNoticeSettings, TemplateDefaults } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -2454,6 +2454,8 @@ export const visitForms = pgTable(
     def: jsonb("def").$type<FormDef>().notNull(),
     /** Goes on every new work order unless it's taken off there. */
     autoAttach: boolean("auto_attach").notNull().default(false),
+    /** Price-list services: a new work order with any of them gets this form. */
+    serviceTypeIds: uuid("service_type_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
     updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
     createdAt: createdAt(),
@@ -2478,6 +2480,13 @@ export const visitFormEntries = pgTable(
     def: jsonb("def").$type<FormDef>().notNull(),
     answers: jsonb("answers").$type<FormAnswers>(),
     signature: jsonb("signature").$type<FormSignature>(),
+    /** The signatures on its signature questions, by question. */
+    signatures: jsonb("signatures").$type<FormSignatures>(),
+    /** The flagged choices already acted on (a tag added, a to-do made), so each acts once. */
+    flagged: jsonb("flagged").$type<string[]>(),
+    /** When a copy was emailed to the customer, and to which address. */
+    emailedAt: timestamp("emailed_at", { withTimezone: true }),
+    emailedTo: text("emailed_to"),
     submittedById: uuid("submitted_by_id").references(() => employees.id, { onDelete: "set null" }),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     /** The last change after it was first submitted. */
@@ -2486,6 +2495,23 @@ export const visitFormEntries = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("visit_form_entries_visit_idx").on(t.visitId), index("visit_form_entries_form_idx").on(t.formId), uniqueIndex("visit_form_entries_visit_form_idx").on(t.visitId, t.formId)],
+);
+
+/** What happened to a form on a work order: submitted, changed (what changed), emailed to the customer. */
+export const visitFormHistory = pgTable(
+  "visit_form_history",
+  {
+    id: id(),
+    companyId: companyId(),
+    entryId: uuid("entry_id").notNull().references(() => visitFormEntries.id, { onDelete: "cascade" }),
+    /** submitted | updated | emailed */
+    action: text("action").notNull(),
+    byId: uuid("by_id").references(() => employees.id, { onDelete: "set null" }),
+    changes: jsonb("changes").$type<FormChange[]>(),
+    detail: text("detail"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("visit_form_history_entry_idx").on(t.entryId, t.createdAt)],
 );
 
 /** Texts with customers: sent from the office or automations, and their replies. */

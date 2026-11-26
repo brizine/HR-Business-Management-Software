@@ -66,6 +66,7 @@ export const TEMPLATE_TAGS: TemplateTag[] = [
   { tag: "PROPERTY_NOT_SERVICED_REASON", label: "Why it was skipped", group: "Work order", needs: "visit", example: "Gate locked" },
   { tag: "EMPLOYEE_FIRST_NAME", label: "Employee's first name (who did it, or who it's given to)", group: "Work order", needs: "visit", example: "Sam" },
   { tag: "EMPLOYEE_LAST_NAME", label: "Employee's last name", group: "Work order", needs: "visit", example: "Rivera" },
+  { tag: "VISIT_FORM_NAME", label: "Visit form's name (in the email that sends a copy of one)", group: "Work order", needs: "visit", example: "Lawn Care Checklist" },
   { tag: "PAYMENT_AMOUNT", label: "Payment amount", group: "Payment", needs: "payment", example: "$85.00" },
   { tag: "PAYMENT_DATE", label: "Payment date", group: "Payment", needs: "payment", example: "November 25, 2026" },
   { tag: "PAYMENT_METHOD", label: "Paid by", group: "Payment", needs: "payment", example: "Visa ·· 4242" },
@@ -237,7 +238,9 @@ export const templateImportSchema = z.object({
  * Crewdesk's own templates for what it sends (one per kind and channel). Every company gets a
  * copy it can change; "Reset" puts this wording back.
  */
-export type SystemTemplate = { key: string; kind: MessageKind; channel: TemplateChannel; name: string; subject?: string; body: string };
+export type SystemTemplate = { key: string; kind: MessageKind | "visitform"; channel: TemplateChannel; name: string; subject?: string; body: string };
+/** The email that sends a customer a copy of a submitted visit form (when the form is set to). */
+export const VISIT_FORM_TEMPLATE_KEY = "visitform_email";
 export const SYSTEM_TEMPLATES: SystemTemplate[] = [
   {
     key: "invoice_email", kind: "invoice", channel: "email", name: "Invoice (Crewdesk)",
@@ -271,6 +274,14 @@ export const SYSTEM_TEMPLATES: SystemTemplate[] = [
 <p>{{COMPANY_NAME}}</p>`,
   },
   { key: "receipt_text", kind: "receipt", channel: "text", name: "Payment receipt text (Crewdesk)", body: "Thank you, {{CUSTOMER_FIRST_NAME}}! We received your payment of {{PAYMENT_AMOUNT}} for invoice {{INVOICE_NUMBER}}. - {{COMPANY_NAME}}" },
+  {
+    key: VISIT_FORM_TEMPLATE_KEY, kind: "visitform", channel: "email", name: "Visit form copy (Crewdesk)",
+    subject: "{{VISIT_FORM_NAME}} from {{COMPANY_NAME}}",
+    body: `<p>Hello {{CUSTOMER_NAME}},</p>
+<p>Attached is a copy of the {{VISIT_FORM_NAME}} from our visit to {{EVENT_PROPERTY_ADDRESS}}.</p>
+<p>Questions? Just reply to this email or call {{COMPANY_PHONE}}.</p>
+<p>Thank you,<br>{{COMPANY_NAME}}</p>`,
+  },
 ];
 export const systemTemplate = (key: string) => SYSTEM_TEMPLATES.find((t) => t.key === key);
 

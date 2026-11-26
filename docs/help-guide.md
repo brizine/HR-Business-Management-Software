@@ -746,19 +746,42 @@ Homeworks' **Send By Regular Mail** (its paid stamps service) isn't in Crewdesk:
 the crew fills in on a work order: a service checklist, a quality check, notes on the lawn or the weather, a
 sign-off.
 
+- **Forms** and **Submitted** are the two tabs on top: the forms you've made, and everything the crew has
+  submitted (see **The Submitted tab** below).
 - **The list** shows each form's name, when it was last changed, how many work orders it's on (and on how many
-  it's been submitted), and whether it's **Auto Attached**. The pencil opens it; the trash can deletes it.
+  it's been submitted), and whether it's **Auto Attached** (Yes, No, or **By service**). Small labels show a form
+  that's **Needed to complete** a work order, one that **Emails the customer**, and one that **Flags answers**.
+  The pencil opens it; the trash can deletes it.
 - **New Form** opens the builder:
   - **Form name** on top (two forms can't share a name).
   - A form is made of **sections**. Give a section a name, then use the **Add:** row under it: **Short Text
     Field** (a one-line answer), **Long Text Field** (notes), **CheckBox** (a list to tick; **Add New Checkbox**
-    adds another) and **DropDown** (pick one; **Add New Option** adds another). Type the question in each box.
+    adds another), **DropDown** (pick one; **Add New Option** adds another), **Yes / No**, **Number**, **Date**,
+    **Photo** (the crew takes or chooses pictures, up to 12 a question; they're also kept with the work order's
+    photos) and **Signature** (a signature box of its own, so one form can have, say, a technician's and a
+    customer's). Type the question in each box. The last five are Crewdesk's; Homeworks has the first four.
+  - **Required** under a question means the form can't be submitted until it's answered. Required questions show
+    a red star.
+  - **The flag (⚑)** beside a checkbox, a dropdown option or Yes / No sets what picking that answer does for the
+    office: **add a tag** (to the customer and the work order) and/or **make a to-do for the office** (it goes to
+    whoever made the work order, named after the question and the answer, with the customer on it). For example:
+    "Pest damage seen? Yes" adds the tag "Pest follow-up" and makes a to-do. Each answer does this once.
   - The small arrows move a question (or a section) up or down; the trash can or × removes it.
   - **Accept Signature with this form** adds a signature box at the end; change its label if you like
-    (for example "Customer signature").
+    (for example "Customer signature") and tick **Required** if the form can't go in without it.
   - **Add New Section** starts another section.
   - **Automatically attach to new work orders** puts the form on every new work order (it can still be taken off
     any one of them).
+  - **Or attach to new work orders that include one of these services:** pick price-list services, and the form
+    goes only on new work orders with one of them (a grub treatment checklist on grub treatments, not on mowing).
+    On the work order form it's picked as soon as the service is added to a line.
+  - **Must be submitted before the work order can be marked Completed:** the crew gets "Submit the form before
+    marking it Completed" until it's in. The work order shows **Needed before Completed** beside the form.
+  - **Email the customer a copy when the work order is completed** is off unless you tick it. With it on, the
+    customer gets the submitted form as a PDF when the work order is marked Completed (or right away, if it's
+    submitted after that). It's sent once, never to sample customers, and only if the customer has an email
+    address that's working. The wording is the **Visit form copy (Crewdesk)** email under Marketing → Templates.
+    With it off, nothing is sent unless someone presses **Email to customer** on a submitted form.
   - **Preview** shows the form as the crew will see it (try it; nothing is saved) and can **Print** a blank copy.
   - **Save Form** saves it. Leftover empty questions and options are dropped. HTML isn't allowed in a form.
   - On a form you've saved, **Duplicate Form** makes "Copy - (name)" to start a similar one from.
@@ -768,10 +791,24 @@ sign-off.
 - **Filling one in:** on the work order, **Visit forms** lists each form with a dotted circle (not submitted) or a
   green check (submitted). Click one, answer it, sign in the box with a mouse or a finger (**Clear** starts the
   signature over) and press **Submit**. Afterwards it shows who submitted it and when, and the button becomes
-  **Update** once something is changed. The crew on the work order and managers can fill forms in; nothing on a
-  form has to be answered. **Print** gives the form, with its answers, on a page of its own.
+  **Update** once something is changed. The crew on the work order and managers can fill forms in. Only
+  questions marked **Required** have to be answered ("Still needed: …" lists what's missing). **Print** gives the
+  form, with its answers, on a page of its own, and **PDF** opens it as a PDF with your company on top.
+- **Email to customer** (managers, on a submitted form) sends the customer the PDF now, whether or not the form
+  emails copies by itself. The form then says who it went to and when; sending again asks first.
+- **History** at the bottom of a submitted form lists who submitted it, each later change (the question, what it
+  said before and after) and each email to the customer.
+- **Once the work order is on an invoice its forms are locked:** they can be read, printed and emailed but not
+  changed. Void the invoice to change one.
 - **On the phone:** the crew sees **Visit forms** on each of their work orders (Tasks tab); tapping one opens it
-  to fill in, sign with a finger, and **Submit**.
+  to fill in, take photos, sign with a finger, and **Submit**. A form that's needed before Completed says so.
+  (New kinds of question reach the phones with the next app update; until then, fill those forms in on the web.)
+- **On the customer's page:** a **Visit forms** box lists the forms submitted on that customer's work orders,
+  newest first; click one to read it, print it or email it. **See all** opens the Submitted tab for that customer.
+- **The Submitted tab** lists every submitted form with when, the work order, the customer, who submitted it and
+  a short read of the answers. Narrow it by **Form**, **From** / **To** dates, **Submitted by**, or **Search**
+  (customer, address, work order or a word in an answer). The eye opens the form. **Export** downloads what's
+  listed as a spreadsheet, with a column for each question.
 - **Taking a form off a work order** (edit the work order and remove it from the box) removes it only if it
   hasn't been submitted: "Any Unfilled forms will be removed from visit event. Saved form will remain."
 - **Changing a form** changes the copies on work orders that haven't been submitted yet. Submitted ones stay
@@ -892,8 +929,9 @@ are numbered **WO-1001**, **WO-1002** and so on. Open them from **Schedule → W
   choose several). The crew on the work order and managers add them; whoever added one, or a manager, removes it.
   Everyone who can see the work order sees them. They're stored encrypted like other uploads.
 - **Visit forms** (like Homeworks'): checklists and sign-offs the crew fills in on the work order. Pick them in the
-  **Visit Forms** box when making or editing a work order; they're listed on the work order with whether each has
-  been submitted. See **Visit forms** under Marketing.
+  **Visit Forms** box when making or editing a work order (forms tied to a service are picked when that service is
+  added); they're listed on the work order with whether each has been submitted. A form can be set so the work
+  order can't be marked Completed until it's submitted. See **Visit forms** under Marketing.
 - **The Work orders page:** **Show** Coming up, Waitlist, **Ready to invoice**, Completed, Skipped or All;
   filter by **Person**, **Crew**, **Tag** and **Search** (WO number, title or notes). Overdue open ones are marked;
   📎 shows how many photos and documents one has, and its tags show under the title.

@@ -3,7 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";
 import { pool } from "../src/db";
-import { setPushTransport } from "../src/lib/notify";
+import { flushNotifications, setPushTransport } from "../src/lib/notify";
+import { setEmailTransport, type EmailMessage } from "../src/lib/channels";
+import { flushFormEmails } from "../src/lib/visitForms";
 
 let app: FastifyInstance;
 const suffix = Date.now();
@@ -38,9 +40,19 @@ const checklist = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 const sig = { w: 300, h: 120, d: "M10 60 L40 20 L70 90 L100 30 M120 60 L160 60" };
+const sent: EmailMessage[] = [];
+/** A 1x1 PNG. */
+const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+const boundary = "----vf";
+const upload = (who: string, visitId: string, type = "image/png", name = "gate.png") => app.inject({
+  method: "POST", url: `/visits/${visitId}/files`,
+  payload: Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\nContent-Type: ${type}\r\n\r\n`), png, Buffer.from(`\r\n--${boundary}--\r\n`)]),
+  headers: { authorization: `Bearer ${T[who]}`, "content-type": `multipart/form-data; boundary=${boundary}` },
+});
 
 beforeAll(async () => {
   setPushTransport({ send: async (m) => m.map(() => ({ status: "ok" as const, id: "x" })) });
+  setEmailTransport({ send: async (m) => { sent.push(m); } });
   app = await buildApp({ logger: false });
   T.owner = (await app.inject({ method: "POST", url: "/auth/signup", payload: { companyName: "Forms Co", firstName: "Fay", lastName: "Owner", email: email("owner"), password: "password123" } })).json().token;
   await call("PUT", "/auth/policy", "owner", { twoFactorRequiredFor: "none" });
@@ -53,8 +65,15 @@ beforeAll(async () => {
   ID.jane = (await call("GET", "/customers?q=jane", "office")).body.rows[0].id;
   ID.janeProp = (await call("GET", `/customers/${ID.jane}`, "office")).body.properties[0].id;
   today = (await call("GET", "/visits", "office")).body.today;
+  // A real customer (sample customers are never emailed), one with no email, a service and a tag.
+  ID.ann = (await call("POST", "/customers", "owner", { firstName: "Ann", lastName: "Lee", email: email("ann"), property: { street: "9 Elm St", city: "Norman", state: "OK", zip: "73069" } })).body.id;
+  ID.annProp = (await call("GET", `/customers/${ID.ann}`, "office")).body.properties[0].id;
+  ID.cy = (await call("POST", "/customers", "owner", { firstName: "Cy", lastName: "Noemail", delivery: ["paper"], billingStreet: "7 Pine Rd", billingCity: "Norman", billingState: "OK", billingZip: "73071", property: { street: "7 Pine Rd", city: "Norman", state: "OK", zip: "73071" } })).body.id;
+  ID.cyProp = (await call("GET", `/customers/${ID.cy}`, "office")).body.properties[0].id;
+  ID.fert = (await call("POST", "/service-types", "owner", { name: "Fertilizer application", pricing: "flat", priceCents: 6500, incomeAccountCode: "4000" })).body.id;
+  ID.tag = (await call("POST", "/crm/tags", "owner", { name: `Needs attention ${suffix}`, color: "red" })).body.id;
 });
-afterAll(async () => { await app.close(); await pool.end(); });
+afterAll(async () => { setEmailTransport(null); await app.close(); await flushNotifications(); await pool.end(); });
 
 describe("visit forms", () => {
   it("the office builds a form; empty questions and options are dropped; names are unique; no HTML", async () => {
@@ -176,6 +195,194 @@ describe("visit forms", () => {
     for (const v of later) expect(v.forms).toEqual([]);
     // The first of the series (already submitted, and not in "this and later") still has its form.
     expect((await call("GET", `/visits/${ID.series}`, "office")).body.forms).toHaveLength(1);
+  });
+
+  it("a form tied to services goes on work orders that have one of them", async () => {
+    const made = await call("POST", "/visit-forms", "office", checklist({ name: "Application record", serviceTypeIds: [ID.fert] }));
+    expect(made.status).toBe(200);
+    ID.byService = made.body.id;
+    expect(made.body.serviceTypeIds).toEqual([ID.fert]);
+    expect((await call("POST", "/visit-forms", "office", checklist({ name: "Wrong service", serviceTypeIds: ["4f0c6b6e-1111-4222-8333-444455556666"] }))).body.error).toBe("One of those services isn't on the price list");
+    const names = (v: any) => v.forms.map((f: any) => f.name).sort();
+    // With the service on it (and nothing said about forms): it gets the form, with the every-work-order one.
+    const fert = (await call("POST", "/visits", "office", order({ lines: [{ serviceTypeId: ID.fert, description: "Fertilizer application", quantity: 1, unitPriceCents: 6500 }] }))).body;
+    expect(names(fert)).toEqual(["Application record", "Customer sign-off"]);
+    // Without the service: only the every-work-order one. Saying which forms always wins.
+    expect(names((await call("POST", "/visits", "office", order())).body)).toEqual(["Customer sign-off"]);
+    expect(names((await call("POST", "/visits", "office", order({ formIds: [], lines: [{ serviceTypeId: ID.fert, description: "Fertilizer application", quantity: 1, unitPriceCents: 6500 }] }))).body)).toEqual([]);
+    expect((await call("GET", "/visit-forms", "office")).body.find((f: any) => f.id === ID.byService)).toMatchObject({ serviceTypeIds: [ID.fert], mustSubmit: false, emailCopy: false, flags: false });
+    expect((await call("GET", `/visit-forms/${ID.byService}`, "office")).body.serviceTypeIds).toEqual([ID.fert]);
+  });
+
+  it("required answers, new kinds of question, and a form that must be in before Completed", async () => {
+    const def = {
+      signature: true, signatureLabel: "Technician signature", signatureRequired: true, mustSubmit: true,
+      sections: [{ id: "s", name: "Service check", fields: [
+        { id: "gate", type: "yesno", label: "Gate latched?", options: [], required: true },
+        { id: "gal", type: "number", label: "Gallons used", options: [], required: true },
+        { id: "back", type: "date", label: "Come back on", options: [] },
+        { id: "pic", type: "photo", label: "Photo of the gate", options: [] },
+        { id: "cust", type: "signature", label: "Customer signature", options: [], required: true },
+      ] }],
+    };
+    const form = (await call("POST", "/visit-forms", "office", { name: "Service check", def, autoAttach: false })).body;
+    expect(form.def).toMatchObject({ mustSubmit: true, signatureRequired: true });
+    expect(form.def.sections[0].fields[0].options.map((o: any) => o.label)).toEqual(["Yes", "No"]);
+    const wo = (await call("POST", "/visits", "office", order({ formIds: [form.id] }))).body;
+    const entry = wo.forms[0].id;
+    // It can't be completed until the form is in.
+    expect((await call("POST", `/visits/${wo.id}/complete`, "tech", {})).body.error).toBe("Submit the form before marking it Completed: Service check");
+    // Required answers are named when they're missing.
+    expect((await call("PUT", `/visits/${wo.id}/forms/${entry}`, "tech", { answers: { gate: "yes" } })).body.error).toBe("Still needed: Gallons used, Customer signature, Technician signature");
+    // A photo question takes the work order's own photos; anything else is dropped. A number must be a number.
+    const photo = (await upload("tech", wo.id)).json();
+    const other = (await call("POST", "/visits", "office", order())).body;
+    const elsewhere = (await upload("office", other.id)).json();
+    const ok = await call("PUT", `/visits/${wo.id}/forms/${entry}`, "tech", {
+      answers: { gate: "no", gal: "2.5", back: "2026-12-15", pic: [photo.id, elsewhere.id] }, signature: sig, signatures: { cust: sig, gate: sig },
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ submitted: true, answers: { gate: "no", gal: "2.5", back: "2026-12-15", pic: [photo.id] }, signatures: { cust: sig }, locked: false });
+    expect((await call("PUT", `/visits/${wo.id}/forms/${entry}`, "tech", { answers: { gate: "no", gal: "a lot" }, signature: sig, signatures: { cust: sig } })).body.error).toBe("Still needed: Gallons used");
+    // The PDF carries the answers.
+    const pdf = await app.inject({ method: "GET", url: `/visits/${wo.id}/forms/${entry}/pdf`, headers: { authorization: `Bearer ${T.tech}` } });
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.headers["content-type"]).toBe("application/pdf");
+    expect(pdf.rawPayload.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(String(pdf.headers["content-disposition"])).toMatch(/Service-check-WO-\d+\.pdf/);
+    // Now it can be completed.
+    expect((await call("POST", `/visits/${wo.id}/complete`, "tech", {})).body.status).toBe("completed");
+    ID.checkWo = wo.id; ID.checkEntry = entry;
+  });
+
+  it("flagged answers add a tag and make an office to-do, once; changes are kept in the form's history", async () => {
+    const def = {
+      signature: false,
+      sections: [{ id: "s", name: "", fields: [
+        { id: "cond", type: "dropdown", label: "Lawn condition", options: [{ id: "good", label: "Good" }, { id: "poor", label: "Poor", tagId: ID.tag, todo: true }] },
+        { id: "note", type: "text", label: "Note", options: [] },
+      ] }],
+    };
+    expect((await call("POST", "/visit-forms", "office", { name: "Bad tag", def: { ...def, sections: [{ ...def.sections[0], fields: [{ ...def.sections[0].fields[0], options: [{ id: "x", label: "X", tagId: "4f0c6b6e-1111-4222-8333-444455556666" }] }] }] } })).body.error).toBe("One of those tags doesn't exist");
+    const form = (await call("POST", "/visit-forms", "office", { name: "Condition check", def })).body;
+    expect((await call("GET", "/visit-forms", "office")).body.find((f: any) => f.id === form.id).flags).toBe(true);
+    const wo = (await call("POST", "/visits", "office", order({ customerId: ID.ann, propertyId: ID.annProp, formIds: [form.id] }))).body;
+    const entry = wo.forms[0].id;
+    const first = (await call("PUT", `/visits/${wo.id}/forms/${entry}`, "tech", { answers: { cond: "good", note: "Fine" } })).body;
+    expect(first.flagged).toEqual([]);
+    expect((await call("GET", `/customers/${ID.ann}`, "office")).body.tagIds).not.toContain(ID.tag);
+    // Changed to the flagged answer: the tag goes on the customer and the work order, and the office gets a to-do.
+    const second = (await call("PUT", `/visits/${wo.id}/forms/${entry}`, "tech", { answers: { cond: "poor", note: "Fine" } })).body;
+    expect(second.flagged).toEqual([expect.stringContaining("Tag \"Needs attention"), "To-do made: Condition check: Lawn condition: Poor"]);
+    expect((await call("GET", `/customers/${ID.ann}`, "office")).body.tagIds).toContain(ID.tag);
+    expect((await call("GET", `/visits/${wo.id}`, "office")).body.tagIds).toContain(ID.tag);
+    const todos = (await call("GET", `/todos?customerId=${ID.ann}`, "office")).body.items;
+    expect(todos.map((t: any) => t.title)).toEqual(["Condition check: Lawn condition: Poor"]);
+    expect(todos[0].notes).toMatch(/From the visit form "Condition check" on WO-\d+ Mow and edge for Ann Lee, filled in by tech Person\./);
+    expect(todos[0].assignees.map((a: any) => a.id)).toEqual([ID.office]);
+    expect((await call("GET", `/crm/tags/history?customerId=${ID.ann}`, "office")).body[0]).toMatchObject({ tagId: ID.tag, action: "add", source: "form" });
+    // Saved again with the same answer: nothing more happens.
+    expect((await call("PUT", `/visits/${wo.id}/forms/${entry}`, "office", { answers: { cond: "poor", note: "Called her" } })).body.flagged).toEqual([]);
+    expect((await call("GET", `/todos?customerId=${ID.ann}`, "office")).body.items).toHaveLength(1);
+    // The history: submitted, then each change with what changed.
+    const h = (await call("GET", `/visits/${wo.id}/forms/${entry}`, "office")).body.history;
+    expect(h.map((x: any) => [x.action, x.by, x.changes])).toEqual([
+      ["submitted", "tech Person", []],
+      ["updated", "tech Person", [{ label: "Lawn condition", from: "Good", to: "Poor" }]],
+      ["updated", "office Person", [{ label: "Note", from: "Fine", to: "Called her" }]],
+    ]);
+    ID.annWo = wo.id; ID.annEntry = entry;
+  });
+
+  it("the customer gets a copy by email only when the form says so, once the work order is completed", async () => {
+    // (The crew's own notifications go through the same test mailbox; these are the customers' emails.)
+    const mail = () => sent.filter((m) => !/@forms\.test$/.test(String(m.to)) || [email("ann")].includes(String(m.to)));
+    sent.length = 0;
+    // Not set to email: completing sends nothing.
+    await call("POST", `/visits/${ID.annWo}/complete`, "tech", {});
+    await flushFormEmails();
+    expect(mail()).toHaveLength(0);
+    // The office can still send it by hand.
+    expect((await call("POST", `/visits/${ID.annWo}/forms/${ID.annEntry}/email`, "tech")).status).toBe(403);
+    expect((await call("POST", `/visits/${ID.annWo}/forms/${ID.annEntry}/email`, "office")).body).toEqual({ sent: true, to: email("ann") });
+    expect(mail()).toHaveLength(1);
+    expect(mail()[0]).toMatchObject({ to: email("ann"), subject: "Condition check from Forms Co" });
+    expect(mail()[0].html).toContain("copy of the Condition check from our visit to 9 Elm St");
+    expect(mail()[0].attachments?.[0]).toMatchObject({ contentType: "application/pdf" });
+    expect(mail()[0].attachments![0].filename).toMatch(/^Condition-check-WO-\d+\.pdf$/);
+    expect(mail()[0].attachments![0].content.subarray(0, 5).toString()).toBe("%PDF-");
+    const after = (await call("GET", `/visits/${ID.annWo}/forms/${ID.annEntry}`, "office")).body;
+    expect(after.emailedTo).toBe(email("ann"));
+    expect(after.history.at(-1)).toMatchObject({ action: "emailed", by: "office Person", detail: `Emailed to ${email("ann")}` });
+    // Set to email a copy: it goes when the work order is completed, once.
+    sent.length = 0;
+    const def = { signature: false, emailCopy: true, sections: [{ id: "s", name: "", fields: [{ id: "n", type: "text", label: "What we did", options: [] }] }] };
+    const form = (await call("POST", "/visit-forms", "office", { name: "Service summary", def })).body;
+    expect(form.def.emailCopy).toBe(true);
+    const wo = (await call("POST", "/visits", "office", order({ customerId: ID.ann, propertyId: ID.annProp, formIds: [form.id] }))).body;
+    await call("PUT", `/visits/${wo.id}/forms/${wo.forms[0].id}`, "tech", { answers: { n: "Mowed and edged" } });
+    await flushFormEmails();
+    expect(mail()).toHaveLength(0);
+    await call("POST", `/visits/${wo.id}/complete`, "tech", {});
+    await flushFormEmails();
+    expect(mail().map((m) => [m.to, m.subject])).toEqual([[email("ann"), "Service summary from Forms Co"]]);
+    await call("PUT", `/visits/${wo.id}/forms/${wo.forms[0].id}`, "tech", { answers: { n: "Mowed, edged and blew off" } });
+    await flushFormEmails();
+    expect(mail()).toHaveLength(1);
+    // Submitted after the work order was completed: it goes then.
+    const late = (await call("POST", "/visits", "office", order({ customerId: ID.ann, propertyId: ID.annProp, formIds: [form.id] }))).body;
+    await call("POST", `/visits/${late.id}/complete`, "tech", {});
+    await flushFormEmails();
+    expect(mail()).toHaveLength(1);
+    await call("PUT", `/visits/${late.id}/forms/${late.forms[0].id}`, "tech", { answers: { n: "Done" } });
+    await flushFormEmails();
+    expect(mail()).toHaveLength(2);
+    // No email address, or a sample customer: nothing is sent, and sending by hand says why.
+    const cy = (await call("POST", "/visits", "office", order({ customerId: ID.cy, propertyId: ID.cyProp, formIds: [form.id] }))).body;
+    await call("PUT", `/visits/${cy.id}/forms/${cy.forms[0].id}`, "tech", { answers: { n: "Done" } });
+    await call("POST", `/visits/${cy.id}/complete`, "tech", {});
+    await flushFormEmails();
+    expect(mail()).toHaveLength(2);
+    expect((await call("POST", `/visits/${cy.id}/forms/${cy.forms[0].id}/email`, "office")).body.error).toBe("Cy Noemail has no email address");
+    expect((await call("POST", `/visits/${ID.checkWo}/forms/${ID.checkEntry}/email`, "office")).body.error).toBe("Sample customers aren't emailed");
+    // The template is one of Crewdesk's own, so its wording can be changed under Templates.
+    expect((await call("GET", "/templates", "office")).body.find((t: any) => t.systemKey === "visitform_email")).toMatchObject({ name: "Visit form copy (Crewdesk)", system: true });
+  });
+
+  it("once the work order is invoiced its forms are locked", async () => {
+    expect((await call("POST", `/visits/${ID.annWo}/invoice`, "office")).status).toBe(200);
+    const locked = (await call("GET", `/visits/${ID.annWo}/forms/${ID.annEntry}`, "office")).body;
+    expect(locked).toMatchObject({ locked: true, canFill: false });
+    expect((await call("PUT", `/visits/${ID.annWo}/forms/${ID.annEntry}`, "office", { answers: { cond: "good" } })).body.error).toBe("This work order is on an invoice, so its forms are locked. Void the invoice to change them.");
+  });
+
+  it("the submitted forms report: filters, a customer's forms, and the export", async () => {
+    const all = (await call("GET", "/visit-forms/submitted", "office")).body;
+    expect(all.total).toBeGreaterThanOrEqual(6);
+    expect(all.rows[0]).toHaveProperty("summary");
+    expect((await call("GET", "/visit-forms/submitted", "tech")).status).toBe(403);
+    const ann = (await call("GET", `/visit-forms/submitted?customerId=${ID.ann}`, "office")).body;
+    expect(ann.rows.every((r: any) => r.customer.name === "Ann Lee")).toBe(true);
+    expect(ann.rows.map((r: any) => r.name).sort()).toEqual(["Condition check", "Service summary", "Service summary"]);
+    const cond = (await call("GET", `/visit-forms/submitted?name=${encodeURIComponent("Condition check")}`, "office")).body;
+    expect(cond.total).toBe(1);
+    expect(cond.rows[0]).toMatchObject({ submittedBy: "tech Person", summary: "Lawn condition: Poor · Note: Called her", flags: 1, address: "9 Elm St, Norman" });
+    expect(cond.rows[0].workOrder.title).toBe("Mow and edge");
+    expect((await call("GET", `/visit-forms/submitted?q=${encodeURIComponent("blew off")}`, "office")).body.total).toBe(1);
+    expect((await call("GET", `/visit-forms/submitted?byId=${ID.office}`, "office")).body.total).toBe(0);
+    expect((await call("GET", `/visit-forms/submitted?from=${plus(today, 2)}`, "office")).body.total).toBe(0);
+    expect((await call("GET", `/visit-forms/submitted?to=${plus(today, 1)}&limit=2`, "office")).body.rows).toHaveLength(2);
+    const filters = (await call("GET", "/visit-forms/submitted/filters", "office")).body;
+    expect(filters.names).toEqual(expect.arrayContaining(["Condition check", "Service check", "Service summary"]));
+    expect(filters.people).toEqual([{ id: ID.tech, name: "tech Person" }]);
+    const csv = await app.inject({ method: "GET", url: `/visit-forms/submitted/export?customerId=${ID.ann}`, headers: { authorization: `Bearer ${T.office}` } });
+    expect(csv.headers["content-type"]).toBe("text/csv; charset=utf-8");
+    const lines = csv.payload.replace(/^\uFEFF/, "").trim().split("\r\n");
+    expect(lines[0]).toBe("Submitted,Form,Work order,Work order title,Work order date,Customer,Property,Submitted by,Emailed to customer,What we did,Lawn condition,Note");
+    expect(lines).toHaveLength(4);
+    // Times are the office's own (the company's time zone), not UTC stamps.
+    expect(lines[1]).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2},/);
+    expect(lines.find((l) => l.includes("Condition check"))).toMatch(/,Ann Lee,"9 Elm St, Norman",tech Person,[^,]+,,Poor,Called her$/);
   });
 
   it("deleting a form takes it off work orders where it isn't submitted; submitted copies stay readable", async () => {

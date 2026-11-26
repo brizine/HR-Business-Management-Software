@@ -14,7 +14,7 @@ const showable = (t: string) => isImageType(t) && t !== "image/heic" && t !== "i
 const size = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 
 /** Big phone photos are shrunk to 2,400 px (JPEG) before upload so they're quick to send and open. */
-async function shrink(file: File): Promise<File> {
+export async function shrink(file: File): Promise<File> {
   if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size < 1.5 * 1024 * 1024) return file;
   try {
     const bmp = await createImageBitmap(file);

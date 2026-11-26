@@ -46,7 +46,7 @@ describe("templates", () => {
     expect((await call("GET", "/templates", "tech")).status).toBe(403);
     const list = (await call("GET", "/templates", "mgr")).body;
     const own = list.filter((t: any) => t.system);
-    expect(own.map((t: any) => t.systemKey).sort()).toEqual(["estimate_email", "estimate_text", "invoice_email", "invoice_text", "receipt_email", "receipt_text"]);
+    expect(own.map((t: any) => t.systemKey).sort()).toEqual(["estimate_email", "estimate_text", "invoice_email", "invoice_text", "receipt_email", "receipt_text", "visitform_email"]);
     const inv = own.find((t: any) => t.systemKey === "invoice_email");
     expect(inv).toMatchObject({ channel: "email", usedFor: ["invoice"], needs: ["invoice"] });
     ID.sysInvoice = inv.id;

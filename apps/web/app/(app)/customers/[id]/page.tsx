@@ -22,6 +22,7 @@ import { VisitFiles } from "@/components/visit-files";
 import { CustomerTexts } from "@/components/texting";
 import { CustomerAutomations } from "@/components/automations";
 import { CustomerSchedulingPrefs } from "@/components/waitlist";
+import { CustomerForms } from "@/components/visit-forms";
 import { AccountBox, CallNotes, CustomerNotesBox, DeliveryBox, InvoiceDefaultsBox, JobsBox, PayPicker, PaymentsBox, PortalBox, StatsBox, Timeline } from "@/components/customer-page";
 
 /**
@@ -173,6 +174,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
             </div>
             <CustomerNotesBox key={`notes-${c.updatedAt}`} customer={c} onSaved={reload} />
             <JobsBox customerId={id} />
+            <CustomerForms customerId={id} />
             <div className="card">
               <div className="row" style={{ justifyContent: "space-between" }}>
                 <h2 className="cp-h">Properties</h2>

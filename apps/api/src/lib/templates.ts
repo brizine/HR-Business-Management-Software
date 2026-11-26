@@ -355,10 +355,12 @@ export async function sendTemplateEmail(o: {
   attachments?: EmailMessage["attachments"];
   /** To the owner or an employee (no unsubscribe link, and not logged as sent to the customer). */
   internal?: boolean;
+  /** Tags only this email knows (a visit form's name). */
+  vars?: TemplateVars;
 }) {
   const transport = emailTransport();
   if (!transport) throw new Error("Email isn't set up on this server yet");
-  const vars = await templateVars(o.companyId, o.ctx);
+  const vars = { ...(await templateVars(o.companyId, o.ctx)), ...(o.vars ?? {}) };
   const customerId = await customerFor(o.companyId, o.ctx);
   const m = await renderTemplateEmail(o.companyId, o.template, vars, { unsubscribeCustomerId: o.transactional || o.internal ? null : customerId });
   await transport.send({

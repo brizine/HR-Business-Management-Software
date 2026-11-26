@@ -89,12 +89,15 @@ export function CrewButtons({ v, onChange, compact }: { v: Visit; onChange: (v: 
       </div>
     );
   }
+  // A form set as needed before Completed: say so here rather than after the notes are typed.
+  const needed = v.status === "open" || v.status === "on_site" ? (v.forms ?? []).filter((f) => f.mustSubmit && !f.submitted) : [];
   return (
     <div className="row" style={{ gap: 6 }}>
       {v.status === "open" && <button type="button" className={compact ? "btn" : "btn"} disabled={act.busy} onClick={() => run("start")}>Arrived (on site)</button>}
-      {(v.status === "open" || v.status === "on_site") && <button type="button" className="btn primary" disabled={act.busy} onClick={startComplete}>Completed</button>}
+      {(v.status === "open" || v.status === "on_site") && <button type="button" className="btn primary" disabled={act.busy || needed.length > 0} title={needed.length ? `Submit ${needed.map((f) => f.name).join(", ")} first` : undefined} onClick={startComplete}>Completed</button>}
       {(v.status === "open" || v.status === "on_site") && <button type="button" className="btn" disabled={act.busy} onClick={() => setMode("skip")}>Skip</button>}
       {(v.status === "completed" || v.status === "skipped") && !v.invoiced && <button type="button" className="btn" disabled={act.busy} onClick={() => run("reopen")}>Undo ({v.status === "completed" ? "not done" : "not skipped"})</button>}
+      {needed.length > 0 && !compact && <span className="muted" style={{ fontSize: 13, flexBasis: "100%" }}>Before Completed, submit {needed.length === 1 ? "the form" : "the forms"}: {needed.map((f) => f.name).join(", ")}.</span>}
       <ErrorBox error={act.error} />
     </div>
   );
@@ -371,7 +374,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
       )}
 
       <h3 className="todo-section">Visit Forms</h3>
-      <VisitFormsPicker value={formIds} onChange={setFormIds} attached={visit?.forms} />
+      <VisitFormsPicker value={formIds} onChange={setFormIds} attached={visit?.forms} serviceIds={lines.map((l) => l.serviceTypeId).filter((x): x is string => !!x)} />
 
       <h3 className="todo-section">Crew</h3>
       <label style={{ maxWidth: 320 }}>Crew
