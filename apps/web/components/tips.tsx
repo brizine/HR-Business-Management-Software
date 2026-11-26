@@ -17,6 +17,8 @@ const TARGETS = "[data-tip], [title], [data-tip-title], button, [role='button'],
 const NAV = ".rail a, .rail .rail-btn, .side-switch button";
 /** Column headings that sort the list. */
 const SORT = ".cl-sort, .dx-th, th button, th[role='button'], button[aria-sort]";
+/** Lists of choices: a row in one of these gets its description beside the list, not over the next row. */
+const MENUS = ".rail-flyout, .rail, [role='menu'], [role='listbox'], .cl-menu, .menu-list, .topbar-popover, .txt-quick-menu, .measure-export-menu, .hwd-menu, .hw-cols-menu, .eb-actions-menu, .cal-menu";
 const WAIT = 450;   // before the first one shows
 const NEXT = 80;    // moving straight from one button to the next
 
@@ -44,9 +46,9 @@ export function tipFor(el: Element, path: string): string | null {
 }
 
 export function Tips() {
-  const [tip, setTip] = useState<{ text: string; box: DOMRect } | null>(null);
+  const [tip, setTip] = useState<{ text: string; box: DOMRect; beside: DOMRect | null } | null>(null);
   const bubble = useRef<HTMLDivElement>(null);
-  const [at, setAt] = useState<{ left: number; top: number; arrow: number; above: boolean } | null>(null);
+  const [at, setAt] = useState<{ left: number; top: number; arrow: number; where: "below" | "above" | "right" | "left" } | null>(null);
 
   useEffect(() => {
     // Nothing to hover with on a touch screen.
@@ -80,8 +82,14 @@ export function Tips() {
       if (title != null) { el.setAttribute("data-tip-title", title); el.removeAttribute("title"); }
       timer = setTimeout(() => {
         if (current !== el || !el.isConnected) return;
+        // A button whose own menu is open has that menu to speak for it, and would only be in its way.
+        if (el.getAttribute("aria-expanded") === "true") return;
         const text = tipFor(el, window.location.pathname);
-        if (text) { showing = true; setTip({ text, box: el.getBoundingClientRect() }); }
+        if (!text) return;
+        const box = el.getBoundingClientRect();
+        const menu = el.closest(MENUS)?.getBoundingClientRect();
+        showing = true;
+        setTip({ text, box, beside: menu && box.width >= menu.width * 0.6 ? menu : null });
       }, Date.now() - hidAt < 350 ? NEXT : WAIT);
     };
     const find = (t: EventTarget | null) => (t instanceof Element ? t.closest(TARGETS) : null);
@@ -120,19 +128,27 @@ export function Tips() {
   }, []);
 
   // Under the button, or over it when there's no room below; never off the side of the window.
+  // A row of a menu has it beside the menu (right, or left when the menu is at the window's edge).
   useLayoutEffect(() => {
     if (!tip || !bubble.current) { setAt(null); return; }
     const b = bubble.current.getBoundingClientRect();
-    const { box } = tip;
+    const { box, beside } = tip;
+    if (beside) {
+      const centre = box.top + box.height / 2;
+      const top = Math.max(8, Math.min(centre - b.height / 2, window.innerHeight - b.height - 8));
+      const right = beside.right + 8 + b.width <= window.innerWidth - 8;
+      const left = right ? beside.right + 8 : beside.left - 8 - b.width;
+      if (left >= 8) { setAt({ left, top, arrow: Math.max(10, Math.min(centre - top, b.height - 10)), where: right ? "right" : "left" }); return; }
+    }
     const middle = box.left + box.width / 2;
     const left = Math.max(8, Math.min(middle - b.width / 2, window.innerWidth - b.width - 8));
     const above = box.bottom + 8 + b.height > window.innerHeight - 4 && box.top - 8 - b.height > 4;
-    setAt({ left, top: above ? box.top - 8 - b.height : box.bottom + 8, arrow: Math.max(10, Math.min(middle - left, b.width - 10)), above });
+    setAt({ left, top: above ? box.top - 8 - b.height : box.bottom + 8, arrow: Math.max(10, Math.min(middle - left, b.width - 10)), where: above ? "above" : "below" });
   }, [tip]);
 
   if (!tip) return null;
   return (
-    <div ref={bubble} className={`tip${at?.above ? " above" : ""}`} role="tooltip"
+    <div ref={bubble} className={`tip ${at?.where ?? "below"}`} role="tooltip"
       style={{ left: at?.left ?? 0, top: at?.top ?? 0, visibility: at ? "visible" : "hidden", ["--tip-arrow" as string]: `${at?.arrow ?? 20}px` }}>
       {tip.text}
     </div>

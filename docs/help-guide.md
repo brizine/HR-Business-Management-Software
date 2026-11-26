@@ -128,7 +128,8 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   it does: "Download this list as a spreadsheet file (CSV)" on **Export**, "Move the whole day's open work…" on
   **Rain or wind day…**, and so on. It works on the icons in the top bar and the left menu too (each page in the
   menu says what it's for), on tabs and filter chips, and on column headings (which say they sort). Move straight
-  to the next button and its description shows at once. With a keyboard, **Tab** to a button to see it; **Esc**
+  to the next button and its description shows at once. In a menu the description sits beside the menu, so it
+  never covers the next choice. With a keyboard, **Tab** to a button to see it; **Esc**
   or clicking puts it away. Phones and tablets have no pointer to rest, so they don't show these.
 - **Putting a list in order:** wherever a list has an order you can change (services on the price list,
   cancellation reasons, custom fields, job titles and departments, training lessons, application methods, spray
