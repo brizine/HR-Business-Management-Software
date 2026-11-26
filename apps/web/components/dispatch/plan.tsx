@@ -248,6 +248,9 @@ export function PlanDispatch() {
   const inRange = shown.filter((e) => days.includes(e.date));
   const done = inRange.filter((e) => e.status === "completed").length;
   const showWaiting = prefs.span === "day" && (prefs.waiting || prefs.mapCodes.length > 0);
+  // No crew yet first, then the lanes with work that day, then the crews with nothing yet (kept slim).
+  const busy = new Set(visits.filter((e) => e.date === day).map(laneKeyOf));
+  const dayLanes = [...lanes].sort((x, y) => Number(y.kind === "none") - Number(x.kind === "none") || Number(busy.has(y.id)) - Number(busy.has(x.id)));
 
   const card = (e: DEvent, lane: PLane, eta: { at: number; off: "late" | "early" | null } | undefined, leg: Leg | null | undefined, compact = false) => {
     const numbered = !!lane.crew && !!e.route;
@@ -452,7 +455,7 @@ export function PlanDispatch() {
                     </div>
                   </section>
                 )}
-                {lanes.map((l) => lane(l, day))}
+                {dayLanes.map((l) => lane(l, day))}
               </div>
             )}
             {prefs.view !== "board" && (
