@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { MENU_LISTS, defaultLabel, type MenuKey, type StoredList } from "@crewdesk/shared";
 import { useMenuData, type Menus } from "@/lib/menus";
 import { ErrorBox } from "./ui";
+import { Grip, useDragOrder } from "./drag-order";
 
 type Kind = "jobTitles" | "departments" | StoredList;
 
@@ -33,7 +34,7 @@ export function MenuEditor({ kind, title, noun, data, onChange }: { kind: Kind; 
   const saveList = (next: string[]) => run(() => own
     ? api<Menus>("/employees/menus", { method: "PUT", body: { jobTitles: data.jobTitles, departments: data.departments, [kind]: next } })
     : api<Menus>(`/employees/menus/lists/${kind}`, { method: "PUT", body: { values: next } }));
-  const move = (i: number, to: number) => { const next = [...list]; const [v] = next.splice(i, 1); next.splice(to, 0, v); saveList(next); };
+  const drag = useDragOrder(list, (next) => saveList(next), { disabled: !!renaming, busy });
   const unlisted = Object.keys(usage).filter((v) => !list.includes(v)).sort();
 
   return (
@@ -41,9 +42,9 @@ export function MenuEditor({ kind, title, noun, data, onChange }: { kind: Kind; 
       <h3 style={{ margin: 0 }}>{title}</h3>
       <p className="muted" style={{ margin: 0 }}>The choices in the {title.toLowerCase()} menu, in this order. Renaming one updates everything that uses it.</p>
       {list.length ? (
-        <ol className="menu-list">
-          {list.map((v, i) => (
-            <li key={v}>
+        <ol className="menu-list" ref={drag.box}>
+          {drag.order.map((v) => (
+            <li key={v} {...drag.row(v)}>
               {renaming?.from === v ? (
                 <form className="row" style={{ flex: 1 }} onSubmit={async (e) => {
                   e.preventDefault();
@@ -56,10 +57,9 @@ export function MenuEditor({ kind, title, noun, data, onChange }: { kind: Kind; 
                 </form>
               ) : (
                 <>
+                  <Grip drag={drag} id={v} name={v} />
                   <span style={{ flex: 1 }}>{v}</span>
                   <span className="muted" style={{ fontSize: 12 }}>{usage[v] ? `${usage[v]} in use` : "not used"}</span>
-                  <button type="button" className="btn sm" disabled={busy || i === 0} aria-label={`Move ${v} up`} onClick={() => move(i, i - 1)}>↑</button>
-                  <button type="button" className="btn sm" disabled={busy || i === list.length - 1} aria-label={`Move ${v} down`} onClick={() => move(i, i + 1)}>↓</button>
                   <button type="button" className="btn sm" disabled={busy} onClick={() => setRenaming({ from: v, to: v })}>Rename</button>
                   <button type="button" className="btn sm danger" disabled={busy} onClick={() =>
                     confirm(usage[v] ? `Take "${v}" off the list? The ${usage[v]} ${usage[v] === 1 ? "person who has it keeps" : "people who have it keep"} it until someone changes it.` : `Take "${v}" off the list?`)

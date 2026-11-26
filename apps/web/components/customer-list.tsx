@@ -26,6 +26,45 @@ export function Popover({ label, children, open, setOpen, align = "left", classN
     if (align === "left" && r.right > window.innerWidth - 8) setSide("right");
     else if (align === "right" && r.left < 8) setSide("left");
   }, [open, align]);
+  // Down or up, whichever shows the whole panel. With room on neither side it slides over its button
+  // to use the full height of the window, and only then does anything inside it have to scroll.
+  const vert = useRef<"down" | "up" | null>(null);
+  useLayoutEffect(() => {
+    if (!open) { vert.current = null; return; }
+    const fit = () => {
+      const p = pop.current, w = ref.current;
+      if (!p || !w) return;
+      // Measuring it at full height would send any list scrolled inside it back to its top.
+      const scrolled = [p, ...p.querySelectorAll<HTMLElement>("*")].filter((n) => n.scrollTop > 0).map((n) => [n, n.scrollTop] as const);
+      p.style.maxHeight = "none"; p.style.top = "";
+      p.classList.remove("capped");
+      const position = getComputedStyle(p).position;
+      if (position !== "absolute" && position !== "fixed") return;
+      // The room it has: the window, less the top bar and anything it sits in that cuts it off.
+      let top = 8, bottom = window.innerHeight - 8;
+      const bar = document.querySelector(".topbar")?.getBoundingClientRect();
+      if (bar && bar.top <= 0 && bar.bottom > 0) top = Math.max(top, bar.bottom + 6);
+      for (let n = w.parentElement; n && n !== document.body; n = n.parentElement) {
+        if (getComputedStyle(n).overflowY === "visible") continue;
+        const r = n.getBoundingClientRect();
+        top = Math.max(top, r.top + 4); bottom = Math.min(bottom, r.bottom - 4);
+      }
+      const full = p.offsetHeight;
+      const h = Math.min(full, Math.max(160, bottom - top));
+      if (h < full) { p.style.maxHeight = `${h}px`; p.classList.add("capped"); }
+      scrolled.forEach(([n, y]) => { n.scrollTop = y; });
+      if (position === "fixed") return;
+      const at = w.getBoundingClientRect();
+      const below = bottom - at.bottom - 6, above = at.top - 6 - top;
+      // Decided once per opening, so it never jumps sides while it is being used.
+      if (!vert.current) vert.current = full <= below ? "down" : full <= above ? "up" : below >= above ? "down" : "up";
+      const want = vert.current === "down" ? at.bottom + 6 : at.top - 6 - h;
+      p.style.top = `${Math.round(Math.max(top, Math.min(want, bottom - h)) - at.top)}px`;
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  });
   useEffect(() => {
     if (!open) return;
     const away = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
@@ -252,6 +291,17 @@ export function ColumnOrder({ keys, name, label, onChange, fixed = 0, canHide = 
   // The order as of the last move, so a quick drag never works from a stale list between renders.
   const order = useRef(keys);
   order.current = keys;
+  // A row moved down with the keyboard is put back into the page by the browser, which drops the
+  // keyboard from it. Hand it back, so the arrow keys can be pressed again and again.
+  const refocus = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const key = refocus.current;
+    if (!key) return;
+    refocus.current = null;
+    const row = ([...(list.current?.children ?? [])] as HTMLElement[]).find((r) => r.dataset.key === key);
+    const grip = row?.querySelector<HTMLElement>("button.cl-grip");
+    if (grip && document.activeElement !== grip) grip.focus();
+  });
   const moveTo = (key: string, to: number) => {
     const cur = order.current;
     const from = cur.indexOf(key);
@@ -304,7 +354,7 @@ export function ColumnOrder({ keys, name, label, onChange, fixed = 0, canHide = 
         <li key={k} data-key={k} className={dragging === k ? "dragging" : undefined}>
           {i < fixed ? <span className="cl-grip fixed" title="Always first"><Icon name="grip" size={14} /><span>{label ? label(k) : name(k)}</span></span> : (
             <button type="button" className="cl-grip" title="Drag to reorder" aria-label={`${name(k)}: drag to reorder, or press the up and down arrow keys`} onPointerDown={(e) => start(k, e)}
-              onKeyDown={(e) => { if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); moveTo(k, order.current.indexOf(k) + (e.key === "ArrowUp" ? -1 : 1)); } }}>
+              onKeyDown={(e) => { if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); refocus.current = k; moveTo(k, order.current.indexOf(k) + (e.key === "ArrowUp" ? -1 : 1)); } }}>
               <Icon name="grip" size={14} /><span>{label ? label(k) : name(k)}</span>
             </button>
           )}

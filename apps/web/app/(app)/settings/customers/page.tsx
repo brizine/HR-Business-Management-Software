@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
+import { Grip, useDragOrder } from "@/components/drag-order";
 import { SettingsTabs } from "@/components/settings-tabs";
 import { TagChip, useTags, type Tag } from "@/components/customers";
 import { AutoSendCard, EstimateDepositCard, LateFeesCard } from "@/components/billing-rules";
@@ -108,11 +109,7 @@ function ReasonsCard() {
   const [editing, setEditing] = useState<any | "new" | null>(null);
   const action = useAction();
   const list = reasons.data ?? [];
-  const move = (i: number, d: number) => {
-    const ids = list.map((r) => r.id);
-    [ids[i], ids[i + d]] = [ids[i + d], ids[i]];
-    action.run(async () => { reasons.setData(await api("/crm/cancel-reasons-order", { method: "PUT", body: { ids } })); });
-  };
+  const drag = useDragOrder(list.map((r) => r.id), (ids) => action.run(async () => { reasons.setData(await api("/crm/cancel-reasons-order", { method: "PUT", body: { ids } })); }), { busy: action.busy });
   return (
     <div className="card">
       <div className="row" style={{ justifyContent: "space-between" }}>
@@ -122,13 +119,12 @@ function ReasonsCard() {
       <p className="muted">The drop-down shown when a customer or property is cancelled. Retired reasons stay on past cancellations.</p>
       {editing && <ReasonForm reason={editing === "new" ? null : editing} onDone={() => { setEditing(null); reasons.reload(); }} />}
       <ErrorBox error={action.error} />
-      <ol className="plain-list">
-        {list.map((r, i) => (
-          <li key={r.id} className="row" style={{ justifyContent: "space-between", opacity: r.retired ? 0.6 : 1 }}>
-            <span><strong>{r.label}</strong> <span className="muted">{r.initiatedBy === "company" ? "our decision" : "customer's decision"}{r.commentRequired ? " · comment required" : ""}{r.retired ? " · retired" : ""}</span></span>
+      <ol className="plain-list drag-list" ref={drag.box}>
+        {drag.sorted(list, (r) => r.id).map((r) => (
+          <li key={r.id} {...drag.row(r.id, "row")} style={{ opacity: r.retired ? 0.6 : 1 }}>
+            <Grip drag={drag} id={r.id} name={r.label} />
+            <span style={{ flex: 1 }}><strong>{r.label}</strong> <span className="muted">{r.initiatedBy === "company" ? "our decision" : "customer's decision"}{r.commentRequired ? " · comment required" : ""}{r.retired ? " · retired" : ""}</span></span>
             <span className="row">
-              <button className="btn" aria-label={`Move ${r.label} up`} disabled={i === 0 || action.busy} onClick={() => move(i, -1)}>↑</button>
-              <button className="btn" aria-label={`Move ${r.label} down`} disabled={i === list.length - 1 || action.busy} onClick={() => move(i, 1)}>↓</button>
               <button className="btn" onClick={() => setEditing(r)}>Edit</button>
             </span>
           </li>

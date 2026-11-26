@@ -3,6 +3,7 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
+import { Grip, useDragOrder } from "@/components/drag-order";
 import type { Method } from "../products/page";
 
 const blank = { name: "", gal: "", dry: false };
@@ -34,15 +35,15 @@ export default function Methods() {
     list.reload();
   });
   const remove = (m: Method) => act.run(async () => { await api(`/chemical-tracking/methods/${m.id}`, { method: "DELETE" }); list.reload(); });
-  const move = (i: number, d: number) => act.run(async () => {
-    const ids = rows.map((r) => r.id); const j = i + d; if (j < 0 || j >= ids.length) return;
-    [ids[i], ids[j]] = [ids[j], ids[i]];
+  // (Not while a row is being edited: that row is a form.)
+  const drag = useDragOrder(rows.map((r) => r.id), (ids) => act.run(async () => {
     await api("/chemical-tracking/methods/order", { method: "PUT", body: { ids } });
-    list.reload();
-  });
+    await list.reload();
+  }), { disabled: !!editing, busy: act.busy });
 
   const form = (m: Method | null) => (
     <tr key={m?.id ?? "new"}>
+      <td className="drag-col" />
       <td><input aria-label="Method name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="e.g. Truck 2gal/1000ft" autoFocus /></td>
       <td className="row" style={{ alignItems: "center" }}>
         <input aria-label="Gallons per 1,000 sq ft" inputMode="decimal" style={{ width: 90 }} disabled={f.dry} value={f.dry ? "" : f.gal} onChange={(e) => setF({ ...f, gal: e.target.value })} />
@@ -63,16 +64,15 @@ export default function Methods() {
       <div className="card tablewrap">
         {rows.length || editing ? (
           <table>
-            <thead><tr><th>Method</th><th>Spray per 1,000 sq ft</th><th>Used on</th><th /></tr></thead>
-            <tbody>
-              {rows.map((m, i) => editing === m.id ? form(m) : (
-                <tr key={m.id} style={{ opacity: m.active ? 1 : 0.6 }}>
+            <thead><tr><th className="drag-col" aria-label="Order" /><th>Method</th><th>Spray per 1,000 sq ft</th><th>Used on</th><th /></tr></thead>
+            <tbody ref={drag.box}>
+              {drag.sorted(rows, (m) => m.id).map((m) => editing === m.id ? form(m) : (
+                <tr key={m.id} {...drag.row(m.id)} style={{ opacity: m.active ? 1 : 0.6 }}>
+                  <td className="drag-col"><Grip drag={drag} id={m.id} name={m.name} /></td>
                   <td><strong>{m.name}</strong>{!m.active && <> <span className="badge">off</span></>}</td>
                   <td>{m.galPer1000 == null ? "Dry (not mixed)" : `${+m.galPer1000.toFixed(4)} gal`}</td>
                   <td>{m.timesUsed ? `${m.timesUsed} application${m.timesUsed === 1 ? "" : "s"}` : <span className="muted">not yet</span>}</td>
                   <td className="row">
-                    <button className="btn" aria-label="Move up" disabled={act.busy || i === 0} onClick={() => move(i, -1)}>↑</button>
-                    <button className="btn" aria-label="Move down" disabled={act.busy || i === rows.length - 1} onClick={() => move(i, 1)}>↓</button>
                     <button className="btn" onClick={() => start(m)}>Edit</button>
                     <button className="btn" disabled={act.busy} onClick={() => toggle(m)}>{m.active ? "Turn off" : "Turn on"}</button>
                     {!m.timesUsed && <button className="btn" disabled={act.busy} onClick={() => confirm(`Remove ${m.name}?`) && remove(m)}>Remove</button>}

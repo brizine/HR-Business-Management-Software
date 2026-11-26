@@ -293,7 +293,13 @@ export function Columns({ shown, onChange, all = WL_COLUMNS, defaults = DEFAULT_
         {/* Property always stays first. */}
         <ColumnOrder keys={shown.filter((k) => colByKey.has(k))} name={(k) => colByKey.get(k)!.label} fixed={shown[0] === "property" ? 1 : 0} onChange={onChange} />
         <div className="cl-addcols">
-          {rest.map((c) => <button key={c.key} type="button" className="cl-addcol" onClick={() => onChange([...shown, c.key])}><Icon name="plus" size={12} /> {c.label}</button>)}
+          {/* Side by side, a few to a line, so the whole box fits on the screen. */}
+          {!!rest.length && (
+            <div>
+              <div className="todo-label">Add a column</div>
+              {rest.map((c) => <button key={c.key} type="button" className="cl-addcol" onClick={() => onChange([...shown, c.key])}><Icon name="plus" size={12} /> {c.label}</button>)}
+            </div>
+          )}
           {!rest.length && <p className="muted" style={{ margin: 0 }}>Every column is shown.</p>}
         </div>
       </div>

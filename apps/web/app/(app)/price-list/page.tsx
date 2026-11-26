@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi, useNewForm } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
+import { Grip, useDragOrder } from "@/components/drag-order";
 import { dollars, toCents, useServices, type ServiceType } from "@/components/invoices";
 import { PackagesCard } from "@/components/packages";
 
@@ -18,11 +19,7 @@ export default function PriceList() {
   useNewForm(() => { if (admin) setEditing("new"); });
   const action = useAction();
   const list = services.list;
-  const move = (i: number, d: number) => {
-    const ids = list.map((s) => s.id);
-    [ids[i], ids[i + d]] = [ids[i + d], ids[i]];
-    action.run(async () => { await api("/service-types/order", { method: "PUT", body: { ids } }); services.reload(); });
-  };
+  const drag = useDragOrder(list.map((s) => s.id), (ids) => action.run(async () => { await api("/service-types/order", { method: "PUT", body: { ids } }); await services.reload(); }), { disabled: !admin, busy: action.busy });
   const account = (code: string) => INCOME_ACCOUNTS.find((a) => a.code === code);
   return (
     <>
@@ -35,9 +32,10 @@ export default function PriceList() {
       <div className="card tablewrap">
         {list.length ? (
           <table>
-            <thead><tr><th>Service</th><th>Price</th><th>Income account</th><th>Taxable</th><th>Status</th>{admin && <th />}</tr></thead>
-            <tbody>{list.map((s, i) => (
-              <tr key={s.id} style={{ opacity: s.active ? 1 : 0.6 }}>
+            <thead><tr>{admin && <th className="drag-col" aria-label="Order" />}<th>Service</th><th>Price</th><th>Income account</th><th>Taxable</th><th>Status</th>{admin && <th />}</tr></thead>
+            <tbody ref={drag.box}>{drag.sorted(list, (s) => s.id).map((s) => (
+              <tr key={s.id} {...drag.row(s.id)} style={{ opacity: s.active ? 1 : 0.6 }}>
+                {admin && <td className="drag-col"><Grip drag={drag} id={s.id} name={s.name} /></td>}
                 <td><strong>{s.name}</strong>{s.chemical && <span className="badge" style={{ marginLeft: 6 }} title="Weather is recorded when it's completed">chemical</span>}{s.description && <div className="muted">{s.description}</div>}</td>
                 <td>{describePricing(s)}</td>
                 <td>{s.incomeAccountCode} {account(s.incomeAccountCode)?.name ?? ""}</td>
@@ -45,8 +43,6 @@ export default function PriceList() {
                 <td>{s.active ? <span className="badge ok">active</span> : <span className="badge">retired</span>}</td>
                 {admin && (
                   <td className="row">
-                    <button className="btn" aria-label={`Move ${s.name} up`} disabled={i === 0 || action.busy} onClick={() => move(i, -1)}>↑</button>
-                    <button className="btn" aria-label={`Move ${s.name} down`} disabled={i === list.length - 1 || action.busy} onClick={() => move(i, 1)}>↓</button>
                     <button className="btn" onClick={() => setEditing(s)}>Edit</button>
                   </td>
                 )}

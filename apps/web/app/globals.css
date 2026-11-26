@@ -1383,6 +1383,8 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .cl-pop-wrap { position: relative; }
 .cl-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 70; min-width: 220px; max-width: min(92vw, 360px); padding: 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,.16); }
 .cl-pop.align-right { left: auto; right: 0; }
+/* Taller than the window has room for (see Popover): it scrolls inside instead of running off the page. */
+.cl-pop.capped { overflow-y: auto; }
 .cl-pop-wide { width: min(92vw, 440px); max-width: min(92vw, 440px); }
 .cl-pop-inline { position: static; box-shadow: none; }
 .cl-menu { display: grid; gap: 2px; max-height: 60vh; overflow-y: auto; }
@@ -1403,8 +1405,13 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .cl-chip-text { border: 0; background: transparent; color: var(--text); padding: 3px 4px 3px 10px; cursor: pointer; }
 .cl-chip-x { border: 0; background: transparent; color: var(--muted); padding: 3px 9px 3px 5px; cursor: pointer; font-size: 12px; }
 .cl-chip-x:hover { color: var(--bad); }
-.cl-columns { gap: 8px; }
-.cl-shown { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: min(46vh, 440px); overflow-y: auto; }
+/* The column editor shows whole whenever the window can hold it; its two lists scroll only when it can't. */
+.cl-pop:has(> .cl-columns) { display: flex; flex-direction: column; }
+.cl-pop.capped:has(> .cl-columns) { overflow: hidden; }
+.cl-columns { gap: 8px; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.cl-columns > * { flex: none; }
+.cl-columns > .cl-shown, .cl-columns > .cl-addcols { flex: 0 1 auto; min-height: 0; }
+.cl-shown { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; align-content: start; overflow-y: auto; }
 .cl-shown li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 1px 0; font-size: 14px; border-radius: 6px; }
 /* Rows drag into order by their name (mouse or touch); the arrow keys work on a focused row. */
 .cl-grip { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; padding: 4px 6px 4px 2px; border-radius: 6px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
@@ -1418,8 +1425,18 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .cl-shown li.dragging { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); box-shadow: 0 1px 5px rgba(0, 0, 0, .2); position: relative; z-index: 1; }
 .cl-shown li.dragging .cl-grip { background: transparent; }
 .cl-drag-hint { font-size: 12px; font-weight: normal; }
+/* Any list or table whose rows drag into order (components/drag-order.tsx). */
+.drag-grip { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; flex: none; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--muted); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; vertical-align: middle; }
+.drag-grip svg { stroke-width: 2.8; }
+.drag-grip:hover:not(:disabled), .drag-grip:focus-visible { background: var(--bg); border-color: var(--border); color: var(--text); }
+.drag-grip:disabled { opacity: .35; cursor: default; }
+.drag-col { width: 1%; padding-right: 0 !important; white-space: nowrap; }
+.drag-row.dragging { background: color-mix(in srgb, var(--primary) 10%, var(--surface)); box-shadow: 0 1px 6px rgba(0, 0, 0, .18); position: relative; z-index: 1; }
+tr.drag-row.dragging > td { background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
+body.drag-sorting, body.drag-sorting * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
+.drag-list > li { align-items: center; }
 .cl-shown .btn { padding: 2px 7px; font-size: 12px; }
-.cl-addcols { display: grid; gap: 6px; max-height: 220px; overflow-y: auto; }
+.cl-addcols { display: grid; gap: 6px; align-content: start; overflow-y: auto; }
 .cl-addcol { display: inline-flex; align-items: center; gap: 4px; margin: 2px 4px 2px 0; padding: 3px 9px; border: 1px dashed var(--border); border-radius: 999px; background: transparent; color: var(--text); font-size: 13px; cursor: pointer; }
 .cl-addcol:hover { border-color: var(--primary); }
 .cl-table-card { padding-top: 6px; }

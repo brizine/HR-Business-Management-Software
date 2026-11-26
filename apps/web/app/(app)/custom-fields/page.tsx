@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
+import { Grip, useDragOrder } from "@/components/drag-order";
 import { Icon } from "@/components/icons";
 import { NewFieldModal } from "@/components/custom-fields";
 
@@ -31,15 +32,17 @@ export default function CustomFields() {
     .filter((f) => !q.trim() || f.name.toLowerCase().includes(q.trim().toLowerCase()))
     .sort((a, b) => CUSTOM_FIELD_TARGETS.indexOf(a.appliesTo) - CUSTOM_FIELD_TARGETS.indexOf(b.appliesTo)), [all, target, q]);
   const update = (f: CustomFieldDef, body: Record<string, unknown>) => act.run(async () => { await api(`/custom-fields/${f.id}`, { method: "PUT", body }); await list.reload(); });
-  const move = (f: CustomFieldDef, dir: -1 | 1) => act.run(async () => {
-    const same = all.filter((x) => x.appliesTo === f.appliesTo);
-    const i = same.findIndex((x) => x.id === f.id);
-    const j = i + dir;
-    if (j < 0 || j >= same.length) return;
-    [same[i], same[j]] = [same[j], same[i]];
-    await api("/custom-fields/order", { method: "PUT", body: { ids: same.map((x) => x.id) } });
+  // A field moves among the fields for the same kind of record. With a search on, the ones it hides keep their places.
+  const byId = new Map(all.map((f) => [f.id, f]));
+  const drag = useDragOrder(rows.map((f) => f.id), (next, moved) => act.run(async () => {
+    const kind = byId.get(moved)!.appliesTo;
+    const shownNow = next.filter((id) => byId.get(id)?.appliesTo === kind);
+    const slots = all.filter((x) => x.appliesTo === kind).map((x) => x.id);
+    let n = 0;
+    const ids = slots.map((id) => (shownNow.includes(id) ? shownNow[n++] : id));
+    await api("/custom-fields/order", { method: "PUT", body: { ids } });
     await list.reload();
-  });
+  }), { disabled: !admin, busy: act.busy, groupOf: (id) => byId.get(id)?.appliesTo ?? "" });
   const remove = (ids: string[]) => act.run(async () => {
     await api("/custom-fields/delete", { body: { ids } });
     setPicked([]);
@@ -70,14 +73,15 @@ export default function CustomFields() {
           <table className="cf-table">
             <thead>
               <tr>
+                {admin && <th className="drag-col" aria-label="Order" />}
                 {admin && <th style={{ width: 30 }}><input type="checkbox" aria-label="Select all" checked={!!rows.length && picked.length === rows.length} onChange={(e) => toggleAll(e.target.checked)} /></th>}
-                <th>Field name / label</th><th>Field type</th><th>Field applies to</th><th>Default value</th><th>Transferable</th>{admin && <th aria-label="Order and delete" />}
+                <th>Field name / label</th><th>Field type</th><th>Field applies to</th><th>Default value</th><th>Transferable</th>{admin && <th aria-label="Delete" />}
               </tr>
             </thead>
-            <tbody>
-              {rows.map((f) => <FieldRow key={f.id} f={f} admin={admin} picked={picked.includes(f.id)}
+            <tbody ref={drag.box}>
+              {drag.sorted(rows, (f) => f.id).map((f) => <FieldRow key={f.id} f={f} admin={admin} picked={picked.includes(f.id)} drag={drag}
                 onPick={(on) => setPicked((p) => (on ? [...p, f.id] : p.filter((x) => x !== f.id)))}
-                onUpdate={(body) => update(f, body)} onMove={(d) => move(f, d)} onDelete={() => confirm(`Delete "${f.name}"? Its values stop showing everywhere.`) && remove([f.id])} busy={act.busy} />)}
+                onUpdate={(body) => update(f, body)} onDelete={() => confirm(`Delete "${f.name}"? Its values stop showing everywhere.`) && remove([f.id])} busy={act.busy} />)}
             </tbody>
           </table>
           {admin && picked.length > 0 && (
@@ -92,9 +96,9 @@ export default function CustomFields() {
   );
 }
 
-function FieldRow({ f, admin, picked, onPick, onUpdate, onMove, onDelete, busy }: {
+function FieldRow({ f, admin, picked, onPick, onUpdate, drag, onDelete, busy }: {
   f: CustomFieldDef; admin: boolean; picked: boolean; onPick: (on: boolean) => void; onUpdate: (body: Record<string, unknown>) => void;
-  onMove: (d: -1 | 1) => void; onDelete: () => void; busy: boolean;
+  drag: ReturnType<typeof useDragOrder>; onDelete: () => void; busy: boolean;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(f.name);
@@ -102,7 +106,8 @@ function FieldRow({ f, admin, picked, onPick, onUpdate, onMove, onDelete, busy }
   const [def, setDef] = useState(f.defaultValue ?? "");
   const defChanged = def !== (f.defaultValue ?? "");
   return (
-    <tr>
+    <tr {...drag.row(f.id)}>
+      {admin && <td className="drag-col"><Grip drag={drag} id={f.id} name={f.name} /></td>}
       {admin && <td><input type="checkbox" aria-label={`Select ${f.name}`} checked={picked} onChange={(e) => onPick(e.target.checked)} /></td>}
       <td>
         {renaming ? (
@@ -133,8 +138,6 @@ function FieldRow({ f, admin, picked, onPick, onUpdate, onMove, onDelete, busy }
       <td><input type="checkbox" aria-label={`${f.name} is transferable`} checked={f.transferable} disabled={!admin || busy} onChange={(e) => onUpdate({ transferable: e.target.checked })} /></td>
       {admin && (
         <td className="cf-row-actions">
-          <button type="button" className="btn" aria-label={`Move ${f.name} up`} disabled={busy} onClick={() => onMove(-1)}>↑</button>
-          <button type="button" className="btn" aria-label={`Move ${f.name} down`} disabled={busy} onClick={() => onMove(1)}>↓</button>
           <button type="button" className="btn danger" aria-label={`Delete ${f.name}`} disabled={busy} onClick={onDelete}>Delete</button>
         </td>
       )}

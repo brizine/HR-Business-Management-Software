@@ -4,6 +4,7 @@ import { computeMix, formatAmount, formatEntered, isInactive, totalsByUnit } fro
 import { api, fmtDateTime } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
+import { Grip, useDragOrder as useListDrag } from "@/components/drag-order";
 import { useMenus } from "@/components/menu-select";
 
 const remembered = (sheetId: string) => {
@@ -328,6 +329,11 @@ function Calculator({ sheet, canEdit, onChange }: { sheet: any; canEdit: boolean
 /** Editors: settings that aren't in the calculator itself (product order, deleting the mix). */
 function Editor({ sheet, onChange }: { sheet: any; onChange: () => void }) {
   const { busy, error, run } = useAction();
+  // The same order the calculator's rows drag into (saved for everyone).
+  const drag = useListDrag((sheet.products as any[]).map((p) => p.id), (productIds) => run(async () => {
+    await api(`/spray-mixes/${sheet.id}/order`, { method: "PUT", body: { productIds } });
+    await onChange();
+  }), { busy });
   const num = (v: FormDataEntryValue | null) => Number(v);
   const mixUnits = useUnits();
   const unitOptions = (current: string) => [...new Set([...mixUnits, current])];
@@ -352,25 +358,20 @@ function Editor({ sheet, onChange }: { sheet: any; onChange: () => void }) {
       </form>
       <table>
         <thead><tr><th>Product</th><th>Rate per acre</th><th>Measurement</th><th /></tr></thead>
-        <tbody>
-          {sheet.products.map((p: any, i: number) => (
-            <tr key={p.id}>
+        <tbody ref={drag.box}>
+          {drag.sorted(sheet.products as any[], (p) => p.id).map((p: any) => (
+            <tr key={p.id} {...drag.row(p.id)}>
               <td colSpan={4}>
                 <form className="row" onSubmit={(e) => {
                   e.preventDefault();
                   const f = new FormData(e.currentTarget);
                   run(async () => { await api(`/spray-mixes/products/${p.id}`, { method: "PATCH", body: { name: f.get("name"), ratePerAcre: num(f.get("ratePerAcre")), unit: f.get("unit") } }); onChange(); });
                 }}>
+                  <Grip drag={drag} id={p.id} name={p.name} />
                   <input name="name" defaultValue={p.name} aria-label="Product name" required style={{ flex: 2, minWidth: 160 }} />
                   <input name="ratePerAcre" type="number" step="any" min="0" defaultValue={p.ratePerAcre} aria-label={`${p.name} rate per acre`} required style={{ width: 110 }} />
                   <select name="unit" defaultValue={p.unit} aria-label={`${p.name} measurement`} style={{ width: 150 }}>{unitOptions(p.unit).map((u) => <option key={u}>{u}</option>)}</select>
                   <button className="btn sm" disabled={busy}>Save</button>
-                  <button type="button" className="btn sm" aria-label={`Move ${p.name} up`} disabled={busy || i === 0} onClick={() => run(async () => {
-                    const prev = sheet.products[i - 1];
-                    await api(`/spray-mixes/products/${p.id}`, { method: "PATCH", body: { sortOrder: i - 1 } });
-                    await api(`/spray-mixes/products/${prev.id}`, { method: "PATCH", body: { sortOrder: i } });
-                    onChange();
-                  })}>↑</button>
                   <button type="button" className="btn sm danger" disabled={busy} onClick={() => confirm(`Remove ${p.name} from ${sheet.name}?`) && run(async () => { await api(`/spray-mixes/products/${p.id}`, { method: "DELETE" }); onChange(); })}>Remove</button>
                 </form>
               </td>

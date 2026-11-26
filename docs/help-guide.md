@@ -71,6 +71,12 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
 - **Reports** on each side lists the reports you can see there, such as Fuel & Costs, Repair Orders and
   Inspections (Operations), or Attendance, Timesheets, Time Off, Training Progress and Payroll (Team).
 
+- **Putting a list in order:** wherever a list has an order you can change (services on the price list,
+  cancellation reasons, custom fields, job titles and departments, training lessons, application methods, spray
+  mix products, and the columns of the Customers, Waiting list and Dispatch pages), each row has a **handle of six
+  dots**. Drag the row by it with the mouse or a finger and let go where it belongs; the order is saved when you
+  let go. With a keyboard, tab to the handle and press the up or down arrow.
+
 ## Roles and access
 
 - **Roles:** Owner, Admin, Manager, Employee. Owners can do everything. Admins manage people, pay
@@ -206,6 +212,9 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
     Service, custom fields) with a search.
     - **Drag a column's name** up or down to set the order (on a phone or tablet too; with a keyboard, the up and
       down arrow keys move the one you're on), **✕** hides one, and **Reset** goes back to the usual nine.
+    - **The box opens down or up**, whichever side has the room to show all of it, so you don't scroll inside it.
+      On a window too short to hold it, it uses the window's full height and only then do its lists scroll. (The
+      Columns boxes on the Waiting list and Dispatch pages do the same.)
     - Your choice is kept for you in this browser.
   - **Sorting:** click a column heading to sort by it, and again to reverse.
   - **Selecting:** tick customers (or the box at the top for the whole page) to **Add tag**, **Remove tag**,
@@ -301,7 +310,7 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
 - **Tags** (Settings → Customers, admins): add tags with a name, color and description, **Archive** ones no
   longer used (they stay where they are but can't be added), or **Merge** one tag into another. Every tag added
   or removed is recorded with who did it and when.
-- **Cancellation reasons** (Settings → Customers, admins): add, rename, reorder (↑ ↓), mark as the customer's or
+- **Cancellation reasons** (Settings → Customers, admins): add, rename, reorder (drag one by its handle, the six dots), mark as the customer's or
   your decision, require a comment, or retire reasons.
 - **Sample customers** (admins, top of the Customers page): **Load sample customers** adds 10 made-up accounts
   plus 2 tenants, tagged Sample, covering the tricky cases (paper invoices, a landlord with tenants, a property
@@ -318,7 +327,7 @@ billing; admins change prices).
 - **Price list:** each service is priced one of three ways: a **flat price**, **per 1,000 sq ft** (with an optional
   minimum charge), or **by lawn size** (brackets such as "up to 8,000 sq ft $75, larger $95"). Each service posts to
   an income account (4000 Lawn Treatment Programs, 4100 Pest Control, 4200 One-Time Lawn Services, 4950 Other
-  Income). Use ↑ ↓ to set the order; **Retired** services stay on past invoices but aren't offered for new ones.
+  Income). Drag a service by its handle (the six dots at the left) to set the order; **Retired** services stay on past invoices but aren't offered for new ones.
 - **Packages** (under the price list): saved bundles of line items, like Homeworks' packages: "Spring round" =
   fertilizer + edging + blow-off. Admins add them with **Add package**: pick services from the price list or type
   custom items, with quantity, budgeted hours and price. Leave a service's price blank to price it for each
@@ -1245,7 +1254,8 @@ Your own fields, like Homeworks' Custom Fields: "Gallons used" on work orders, "
   **Search** filters.
   - Click a name to rename it, or to change a dropdown's choices.
   - Type a default and click **✓** to save it, and tick **Transferable** on or off.
-  - **↑ / ↓** change the order fields show in on forms and pages.
+  - **Drag a field by its handle** (the six dots at the left) to change the order fields show in on forms and
+    pages. A field moves among the fields for the same kind of record.
   - **Delete** removes one field, or tick several and **Delete selected**. Deleted fields' values stop showing
     everywhere.
 - **Filling them in:** the customer, property, work order and to-do forms have a **Custom fields** box.
