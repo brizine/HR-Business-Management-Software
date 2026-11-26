@@ -29,7 +29,8 @@ export default function NewWorkOrder() {
     const customerId = url.searchParams.get("customerId");
     const propertyId = url.searchParams.get("propertyId") ?? undefined;
     const date = url.searchParams.get("date") ?? undefined;
-    const done = (customer?: { id: string; name: string }) => setPreset({ customer, propertyId: customer ? propertyId : undefined, date });
+    const notes = url.searchParams.get("notes")?.slice(0, 2000) || undefined;
+    const done = (customer?: { id: string; name: string }) => setPreset({ customer, propertyId: customer ? propertyId : undefined, date, notes });
     if (customerId) api<any>(`/customers/${customerId}`).then((c) => done({ id: c.id, name: customerName(c) }), () => done());
     else if (propertyId) {
       // From a property page: its bill-to customer.

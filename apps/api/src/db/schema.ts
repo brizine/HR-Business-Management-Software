@@ -72,6 +72,8 @@ export const companies = pgTable("companies", {
     provider: "talkroute"; fromNumber: string; connectedAt: string; accountName?: string | null; inboundSince?: string | null;
     /** The provider's id for "tell Crewdesk about new texts" (so it can be taken off again). */
     subscriptionId?: string | null;
+    /** The same for calls and voicemails. */
+    callSubscriptionId?: string | null; voicemailSubscriptionId?: string | null;
     /** When the provider last told Crewdesk about a text, and when Crewdesk last asked it for missed ones. */
     hookAt?: string | null; polledAt?: string | null;
   }>(),
@@ -81,6 +83,8 @@ export const companies = pgTable("companies", {
   textingHookToken: text("texting_hook_token").unique(),
   /** Who is told (phone and inbox) when a text comes in, and so can read and answer texts. Empty: Customers & billing managers. */
   textingNotifyIds: uuid("texting_notify_ids").array().notNull().default(sql`ARRAY[]::uuid[]`),
+  /** The office's texting choices (after-hours reply, missed-call text) and how its long jobs are going. See shared/texting. */
+  textingOptions: jsonb("texting_options").$type<import("@crewdesk/shared").TextingOptions>(),
   /** Grace periods, alerts and points for attendance (see attendance.ts in @crewdesk/shared). */
   attendanceRules: jsonb("attendance_rules").$type<AttendanceRules>(),
   /** The company's own edited copy of the user manual (Markdown); null = the standard docs/help-guide.md. */
@@ -143,6 +147,8 @@ export const employees = pgTable(
     lastName: text("last_name").notNull(),
     email: text("email").notNull().unique(),
     phone: text("phone"),
+    /** "Don't tell me about incoming texts between these times" (the company's time zone): { start: "21:00", end: "07:00" }. */
+    textQuiet: jsonb("text_quiet").$type<{ start: string; end: string }>(),
     passwordHash: text("password_hash"),
     role: text("role").notNull().default("employee"),
     title: text("title"),
@@ -2543,6 +2549,10 @@ export const textThreads = pgTable(
     status: text("status").notNull().default("open"),
     /** Replies nobody has opened yet (or 1 after "Mark unread"). */
     unread: integer("unread").notNull().default(0),
+    /** Whose conversation it is to answer (then only they are told about its texts). */
+    assignedId: uuid("assigned_id").references(() => employees.id, { onDelete: "set null" }),
+    /** When the after-hours reply or the missed-call text last went to this number (so neither repeats itself). */
+    autoRepliedAt: timestamp("auto_replied_at", { withTimezone: true }),
     lastAt: timestamp("last_at", { withTimezone: true }).notNull().defaultNow(),
     lastBody: text("last_body").notNull().default(""),
     lastDirection: text("last_direction").notNull().default("out"),
@@ -2603,19 +2613,21 @@ export const customerTexts = pgTable(
     employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
     /** The send-to-many it went out with, if any. */
     batchId: uuid("batch_id").references(() => textBatches.id, { onDelete: "set null" }),
-    /** "out" or "in". */
+    /** "out", "in", or "note" (the office's own note in the conversation: never sent). */
     direction: text("direction").notNull(),
     /** The customer's number (+1…). */
     phone: text("phone").notNull(),
     body: text("body").notNull(),
-    /** Out: "queued" (waiting its turn in a send to many), "sending", "sent", "delivered" or "failed". In: "received". */
+    /** Out: "scheduled" (to go at sendAt), "queued" (waiting its turn), "sending", "sent", "delivered" or "failed". In: "received". A note: "note". */
     status: text("status").notNull(),
     error: text("error"),
     providerId: text("provider_id"),
-    /** "office", "automation", "test", or "talkroute" (sent from Talkroute's own app). */
+    /** "office", "automation", "test", "talkroute" (sent from Talkroute's own app), or "auto" (after-hours reply, missed-call text). */
     source: text("source").notNull().default("office"),
     sentById: uuid("sent_by_id").references(() => employees.id, { onDelete: "set null" }),
     readAt: timestamp("read_at", { withTimezone: true }),
+    /** A text written to go later: when. */
+    sendAt: timestamp("send_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -2626,6 +2638,56 @@ export const customerTexts = pgTable(
     index("customer_texts_status_idx").on(t.companyId, t.status),
     uniqueIndex("customer_texts_provider_idx").on(t.companyId, t.providerId),
   ],
+);
+
+/** A picture (or other file) on a text, kept encrypted like other uploads. */
+export const textMedia = pgTable(
+  "text_media",
+  {
+    id: id(),
+    companyId: companyId(),
+    textId: uuid("text_id").notNull().references(() => customerTexts.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    storageKey: text("storage_key").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("text_media_text_idx").on(t.textId)],
+);
+
+/** Short answers the office sends often ("On our way", "We'll call you back"), a click away under the message box. */
+export const textQuickReplies = pgTable(
+  "text_quick_replies",
+  { id: id(), companyId: companyId(), title: text("title").notNull(), body: text("body").notNull(), createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }), createdAt: createdAt() },
+  (t) => [index("text_quick_replies_company_idx").on(t.companyId)],
+);
+
+/** Calls and voicemails on the company's number, as the phone service reports them (shown on the customer's page). */
+export const phoneCalls = pgTable(
+  "phone_calls",
+  {
+    id: id(),
+    companyId: companyId(),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    /** The other number (+1…). */
+    phone: text("phone").notNull(),
+    /** "call" or "voicemail". */
+    kind: text("kind").notNull().default("call"),
+    /** "in" or "out". */
+    direction: text("direction").notNull().default("in"),
+    /** "answered", "missed" or "hangup". */
+    result: text("result").notNull().default("answered"),
+    durationSeconds: integer("duration_seconds").notNull().default(0),
+    callerName: text("caller_name"),
+    /** A voicemail's words, when the phone service wrote them out. */
+    transcript: text("transcript"),
+    providerId: text("provider_id"),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("phone_calls_customer_idx").on(t.customerId, t.at), index("phone_calls_company_idx").on(t.companyId, t.at), uniqueIndex("phone_calls_provider_idx").on(t.companyId, t.providerId)],
 );
 
 /**

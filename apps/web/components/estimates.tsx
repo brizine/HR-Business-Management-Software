@@ -43,7 +43,7 @@ function companyRule(settings: any) {
   return d && d.requireFor !== "none" && d.value > 0 ? { kind: d.kind, value: d.value, minTotalCents: d.minTotalCents } : null;
 }
 
-export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate?: any; preset?: { customer?: { id: string; name: string } }; onSaved: (e: any) => void; onCancel: () => void }) {
+export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate?: any; preset?: { customer?: { id: string; name: string }; internalNotes?: string }; onSaved: (e: any) => void; onCancel: () => void }) {
   const [customer, setCustomer] = useState<{ id: string; name: string } | null>(estimate ? { id: estimate.customer.id, name: estimate.customer.name } : preset?.customer ?? null);
   const [propertyId, setPropertyId] = useState<string>(estimate?.propertyId ?? "");
   const [title, setTitle] = useState(estimate?.title ?? "");
@@ -55,7 +55,7 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
   const [lines, setLines] = useState<Line[]>(estimate?.lines?.length ? estimate.lines.map(fromLine) : [blankLine()]);
   const [terms, setTerms] = useState(estimate?.terms ?? "");
   const [customerNotes, setCustomerNotes] = useState(estimate?.customerNotes ?? "");
-  const [internalNotes, setInternalNotes] = useState(estimate?.internalNotes ?? "");
+  const [internalNotes, setInternalNotes] = useState(estimate?.internalNotes ?? preset?.internalNotes ?? "");
   const [depositMode, setDepositMode] = useState<string>(estimate?.depositMode ?? "default");
   const [depositKind, setDepositKind] = useState<"amount" | "percent">(estimate?.depositKind ?? "percent");
   const [depositValue, setDepositValue] = useState<string>(estimate?.depositValue != null ? (estimate.depositKind === "amount" ? (estimate.depositValue / 100).toFixed(2) : String(estimate.depositValue)) : "");

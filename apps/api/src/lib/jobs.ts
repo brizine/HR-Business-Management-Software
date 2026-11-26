@@ -1,5 +1,5 @@
 import { applyLateFees, runAutoSend } from "./billingJobs";
-import { pollInboundTexts, resumeTextQueue } from "./texting";
+import { pollInboundTexts, refreshContacts, releaseScheduledTexts, resumeTextQueue } from "./texting";
 import { runAutomations } from "./automations";
 import { pruneEmailLog } from "./emailHealth";
 import { runWeather } from "./weather";
@@ -49,7 +49,10 @@ export async function runScheduledChecks(now = new Date()) {
   await runAutoSend(now).catch((err) => console.error("auto-send failed", err));
   await pollInboundTexts().catch((err) => console.error("checking texts failed", err));
   // Texts lined up in a send to many that a restart left waiting (not waited for: they go out a few a minute).
+  await releaseScheduledTexts(now).catch((err) => console.error("scheduled texts failed", err));
   await resumeTextQueue().catch((err) => console.error("sending queued texts failed", err));
+  // New customers go into the texting service's contacts, for companies that copy them (once a day).
+  await refreshContacts().catch((err) => console.error("copying customers to the texting service failed", err));
   await runAutomations(now).catch((err) => console.error("automations failed", err));
   await pruneEmailLog(now).catch((err) => console.error("email log prune failed", err));
   // Weather for chemical applications whose station hadn't reported yet.
@@ -436,6 +439,8 @@ export function startScheduler(intervalMs = 5 * 60_000) {
   // These timers don't keep the process running at shutdown.
   const addresses = () => refreshAddresses().catch((err) => console.error("address refresh failed", err));
   setTimeout(addresses, 60_000).unref();
+  // Texts written to go later leave within half a minute of their time.
+  setInterval(() => releaseScheduledTexts().catch((err) => console.error("scheduled texts failed", err)), 30_000).unref();
   setInterval(addresses, 3_600_000).unref();
   let stripeRunning = false;
   const stripe = () => {

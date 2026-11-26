@@ -37,3 +37,31 @@ describe("texting", () => {
     expect(webPathFor({ screen: "texts" })).toBe("/texts");
   });
 });
+
+describe("texting hours", () => {
+  // Wednesday Nov 25, 2026, 9:30 PM in Norman (03:30 UTC on the 26th).
+  const night = new Date("2026-11-26T03:30:00Z"), noon = new Date("2026-11-25T18:00:00Z");
+  const tz = "America/Chicago";
+  it("knows when the office is open", async () => {
+    const { officeOpen, DEFAULT_TEXTING_CHOICES } = await import("../src");
+    const hours = DEFAULT_TEXTING_CHOICES.autoReply.hours;
+    expect(officeOpen(hours, noon, tz)).toBe(true);
+    expect(officeOpen(hours, night, tz)).toBe(false);
+    // Saturday is closed by default.
+    expect(officeOpen(hours, new Date("2026-11-28T18:00:00Z"), tz)).toBe(false);
+  });
+  it("quiet hours can run past midnight", async () => {
+    const { inQuietHours } = await import("../src");
+    expect(inQuietHours({ start: "21:00", end: "07:00" }, night, tz)).toBe(true);
+    expect(inQuietHours({ start: "21:00", end: "07:00" }, noon, tz)).toBe(false);
+    expect(inQuietHours({ start: "11:00", end: "13:00" }, noon, tz)).toBe(true);
+    expect(inQuietHours(null, night, tz)).toBe(false);
+  });
+  it("the office's choices are checked", async () => {
+    const { textingOptionsSchema, DEFAULT_TEXTING_CHOICES, textingChoices } = await import("../src");
+    expect(textingOptionsSchema.safeParse(DEFAULT_TEXTING_CHOICES).success).toBe(true);
+    expect(textingOptionsSchema.safeParse({ ...DEFAULT_TEXTING_CHOICES, autoReply: { ...DEFAULT_TEXTING_CHOICES.autoReply, enabled: true, message: "" } }).success).toBe(false);
+    expect(textingOptionsSchema.safeParse({ ...DEFAULT_TEXTING_CHOICES, autoReply: { ...DEFAULT_TEXTING_CHOICES.autoReply, hours: { ...DEFAULT_TEXTING_CHOICES.autoReply.hours, mon: { open: "17:00", close: "08:00" } } } }).success).toBe(false);
+    expect(textingChoices(null)).toEqual(DEFAULT_TEXTING_CHOICES);
+  });
+});

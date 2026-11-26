@@ -88,10 +88,10 @@ const pending = new Set<Promise<void>>();
  * inbox + push, email, and/or text. Runs in the background so API responses never wait on Expo;
  * failures are logged, never thrown to the caller.
  */
-export function notify(companyId: string, employeeIds: Iterable<string | null | undefined>, n: NotificationInput) {
+export function notify(companyId: string, employeeIds: Iterable<string | null | undefined>, n: NotificationInput, o: { /** People in their quiet hours: it waits in their inbox, with no push, email or text. */ inboxOnly?: Iterable<string> } = {}) {
   const ids = [...new Set([...employeeIds].filter((x): x is string => !!x))];
   if (!ids.length) return;
-  const p = deliver(companyId, ids, n)
+  const p = deliver(companyId, ids, n, new Set(o.inboxOnly ?? []))
     .catch((err) => console.error("notify failed", err))
     .finally(() => pending.delete(p));
   pending.add(p);
@@ -102,7 +102,7 @@ export async function flushNotifications() {
   while (pending.size) await Promise.all([...pending]);
 }
 
-async function deliver(companyId: string, employeeIds: string[], n: NotificationInput) {
+async function deliver(companyId: string, employeeIds: string[], n: NotificationInput, quiet: Set<string>) {
   // Only notify active staff in this company.
   const people = await db
     .select()
@@ -124,14 +124,14 @@ async function deliver(companyId: string, employeeIds: string[], n: Notification
   const wants = (mode: DeliveryMode, id: string) => mode === "always" || (mode === "no_app" && !hasApp(id));
 
   const inApp = people.filter((p) => pref(p.id).app);
-  const byEmail = emailTransport() ? people.filter((p) => p.email && wants(pref(p.id).email, p.id)) : [];
+  const byEmail = emailTransport() ? people.filter((p) => !quiet.has(p.id) && p.email && wants(pref(p.id).email, p.id)) : [];
   const bySms =
     smsTransport() && company.smsEnabled
-      ? people.filter((p) => p.smsOptInAt && toE164(p.phone) && wants(pref(p.id).sms, p.id))
+      ? people.filter((p) => !quiet.has(p.id) && p.smsOptInAt && toE164(p.phone) && wants(pref(p.id).sms, p.id))
       : [];
 
   const results = await Promise.allSettled([
-    sendInApp(companyId, inApp.map((p) => p.id), tokens, n),
+    sendInApp(companyId, inApp.map((p) => p.id), tokens.filter((t) => !quiet.has(t.employeeId)), n),
     ...byEmail.map((p) => sendEmail(p, company.name, n)),
     ...bySms.map((p) => sendSms(p, company.name, n)),
   ]);

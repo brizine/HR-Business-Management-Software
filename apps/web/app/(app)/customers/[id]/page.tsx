@@ -19,7 +19,7 @@ import { PaymentMethodsCard } from "@/components/payment-methods";
 import { LinkedEstimates } from "@/components/estimates";
 import { Popover } from "@/components/customer-list";
 import { VisitFiles } from "@/components/visit-files";
-import { CustomerTexts } from "@/components/texting";
+import { CustomerCalls, CustomerTexts } from "@/components/texting";
 import { CustomerAutomations } from "@/components/automations";
 import { CustomerSchedulingPrefs } from "@/components/waitlist";
 import { CustomerForms } from "@/components/visit-forms";
@@ -137,6 +137,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
         <div className="cp-grid">
           <div className="cp-col">
             <CustomerTexts key={textFocus} customerId={id} focus={textFocus > 0} />
+            <CustomerCalls customerId={id} />
             <CallNotes customerId={id} customerName={c.name} onSaved={() => setVersion((v) => v + 1)} />
             <CustomerEmails customerId={id} />
           </div>

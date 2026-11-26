@@ -163,7 +163,7 @@ async function newRecoveryCodes(employeeId: string) {
 function publicCompany(company: typeof companies.$inferSelect) {
   // Connections and their keys stay on the server (each has its own settings route for the people allowed to see it).
   const { logoKey, accountingKey, accounting, helpGuide, helpGuideBase, reviewProgram, stripe, stripeSecret, stripeWebhookSecret, billing,
-    texting, textingKey, textingHookSecret, textingHookToken, textingNotifyIds, ...companyInfo } = company;
+    texting, textingKey, textingHookSecret, textingHookToken, textingNotifyIds, textingOptions, ...companyInfo } = company;
   return { ...companyInfo, hasLogo: !!logoKey, isTest: !!company.testOfCompanyId };
 }
 

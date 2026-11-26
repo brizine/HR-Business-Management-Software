@@ -660,8 +660,40 @@ Homeworks' Text page.
 - **On a customer's page:** **Communication** shows their texts as a conversation with a box to write one.
 - **Who can be texted:** their phone (or other phone) on file. A customer who replies **STOP** isn't texted again
   until they reply **START**; their page and the conversation say so.
-- **Texts are plain text.** A picture a customer sends shows as "[Picture or attachment. Open Talkroute to see
-  it.]" for now.
+- **Pictures:** a picture a customer texts shows in the conversation (click it to see it full size) and is also
+  put with the customer's **photos and documents**, captioned "Texted to us" with the date. To text one back,
+  press **Picture** under the message box and pick a JPG, PNG or GIF; whatever is typed in the box goes with it.
+  Photos are shrunk before they go, because carriers turn away large ones.
+- **Notes:** switch the box under a conversation from **Text** to **Note** to write something for the office
+  ("called her back, she'll decide Friday"). A note sits in the conversation in yellow and is never sent.
+- **Whose conversation it is:** the box at the top of a conversation says **Everyone's** or a person's name. Give
+  it to one person and only they are told about its texts from then on (they get a notification saying it's
+  theirs). **Mine** in the list shows the ones given to you. Set it back to Everyone's to hand it back.
+- **Create ▾** on a conversation: **To-do from their last text** makes a to-do for you, due today, with what they
+  said and the customer on it. **Work order…** and **Estimate…** open a new one for that customer with what they
+  said already in the notes.
+- **Quick replies:** answers you send often. Type one in the box, open **Quick replies ▾** and press **Save
+  what's in the box as a quick reply**; after that it's a click away for everyone. The × deletes one.
+- **Send later:** press **Send later…**, pick the date and time, then **Schedule**. The text waits at the bottom
+  of the conversation ("Goes Nov 27, 8:00 AM") with **Take it back** beside it until it goes. Sends to several
+  people can wait the same way; **Take back** is under Messages History.
+- **Quiet hours:** each person can tick **Quiet hours** at the top of Marketing → Text and set a start and end
+  (9:00 PM to 7:00 AM, say). During them, texts still land in their Crewdesk inbox but their phone doesn't buzz.
+  Admins can set them for each person under Settings → Integrations.
+- **After-hours reply** (Settings → Integrations): tick it, write the reply, and set the hours the office is open
+  each day. A text that arrives while the office is closed gets that reply by itself, once per conversation every
+  8 hours, and never to someone who replied STOP or to your own team.
+- **Missed-call text** (Settings → Integrations): tick it and write the text. When a call to your number is missed
+  or goes to voicemail, the caller is texted (at most once per number every 8 hours).
+- **Calls & voicemails** on a customer's page (Communication): calls to and from their number on your Talkroute
+  line, missed ones marked, and each voicemail with what was said (when Talkroute wrote it out) and **Play the
+  recording**.
+- **Past conversations** (Settings → Integrations): **Bring in from Talkroute** copies the last 30 days, 90 days
+  or year of conversations into Crewdesk as history. Nobody is notified, nothing is marked unread, and ones that
+  went quiet over a month ago come in marked Done.
+- **Talkroute contacts** (Settings → Integrations): **Copy customers to Talkroute** puts every customer with a
+  phone number into Talkroute's contacts, so their names show in Talkroute's apps. Ones already copied are left
+  alone (a later name change in Crewdesk isn't pushed), and new customers are copied overnight from then on.
 
 ### Automations
 
@@ -1596,7 +1628,9 @@ inspections, issue reports, repair orders, work orders, to-dos, training, onboar
 - **Text messages** (the 💬 by the bell, for the people picked to answer texts and Customers & billing managers):
   every conversation on the company's number, newest first, with unread ones marked. Tap one to read it and answer
   from the phone; **Mark unread** and **Mark done** are at the top. A notification for an incoming text opens its
-  conversation.
+  conversation. Pictures customers send show in the conversation, the 📷 button texts one back (take a photo or
+  choose one), **Make it mine** takes the conversation so only you are told about its texts, and **Mine** in the
+  list shows yours.
 - **To-dos** (Tasks tab): yours for the next week with the category and repeat, the customer, the address (tap
   it for directions), gate code and notes; **Start work** / **Stop work** (time tracking), **Done**, **Add photo**
   and **Note for office** (a note for the dispatcher). **Quick add** makes one for yourself for today or tomorrow.

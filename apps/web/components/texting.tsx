@@ -2,8 +2,11 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { TEXT_MAX, formatPhone, textInitials, textSegments, textWords, type TextFilter } from "@crewdesk/shared";
-import { api } from "@/lib/api";
+import {
+  TEXT_DAYS, TEXT_DAY_LABELS, TEXT_HISTORY_DAYS, TEXT_MAX, TEXT_MEDIA_MAX_BYTES, formatPhone, textInitials, textSegments, textWords,
+  type TextDay, type TextFilter, type TextingChoices, type TextingJob,
+} from "@crewdesk/shared";
+import { API_URL, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox } from "@/components/ui";
@@ -21,11 +24,15 @@ import { TagMenu } from "./templates";
 type Settings = {
   available: boolean; connected: boolean; provider: string; fromNumber?: string; connectedAt?: string; accountName?: string | null; webhook?: boolean; hookAt?: string | null;
   notify: { picked: boolean; people: { id: string; name: string }[] };
+  calls?: boolean; options: TextingChoices; history: TextingJob | null; contacts: TextingJob | null; timezone: string; myQuiet: Quiet;
 };
-type Text = { id: string; direction: "in" | "out"; body: string; status: string; error: string | null; source: string; by: string | null; at: string };
+type Quiet = { start: string; end: string } | null;
+type Media = { id: string; fileName: string; contentType: string };
+type Text = { id: string; direction: "in" | "out" | "note"; body: string; status: string; error: string | null; source: string; by: string | null; at: string; sendAt?: string | null; media?: Media[] };
 type ThreadRow = {
   id: string; phone: string; kind: "customer" | "employee" | "unknown"; name: string | null; customerId: string | null; employeeId: string | null;
   status: "open" | "done"; unread: number; optedOut: string | null; last: { body: string; direction: "in" | "out"; status: string; at: string };
+  assignedId: string | null; assignedName?: string | null;
 };
 type ThreadList = { total: number; page: number; pageSize: number; unread: number; threads: ThreadRow[] };
 type ThreadFull = ThreadRow & { connected: boolean; fromNumber: string | null; texts: Text[] };
@@ -114,6 +121,8 @@ export function TextingCard() {
       ) : d ? <p className="muted" style={{ margin: 0 }}>Only the owner can connect texting.</p> : null}
       <ErrorBox error={error} />
       {d && admin && <NotifyPicker settings={d} onSaved={s.reload} />}
+      {d?.connected && admin && <TextingChoicesForm settings={d} onSaved={s.reload} />}
+      {d?.connected && admin && <TextingJobs settings={d} reload={s.reload} />}
       {d && !admin && d.notify.people.length > 0 && <p className="muted" style={{ margin: 0, fontSize: 13 }}>Told when a text comes in: {d.notify.people.map((p) => p.name).join(", ")}.</p>}
     </div>
   );
@@ -121,7 +130,7 @@ export function TextingCard() {
 
 /** Who's told (phone and inbox) when a text comes in. The people picked can also read and answer texts. */
 function NotifyPicker({ settings, onSaved }: { settings: Settings; onSaved: () => void }) {
-  const people = useApi<{ picked: string[]; people: { id: string; name: string; role: string; hasApp: boolean }[] }>("/texting/settings/people");
+  const people = useApi<{ picked: string[]; people: { id: string; name: string; role: string; hasApp: boolean; quiet: Quiet }[] }>("/texting/settings/people");
   const [ids, setIds] = useState<string[] | null>(null);
   const [saved, setSaved] = useState(false);
   const { busy, error, run } = useAction();
@@ -141,17 +150,124 @@ function NotifyPicker({ settings, onSaved }: { settings: Settings; onSaved: () =
       <ErrorBox error={people.error ?? error} />
       <div className="txt-people">
         {(people.data?.people ?? []).map((p) => (
-          <label key={p.id} className="check">
-            <input type="checkbox" checked={picked.includes(p.id)} onChange={() => toggle(p.id)} />
-            <span>{p.name} <span className="muted">· {p.role.charAt(0).toUpperCase() + p.role.slice(1)}{p.hasApp ? "" : " · no phone signed in to the app yet"}</span></span>
-          </label>
+          <div key={p.id} className="txt-person">
+            <label className="check">
+              <input type="checkbox" checked={picked.includes(p.id)} onChange={() => toggle(p.id)} />
+              <span>{p.name} <span className="muted">· {p.role.charAt(0).toUpperCase() + p.role.slice(1)}{p.hasApp ? "" : " · no phone signed in to the app yet"}</span></span>
+            </label>
+            {picked.includes(p.id) && <QuietHours value={p.quiet} label={`Quiet hours for ${p.name}`} onSave={(quiet) => run(async () => { await api("/texting/settings/quiet", { method: "PUT", body: { employeeId: p.id, quiet } }); await people.reload(); })} />}
+          </div>
         ))}
       </div>
+      <p className="muted" style={{ margin: 0, fontSize: 13 }}>During someone&apos;s quiet hours a text still lands in their Crewdesk inbox, but their phone doesn&apos;t buzz ({settings.timezone.replace(/_/g, " ")} time).</p>
       <div className="row" style={{ gap: 8 }}>
         <button className="btn primary" disabled={busy || !dirty} onClick={() => run(async () => { await api("/texting/settings/notify", { method: "PUT", body: { employeeIds: picked } }); setSaved(true); await people.reload(); onSaved(); })}>{busy ? "Saving…" : "Save who's told"}</button>
         {saved && !dirty && <span className="muted" role="status">Saved.</span>}
         {picked.some((id) => people.data?.people.find((p) => p.id === id && !p.hasApp)) && <span className="muted" style={{ fontSize: 13 }}>Someone without the app on their phone still gets it in their Crewdesk inbox (and by email, if their notification settings say so).</span>}
       </div>
+    </div>
+  );
+}
+
+/** "Don't buzz my phone between these times": off, or a start and an end (which may run past midnight). */
+function QuietHours({ value, onSave, label }: { value: Quiet; onSave: (q: Quiet) => void; label: string }) {
+  const [on, setOn] = useState(!!value);
+  const [start, setStart] = useState(value?.start ?? "21:00");
+  const [end, setEnd] = useState(value?.end ?? "07:00");
+  useEffect(() => { setOn(!!value); if (value) { setStart(value.start); setEnd(value.end); } }, [value?.start, value?.end]); // eslint-disable-line react-hooks/exhaustive-deps
+  const save = (next: Quiet) => { if ((next?.start ?? "") !== (value?.start ?? "") || (next?.end ?? "") !== (value?.end ?? "")) onSave(next); };
+  return (
+    <span className="txt-quiet" role="group" aria-label={label}>
+      <label className="check"><input type="checkbox" checked={on} onChange={(e) => { setOn(e.target.checked); save(e.target.checked ? { start, end } : null); }} /> Quiet hours</label>
+      {on && (
+        <>
+          <input type="time" aria-label="Quiet from" value={start} onChange={(e) => setStart(e.target.value)} onBlur={() => start && end && start !== end && save({ start, end })} />
+          <span>to</span>
+          <input type="time" aria-label="Quiet until" value={end} onChange={(e) => setEnd(e.target.value)} onBlur={() => start && end && start !== end && save({ start, end })} />
+        </>
+      )}
+    </span>
+  );
+}
+
+/** The after-hours reply (with the office's hours) and the missed-call text. */
+function TextingChoicesForm({ settings, onSaved }: { settings: Settings; onSaved: () => void }) {
+  const [o, setO] = useState<TextingChoices>(settings.options);
+  const [saved, setSaved] = useState(false);
+  const { busy, error, run } = useAction();
+  // Compared field by field (what's saved comes back with its fields in another order).
+  const same = (a: TextingChoices, b: TextingChoices) => a.autoReply.enabled === b.autoReply.enabled && a.autoReply.message === b.autoReply.message && a.missedCall.enabled === b.missedCall.enabled && a.missedCall.message === b.missedCall.message
+    && TEXT_DAYS.every((d) => (a.autoReply.hours[d]?.open ?? "") === (b.autoReply.hours[d]?.open ?? "") && (a.autoReply.hours[d]?.close ?? "") === (b.autoReply.hours[d]?.close ?? ""));
+  const dirty = !same(o, settings.options);
+  const auto = (patch: Partial<TextingChoices["autoReply"]>) => { setSaved(false); setO({ ...o, autoReply: { ...o.autoReply, ...patch } }); };
+  const day = (d: TextDay, h: { open: string; close: string } | null) => auto({ hours: { ...o.autoReply.hours, [d]: h } });
+  return (
+    <div className="stack" style={{ gap: 12, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+      <div className="stack" style={{ gap: 6 }}>
+        <label className="check"><input type="checkbox" checked={o.autoReply.enabled} onChange={(e) => auto({ enabled: e.target.checked })} /> <strong>After-hours reply:</strong> answer a text by itself when the office is closed</label>
+        {o.autoReply.enabled && (
+          <>
+            <textarea rows={2} maxLength={480} aria-label="After-hours reply" value={o.autoReply.message} onChange={(e) => auto({ message: e.target.value })} />
+            <div className="txt-hours" role="group" aria-label="Office hours">
+              {TEXT_DAYS.map((d) => {
+                const h = o.autoReply.hours[d];
+                return (
+                  <div key={d} className="txt-hours-row">
+                    <label className="check"><input type="checkbox" checked={!!h} onChange={(e) => day(d, e.target.checked ? { open: "08:00", close: "17:00" } : null)} /> {TEXT_DAY_LABELS[d]}</label>
+                    {h ? <><input type="time" aria-label={`${TEXT_DAY_LABELS[d]} opens`} value={h.open} onChange={(e) => day(d, { ...h, open: e.target.value })} /><span>to</span><input type="time" aria-label={`${TEXT_DAY_LABELS[d]} closes`} value={h.close} onChange={(e) => day(d, { ...h, close: e.target.value })} /></> : <span className="muted">Closed</span>}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="muted" style={{ margin: 0, fontSize: 13 }}>Sent once per conversation every 8 hours, never to someone who replied STOP or to your own team. Tags like {"{{CUSTOMER_FIRST_NAME}}"} and {"{{COMPANY_NAME}}"} are filled in.</p>
+          </>
+        )}
+      </div>
+      <div className="stack" style={{ gap: 6 }}>
+        <label className="check"><input type="checkbox" checked={o.missedCall.enabled} onChange={(e) => { setSaved(false); setO({ ...o, missedCall: { ...o.missedCall, enabled: e.target.checked } }); }} /> <strong>Missed-call text:</strong> text someone whose call wasn&apos;t answered</label>
+        {o.missedCall.enabled && (
+          <>
+            <textarea rows={2} maxLength={480} aria-label="Missed-call text" value={o.missedCall.message} onChange={(e) => { setSaved(false); setO({ ...o, missedCall: { ...o.missedCall, message: e.target.value } }); }} />
+            {!settings.calls && <p className="notice" style={{ margin: 0 }}>Talkroute isn&apos;t telling Crewdesk about calls on this connection. Disconnect and connect again to turn that on.</p>}
+            <p className="muted" style={{ margin: 0, fontSize: 13 }}>Goes when a call to your number is missed or goes to voicemail, at most once per number every 8 hours.</p>
+          </>
+        )}
+      </div>
+      <ErrorBox error={error} />
+      <div className="row" style={{ gap: 8 }}>
+        <button className="btn primary" disabled={busy || !dirty} onClick={() => run(async () => { await api("/texting/settings/options", { method: "PUT", body: o }); setSaved(true); onSaved(); })}>{busy ? "Saving…" : "Save automatic replies"}</button>
+        {saved && !dirty && <span className="muted" role="status">Saved.</span>}
+      </div>
+    </div>
+  );
+}
+
+const jobLine = (j: TextingJob, what: string) => (j.error ? `Stopped: ${j.error}` : j.finishedAt ? `${what.replace("{n}", j.added.toLocaleString())} · ${when(j.finishedAt)}` : `Working… ${j.done.toLocaleString()} of ${j.total.toLocaleString()}`);
+
+/** The long jobs: bringing in past conversations, and copying customers into Talkroute's contacts. */
+function TextingJobs({ settings, reload }: { settings: Settings; reload: () => void }) {
+  const [days, setDays] = useState<number>(90);
+  const { busy, error, run } = useAction();
+  const working = (j: TextingJob | null) => !!j && !j.finishedAt;
+  const going = working(settings.history) || working(settings.contacts);
+  useEffect(() => { if (!going) return; const t = setInterval(reload, 3000); return () => clearInterval(t); }, [going]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="stack" style={{ gap: 10, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+      <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <strong>Past conversations:</strong>
+        <select aria-label="How far back" value={days} onChange={(e) => setDays(Number(e.target.value))} style={{ width: "auto" }}>
+          {TEXT_HISTORY_DAYS.map((d) => <option key={d} value={d}>{d === 365 ? "the last year" : `the last ${d} days`}</option>)}
+        </select>
+        <button className="btn" disabled={busy || working(settings.history)} onClick={() => run(async () => { await api("/texting/settings/history", { body: { days } }); reload(); })}>Bring in from Talkroute</button>
+        {settings.history && <span className="muted" role="status">{jobLine(settings.history, "{n} texts brought in")}</span>}
+      </div>
+      <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <strong>Talkroute contacts:</strong>
+        <button className="btn" disabled={busy || working(settings.contacts)} onClick={() => run(async () => { await api("/texting/settings/contacts", { method: "POST" }); reload(); })}>Copy customers to Talkroute</button>
+        {settings.contacts && <span className="muted" role="status">{jobLine(settings.contacts, "{n} added")}</span>}
+      </div>
+      <p className="muted" style={{ margin: 0, fontSize: 13 }}>Past conversations come in as history: nobody is notified and nothing is marked unread. Copying customers puts their names in Talkroute&apos;s apps; ones already copied are left alone, and new customers are copied overnight from then on.</p>
+      <ErrorBox error={error} />
     </div>
   );
 }
@@ -183,7 +299,7 @@ export function TextsButton() {
 /* ───────────── Writing a text ───────────── */
 
 /** The message box, as Homeworks has it: Insert Customer / Company Info, Insert Template, and the count underneath. */
-function MessageBox({ value, onChange, disabled, rows = 4, templates, placeholder = "Type your message..." }: { value: string; onChange: (v: string) => void; disabled?: boolean; rows?: number; templates?: Template[]; placeholder?: string }) {
+function MessageBox({ value, onChange, disabled, rows = 4, templates, placeholder = "Type your message...", tools }: { value: string; onChange: (v: string) => void; disabled?: boolean; rows?: number; templates?: Template[]; placeholder?: string; tools?: ReactNode }) {
   const box = useRef<HTMLTextAreaElement>(null);
   const insert = (text: string) => {
     const el = box.current;
@@ -203,6 +319,7 @@ function MessageBox({ value, onChange, disabled, rows = 4, templates, placeholde
             {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         )}
+        {tools}
       </div>
       <div className="txt-box-count">
         <span>Words: {textWords(value)}</span><span>Characters: {seg.length}</span>
@@ -231,20 +348,48 @@ export function TextComposer({ onSend, disabled, placeholder }: { onSend: (body:
   );
 }
 
-function Bubbles({ texts }: { texts: Text[] }) {
+/** Shrinks a photo so carriers will pass it along (a phone's photo is several times too big). */
+async function textPicture(file: File): Promise<File> {
+  if (file.type === "image/gif" || file.size <= TEXT_MEDIA_MAX_BYTES * 0.9) return file;
+  const bmp = await createImageBitmap(file);
+  for (const [side, quality] of [[1600, 0.82], [1280, 0.78], [1024, 0.7], [800, 0.6]] as const) {
+    const scale = Math.min(1, side / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bmp.width * scale); canvas.height = Math.round(bmp.height * scale);
+    canvas.getContext("2d")!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((ok) => canvas.toBlob(ok, "image/jpeg", quality));
+    if (blob && blob.size <= TEXT_MEDIA_MAX_BYTES * 0.95) return new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
+  }
+  throw new Error("That picture is too big to text, even shrunk");
+}
+
+const sender = (t: Text) => (t.source === "automation" ? "automation" : t.source === "auto" ? "sent automatically" : t.source === "talkroute" ? "sent from Talkroute" : t.by ?? "office");
+
+/** The conversation: their texts on the left, yours on the right, the office's own notes across the middle, and anything waiting to go at the end. */
+function Bubbles({ texts, onTakeBack }: { texts: Text[]; onTakeBack?: (id: string) => void }) {
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => { end.current?.scrollIntoView({ block: "nearest" }); }, [texts.length]);
   return (
     <>
-      {texts.map((t) => (
-        <div key={t.id} className={`sms ${t.direction}${t.status === "failed" ? " failed" : ""}`}>
-          <div className="sms-body">{t.body}</div>
-          <div className="sms-meta">
-            {when(t.at)}
-            {t.direction === "out" ? ` · ${t.source === "automation" ? "automation" : t.source === "talkroute" ? "sent from Talkroute" : t.by ?? "office"}${t.status === "failed" ? ` · not sent: ${t.error ?? ""}` : t.status === "queued" ? " · waiting to send" : ""}` : ""}
+      {texts.map((t) => {
+        if (t.direction === "note") return <div key={t.id} className="sms note"><div className="sms-body">{t.body}</div><div className="sms-meta">Note (not sent) · {t.by ?? "office"} · {when(t.at)}</div></div>;
+        const waiting = t.status === "scheduled";
+        return (
+          <div key={t.id} className={`sms ${t.direction}${t.status === "failed" ? " failed" : ""}${waiting ? " waiting" : ""}`}>
+            {(t.media ?? []).map((m) => (
+              /^image\//.test(m.contentType)
+                ? <a key={m.id} className="sms-pic" href={`${API_URL}/texting/media/${m.id}`} target="_blank" rel="noopener noreferrer"><img src={`${API_URL}/texting/media/${m.id}`} alt="Picture sent by text" loading="lazy" /></a>
+                : <a key={m.id} className="sms-file" href={`${API_URL}/texting/media/${m.id}?download=1`}><Icon name="download" size={14} /> {m.fileName}</a>
+            ))}
+            {t.body && <div className="sms-body">{t.body}</div>}
+            <div className="sms-meta">
+              {waiting ? <>Goes {t.sendAt ? when(t.sendAt) : "later"} · {t.by ?? "office"}{onTakeBack && <> · <button type="button" className="linkbtn" onClick={() => onTakeBack(t.id)}>Take it back</button></>}</> : (
+                <>{when(t.at)}{t.direction === "out" ? ` · ${sender(t)}${t.status === "failed" ? ` · not sent: ${t.error ?? ""}` : t.status === "queued" || t.status === "sending" ? " · sending" : ""}` : ""}</>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
       <div ref={end} />
     </>
   );
@@ -263,7 +408,7 @@ export function CustomerTexts({ customerId, focus }: { customerId: string; focus
       <ErrorBox error={conv.error} />
       {d && (
         <>
-          {d.texts.length > 0 ? <div className="sms-thread" role="log" aria-label="Texts"><Bubbles texts={d.texts} /></div> : <p className="muted" style={{ margin: "6px 0" }}>No texts yet.</p>}
+          {d.texts.length > 0 ? <div className="sms-thread" role="log" aria-label="Texts"><Bubbles texts={d.texts} onTakeBack={(textId) => void api(`/texting/texts/${textId}`, { method: "DELETE" }).then(() => conv.reload())} /></div> : <p className="muted" style={{ margin: "6px 0" }}>No texts yet.</p>}
           {!d.connected ? <p className="muted" style={{ margin: 0 }}>Texting isn&apos;t connected yet (Settings → Integrations).</p>
             : d.optedOut ? <p className="bad-text" style={{ margin: 0 }}>They replied STOP on {new Date(d.optedOut).toLocaleDateString()}, so they can&apos;t be texted until they reply START.</p>
             : !d.number ? <p className="muted" style={{ margin: 0 }}>Add a mobile number to text them.</p>
@@ -274,9 +419,42 @@ export function CustomerTexts({ customerId, focus }: { customerId: string; focus
   );
 }
 
+type Call = { id: string; kind: "call" | "voicemail"; direction: "in" | "out"; result: "answered" | "missed" | "hangup"; seconds: number; phone: string; callerName: string | null; transcript: string | null; at: string };
+const callLength = (s: number) => (s >= 60 ? `${Math.floor(s / 60)} min ${s % 60 ? `${s % 60} s` : ""}`.trim() : `${s} s`);
+const callWords = (c: Call) => (c.kind === "voicemail" ? "Voicemail" : c.direction === "out" ? "Call to them" : c.result === "missed" ? "Missed call" : c.result === "hangup" ? "Call (hung up)" : "Call from them");
+
+/** A customer's calls and voicemails on the company's number, as Talkroute reports them; a voicemail can be read and played. */
+export function CustomerCalls({ customerId }: { customerId: string }) {
+  const data = useApi<{ on: boolean; rows: Call[] }>(`/texting/calls?customerId=${customerId}`);
+  const [audio, setAudio] = useState<{ id: string; url: string } | null>(null);
+  const { error, run } = useAction();
+  const rows = data.data?.rows ?? [];
+  if (!rows.length) return null;
+  return (
+    <div className="card">
+      <h2 className="cp-h">Calls &amp; voicemails</h2>
+      <ErrorBox error={error} />
+      <ul className="txt-calls">
+        {rows.map((c) => (
+          <li key={c.id} className={c.result === "missed" || c.kind === "voicemail" ? "missed" : ""}>
+            <div className="row" style={{ justifyContent: "space-between", gap: 8 }}>
+              <strong>{callWords(c)}</strong>
+              <span className="muted" style={{ fontSize: 12 }}>{when(c.at)}{c.seconds ? ` · ${callLength(c.seconds)}` : ""}</span>
+            </div>
+            {c.transcript && <div className="txt-call-words">&ldquo;{c.transcript}&rdquo;</div>}
+            {c.kind === "voicemail" && (audio?.id === c.id
+              ? <audio controls autoPlay src={audio.url} style={{ width: "100%", marginTop: 4 }}>Your browser can&apos;t play this recording.</audio>
+              : <button type="button" className="linkbtn" onClick={() => run(async () => setAudio({ id: c.id, url: (await api<{ url: string }>(`/texting/calls/${c.id}/audio`)).url }))}>Play the recording</button>)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /* ───────────── Text Messages: the list and the open conversation ───────────── */
 
-const FILTERS: [TextFilter, string][] = [["all", "All"], ["unread", "Unread"], ["open", "Open"], ["done", "Done"]];
+const FILTERS: [TextFilter, string][] = [["all", "All"], ["unread", "Unread"], ["mine", "Mine"], ["open", "Open"], ["done", "Done"]];
 
 export function TextMessagesTab() {
   const params = useSearchParams();
@@ -300,6 +478,7 @@ export function TextMessagesTab() {
   return (
     <>
       {settings.data && !settings.data.connected && <p className="notice" style={{ margin: 0 }}>Texting isn&apos;t connected yet, so nothing new comes in here. {can("owner", "customers") ? <Link href="/settings/integrations">Connect Talkroute</Link> : "The owner connects it under Settings → Integrations."}</p>}
+      {settings.data && <div className="txt-mine"><span className="muted">Text notifications on my phone:</span> <QuietHours value={settings.data.myQuiet} label="My quiet hours" onSave={(quiet) => void api("/texting/settings/quiet", { method: "PUT", body: { quiet } }).then(() => settings.reload())} /></div>}
       <div className="card txt-pane" data-lkeep="">
         <aside className={`txt-list${open ? " has-open" : ""}`} aria-label="Conversations">
           <div className="txt-seg" role="tablist" aria-label="Show">
@@ -322,13 +501,14 @@ export function TextMessagesTab() {
                   <span className="txt-row-main">
                     <span className="txt-row-top"><strong>{who(t)}</strong><span className="txt-row-when">{shortWhen(t.last.at)}</span></span>
                     <span className="txt-row-preview">{t.last.direction === "out" ? "You: " : ""}{t.last.body}</span>
+                    {t.assignedName && <span className="txt-row-owner">{t.assignedName}&apos;s</span>}
                   </span>
                   {t.unread > 0 && <span className="txt-dot" aria-label={`${t.unread} unread`}>{t.unread}</span>}
                 </button>
               </li>
             ))}
           </ul>
-          {d && !d.threads.length && <p className="muted txt-empty">{search ? "No conversations match." : filter === "unread" ? "Nothing unread." : filter === "done" ? "Nothing marked done." : "No texts yet."}</p>}
+          {d && !d.threads.length && <p className="muted txt-empty">{search ? "No conversations match." : filter === "unread" ? "Nothing unread." : filter === "mine" ? "No conversations are yours right now." : filter === "done" ? "Nothing marked done." : "No texts yet."}</p>}
           {d && d.total > 0 && (
             <div className="txt-pager">
               <div className="txt-pager-btns">
@@ -351,23 +531,87 @@ export function TextMessagesTab() {
   );
 }
 
+type QuickReply = { id: string; title: string; body: string };
+
+/** Short answers the office sends often, a click away; "Save this one" keeps what's in the box. */
+function QuickReplies({ current, onPick }: { current: string; onPick: (body: string) => void }) {
+  const list = useApi<{ rows: QuickReply[] }>("/texting/quick-replies");
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const { error, run } = useAction();
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", away);
+    return () => document.removeEventListener("mousedown", away);
+  }, [open]);
+  const rows = list.data?.rows ?? [];
+  return (
+    <div className="txt-quick" ref={wrap}>
+      <button type="button" className="btn sm" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>Quick replies ▾</button>
+      {open && (
+        <div className="txt-quick-menu" role="menu">
+          {rows.map((r) => (
+            <div key={r.id} className="txt-quick-row">
+              <button type="button" role="menuitem" title={r.body} onClick={() => { onPick(r.body); setOpen(false); }}><strong>{r.title}</strong><span>{r.body}</span></button>
+              <button type="button" className="hw-icon-btn danger" aria-label={`Delete ${r.title}`} title="Delete" onClick={() => confirm(`Delete the quick reply "${r.title}"?`) && run(async () => { await api(`/texting/quick-replies/${r.id}`, { method: "DELETE" }); await list.reload(); })}>×</button>
+            </div>
+          ))}
+          {list.data && !rows.length && <p className="muted" style={{ margin: "4px 8px" }}>None yet. Write an answer you send often, then save it here.</p>}
+          <button type="button" className="txt-quick-save" disabled={!current.trim()} onClick={() => { const title = prompt("A short name for this quick reply", current.trim().split(/\s+/).slice(0, 4).join(" "))?.trim(); if (title) run(async () => { await api("/texting/quick-replies", { body: { title, body: current.trim() } }); await list.reload(); }); }}>
+            <Icon name="plus" size={14} /> Save what&apos;s in the box as a quick reply
+          </button>
+          <ErrorBox error={error} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A local date and time box's value ("2026-11-27T08:00") for some minutes from now. */
+const localInput = (d: Date) => new Date(+d - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+
 function Conversation({ id, onBack, onChanged, onGone }: { id: string; onBack: () => void; onChanged: () => void; onGone: () => void }) {
   const { can } = useAuth();
+  const router = useRouter();
   const conv = useApi<ThreadFull>(`/texting/threads/${id}`);
+  const people = useApi<{ people: { id: string; name: string }[]; me: string }>("/texting/people");
   const templates = useTextTemplates();
   const [body, setBody] = useState("");
+  const [mode, setMode] = useState<"text" | "note">("text");
+  const [later, setLater] = useState<string | null>(null);
   const [filing, setFiling] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [made, setMade] = useState<{ id: string; title: string } | null>(null);
+  const file = useRef<HTMLInputElement>(null);
   const { busy, error, run } = useAction();
   const count = conv.data?.texts.length ?? 0;
   // Opening it marked its replies read; tell the list and the bubble.
   useEffect(() => { if (conv.data) onChanged(); }, [count]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const t = setInterval(() => void conv.reload(), 10_000); return () => clearInterval(t); }, [conv.reload]); // eslint-disable-line react-hooks/exhaustive-deps
   const d = conv.data;
-  const act = (path: string, payload?: unknown) => run(async () => { await api(`/texting/threads/${id}/${path}`, { method: "POST", body: payload ?? {} }); await conv.reload(); onChanged(); });
-  const send = () => run(async () => { await api(`/texting/threads/${id}`, { body: { body: body.trim() } }); setBody(""); await conv.reload(); onChanged(); });
+  const after = async () => { await conv.reload(); onChanged(); };
+  const act = (path: string, payload?: unknown) => run(async () => { await api(`/texting/threads/${id}/${path}`, { method: "POST", body: payload ?? {} }); await after(); });
+  const send = () => run(async () => {
+    if (mode === "note") await api(`/texting/threads/${id}/note`, { body: { body: body.trim() } });
+    else await api(`/texting/threads/${id}`, { body: { body: body.trim(), ...(later ? { sendAt: new Date(later).toISOString() } : {}) } });
+    setBody(""); setLater(null); await after();
+  });
+  const sendPicture = (picked: File | undefined) => { if (picked) run(async () => {
+    const f = await textPicture(picked);
+    const fd = new FormData();
+    fd.append("body", body.trim());
+    fd.append("file", f, f.name);
+    await api(`/texting/threads/${id}/picture`, { method: "POST", body: fd });
+    setBody(""); if (file.current) file.current.value = ""; await after();
+  }); };
   if (conv.error && !d) return <div className="txt-hello"><ErrorBox error={conv.error} /><button type="button" className="btn" onClick={onBack}>Back</button></div>;
   if (!d) return <div className="txt-hello"><span className="muted">Loading…</span></div>;
+  // What they last said, to start a work order or estimate with.
+  const lastIn = [...d.texts].reverse().find((t) => t.direction === "in" && t.body);
+  const notes = lastIn ? `From a text on ${when(lastIn.at)}: "${lastIn.body}"` : "";
+  const startUrl = (path: string) => `${path}?customerId=${d.customerId}${notes ? `&notes=${encodeURIComponent(notes.slice(0, 1500))}` : ""}`;
   return (
     <>
       <header className="txt-head">
@@ -378,30 +622,61 @@ function Conversation({ id, onBack, onChanged, onGone }: { id: string; onBack: (
           <span className="muted">{formatPhone(d.phone)}{d.kind === "employee" ? " · on your team" : d.kind === "unknown" ? " · not a customer yet" : ""}</span>
         </div>
         <div className="txt-head-tools">
+          <select className="txt-assign" aria-label="Whose conversation this is" title="Give this conversation to one person. Only they are told about its texts from then on." value={d.assignedId ?? ""} disabled={busy}
+            onChange={(e) => act("assign", { employeeId: e.target.value || null })}>
+            <option value="">Everyone&apos;s</option>
+            {(people.data?.people ?? []).map((p) => <option key={p.id} value={p.id}>{p.id === people.data?.me ? `Mine (${p.name})` : p.name}</option>)}
+          </select>
+          <div className="txt-quick">
+            <button type="button" className="btn sm" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>Create ▾</button>
+            {menu && (
+              <div className="txt-quick-menu right" role="menu" onMouseLeave={() => setMenu(false)}>
+                <button type="button" role="menuitem" className="txt-menu-item" onClick={() => { setMenu(false); run(async () => { setMade(await api<{ id: string; title: string }>(`/texting/threads/${id}/todo`, { method: "POST", body: {} })); await after(); }); }}>To-do from their last text</button>
+                {d.customerId && can("manager", "customers") && <button type="button" role="menuitem" className="txt-menu-item" onClick={() => router.push(startUrl("/visits/new"))}>Work order…</button>}
+                {d.customerId && can("manager", "customers") && <button type="button" role="menuitem" className="txt-menu-item" onClick={() => router.push(startUrl("/estimates/new"))}>Estimate…</button>}
+              </div>
+            )}
+          </div>
           <button type="button" className="btn sm" disabled={busy} onClick={() => run(async () => { await api(`/texting/threads/${id}/unread`, { method: "POST" }); onChanged(); onBack(); })}>Mark unread</button>
           <button type="button" className={`btn sm txt-state ${d.status}`} disabled={busy} aria-pressed={d.status === "done"} title={d.status === "done" ? "Marked done. Click to open it again." : "Open. Click when it's been dealt with."}
             onClick={() => act("status", { status: d.status === "done" ? "open" : "done" })}>{d.status === "done" ? "Done" : "Open"}</button>
           {can("admin", "customers") && <button type="button" className="btn sm" disabled={busy} onClick={() => setDeleting(true)}>Delete Messages</button>}
         </div>
       </header>
+      {made && <div className="txt-file" role="status">To-do made: <Link href={`/todos/${made.id}`}>{made.title}</Link> <button type="button" className="linkbtn" onClick={() => setMade(null)}>OK</button></div>}
       {d.kind === "unknown" && can("manager", "customers") && (
         <div className="txt-file">
-          {filing ? <CustomerPick onCancel={() => setFiling(false)} onPick={(customerId) => run(async () => { await api("/texting/assign", { body: { phone: d.phone, customerId } }); setFiling(false); await conv.reload(); onChanged(); })} />
+          {filing ? <CustomerPick onCancel={() => setFiling(false)} onPick={(customerId) => run(async () => { await api("/texting/assign", { body: { phone: d.phone, customerId } }); setFiling(false); await after(); })} />
             : <button type="button" className="linkbtn" onClick={() => setFiling(true)}>This number isn&apos;t on a customer yet. File the conversation under a customer…</button>}
         </div>
       )}
       <div className="txt-bubbles sms-thread" role="log" aria-label="Texts">
-        {d.texts.length ? <Bubbles texts={d.texts} /> : <p className="muted" style={{ margin: "auto" }}>No texts yet. Write the first one below.</p>}
+        {d.texts.length ? <Bubbles texts={d.texts} onTakeBack={(textId) => run(async () => { await api(`/texting/texts/${textId}`, { method: "DELETE" }); await after(); })} /> : <p className="muted" style={{ margin: "auto" }}>No texts yet. Write the first one below.</p>}
       </div>
       <footer className="txt-foot">
-        {!d.connected ? <p className="muted" style={{ margin: 0 }}>Texting isn&apos;t connected yet (Settings → Integrations).</p>
-          : d.optedOut ? <p className="bad-text" style={{ margin: 0 }}>They replied STOP on {new Date(d.optedOut).toLocaleDateString()}, so they can&apos;t be texted until they reply START.</p>
-          : (
-            <form onSubmit={(e) => { e.preventDefault(); if (body.trim()) send(); }}>
-              <MessageBox value={body} onChange={setBody} templates={templates} rows={3} />
-              <div className="txt-foot-send"><ErrorBox error={error} /><button className="btn hw-and" disabled={busy || !body.trim()}>{busy ? "Sending…" : "Send"}</button></div>
-            </form>
-          )}
+        {!d.connected && mode === "text" ? <p className="muted" style={{ margin: "0 0 8px" }}>Texting isn&apos;t connected yet (Settings → Integrations).</p>
+          : d.optedOut && mode === "text" ? <p className="bad-text" style={{ margin: "0 0 8px" }}>They replied STOP on {new Date(d.optedOut).toLocaleDateString()}, so they can&apos;t be texted until they reply START.</p> : null}
+        <form className={mode === "note" ? "txt-noting" : ""} onSubmit={(e) => { e.preventDefault(); if (body.trim()) send(); }}>
+          <MessageBox value={body} onChange={setBody} templates={mode === "text" ? templates : undefined} rows={3} placeholder={mode === "note" ? "Write a note for the office. It isn't sent to them." : undefined}
+            tools={mode === "text" ? (
+              <>
+                <QuickReplies current={body} onPick={(b) => setBody(b.slice(0, TEXT_MAX))} />
+                <button type="button" className="btn sm" disabled={busy || !d.connected || !!d.optedOut} title="Text a picture (JPG, PNG or GIF). What's typed in the box goes with it." onClick={() => file.current?.click()}><Icon name="upload" size={14} /> Picture</button>
+                <input ref={file} type="file" accept="image/jpeg,image/png,image/gif" hidden onChange={(e) => sendPicture(e.target.files?.[0])} />
+              </>
+            ) : undefined} />
+          <div className="txt-foot-send">
+            <div className="txt-seg small" role="tablist" aria-label="What to write">
+              <button type="button" role="tab" aria-selected={mode === "text"} className={mode === "text" ? "on" : ""} onClick={() => setMode("text")}>Text</button>
+              <button type="button" role="tab" aria-selected={mode === "note"} className={mode === "note" ? "on" : ""} onClick={() => { setMode("note"); setLater(null); }}>Note</button>
+            </div>
+            <ErrorBox error={error} />
+            {mode === "text" && (later === null
+              ? <button type="button" className="linkbtn" onClick={() => setLater(localInput(new Date(Date.now() + 3_600_000)))}>Send later…</button>
+              : <span className="txt-later"><input type="datetime-local" aria-label="When to send it" value={later} min={localInput(new Date(Date.now() + 120_000))} onChange={(e) => setLater(e.target.value)} /><button type="button" className="linkbtn" onClick={() => setLater(null)}>Send now instead</button></span>)}
+            <button className="btn hw-and" disabled={busy || !body.trim() || (mode === "text" && (!d.connected || !!d.optedOut))}>{busy ? "Working…" : mode === "note" ? "Add note" : later ? "Schedule" : "Send"}</button>
+          </div>
+        </form>
       </footer>
       {deleting && <ConfirmDialog title="Delete Messages" busy={busy} onNo={() => setDeleting(false)}
         message={<>Delete the whole conversation with <strong>{who(d)}</strong> from Crewdesk? Its texts are removed here (they stay in Talkroute).</>}
@@ -488,7 +763,7 @@ function NewConversation({ onClose, onOpen }: { onClose: () => void; onOpen: (id
 /* ───────────── Send Text Messages ───────────── */
 
 type Picked = { kind: Kind | "phones"; id: string; name: string };
-type Batch = { id: string; at: string; by: string | null; label: string; body: string; total: number; stopped: boolean; sent: number; failed: number; waiting: number; skipped: { name: string; reason: string }[] };
+type Batch = { id: string; at: string; by: string | null; label: string; body: string; total: number; stopped: boolean; sent: number; failed: number; waiting: number; scheduled: number; sendAt: string | null; skipped: { name: string; reason: string }[] };
 
 export function SendTextsTab() {
   const settings = useApi<Settings>("/texting/settings");
@@ -500,6 +775,7 @@ export function SendTextsTab() {
   const [body, setBody] = useState("");
   const [template, setTemplate] = useState("");
   const [done, setDone] = useState<{ text: string; skipped: { name: string; reason: string }[] } | null>(null);
+  const [later, setLater] = useState<string | null>(null);
   const [groupName, setGroupName] = useState("");
   const [groupsKey, setGroupsKey] = useState(0);
   const [editing, setEditing] = useState<Recipient | null>(null);
@@ -512,9 +788,9 @@ export function SendTextsTab() {
   const add = (k: Picked["kind"], r: { id: string; name: string }) => { setDone(null); setTo((cur) => (cur.some((x) => x.kind === k && x.id === r.id) ? cur : [...cur, { kind: k, id: r.id, name: r.name }])); };
   const ids = (k: Picked["kind"]) => to.filter((x) => x.kind === k).map((x) => x.id);
   const send = () => run(async () => {
-    const r = await api<{ sent: number; queued: number; skipped: { name: string; reason: string }[] }>("/texting/send", { body: { body: body.trim(), customerIds: ids("customers"), employeeIds: ids("employees"), groupIds: ids("groups"), crewIds: ids("crews"), phones: ids("phones") } });
-    setDone({ text: r.queued ? `${r.queued} texts are lined up and going out a few a minute. Watch them under Messages History.` : "Sent.", skipped: r.skipped });
-    setBody(""); setTemplate(""); setTo([]);
+    const r = await api<{ sent: number; queued: number; sendAt?: string | null; skipped: { name: string; reason: string }[] }>("/texting/send", { body: { body: body.trim(), customerIds: ids("customers"), employeeIds: ids("employees"), groupIds: ids("groups"), crewIds: ids("crews"), phones: ids("phones"), ...(later ? { sendAt: new Date(later).toISOString() } : {}) } });
+    setDone({ text: r.sendAt ? `${r.queued} ${r.queued === 1 ? "text is" : "texts are"} set to go ${when(r.sendAt)}. Take them back under Messages History.` : r.queued ? `${r.queued} texts are lined up and going out a few a minute. Watch them under Messages History.` : "Sent.", skipped: r.skipped });
+    setBody(""); setTemplate(""); setTo([]); setLater(null);
     await batches.reload();
   });
   const sendLabel = kind === "groups" ? "Send Messages To" : "Send Message To";
@@ -534,10 +810,11 @@ export function SendTextsTab() {
                 <div className="row" style={{ gap: 10, fontSize: 13, flexWrap: "wrap" }}>
                   <span>{b.sent} of {b.total} sent</span>
                   {b.waiting > 0 && !b.stopped && <span className="hwf-tag warn" style={{ marginLeft: 0 }}>{b.waiting} waiting</span>}
+                  {b.scheduled > 0 && !b.stopped && <span className="hwf-tag" style={{ marginLeft: 0 }}>{b.scheduled} set for {b.sendAt ? when(b.sendAt) : "later"}</span>}
                   {b.failed > 0 && <Link href="/texts?tab=errors" className="bad-text">{b.failed} didn&apos;t go</Link>}
                   {b.skipped.length > 0 && <span className="muted" title={b.skipped.slice(0, 30).map((s) => `${s.name}: ${s.reason}`).join("\n")}>{b.skipped.length} left out</span>}
                   {b.stopped && <span className="muted">Stopped</span>}
-                  {b.waiting > 0 && !b.stopped && <button type="button" className="linkbtn" onClick={() => confirm("Stop this send? Texts that haven't gone yet won't be sent.") && run(async () => { await api(`/texting/batches/${b.id}/stop`, { method: "POST" }); await batches.reload(); })}>Stop</button>}
+                  {(b.waiting > 0 || b.scheduled > 0) && !b.stopped && <button type="button" className="linkbtn" onClick={() => confirm("Stop this send? Texts that haven't gone yet won't be sent.") && run(async () => { await api(`/texting/batches/${b.id}/stop`, { method: "POST" }); await batches.reload(); })}>{b.scheduled > 0 ? "Take back" : "Stop"}</button>}
                 </div>
               </div>
             ))}
@@ -570,7 +847,12 @@ export function SendTextsTab() {
               <button type="button" aria-label="Close" onClick={() => setDone(null)}>×</button>
             </div>
           )}
-          <div className="txt-send-btn"><button type="button" className="btn hw-and" disabled={busy || !body.trim() || !to.length || !settings.data?.connected} onClick={send}>{busy ? "Sending…" : "Send"}</button></div>
+          <div className="txt-send-btn">
+            {later === null
+              ? <button type="button" className="linkbtn" onClick={() => setLater(localInput(new Date(Date.now() + 3_600_000)))}>Send later…</button>
+              : <span className="txt-later"><input type="datetime-local" aria-label="When to send it" value={later} min={localInput(new Date(Date.now() + 120_000))} onChange={(e) => setLater(e.target.value)} /><button type="button" className="linkbtn" onClick={() => setLater(null)}>Send now instead</button></span>}
+            <button type="button" className="btn hw-and" disabled={busy || !body.trim() || !to.length || !settings.data?.connected} onClick={send}>{busy ? "Sending…" : later ? "Schedule" : "Send"}</button>
+          </div>
         </div>
       </div>
       <div className="txt-send-side">

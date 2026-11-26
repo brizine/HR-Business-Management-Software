@@ -12,14 +12,14 @@ import { ErrorText, Row, Screen, Txt, useTheme } from "@/components/ui";
  * newest first. For Customers & billing managers and the people picked to answer texts.
  */
 
-type Thread = { id: string; phone: string; kind: "customer" | "employee" | "unknown"; name: string | null; status: "open" | "done"; unread: number; last: { body: string; direction: "in" | "out"; at: string } };
+type Thread = { id: string; phone: string; kind: "customer" | "employee" | "unknown"; name: string | null; status: "open" | "done"; unread: number; assignedName?: string | null; last: { body: string; direction: "in" | "out"; at: string } };
 type List = { total: number; unread: number; threads: Thread[] };
 
 const shortWhen = (iso: string) => { const d = new Date(iso); return d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : d.toLocaleDateString([], { month: "short", day: "numeric" }); };
 
 export default function Texts() {
   const t = useTheme();
-  const [filter, setFilter] = useState<"all" | "unread">("all");
+  const [filter, setFilter] = useState<"all" | "unread" | "mine">("all");
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
   const list = useApi<List>(`/texting/threads?filter=${filter}${search ? `&q=${encodeURIComponent(search)}` : ""}`);
@@ -33,10 +33,10 @@ export default function Texts() {
   return (
     <Screen refreshing={list.loading} onRefresh={list.reload}>
       <Row style={{ gap: 6, justifyContent: "flex-start" }}>
-        {(["all", "unread"] as const).map((k) => (
+        {(["all", "unread", "mine"] as const).map((k) => (
           <Pressable key={k} onPress={() => setFilter(k)} accessibilityRole="tab" accessibilityState={{ selected: filter === k }}
             style={{ paddingVertical: 8, paddingHorizontal: 16, borderRadius: 10, borderWidth: 1, borderColor: filter === k ? t.primary : t.border, backgroundColor: filter === k ? t.primary : t.surface }}>
-            <Txt style={{ color: filter === k ? "#fff" : t.text, fontWeight: "600" }}>{k === "all" ? "All" : `Unread${d?.unread ? ` (${d.unread})` : ""}`}</Txt>
+            <Txt style={{ color: filter === k ? "#fff" : t.text, fontWeight: "600" }}>{k === "all" ? "All" : k === "mine" ? "Mine" : `Unread${d?.unread ? ` (${d.unread})` : ""}`}</Txt>
           </Pressable>
         ))}
       </Row>
@@ -56,6 +56,7 @@ export default function Texts() {
               <Txt muted style={{ fontSize: 12 }}>{shortWhen(th.last.at)}</Txt>
             </Row>
             <Txt muted={!th.unread} style={{ fontSize: 14 }} numberOfLines={1}>{th.last.direction === "out" ? "You: " : ""}{th.last.body}</Txt>
+            {th.assignedName ? <Txt muted style={{ fontSize: 12 }}>{th.assignedName}&apos;s</Txt> : null}
           </View>
           {th.unread > 0 ? (
             <View style={{ minWidth: 22, height: 22, borderRadius: 11, backgroundColor: t.bad, alignItems: "center", justifyContent: "center", paddingHorizontal: 5 }}>
@@ -64,7 +65,7 @@ export default function Texts() {
           ) : th.status === "done" ? <Txt muted style={{ fontSize: 12 }}>Done</Txt> : null}
         </Pressable>
       ))}
-      {d && !d.threads.length ? <Txt muted>{search ? "No conversations match." : filter === "unread" ? "Nothing unread." : "No texts yet."}</Txt> : null}
+      {d && !d.threads.length ? <Txt muted>{search ? "No conversations match." : filter === "unread" ? "Nothing unread." : filter === "mine" ? "No conversations are yours right now." : "No texts yet."}</Txt> : null}
     </Screen>
   );
 }
