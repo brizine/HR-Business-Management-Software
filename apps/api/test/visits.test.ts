@@ -105,6 +105,19 @@ describe("work orders", () => {
     // Deleting the draft makes it ready to invoice again.
     await call("DELETE", `/invoices/${r.body.invoiceId}`, "office");
     expect((await call("GET", "/visits?invoiceable=true", "office")).body.items.map((v: any) => v.id)).toEqual([ID.wo]);
+    // The service's invoice description words the invoice line; the work order keeps the service's name.
+    const fert = { name: "Fertilizer & weed control", pricing: "flat", priceCents: 6500, incomeAccountCode: "4000" };
+    const worded = await call("PUT", `/service-types/${ID.fert}`, "owner", { ...fert, invoiceDescription: "Granular fertilizer with broadleaf weed control" });
+    expect(worded.body.invoiceDescription).toBe("Granular fertilizer with broadleaf weed control");
+    const again = await call("POST", `/visits/${ID.wo}/invoice`, "office");
+    const reworded = (await call("GET", `/invoices/${again.body.invoiceId}`, "office")).body;
+    // "Edge beds" was typed by hand (no service): it stays as typed.
+    expect(reworded.lines.map((l: any) => l.description)).toEqual(["Granular fertilizer with broadleaf weed control", "Edge beds"]);
+    expect((await call("GET", `/visits/${ID.wo}`, "office")).body.lines[0].description).toBe("Fertilizer & weed control");
+    await call("DELETE", `/invoices/${again.body.invoiceId}`, "office");
+    // A save that doesn't mention it leaves it alone; an emptied box clears it, and invoices use the name again.
+    expect((await call("PUT", `/service-types/${ID.fert}`, "owner", fert)).body.invoiceDescription).toBe("Granular fertilizer with broadleaf weed control");
+    expect((await call("PUT", `/service-types/${ID.fert}`, "owner", { ...fert, invoiceDescription: "" })).body.invoiceDescription).toBeNull();
     // Two finished work orders at the same property: one invoice, lines dated.
     await call("POST", `/visits/${ID.second}/complete`, "office", {});
     const many = await call("POST", "/visits/invoice", "office", { ids: [ID.wo, ID.second] });

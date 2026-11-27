@@ -2680,3 +2680,9 @@ button.hp-card:hover { border-color: var(--primary); }
 .wl-map .wl-sel-grab.ne, .wl-map .wl-sel-grab.sw { cursor: nesw-resize; }
 .wl-map .wl-sel-grab.n, .wl-map .wl-sel-grab.s { cursor: ns-resize; }
 .wl-map .wl-sel-grab.e, .wl-map .wl-sel-grab.w { cursor: ew-resize; }
+
+/* ───────────── Rate chart on the price list (folds away) ───────────── */
+.rate-chart { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; background: var(--surface); }
+.rate-chart > summary { cursor: pointer; font-size: 14px; padding: 2px 0; }
+.rate-chart[open] > summary { margin-bottom: 4px; }
+.rate-chart-table td, .rate-chart-table th { padding-top: 5px; padding-bottom: 5px; }

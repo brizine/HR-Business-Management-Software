@@ -50,7 +50,10 @@ export const BAND_PRICE_POINTS = [0, 0.5, 1] as const;
 
 export const serviceTypeSchema = z.object({
   name: z.string().trim().min(1, "Enter the service name").max(120),
-  description: z.string().trim().max(1000).optional().transform((v) => v || undefined),
+  /** Notes for the team; customers don't see them. Empty clears them. */
+  description: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), z.string().trim().max(1000).nullable()).optional(),
+  /** What customers read on the invoice or estimate line (the name when empty). */
+  invoiceDescription: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), z.string().trim().max(500).nullable()).optional(),
   pricing: z.enum(PRICING_KINDS).default("flat"),
   /** Flat: the price. Per 1,000 sq ft: the rate per 1,000. */
   priceCents: cents.default(0),
@@ -99,6 +102,15 @@ export const serviceTypeSchema = z.object({
   }
 });
 export type ServiceTypeInput = z.infer<typeof serviceTypeSchema>;
+
+/**
+ * The text a line starts with when a service is picked. Invoices and estimates are read by the
+ * customer, so they take the service's invoice description when it has one; work orders keep the
+ * short name the crew knows it by.
+ */
+export function lineTextFor(s: { name: string; invoiceDescription?: string | null }, doc: "invoice" | "estimate" | "workorder"): string {
+  return doc === "workorder" ? s.name : s.invoiceDescription?.trim() || s.name;
+}
 
 export interface PricedService {
   pricing: string; priceCents: number; minimumCents: number; brackets: Bracket[];

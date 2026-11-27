@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { INCOME_ACCOUNTS, PREPAYMENT_STATUS_LABELS, PREPAY_HOW, PREPAY_HOW_LABELS, formatMoney, prepayTotals, priceFor, type PrepayHow } from "@crewdesk/shared";
+import { INCOME_ACCOUNTS, PREPAYMENT_STATUS_LABELS, PREPAY_HOW, PREPAY_HOW_LABELS, formatMoney, lineTextFor, prepayTotals, priceFor, type PrepayHow } from "@crewdesk/shared";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -45,7 +45,7 @@ export function PrepaymentForm({ customerId, properties, onDone, onClose }: { cu
     const s = services.list.find((x) => x.id === id);
     if (!s) return;
     const price = priceFor(s as never, sqFt) ?? 0;
-    setLines([...lines, { serviceTypeId: s.id, description: s.name, quantity: 1, unitPriceCents: price }]);
+    setLines([...lines, { serviceTypeId: s.id, description: lineTextFor(s, "invoice"), quantity: 1, unitPriceCents: price }]);
     if (!description) setDescription(`${new Date().getFullYear() + (new Date().getMonth() >= 9 ? 1 : 0)} season`);
   };
   const valid = covers > 0 && description.trim() && t.amountCents > 0 && (how !== "check" || reference.trim());

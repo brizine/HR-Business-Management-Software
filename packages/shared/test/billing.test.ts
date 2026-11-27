@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type PricedService, describePricing, tieredBreakdown, formatMoney, invoiceSchema, invoiceTotals, isOverdue, priceFor, serviceTypeSchema, invoiceBalance, creditSchema, billingSettingsSchema, prepayTotals, prepaySplit, prepaymentSchema, splitIncome } from "../src/billing";
+import { type PricedService, describePricing, lineTextFor, tieredBreakdown, formatMoney, invoiceSchema, invoiceTotals, isOverdue, priceFor, serviceTypeSchema, invoiceBalance, creditSchema, billingSettingsSchema, prepayTotals, prepaySplit, prepaymentSchema, splitIncome } from "../src/billing";
 
 describe("price list", () => {
   it("prices flat, per 1,000 sq ft (with a minimum) and by lawn size", () => {
@@ -13,6 +13,22 @@ describe("price list", () => {
     expect(priceFor({ ...br, brackets: br.brackets.slice(0, 2) }, 25000)).toBeNull();
     expect(describePricing(per)).toBe("$4.25 per 1,000 sq ft (min $40.00)");
     expect(describePricing(br)).toBe("up to 5,000 sq ft $40.00 · up to 10,000 sq ft $55.00 · larger $70.00");
+  });
+
+  it("a service's invoice description words invoice and estimate lines; work orders keep the name", () => {
+    const fert = { name: "Round 2", invoiceDescription: "Granular fertilizer with broadleaf weed control" };
+    expect(lineTextFor(fert, "invoice")).toBe("Granular fertilizer with broadleaf weed control");
+    expect(lineTextFor(fert, "estimate")).toBe("Granular fertilizer with broadleaf weed control");
+    expect(lineTextFor(fert, "workorder")).toBe("Round 2");
+    // Nothing typed (or only spaces): the name.
+    expect(lineTextFor({ name: "Round 2" }, "invoice")).toBe("Round 2");
+    expect(lineTextFor({ name: "Round 2", invoiceDescription: "   " }, "estimate")).toBe("Round 2");
+    // An emptied box is saved as nothing, not as an empty line; a missing one leaves what's saved alone.
+    const base = { name: "Round 2", pricing: "flat", priceCents: 6500 };
+    expect(serviceTypeSchema.parse({ ...base, invoiceDescription: "  " }).invoiceDescription).toBeNull();
+    expect(serviceTypeSchema.parse({ ...base, invoiceDescription: " Fertilizer " }).invoiceDescription).toBe("Fertilizer");
+    expect("invoiceDescription" in serviceTypeSchema.parse(base)).toBe(false);
+    expect(serviceTypeSchema.safeParse({ ...base, invoiceDescription: "x".repeat(501) }).success).toBe(false);
   });
 
   it("checks brackets go up, with only the last open-ended", () => {

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
-  ESTIMATE_STATUS_LABELS, INCOME_ACCOUNTS, depositCents, describeDepositRule, describePricing, estimateLineAmount, estimateTotals, formatMoney, lineMaterialCents, lineTaxRate, priceFor, taxRateFor, type EstimateStatus as Status,
+  ESTIMATE_STATUS_LABELS, INCOME_ACCOUNTS, depositCents, describeDepositRule, describePricing, estimateLineAmount, estimateTotals, formatMoney, lineMaterialCents, lineTaxRate, priceFor, taxRateFor, type EstimateStatus as Status, lineTextFor,
 } from "@crewdesk/shared";
 import { api, fmtDate, today } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
@@ -91,7 +91,7 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
     // Our cost (each): the service's products for this lawn, at today's prices.
     const material = lineMaterialCents(s, lawnFor(lines[i]));
     setLine(i, {
-      serviceTypeId: s.id, description: lines[i].description || s.name, price: price != null ? dollars(price) : lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)),
+      serviceTypeId: s.id, description: lines[i].description || lineTextFor(s, "estimate"), price: price != null ? dollars(price) : lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)),
       cost: material != null ? dollars(material) : lines[i].cost, costAuto: material != null || (lines[i].costAuto && !lines[i].cost.trim()),
     });
   };

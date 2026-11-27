@@ -173,7 +173,7 @@ export async function invoiceVisitsFor(companyId: string, sub: string | null, id
     if (v.billing !== "invoice") throw new HttpError(400, `${visitNumber(v.number)} is set to "Don't invoice"`);
     if (v.invoiceId && live.some((x) => x.id === v.invoiceId)) throw new HttpError(400, `${visitNumber(v.number)} is already on an invoice`);
   }
-  const lines = await db.select({ l: visitLines, account: serviceTypes.incomeAccountCode }).from(visitLines).leftJoin(serviceTypes, eq(serviceTypes.id, visitLines.serviceTypeId))
+  const lines = await db.select({ l: visitLines, account: serviceTypes.incomeAccountCode, name: serviceTypes.name, invoiceText: serviceTypes.invoiceDescription }).from(visitLines).leftJoin(serviceTypes, eq(serviceTypes.id, visitLines.serviceTypeId))
     .where(inArray(visitLines.visitId, ids)).orderBy(asc(visitLines.sortOrder));
   for (const v of rows) if (!lines.some((x) => x.l.visitId === v.id)) throw new HttpError(400, `${visitNumber(v.number)} has no line items to invoice`);
   const today = await companyToday(companyId);
@@ -187,8 +187,10 @@ export async function invoiceVisitsFor(companyId: string, sub: string | null, id
     const made: { id: string; visits: number; totalCents: number }[] = [];
     for (const group of groups.values()) {
       const several = group.length > 1;
-      const items = group.flatMap((v) => lines.filter((x) => x.l.visitId === v.id).map(({ l, account }) => ({
-        serviceTypeId: l.serviceTypeId, description: several && v.date ? `${fmtDay(v.date)}: ${l.description}` : l.description,
+      // A line still carrying the service's plain name gets the service's invoice description; one that was reworded keeps its words.
+      const worded = (l: typeof visitLines.$inferSelect, name: string | null, invoiceText: string | null) => (invoiceText?.trim() && name && l.description.trim() === name.trim() ? invoiceText.trim() : l.description);
+      const items = group.flatMap((v) => lines.filter((x) => x.l.visitId === v.id).map(({ l, account, name, invoiceText }) => ({
+        serviceTypeId: l.serviceTypeId, description: several && v.date ? `${fmtDay(v.date)}: ${worded(l, name, invoiceText)}` : worded(l, name, invoiceText),
         quantity: l.quantity, unitPriceCents: l.unitPriceCents, incomeAccountCode: account ?? "4000", taxRate: l.taxRate,
       })));
       const [payer] = await tx.select({ custom: customers.custom, discountPercent: customers.discountPercent, invoiceNotes: customers.invoiceNotes, termsDays: customers.termsDays })

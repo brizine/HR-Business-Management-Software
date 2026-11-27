@@ -407,6 +407,36 @@ billing; admins change prices).
   with volume discount** (see below). Each service posts to
   an income account (4000 Lawn Treatment Programs, 4100 Pest Control, 4200 One-Time Lawn Services, 4950 Other
   Income). Drag a service by its handle (the six dots at the left) to set the order; **Retired** services stay on past invoices but aren't offered for new ones.
+  The list's **Priced** column says which of the four ways a service uses; hover over it for the prices themselves.
+- **Which way to price:** under the **Priced** box the form says in a sentence what the chosen way does.
+  - **Flat price:** one price for every lawn, whatever its size.
+  - **Per 1,000 sq ft:** the lawn's size times one rate, never less than the minimum. The price rises with every
+    square foot: at $6 per 1,000, an 8,000 sq ft lawn is $48 and an 8,500 sq ft lawn is $51.
+  - **By lawn size:** you type a fixed price for each size range (up to 5,000 sq ft $60, up to 8,000 sq ft $75,
+    anything bigger $95). A lawn pays the price of the first range it fits in. Nothing is multiplied: every lawn in
+    a range pays the same, and the price jumps from one range to the next. Use it when you think in a short list
+    of prices; use per 1,000 when the price should follow the size.
+  - **Per 1,000 sq ft with volume discount:** a minimum, then rates that change at the sizes you set (below).
+- **Invoice description:** what customers read on the invoice or estimate line for the service, such as
+  "Granular fertilizer with pre-emergent and broadleaf weed control" for a service you call "Round 1". When it is
+  empty the service's name is used. Work orders always show the name, since that is what your crew knows it by;
+  when a work order is invoiced, a line still carrying the service's name is given the invoice description, and a
+  line somebody reworded by hand keeps its words. **Notes for your team** show under the name on the price list
+  and never reach customers.
+- **Chemical application and its products:** tick **Chemical application** on a service that puts product down;
+  it then keeps chemical application records (see Chemical Tracking). People who can open Chemical Tracking get a
+  **Products applied** box right there: where it's applied (Turf to start), the products with the rate each goes
+  down at, and any mixes, each with optional from/until dates. It is the same list as Chemical Tracking →
+  Services, so change it in either place. Those products set the service's material cost and what the tech sees
+  filled in when completing the work order.
+- **Copy:** each service has a **Copy** button. It opens a new service with everything the other one has
+  (pricing, tiers, time estimate, invoice description, taxable and chemical ticks, products and mixes) under the
+  name "… (copy)". Change what differs, rename it and save; the original is not touched.
+- **Rate chart:** for per 1,000 and volume discount pricing the form shows a **Rate chart** with every size the
+  service prices (every 1,000 sq ft for a single rate; every 500 sq ft, or every step, for volume discount), up to
+  the **Price by hand above** size or about an acre. Click its heading to fold it away or bring it back; the
+  heading still shows how many sizes it covers and the lowest and highest price, and Crewdesk remembers which way
+  you left it.
 - **Per 1,000 sq ft with volume discount:** a minimum charge for small lawns, then a rate per 1,000 sq ft that
   steps down as lawns get bigger. It works like tax brackets: **each rate is charged only on the square feet inside
   its own tier**, never on the whole lawn. That is why a bigger lawn can never cost less than a smaller one.
@@ -428,9 +458,9 @@ billing; admins change prices).
     match the hand sum again.
   - **Round prices to** rounds the result (to $0.50 on a new service). **Price by hand above** stops Crewdesk
     pricing very large lawns on its own: above that size the price has to be typed in.
-  - **The table under the form** shows the price at a range of lawn sizes as you type, with one lawn worked
-    through step by step above it. **Priced as** is the size each price was worked out at (it differs from the
-    lawn's size only when steps are on). **Average per 1,000** is the price divided by the lawn's size; it is
+  - **The rate chart under the form** shows the price at every size as you type, with one lawn worked
+    through step by step above it. **Priced as** (shown when steps are on) is the size each price was worked out
+    at. **Average per 1,000** is the price divided by the lawn's size; it is
     higher than the tier's own rate because the minimum is spread across the lawn.
 - **Packages** (under the price list): saved bundles of line items, like Homeworks' packages: "Spring round" =
   fertilizer + edging + blow-off. Admins add them with **Add package**: pick services from the price list or type

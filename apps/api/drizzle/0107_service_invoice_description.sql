@@ -1,0 +1,1 @@
+ALTER TABLE "service_types" ADD COLUMN "invoice_description" text;

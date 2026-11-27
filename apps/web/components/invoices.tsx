@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  INCOME_ACCOUNTS, INVOICE_STATUS_LABELS, describePricing, formatMoney, invoiceTotals, lineAmount, lineTaxRate, priceFor, taxRateFor, type EstimateDepositSettings, type InvoiceStatus,
+  INCOME_ACCOUNTS, INVOICE_STATUS_LABELS, describePricing, formatMoney, invoiceTotals, lineAmount, lineTaxRate, priceFor, taxRateFor, type EstimateDepositSettings, type InvoiceStatus, lineTextFor,
 } from "@crewdesk/shared";
 import Link from "next/link";
 import { api, fmtDate, today } from "@/lib/api";
@@ -9,7 +9,7 @@ import { useApi } from "@/lib/hooks";
 import { ErrorBox } from "@/components/ui";
 import { CustomerPicker } from "@/components/customers";
 
-export interface ServiceType { id: string; name: string; description: string | null; pricing: string; priceCents: number; minimumCents: number; brackets: { upToSqFt: number | null; priceCents: number }[]; incomeAccountCode: string; active: boolean; taxable?: boolean; setupMinutes?: number | null; minutesPer1000?: number | null; tiers?: { fromSqFt: number; ratePer1000Cents: number }[]; bandSizeSqFt?: number | null; bandPricePoint?: number; roundToCents?: number; maxAutoSqFt?: number | null; targetCentsPerHour?: number | null; chemical?: boolean; applicationSite?: string | null;
+export interface ServiceType { id: string; name: string; description: string | null; invoiceDescription?: string | null; pricing: string; priceCents: number; minimumCents: number; brackets: { upToSqFt: number | null; priceCents: number }[]; incomeAccountCode: string; active: boolean; taxable?: boolean; setupMinutes?: number | null; minutesPer1000?: number | null; tiers?: { fromSqFt: number; ratePer1000Cents: number }[]; bandSizeSqFt?: number | null; bandPricePoint?: number; roundToCents?: number; maxAutoSqFt?: number | null; targetCentsPerHour?: number | null; chemical?: boolean; applicationSite?: string | null;
   /** Products it applies, and their cost per 1,000 sq ft today (null: no products). */
   products?: ServiceProductLink[]; materialPer1000Cents?: number | null; materialMissingCost?: number }
 export interface ServiceProductLink { id: string; productId: string; productRateId: string; startDate: string | null; endDate: string | null; productName: string; rateName: string; amountPer1000: number; unit: string; costPer1000Cents: number | null; applies: boolean }
@@ -119,7 +119,7 @@ export function InvoiceFields({ value, onChange, lockCustomer, fresh }: { value:
     const s = services.data?.find((x) => x.id === id);
     if (!s) return;
     const price = priceFor(s, property?.lawnSqFt ?? null);
-    setLine(i, { serviceTypeId: s.id, description: value.lines[i].description || s.name, price: price != null ? dollars(price) : value.lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)) });
+    setLine(i, { serviceTypeId: s.id, description: value.lines[i].description || lineTextFor(s, "invoice"), price: price != null ? dollars(price) : value.lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)) });
   };
   const parsed = value.lines.map((l) => ({ quantity: Number(l.quantity) || 0, unitPriceCents: toCents(l.price) || 0, taxRate: Number(l.tax) || 0 }));
   const lateFees = value.lateFees ?? [];

@@ -1777,6 +1777,8 @@ export const serviceTypes = pgTable(
     companyId: companyId(),
     name: text("name").notNull(),
     description: text("description"),
+    /** What customers read on the invoice or estimate line for this service (the name when empty). */
+    invoiceDescription: text("invoice_description"),
     /** "flat", "per_thousand" or "bracket". */
     pricing: text("pricing").notNull().default("flat"),
     priceCents: integer("price_cents").notNull().default(0),
