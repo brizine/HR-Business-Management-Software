@@ -10,7 +10,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { VisitFormsPicker, type WorkOrderForm } from "./visit-forms";
-import { LineAreaPicker, areaDraft, areaValue, draftSqFt, serviceArea, usesLawnArea, type AreaDraft } from "./line-area";
+import { LineAreaPicker, areaDraft, areaValue, draftSqFt, serviceArea, useSizes, usesLawnArea, type AreaDraft } from "./line-area";
 import { CustomerPicker, TagChip, TagPicker, useTags } from "./customers";
 import { Icon } from "./icons";
 import { useBillingSettings } from "./invoices";
@@ -28,7 +28,7 @@ export interface Visit {
   crewId: string | null; crew: { id: string; name: string; color: string } | null;
   tagIds: string[]; tags: { id: string; name: string; color: string }[]; fileCount: number; custom: CustomValues;
   customer: { id: string; name: string; phone: string | null };
-  property: { id: string; name: string | null; address: string; gateCode: string | null; pets: string | null; accessNotes: string | null; lawnSqFt: number | null; frontSqFt?: number | null; backSqFt?: number | null; lat: number | null; lng: number | null; custom?: CustomValues } | null;
+  property: { id: string; name: string | null; address: string; gateCode: string | null; pets: string | null; accessNotes: string | null; lawnSqFt: number | null; frontSqFt?: number | null; backSqFt?: number | null; otherSqFt?: number | null; lat: number | null; lng: number | null; custom?: CustomValues } | null;
   invoice: { id: string; number: number | null; status: string } | null;
   lines: VisitLine[]; assignees: { id: string; firstName: string; lastName: string }[];
   finishedBy: string | null; createdBy: string | null;
@@ -165,6 +165,8 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
   useEffect(() => { if (detail.data && !propertyId && properties.length === 1) setPropertyId(properties[0].id); }, [detail.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setLine = (i: number, patch: Partial<LineDraft>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  // The property sizes a line can be priced from (the company's number fields on properties).
+  const sizes = useSizes();
   // Sales tax: the rate for this customer and property; taxable items get it.
   const billingSet = useBillingSettings();
   const taxSettings = billingSet.data ?? { taxEnabled: false, taxName: "Sales tax", defaultTaxRate: 0 };
@@ -178,14 +180,14 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
     // The service's own part of the lawn (whole, front or back) to start with.
     const area = serviceArea(s);
     const price = priceFor(s, draftSqFt(area, property));
-    setLine(i, { serviceTypeId: s.id, area, description: lines[i].description && lines[i].serviceTypeId === null ? lines[i].description : withAreaNote(s.name, areaValue(area)), price: price != null ? dollars(price) : lines[i].price, tax: taxFor(s.id) });
+    setLine(i, { serviceTypeId: s.id, area, description: lines[i].description && lines[i].serviceTypeId === null ? lines[i].description : withAreaNote(s.name, areaValue(area), sizes.names), price: price != null ? dollars(price) : lines[i].price, tax: taxFor(s.id) });
   };
   /** A line for another part of the lawn: priced from that size, and its wording says so (unless somebody reworded it). */
   const setArea = (i: number, area: AreaDraft) => {
     const l = lines[i];
     const s = services.data?.find((x) => x.id === l.serviceTypeId);
     const price = s ? priceFor(s, draftSqFt(area, property)) : null;
-    setLine(i, { area, description: s ? rewordForArea(l.description, [s.name, s.invoiceDescription], areaValue(l.area), areaValue(area)) : l.description, ...(s && s.pricing !== "flat" && price != null ? { price: dollars(price) } : {}) });
+    setLine(i, { area, description: s ? rewordForArea(l.description, [s.name, s.invoiceDescription], areaValue(l.area), areaValue(area), sizes.names) : l.description, ...(s && s.pricing !== "flat" && price != null ? { price: dollars(price) } : {}) });
   };
   // A different customer or property: taxable lines take its rate.
   const lastRate = useRef<number | null>(null);
@@ -281,7 +283,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
                     {(services.data ?? []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                   </select>
                   <input aria-label={`Line ${i + 1} description`} value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} placeholder="Description" style={{ marginTop: 4 }} />
-                  {usesLawnArea(s) && <LineAreaPicker label={`Line ${i + 1} lawn area`} value={l.area} onChange={(a) => setArea(i, a)} property={property} />}
+                  {usesLawnArea(s) && <LineAreaPicker label={`Line ${i + 1} lawn area`} value={l.area} onChange={(a) => setArea(i, a)} property={property} sizes={sizes} />}
                   {s && <div className="muted" style={{ fontSize: 12 }}>{describePricing(s)}{unpriced ? " · add the lawn size to price it" : ""}</div>}
                 </td>
                 <td><input aria-label={`Line ${i + 1} quantity`} inputMode="decimal" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></td>
@@ -302,7 +304,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
                   if (!pkg) return;
                   // Each line is priced from the part of the lawn its service covers, and says so.
                   const added = packageToLines(pkg.lines, services.data ?? [], property ?? null).map((l) => ({
-                    serviceTypeId: l.serviceTypeId, description: withAreaNote(l.description, l), quantity: String(l.quantity), hours: l.budgetedHours != null ? String(l.budgetedHours) : "", price: dollars(l.unitPriceCents), tax: taxFor(l.serviceTypeId), area: areaDraft(l),
+                    serviceTypeId: l.serviceTypeId, description: withAreaNote(l.description, l, sizes.names), quantity: String(l.quantity), hours: l.budgetedHours != null ? String(l.budgetedHours) : "", price: dollars(l.unitPriceCents), tax: taxFor(l.serviceTypeId), area: areaDraft(l),
                   }));
                   // An untouched empty first line is replaced.
                   setLines((ls) => [...ls.filter((l) => l.description.trim() || l.price.trim()), ...added]);

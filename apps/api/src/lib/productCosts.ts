@@ -96,7 +96,7 @@ export async function snapshotVisitProducts(tx: Tx, visitId: string, companyId: 
   await tx.delete(visitProducts).where(eq(visitProducts.visitId, visitId));
   if (!v) return 0;
   const day = v.date ?? (await companyToday(companyId));
-  const [prop] = v.propertyId ? await tx.select({ lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt }).from(properties).where(eq(properties.id, v.propertyId)) : [];
+  const [prop] = v.propertyId ? await tx.select({ lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt, otherSqFt: properties.otherSqFt, custom: properties.custom }).from(properties).where(eq(properties.id, v.propertyId)) : [];
   const lines = (await tx.select({ serviceTypeId: visitLines.serviceTypeId, quantity: visitLines.quantity, lawnArea: visitLines.lawnArea, lawnAreaSqFt: visitLines.lawnAreaSqFt }).from(visitLines).where(eq(visitLines.visitId, visitId)).orderBy(asc(visitLines.sortOrder)))
     .map((l) => ({ ...l, area: lineSqFt(l, prop) })).filter((l): l is typeof l & { area: number } => l.area != null && l.area > 0);
   if (!lines.length) return 0;

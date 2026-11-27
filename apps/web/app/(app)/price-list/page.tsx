@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { INCOME_ACCOUNTS, LAWN_AREA_LABELS, PRICING_KINDS, PRICING_LABELS, SERVICE_LAWN_AREAS, describePricing, formatMoney, formatRateAmount, priceFor, sizeMinutes, tieredBreakdown, type PricedService, type PricingKind } from "@crewdesk/shared";
+import { INCOME_ACCOUNTS, PRICING_KINDS, PRICING_LABELS, describePricing, formatMoney, formatRateAmount, priceFor, sizeMinutes, tieredBreakdown, type PricedService, type PricingKind } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi, useNewForm } from "@/lib/hooks";
@@ -10,6 +10,7 @@ import { Grip, useDragOrder } from "@/components/drag-order";
 import { readLocal, writeLocal } from "@/components/customer-list";
 import { ServiceChemicalsEditor, chemicalsOf, emptyChemicals, saveServiceChemicals, useChemicalCatalog, type ChemicalService, type ServiceChemicals } from "@/components/service-products";
 import { dollars, toCents, useServices, type ServiceType } from "@/components/invoices";
+import { useSizes } from "@/components/line-area";
 import { PackagesCard } from "@/components/packages";
 
 /** The services price list. Everyone in Customers & billing sees it; admins change it. */
@@ -88,6 +89,8 @@ function ServiceForm({ service, copyFrom, onDone }: { service: ServiceType | nul
   const [taxable, setTaxable] = useState(from?.taxable ?? false);
   const [chemical, setChemical] = useState(from?.chemical ?? false);
   const [lawnArea, setLawnArea] = useState(from?.defaultLawnArea ?? "whole");
+  // The property sizes a service can be priced from (the company's number fields on properties).
+  const sizes = useSizes();
   const [tiers, setTiers] = useState<{ from: string; rate: string }[]>(
     from?.tiers?.length ? from.tiers.map((t) => ({ from: String(t.fromSqFt), rate: dollars(t.ratePer1000Cents) })) : [{ from: "3000", rate: "" }, { from: "6000", rate: "" }, { from: "10000", rate: "" }],
   );
@@ -241,8 +244,11 @@ function ServiceForm({ service, copyFrom, onDone }: { service: ServiceType | nul
           </fieldset>
         );
       })()}
-      <label style={{ maxWidth: 520 }}>Lawn area it covers <span className="muted">(where its square feet come from for the price, the time and the product amounts; any line can be switched to another part, or to a typed size, for one customer)</span>
-        <select value={lawnArea} onChange={(e) => setLawnArea(e.target.value)}>{SERVICE_LAWN_AREAS.map((k) => <option key={k} value={k}>{LAWN_AREA_LABELS[k]}</option>)}</select>
+      <label style={{ maxWidth: 560 }}>Priced from <span className="muted">(the property field its size comes from, for the price, the time and the product amounts. Any number field on properties can be used; add more in Resources → Custom fields. A line can still be switched to another field, or to a typed size, for one customer.)</span>
+        <select value={lawnArea} onChange={(e) => setLawnArea(e.target.value)}>
+          {sizes.choices.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
+          {!sizes.choices.some((c) => c.key === lawnArea) && <option value={lawnArea}>A field that&apos;s been deleted</option>}
+        </select>
       </label>
       <label className="check"><input type="checkbox" checked={chemical} onChange={(e) => tickChemical(e.target.checked)} /> Chemical application <span className="muted">(this service keeps chemical application records; see {chemAccess ? <Link href="/chemical-tracking">Chemical Tracking</Link> : "Chemical Tracking"})</span></label>
       {chemical && chemAccess ? (

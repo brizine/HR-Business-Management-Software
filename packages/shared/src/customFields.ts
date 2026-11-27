@@ -33,6 +33,67 @@ export type CustomValues = Record<string, CustomValue>;
 export interface CustomFieldDef {
   id: string; appliesTo: CustomFieldTarget; name: string; type: CustomFieldType; options: string[];
   defaultValue: string | null; transferable: boolean;
+  /** One of Crewdesk's own property fields (see PROPERTY_BUILTIN_FIELDS); null for a field the company added. */
+  builtin?: PropertyBuiltin | null;
+}
+
+/**
+ * The property details Crewdesk itself uses, kept as custom fields so a company can rename them,
+ * put them in any order and add its own beside them. Crewdesk still knows which is which by `key`:
+ * the gate code and pets reach the crew's phone, the Map Code groups routes, and the sizes price
+ * services. Each one's value is stored in the property's own column of the same name.
+ */
+export const PROPERTY_BUILTIN_FIELDS = [
+  { key: "mapCode", name: "Map Code", type: "text" },
+  { key: "frontSqFt", name: "Front Lawn ft", type: "decimal" },
+  { key: "backSqFt", name: "Back Lawn ft", type: "decimal" },
+  { key: "otherSqFt", name: "Other ft", type: "decimal" },
+  { key: "lawnSqFt", name: "Total ft", type: "decimal" },
+  { key: "gateCode", name: "Gate Code", type: "text" },
+  { key: "pets", name: "Pets", type: "text" },
+  { key: "accessNotes", name: "Access Notes", type: "text" },
+  { key: "notes", name: "Notes", type: "text" },
+] as const satisfies readonly { key: string; name: string; type: CustomFieldType }[];
+export type PropertyBuiltin = (typeof PROPERTY_BUILTIN_FIELDS)[number]["key"];
+export const PROPERTY_BUILTIN_KEYS = PROPERTY_BUILTIN_FIELDS.map((f) => f.key) as PropertyBuiltin[];
+/** The four sizes, in the order they add up: front + back + other = total. */
+export const PROPERTY_SIZE_KEYS = ["frontSqFt", "backSqFt", "otherSqFt", "lawnSqFt"] as const satisfies readonly PropertyBuiltin[];
+/** A property's own columns that built-in fields read and write. */
+export type PropertyBuiltinValues = { [K in PropertyBuiltin]?: (K extends (typeof PROPERTY_SIZE_KEYS)[number] ? number : string) | null };
+
+/** A field that holds a number (a service can be priced from one). */
+export const isNumberField = (f: Pick<CustomFieldDef, "type">) => f.type === "decimal" || f.type === "integer";
+
+/**
+ * A property's values for every field, built-in ones included: the built-in fields read the
+ * property's own columns, the company's fields its saved custom values.
+ */
+export function propertyFieldValues(fields: Pick<CustomFieldDef, "id" | "builtin">[], p: (PropertyBuiltinValues & { custom?: CustomValues | null }) | null | undefined): CustomValues {
+  const out: CustomValues = { ...(p?.custom ?? {}) };
+  for (const f of fields) {
+    if (!f.builtin) continue;
+    const v = p?.[f.builtin];
+    if (v === null || v === undefined || v === "") delete out[f.id];
+    else out[f.id] = typeof v === "number" ? Math.round(v * 100) / 100 : v;
+  }
+  return out;
+}
+
+/**
+ * The other way: values keyed by field id, split into the property's own columns (only the built-in
+ * fields that were sent; blank clears one) and the custom values to save for the company's fields.
+ */
+export function splitPropertyValues(fields: Pick<CustomFieldDef, "id" | "builtin">[], sent: Record<string, unknown> | null | undefined, cleaned: CustomValues): { columns: PropertyBuiltinValues; custom: CustomValues } {
+  const columns: Record<string, string | number | null> = {};
+  const custom: CustomValues = { ...cleaned };
+  for (const f of fields) {
+    if (!f.builtin) continue;
+    delete custom[f.id];
+    if (!sent || !(f.id in sent)) continue;
+    const v = cleaned[f.id];
+    columns[f.builtin] = v === undefined || typeof v === "boolean" ? null : v;
+  }
+  return { columns: columns as PropertyBuiltinValues, custom };
 }
 
 const blankToNull = (v: unknown) => (typeof v === "string" && v.trim() === "" ? null : v);
@@ -173,4 +234,26 @@ export function formatCustomValue(f: Pick<CustomFieldDef, "type">, v: CustomValu
     case "decimal": return typeof v === "number" ? v.toLocaleString("en-US", { maximumFractionDigits: 4 }) : String(v);
     default: return String(v);
   }
+}
+
+/**
+ * Keeps a property's Total ft in step while its parts are typed: when the total is blank, or still
+ * the sum of front + back + other as they were, it follows the new sum. A total typed to something
+ * else is left alone (that's how it's overridden by hand). `before` and `after` are a form's values
+ * by field id.
+ */
+export function followPropertyTotal(fields: Pick<CustomFieldDef, "id" | "builtin">[], before: CustomValues, after: CustomValues): CustomValues {
+  const id = (key: PropertyBuiltin) => fields.find((f) => f.builtin === key)?.id;
+  const total = id("lawnSqFt");
+  if (!total) return after;
+  const parts = (["frontSqFt", "backSqFt", "otherSqFt"] as const).map(id).filter((x): x is string => !!x);
+  if (!parts.some((p) => after[p] !== before[p])) return after;
+  const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(String(v).replace(/,/g, "")));
+  const sum = (v: CustomValues) => {
+    const ns = parts.map((p) => num(v[p]));
+    return ns.every((n) => n == null) ? null : ns.reduce<number>((s, n) => s + (n != null && Number.isFinite(n) ? n : 0), 0);
+  };
+  const was = sum(before), now = sum(after), typed = num(before[total]);
+  if (typed != null && (was == null || Math.round(typed) !== Math.round(was))) return after;
+  return { ...after, [total]: now == null ? "" : Math.round(now) };
 }

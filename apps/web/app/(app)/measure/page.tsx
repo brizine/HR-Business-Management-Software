@@ -441,6 +441,17 @@ export default function MeasurePage() {
     });
   };
 
+  // A link from a property's image (/measure?open=<id>) opens that saved drawing.
+  const openedFromLink = useRef(false);
+  useEffect(() => {
+    if (openedFromLink.current) return;
+    const id = new URLSearchParams(window.location.search).get("open");
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return;
+    openedFromLink.current = true;
+    open(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const save = (asNew: boolean) => action.run(async () => {
     if (!name.trim()) throw new Error("Give the measurement a name (customer or property) before saving.");
     // Only an outline still being traced (or a reopened one) gets in the way; a selected drawing button doesn't.

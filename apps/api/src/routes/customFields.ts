@@ -1,14 +1,14 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
-import { and, eq, inArray, max, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, max, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
-  CUSTOM_FIELDS_MAX, CUSTOM_FIELD_TARGETS, CUSTOM_FIELD_TARGET_LABELS, customFieldSchema, customFieldUpdateSchema,
+  CUSTOM_FIELDS_MAX, CUSTOM_FIELD_TARGETS, CUSTOM_FIELD_TARGET_LABELS, customFieldSchema, customFieldUpdateSchema, propertyFieldValues, splitPropertyValues,
   type CustomFieldTarget, type CustomValues,
 } from "@crewdesk/shared";
 import { db } from "../db";
 import { assets, customFields, customers, invoices, properties, todoAssignees, todos, visitAssignees, visits } from "../db/schema";
 import { authenticate, isManager, requireRole } from "../lib/auth";
-import { asDef, enteredCustom } from "../lib/customFields";
+import { asDef, enteredCustom, ensurePropertyFields, fieldsFor, propertyColumnChanges } from "../lib/customFields";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { todoVisibility } from "./todos";
 import { canManageVisits, visitVisibility } from "./visits";
@@ -22,18 +22,32 @@ const asText = (v: unknown) => (v === null || v === undefined || v === "" ? null
  * crew on it; to-dos: managers, whoever made it or the people it's for; equipment: everyone sees,
  * Fleet managers change.
  */
-async function recordValues(req: FastifyRequest, target: CustomFieldTarget, id: string, edit: boolean): Promise<{ values: CustomValues; save: (v: CustomValues) => Promise<void> }> {
+async function recordValues(req: FastifyRequest, target: CustomFieldTarget, id: string, edit: boolean): Promise<{ values: CustomValues; save: (v: CustomValues, sent?: Record<string, unknown> | null) => Promise<CustomValues | void> }> {
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound("Record");
   const { companyId, sub: me } = req.user;
   const deny = () => { throw new HttpError(403, "You don't have access to change these"); };
   switch (target) {
+    case "property": {
+      // A property's fields include Crewdesk's own (Map Code, the sizes, Gate Code …): those read and write the property itself.
+      if (!isManager(req, "customers")) throw new HttpError(403, "This needs Customers & billing access");
+      const [row] = await db.select().from(properties).where(and(eq(properties.id, id), eq(properties.companyId, companyId)));
+      if (!row) notFound("Property");
+      const fields = await fieldsFor(companyId, "property");
+      return {
+        values: propertyFieldValues(fields, row),
+        save: async (v, sent) => {
+          const { columns, custom } = splitPropertyValues(fields, sent, v);
+          const [u] = await db.update(properties).set({ custom, ...propertyColumnChanges(row, columns), updatedAt: new Date() }).where(eq(properties.id, id)).returning();
+          return propertyFieldValues(fields, u);
+        },
+      };
+    }
     case "customer":
-    case "property":
     case "invoice": {
       if (!isManager(req, "customers")) throw new HttpError(403, "This needs Customers & billing access");
-      const table = target === "customer" ? customers : target === "property" ? properties : invoices;
+      const table = target === "customer" ? customers : invoices;
       const [row] = await db.select({ custom: table.custom }).from(table).where(and(eq(table.id, id), eq(table.companyId, companyId)));
-      if (!row) notFound(target === "customer" ? "Customer" : target === "property" ? "Property" : "Invoice");
+      if (!row) notFound(target === "customer" ? "Customer" : "Invoice");
       return { values: row.custom, save: async (v) => { await db.update(table).set({ custom: v }).where(eq(table.id, id)); } };
     }
     case "workorder": {
@@ -73,6 +87,8 @@ const routes: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: { appliesTo?: string } }>("/", async (req) => {
     const where = [eq(customFields.companyId, req.user.companyId)];
     if (req.query.appliesTo && isTarget(req.query.appliesTo)) where.push(eq(customFields.appliesTo, req.query.appliesTo));
+    // A property's list includes Crewdesk's own fields.
+    if (!req.query.appliesTo || req.query.appliesTo === "property") await ensurePropertyFields(req.user.companyId);
     const rows = await db.select().from(customFields).where(and(...where)).orderBy(customFields.appliesTo, customFields.sortOrder, customFields.name);
     return rows.map(asDef);
   });
@@ -88,7 +104,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const { companyId } = req.user;
     await uniqueName(companyId, body.appliesTo, body.name);
     const [{ n, top }] = await db.select({ n: sql<number>`count(*)::int`, top: max(customFields.sortOrder) }).from(customFields)
-      .where(and(eq(customFields.companyId, companyId), eq(customFields.appliesTo, body.appliesTo)));
+      .where(and(eq(customFields.companyId, companyId), eq(customFields.appliesTo, body.appliesTo), isNull(customFields.builtin)));
     if (n >= CUSTOM_FIELDS_MAX) throw new HttpError(400, `Up to ${CUSTOM_FIELDS_MAX} custom fields on ${CUSTOM_FIELD_TARGET_LABELS[body.appliesTo].toLowerCase()}`);
     const [row] = await db.insert(customFields).values({
       companyId, appliesTo: body.appliesTo, name: body.name, type: body.type, options: body.type === "select" ? body.options : [],
@@ -129,14 +145,19 @@ const routes: FastifyPluginAsync = async (app) => {
 
   /** Deleting a field hides its values everywhere (one, or several at once). */
   app.delete<{ Params: { id: string } }>("/:id", { preHandler: requireRole("admin") }, async (req) => {
-    const rows = await db.delete(customFields).where(and(eq(customFields.id, req.params.id), eq(customFields.companyId, req.user.companyId))).returning({ id: customFields.id });
-    if (!rows.length) notFound("Custom field");
+    const [f] = await db.select().from(customFields).where(and(eq(customFields.id, req.params.id), eq(customFields.companyId, req.user.companyId)));
+    if (!f) notFound("Custom field");
+    if (f.builtin) throw new HttpError(400, `Crewdesk uses "${f.name}" itself, so it can't be deleted. You can rename it, or hide it from the property page in the layout editor.`);
+    await db.delete(customFields).where(eq(customFields.id, f.id));
     return { deleted: 1 };
   });
   app.post("/delete", { preHandler: requireRole("admin") }, async (req) => {
     const { ids } = parse(z.object({ ids: z.array(z.string().uuid()).min(1, "Pick the fields to delete").max(300) }), req.body);
-    const rows = await db.delete(customFields).where(and(inArray(customFields.id, ids), eq(customFields.companyId, req.user.companyId))).returning({ id: customFields.id });
-    return { deleted: rows.length };
+    // Crewdesk's own property fields stay (they're skipped, and counted so the page can say so).
+    const rows = await db.delete(customFields).where(and(inArray(customFields.id, ids), eq(customFields.companyId, req.user.companyId), isNull(customFields.builtin))).returning({ id: customFields.id });
+    const [{ kept }] = await db.select({ kept: sql<number>`count(*)::int` }).from(customFields)
+      .where(and(inArray(customFields.id, ids), eq(customFields.companyId, req.user.companyId)));
+    return { deleted: rows.length, kept };
   });
 
   // ---- One record's values (Homeworks' "Save Custom Fields" on a property).
@@ -152,8 +173,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const rec = await recordValues(req, target, req.params.id, true);
     const sent = (req.body as { values?: unknown } | null)?.values;
     const values = await enteredCustom(req.user.companyId, target, sent, rec.values);
-    await rec.save(values);
-    return values;
+    return (await rec.save(values, sent && typeof sent === "object" ? (sent as Record<string, unknown>) : null)) ?? values;
   });
 };
 

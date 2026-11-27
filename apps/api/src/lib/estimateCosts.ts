@@ -18,7 +18,7 @@ export async function refreshEstimateCosts(companyId: string, estimateIds?: stri
   const lines = await db.select().from(estimateLines).where(and(inArray(estimateLines.estimateId, es.map((e) => e.id)), eq(estimateLines.costAuto, true)));
   if (!lines.length) return 0;
   const propIds = [...new Set([...lines.map((l) => l.propertyId), ...es.map((e) => e.propertyId)].filter((x): x is string => !!x))];
-  const props = propIds.length ? await db.select({ id: properties.id, lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt }).from(properties).where(inArray(properties.id, propIds)) : [];
+  const props = propIds.length ? await db.select({ id: properties.id, lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt, otherSqFt: properties.otherSqFt, custom: properties.custom }).from(properties).where(inArray(properties.id, propIds)) : [];
   const byService = await serviceProductLines([...new Set(lines.map((l) => l.serviceTypeId).filter((x): x is string => !!x))], await companyToday(companyId));
   let changed = 0;
   for (const l of lines) {

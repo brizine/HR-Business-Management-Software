@@ -80,3 +80,74 @@ describe("which part of the lawn a line is for", () => {
     expect(packageToLines(pkg, services, null).map((l) => l.unitPriceCents)).toEqual([null, null]);
   });
 });
+
+describe("a property's sizes are custom fields, and a service is priced from one of them", () => {
+  const F = (id: string, name: string, builtin: any = null, type: any = "decimal") => ({ id, appliesTo: "property" as const, name, type, options: [], defaultValue: null, transferable: false, builtin });
+  const SIDE = "11111111-2222-4333-8444-555555555555";
+  const fields = [F("m", "Map Code", "mapCode", "text"), F("f", "Front Lawn ft", "frontSqFt"), F("b", "Back Lawn ft", "backSqFt"), F("o", "Other ft", "otherSqFt"), F("t", "Total ft", "lawnSqFt"), F("g", "Gate Code", "gateCode", "text"), F(SIDE, "Side Yard ft"), F("x", "Dog's name", null, "text")];
+  const property = { lawnSqFt: 12500, frontSqFt: 4200, backSqFt: 6800, otherSqFt: 1500, custom: { [SIDE]: 900, x: "Rex" } };
+
+  it("offers every number field, the total first, by the names the company gave them", async () => {
+    const { sizeChoices, areaKeyOf, areaNames } = await import("../src");
+    expect(sizeChoices(fields)).toEqual([
+      { key: "whole", name: "Total ft" }, { key: "front", name: "Front Lawn ft" }, { key: "back", name: "Back Lawn ft" }, { key: "other", name: "Other ft" }, { key: `cf:${SIDE}`, name: "Side Yard ft" },
+    ]);
+    // Text fields (Map Code, Gate Code, the dog's name) aren't sizes.
+    expect(areaKeyOf(fields[0])).toBeNull();
+    expect(areaKeyOf(fields[7])).toBeNull();
+    expect(areaNames(fields)[`cf:${SIDE}`]).toBe("Side Yard ft");
+  });
+
+  it("prices a line from the other area or from a field the company added", () => {
+    expect(lineSqFt({ lawnArea: "other" }, property)).toBe(1500);
+    expect(lineSqFt({ lawnArea: `cf:${SIDE}` }, property)).toBe(900);
+    expect(priceFor(fleaTick, lineSqFt({ lawnArea: `cf:${SIDE}` }, property))).toBe(3000);
+    // Nothing in the field at this property: no size, so no price until one is typed.
+    expect(lineSqFt({ lawnArea: `cf:${SIDE}` }, { lawnSqFt: 9000, custom: {} })).toBeNull();
+    expect(lineSqFt({ lawnArea: `cf:${SIDE}` }, { lawnSqFt: 9000 })).toBeNull();
+    // A number typed with a comma still counts; a text value doesn't.
+    expect(lineSqFt({ lawnArea: `cf:${SIDE}` }, { custom: { [SIDE]: "1,250" } })).toBe(1250);
+    expect(lineSqFt({ lawnArea: "cf:not-a-field" }, property)).toBe(12500);
+  });
+
+  it("names the area in the line's wording, without the unit", async () => {
+    const { areaNames } = await import("../src");
+    const names = areaNames(fields);
+    expect(withAreaNote("Flea & tick", { lawnArea: "other" })).toBe("Flea & tick (other area only)");
+    expect(withAreaNote("Flea & tick", { lawnArea: `cf:${SIDE}` }, names)).toBe("Flea & tick (side yard only)");
+    // Without the names (or once the field is deleted) the line just keeps its wording.
+    expect(withAreaNote("Flea & tick", { lawnArea: `cf:${SIDE}` })).toBe("Flea & tick");
+    expect(rewordForArea("Flea & tick (side yard only)", "Flea & tick", { lawnArea: `cf:${SIDE}` }, { lawnArea: "back" }, names)).toBe("Flea & tick (back lawn only)");
+  });
+
+  it("is what lines and services store", () => {
+    const line = { description: "Flea & tick", quantity: 1, unitPriceCents: 3000 };
+    expect(visitLineSchema.parse({ ...line, lawnArea: `cf:${SIDE}` }).lawnArea).toBe(`cf:${SIDE}`);
+    expect(visitLineSchema.parse({ ...line, lawnArea: "other" }).lawnArea).toBe("other");
+    expect(visitLineSchema.safeParse({ ...line, lawnArea: "cf:123" }).success).toBe(false);
+    const svc = { name: "Side yard spray", pricing: "per_thousand", priceCents: 600 };
+    expect(serviceTypeSchema.parse({ ...svc, defaultLawnArea: `cf:${SIDE}` }).defaultLawnArea).toBe(`cf:${SIDE}`);
+    expect(serviceTypeSchema.parse({ ...svc, defaultLawnArea: "other" }).defaultLawnArea).toBe("other");
+    expect(serviceTypeSchema.safeParse({ ...svc, defaultLawnArea: "custom" }).success).toBe(false);
+    expect(lineAreaValues({ lawnArea: `cf:${SIDE}`, lawnAreaSqFt: 5 })).toEqual({ lawnArea: `cf:${SIDE}`, lawnAreaSqFt: null });
+    expect(lineAreaValues({ lawnArea: "sideways" })).toEqual({ lawnArea: "whole", lawnAreaSqFt: null });
+  });
+
+  it("reads Crewdesk's own fields from the property and writes them back to it", async () => {
+    const { propertyFieldValues, splitPropertyValues, lawnTotal, PROPERTY_BUILTIN_FIELDS } = await import("../src");
+    expect(PROPERTY_BUILTIN_FIELDS.map((b) => b.name)).toEqual(["Map Code", "Front Lawn ft", "Back Lawn ft", "Other ft", "Total ft", "Gate Code", "Pets", "Access Notes", "Notes"]);
+    const p = { ...property, mapCode: "801", gateCode: "2468", pets: null };
+    const values = propertyFieldValues(fields, p);
+    expect(values).toEqual({ m: "801", f: 4200, b: 6800, o: 1500, t: 12500, g: "2468", [SIDE]: 900, x: "Rex" });
+    // Saving: only what was sent changes; blank clears; the company's own fields stay custom values.
+    const sent = { g: "", b: "7000", [SIDE]: "950" };
+    const cleaned = { ...values, b: 7000, [SIDE]: 950 } as Record<string, string | number | boolean>;
+    delete cleaned.g;
+    expect(splitPropertyValues(fields, sent, cleaned)).toEqual({ columns: { gateCode: null, backSqFt: 7000 }, custom: { [SIDE]: 950, x: "Rex" } });
+    // The total: as typed (so it can be overridden), else front + back + other.
+    expect(lawnTotal({ frontSqFt: 4200, backSqFt: 6800, otherSqFt: 1500 })).toBe(12500);
+    expect(lawnTotal({ frontSqFt: 4200, backSqFt: 6800, otherSqFt: 1500, lawnSqFt: 13000 })).toBe(13000);
+    expect(lawnTotal({ lawnSqFt: 9000 })).toBe(9000);
+    expect(lawnTotal({})).toBeNull();
+  });
+});

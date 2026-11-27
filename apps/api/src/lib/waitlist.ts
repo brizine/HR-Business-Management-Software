@@ -24,7 +24,7 @@ export async function estimateMinutes(rows: { id: string; propertyId: string | n
   const typeIds = [...new Set(lines.map((l) => l.serviceTypeId).filter((x): x is string => !!x))];
   const rates = new Map((typeIds.length ? await db.select({ id: serviceTypes.id, setupMinutes: serviceTypes.setupMinutes, minutesPer1000: serviceTypes.minutesPer1000 }).from(serviceTypes).where(inArray(serviceTypes.id, typeIds)) : []).map((r) => [r.id, r]));
   const propIds = [...new Set(rows.map((r) => r.propertyId).filter((x): x is string => !!x))];
-  const sizes = new Map((propIds.length ? await db.select({ id: properties.id, lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt }).from(properties).where(inArray(properties.id, propIds)) : []).map((p) => [p.id, p]));
+  const sizes = new Map((propIds.length ? await db.select({ id: properties.id, lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt, otherSqFt: properties.otherSqFt, custom: properties.custom }).from(properties).where(inArray(properties.id, propIds)) : []).map((p) => [p.id, p]));
   // The property's past visits of the same main service, Start to Complete (newest first).
   const past = !propIds.length ? [] : await db.select({ propertyId: visits.propertyId, startedAt: visits.startedAt, completedAt: visits.completedAt, serviceTypeId: sql<string | null>`(select l.service_type_id from visit_lines l where l.visit_id = "visits"."id" order by l.sort_order limit 1)` })
     .from(visits).where(and(inArray(visits.propertyId, propIds), eq(visits.status, "completed"), isNotNull(visits.startedAt), isNotNull(visits.completedAt), gte(visits.completedAt, new Date(Date.now() - 2 * 365 * 86_400_000))))

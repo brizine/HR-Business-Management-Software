@@ -175,4 +175,51 @@ describe("products on services", () => {
     expect(invoice.property).toMatchObject({ backSqFt: back });
     await call("PUT", `/service-types/${ID.round}`, "owner", { ...svc, defaultLawnArea: "whole" });
   });
+
+  it("a service priced from a field the company added to properties: the line, the load sheet, the products and the invoice use that field", async () => {
+    // The company measures side yards too, and sells a spray for just that strip.
+    const side = (await call("POST", "/custom-fields", "owner", { appliesTo: "property", name: "Side Yard ft", type: "decimal" })).body.id;
+    const key = `cf:${side}`;
+    const fields = (await call("GET", "/custom-fields?appliesTo=property", "owner")).body;
+    const other = fields.find((f: any) => f.builtin === "otherSqFt").id;
+    await call("PUT", `/custom-fields/values/property/${ID.janeProp}`, "office", { values: { [side]: 900, [other]: 400 } });
+    // The service says which field its price comes from; a typed size isn't a choice for a service.
+    const svc = { name: "Side yard spray", pricing: "per_thousand", priceCents: 1000, minimumCents: 500, incomeAccountCode: "4000", invoiceDescription: "Weed control along the side yard" };
+    expect((await call("POST", "/service-types", "owner", { ...svc, defaultLawnArea: "custom" })).status).toBe(400);
+    const made = await call("POST", "/service-types", "owner", { ...svc, defaultLawnArea: key });
+    expect(made.body.defaultLawnArea).toBe(key);
+    ID.sideSvc = made.body.id;
+    await call("PUT", `/chemical-tracking/services/${ID.sideSvc}/products`, "owner", { products: [{ productId: ID.liquid, productRateId: ID.liquidRate }] });
+
+    // One line from the side yard field, one from the "other" area.
+    const day = "2026-04-22";
+    const wo = await call("POST", "/visits", "office", { ...workOrder(day), lines: [
+      { serviceTypeId: ID.sideSvc, description: "Side yard spray (side yard only)", quantity: 1, unitPriceCents: 900, lawnArea: key },
+      { serviceTypeId: ID.sideSvc, description: "Side yard spray", quantity: 1, unitPriceCents: 500, lawnArea: "other" },
+    ] });
+    expect(wo.status).toBe(200);
+    expect(wo.body.lines.map((l: any) => l.lawnArea)).toEqual([key, "other"]);
+    // The property goes out with what the lines are priced from.
+    expect(wo.body.property).toMatchObject({ otherSqFt: 400, custom: { [side]: 900 } });
+    const sheet = (await call("GET", `/chemical-tracking/load-sheet?date=${day}&by=day`, "office")).body;
+    const stop = sheet.groups[0].stops.find((x: any) => x.visitId === wo.body.id);
+    expect(stop.sqFt).toBe(1300);
+    expect(stop.items.map((i: any) => i.amount)).toEqual([0.9, 0.4]);
+    expect((await call("GET", `/visits/${wo.body.id}/chemicals`, "tech")).body.items.map((i: any) => i.amount)).toEqual([0.9, 0.4]);
+    await call("POST", `/visits/${wo.body.id}/complete`, "office", {});
+    expect((await call("GET", `/visits/${wo.body.id}/products`, "office")).body.map((r: any) => [r.areaSqFt, r.amount])).toEqual([[900, 0.9], [400, 0.4]]);
+    // The invoice words each line with its area, by the field's name without its unit.
+    const inv = await call("POST", `/visits/${wo.body.id}/invoice`, "office");
+    const invoice = (await call("GET", `/invoices/${inv.body.invoiceId}`, "office")).body;
+    expect(invoice.lines.map((l: any) => [l.description, l.lawnArea])).toEqual([
+      ["Weed control along the side yard (side yard only)", key],
+      ["Weed control along the side yard (other area only)", "other"],
+    ]);
+    // Nothing in the field at a property: the line has no size, so nothing is counted for it.
+    await call("PUT", `/custom-fields/values/property/${ID.janeProp}`, "office", { values: { [side]: "" } });
+    const blank = await call("POST", "/visits", "office", { ...workOrder("2026-04-23"), lines: [{ serviceTypeId: ID.sideSvc, description: "Side yard spray", quantity: 1, unitPriceCents: 500, lawnArea: key }] });
+    const later = (await call("GET", "/chemical-tracking/load-sheet?date=2026-04-23&by=day", "office")).body;
+    expect(later.groups[0].stops.find((x: any) => x.visitId === blank.body.id).items.map((i: any) => i.amount)).toEqual([0]);
+    expect(later.groups[0].missingSize).toBe(1);
+  });
 });

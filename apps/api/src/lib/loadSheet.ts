@@ -29,7 +29,7 @@ export async function loadSheet(companyId: string, date: string, by: LoadBy) {
   const vs = await db.select({
     id: visits.id, number: visits.number, time: visits.startTime, status: visits.status, crewId: visits.crewId, propertyId: visits.propertyId,
     c: { kind: customers.kind, firstName: customers.firstName, lastName: customers.lastName, companyName: customers.companyName },
-    street: properties.street, city: properties.city, lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt,
+    street: properties.street, city: properties.city, lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt, otherSqFt: properties.otherSqFt, custom: properties.custom,
   }).from(visits).innerJoin(customers, eq(customers.id, visits.customerId)).leftJoin(properties, eq(properties.id, visits.propertyId))
     .where(and(eq(visits.companyId, companyId), eq(visits.date, date), ne(visits.status, "skipped")))
     .orderBy(asc(visits.startTime), asc(visits.number));

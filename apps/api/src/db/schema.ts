@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { AutomationAction, AutomationDef, CustomValues, FormAnswers, FormChange, FormDef, FormSignature, FormSignatures, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, LawnArea, ServiceLawnArea, MeasureShape, MeasureImagerySettings, WeatherSettings, ChemicalNoticeSettings, TemplateDefaults } from "@crewdesk/shared";
+import type { AutomationAction, AutomationDef, CustomValues, FormAnswers, FormChange, FormDef, FormSignature, FormSignatures, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, LawnArea, ServiceLawnArea, PropertyBuiltin, MeasureShape, MeasureImagerySettings, WeatherSettings, ChemicalNoticeSettings, TemplateDefaults } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -1442,6 +1442,8 @@ export const properties = pgTable(
     lawnSqFt: doublePrecision("lawn_sq_ft"),
     frontSqFt: doublePrecision("front_sq_ft"),
     backSqFt: doublePrecision("back_sq_ft"),
+    /** Measured area that is neither front nor back. */
+    otherSqFt: doublePrecision("other_sq_ft"),
     /** The saved Property Measure the lawn size came from. */
     measurementId: uuid("measurement_id").references(() => measurements.id, { onDelete: "set null" }),
     gateCode: text("gate_code"),
@@ -2145,10 +2147,15 @@ export const customFields = pgTable(
     defaultValue: text("default_value"),
     /** Copies the value from the same-named field on the record it's made for. */
     transferable: boolean("transferable").notNull().default(false),
+    /** One of Crewdesk's own property fields (PROPERTY_BUILTIN_FIELDS): its values live in the property's column of that name. */
+    builtin: text("builtin").$type<PropertyBuiltin>(),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: createdAt(),
   },
-  (t) => [index("custom_fields_company_idx").on(t.companyId, t.appliesTo)],
+  (t) => [
+    index("custom_fields_company_idx").on(t.companyId, t.appliesTo),
+    uniqueIndex("custom_fields_builtin_key").on(t.companyId, t.appliesTo, t.builtin).where(sql`${t.builtin} is not null`),
+  ],
 );
 
 /** To-do categories (Homeworks' "To-do Category", with "Add New Category"). */

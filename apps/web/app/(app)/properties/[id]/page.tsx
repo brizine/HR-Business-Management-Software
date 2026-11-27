@@ -9,10 +9,9 @@ import { useAction, useApi } from "@/lib/hooks";
 import { LinkedTodos } from "@/components/todos";
 import { LinkedVisits } from "@/components/visits";
 import { Badge, ErrorBox, PageHead } from "@/components/ui";
-import { CancelForm, CustomerPicker, PropertyFields, TagChips, propertyBody, propertyFormValue, useTags } from "@/components/customers";
+import { CancelForm, CustomerPicker, PropertyFields, propertyBody, propertyFormValue, useTags } from "@/components/customers";
 import { CreditForm } from "@/components/credits";
-import { CustomFieldsCard } from "@/components/custom-fields";
-import { PropertySchedulingPrefs } from "@/components/waitlist";
+import { PropertyBox } from "@/components/property-box";
 
 export default function PropertyDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -33,7 +32,6 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
   const current = p.assignments.filter((a: any) => !a.endDate);
   const past = p.assignments.filter((a: any) => a.endDate);
   const billTo = current.find((a: any) => a.role === "bill_to");
-  const lawn = p.lawnSqFt ? `${Math.round(p.lawnSqFt).toLocaleString()} sq ft` : "—";
   const mapsLink = p.lat != null && p.lng != null ? `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formatAddress(p))}`;
 
   return (
@@ -62,21 +60,7 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
       {creditNote && <p className="notice" role="status">{creditNote} <Link href={`/customers/${billTo?.customerId}`}>Open {billTo?.name}</Link></p>}
       {editing ? <EditProperty property={p} tags={tags} onDone={() => { setEditing(false); property.reload(); }} /> : (
         <div className="grid cols-2">
-          <div className="card">
-            <h2 style={{ fontSize: 16, marginTop: 0 }}>Property</h2>
-            <dl className="facts">
-              <dt>Map Code</dt><dd>{p.mapCode ?? <span className="muted">No MC</span>}{p.mapCode && p.mapCodeManual && <span className="muted"> (set by hand)</span>}</dd>
-              <dt>Lawn</dt><dd>{lawn}{(p.frontSqFt != null || p.backSqFt != null) && <span className="muted"> · front {Math.round(p.frontSqFt ?? 0).toLocaleString()}, back {Math.round(p.backSqFt ?? 0).toLocaleString()}</span>}</dd>
-              <dt>Measured</dt><dd>{p.measurement ? <>{p.measurement.name} <span className="muted">· {fmtDate(p.measurement.updatedAt)}</span></> : <span className="muted">Not linked to a saved Property Measure</span>}</dd>
-              <dt>Gate code</dt><dd>{p.gateCode ?? "—"}</dd>
-              <dt>Pets</dt><dd>{p.pets ?? "—"}</dd>
-              <dt>Tags</dt><dd><TagChips ids={p.tagIds} tags={tags} /> {!p.tagIds.length && "—"}</dd>
-            </dl>
-            {p.accessNotes && <><h3 style={{ fontSize: 14, marginBottom: 4 }}>Access notes</h3><p style={{ whiteSpace: "pre-wrap", marginTop: 0 }}>{p.accessNotes}</p></>}
-            {p.notes && <><h3 style={{ fontSize: 14, marginBottom: 4 }}>Notes</h3><p style={{ whiteSpace: "pre-wrap", marginTop: 0 }}>{p.notes}</p></>}
-            <h3 style={{ fontSize: 14, marginBottom: 4 }}>Scheduling</h3>
-            <PropertySchedulingPrefs property={p} onSaved={property.reload} />
-          </div>
+          <PropertyBox property={p} tags={tags} onSaved={property.reload} />
           <div className="card">
             <div className="row" style={{ justifyContent: "space-between" }}>
               <h2 style={{ fontSize: 16, margin: 0 }}>People</h2>
@@ -116,7 +100,6 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
         </div>
       )}
       <div style={{ marginTop: 16 }}>
-        <CustomFieldsCard target="property" id={id} canEdit values={p.custom ?? {}} onSaved={() => property.reload()} />
         <LinkedVisits propertyId={id} />
         <LinkedTodos propertyId={id} customer={(billTo ?? current[0]) ? { id: (billTo ?? current[0]).customerId, name: (billTo ?? current[0]).name } : null} />
       </div>

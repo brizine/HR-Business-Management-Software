@@ -7,10 +7,11 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox } from "@/components/ui";
 import { useServices } from "@/components/invoices";
+import { useSizes } from "@/components/line-area";
 
 /* Prepayments (staff): take one (or send a pay link), see what's left, take back the discount, refund the rest. */
 
-type Prop = { id: string; address: string; lawnSqFt?: number | null; frontSqFt?: number | null; backSqFt?: number | null };
+type Prop = { id: string; address: string; lawnSqFt?: number | null; frontSqFt?: number | null; backSqFt?: number | null; otherSqFt?: number | null; custom?: Record<string, string | number | boolean> | null };
 type Line = { serviceTypeId: string; description: string; quantity: number; unitPriceCents: number };
 type Prepayment = {
   id: string; number: number; description: string; status: string; method: string | null; methodDetail: string | null; reference: string | null; receivedOn: string | null;
@@ -38,6 +39,7 @@ export function PrepaymentForm({ customerId, properties, onDone, onClose }: { cu
   const [note, setNote] = useState("");
   const [incomeCode, setIncomeCode] = useState("4000");
   const { busy, error, run } = useAction();
+  const sizes = useSizes();
   const lawn = properties.find((p) => p.id === prop && p.lawnSqFt) ?? properties.find((p) => p.lawnSqFt) ?? null;
   const sqFt = lawn?.lawnSqFt ?? null;
   const covers = mode === "services" ? lines.reduce((s, l) => s + Math.round(l.quantity * l.unitPriceCents), 0) : cents(amount) || 0;
@@ -45,10 +47,10 @@ export function PrepaymentForm({ customerId, properties, onDone, onClose }: { cu
   const addService = (id: string) => {
     const s = services.list.find((x) => x.id === id);
     if (!s) return;
-    // A service set to the front or back lawn is priced from that part, and the line says so.
+    // A service priced from the front, the back or another of the property's sizes uses that one, and the line says so.
     const area = { lawnArea: s.defaultLawnArea ?? "whole" };
     const price = priceFor(s as never, lineSqFt(area, lawn)) ?? 0;
-    setLines([...lines, { serviceTypeId: s.id, description: withAreaNote(lineTextFor(s, "invoice"), area), quantity: 1, unitPriceCents: price }]);
+    setLines([...lines, { serviceTypeId: s.id, description: withAreaNote(lineTextFor(s, "invoice"), area, sizes.names), quantity: 1, unitPriceCents: price }]);
     if (!description) setDescription(`${new Date().getFullYear() + (new Date().getMonth() >= 9 ? 1 : 0)} season`);
   };
   const valid = covers > 0 && description.trim() && t.amountCents > 0 && (how !== "check" || reference.trim());

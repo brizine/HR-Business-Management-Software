@@ -9,7 +9,7 @@ import {
   INACTIVE_STATUSES, VISIT_FILES_MAX, VISIT_STATUS_LABELS, customerName, describeRepeat, formatAddress, formatMoney, formatTodoTime, invoiceTotals, lineAmount,
   cleanFormAnswers, cleanFormSignatures, formAnswersSchema, formChanges, formFields, isImageType, isSigned, missingRequired,
   visitCompleteSchema, visitDates, visitLineHours, visitNumber, visitSchema, visitSkipSchema, visitTotal, visitUpdateSchema,
-  lineAreaValues, withAreaNote,
+  areaNames, lineAreaValues, withAreaNote,
   type VisitStatus, type VisitUpdate,
 } from "@crewdesk/shared";
 import { db } from "../db";
@@ -19,7 +19,7 @@ import { addFormHistory, applyFlags, autoFormIds, emailCopiesAfter, emailEntry, 
 import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
 import { addDays, billingSettings } from "../lib/invoices";
-import { jobSources, newRecordCustom, updatedCustom } from "../lib/customFields";
+import { fieldsFor, jobSources, newRecordCustom, updatedCustom } from "../lib/customFields";
 import { companyToday } from "../lib/payRates";
 import { snapshotVisitProducts, visitProductRows } from "../lib/productCosts";
 import { createApplicationRecord, voidApplicationRecords } from "../lib/chemicalRecords";
@@ -57,7 +57,7 @@ export async function presentVisits(req: FastifyRequest, rows: Visit[]) {
   const people = [...new Set(rows.flatMap((v) => [v.finishedById, v.createdById]).filter((x): x is string => !!x))];
   const cs = await db.select({ id: customers.id, kind: customers.kind, firstName: customers.firstName, lastName: customers.lastName, companyName: customers.companyName, phone: customers.phone, tagIds: customers.tagIds })
     .from(customers).where(inArray(customers.id, custIds));
-  const ps = propIds.length ? await db.select({ id: properties.id, name: properties.name, street: properties.street, city: properties.city, state: properties.state, zip: properties.zip, gateCode: properties.gateCode, pets: properties.pets, accessNotes: properties.accessNotes, lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt, lat: properties.lat, lng: properties.lng, custom: properties.custom })
+  const ps = propIds.length ? await db.select({ id: properties.id, name: properties.name, street: properties.street, city: properties.city, state: properties.state, zip: properties.zip, gateCode: properties.gateCode, pets: properties.pets, accessNotes: properties.accessNotes, lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt, otherSqFt: properties.otherSqFt, lat: properties.lat, lng: properties.lng, custom: properties.custom })
     .from(properties).where(inArray(properties.id, propIds)) : [];
   const inv = invIds.length ? await db.select({ id: invoices.id, number: invoices.number, status: invoices.status }).from(invoices).where(inArray(invoices.id, invIds)) : [];
   const es = people.length ? await db.select({ id: employees.id, firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(inArray(employees.id, people)) : [];
@@ -78,7 +78,7 @@ export async function presentVisits(req: FastifyRequest, rows: Visit[]) {
       lines: lines.filter((l) => l.visitId === v.id).map((l) => ({ ...l, unitPriceCents: showPrices ? l.unitPriceCents : null, amountCents: showPrices ? l.amountCents : null })),
       assignees: crew.filter((x) => x.visitId === v.id).map(({ id, firstName, lastName }) => ({ id, firstName, lastName })),
       customer: { id: c.id, name: customerName(c), phone: c.phone, tagIds: c.tagIds },
-      property: p ? { id: p.id, name: p.name, address: formatAddress(p), gateCode: p.gateCode, pets: p.pets, accessNotes: p.accessNotes, lawnSqFt: p.lawnSqFt, frontSqFt: p.frontSqFt, backSqFt: p.backSqFt, lat: p.lat, lng: p.lng, custom: p.custom } : null,
+      property: p ? { id: p.id, name: p.name, address: formatAddress(p), gateCode: p.gateCode, pets: p.pets, accessNotes: p.accessNotes, lawnSqFt: p.lawnSqFt, frontSqFt: p.frontSqFt, backSqFt: p.backSqFt, otherSqFt: p.otherSqFt, lat: p.lat, lng: p.lng, custom: p.custom } : null,
       invoice: i ? { id: i.id, number: i.number, status: i.status } : null,
       crew: cr.find((x) => x.id === v.crewId) ?? null,
       fileCount: fileCounts.find((x) => x.visitId === v.id)?.n ?? 0,
@@ -177,6 +177,8 @@ export async function invoiceVisitsFor(companyId: string, sub: string | null, id
   const lines = await db.select({ l: visitLines, account: serviceTypes.incomeAccountCode, name: serviceTypes.name, invoiceText: serviceTypes.invoiceDescription }).from(visitLines).leftJoin(serviceTypes, eq(serviceTypes.id, visitLines.serviceTypeId))
     .where(inArray(visitLines.visitId, ids)).orderBy(asc(visitLines.sortOrder));
   for (const v of rows) if (!lines.some((x) => x.l.visitId === v.id)) throw new HttpError(400, `${visitNumber(v.number)} has no line items to invoice`);
+  // The names of the company's own size fields, for a line's "(side yard only)" note.
+  const sizeNames = lines.some((x) => x.l.lawnArea.startsWith("cf:")) ? areaNames(await fieldsFor(companyId, "property")) : null;
   const today = await companyToday(companyId);
   const settings = await billingSettings(companyId);
   const groups = new Map<string, Visit[]>();
@@ -191,7 +193,7 @@ export async function invoiceVisitsFor(companyId: string, sub: string | null, id
       // A line still carrying the service's plain name (with its "back lawn only" note, if any) gets the service's invoice
       // description with the same note; one that was reworded keeps its words.
       const worded = (l: typeof visitLines.$inferSelect, name: string | null, invoiceText: string | null) =>
-        (invoiceText?.trim() && name && [name.trim(), withAreaNote(name.trim(), l)].includes(l.description.trim()) ? withAreaNote(invoiceText.trim(), l) : l.description);
+        (invoiceText?.trim() && name && [name.trim(), withAreaNote(name.trim(), l, sizeNames)].includes(l.description.trim()) ? withAreaNote(invoiceText.trim(), l, sizeNames) : l.description);
       const items = group.flatMap((v) => lines.filter((x) => x.l.visitId === v.id).map(({ l, account, name, invoiceText }) => ({
         serviceTypeId: l.serviceTypeId, description: several && v.date ? `${fmtDay(v.date)}: ${worded(l, name, invoiceText)}` : worded(l, name, invoiceText),
         quantity: l.quantity, unitPriceCents: l.unitPriceCents, incomeAccountCode: account ?? "4000", taxRate: l.taxRate, lawnArea: l.lawnArea, lawnAreaSqFt: l.lawnAreaSqFt,

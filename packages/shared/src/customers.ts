@@ -128,7 +128,9 @@ const propertyFields = z.object({
   mapCode: optText(20),
   frontSqFt: sqFt,
   backSqFt: sqFt,
-  /** Total lawn size; worked out from front + back when those are given. */
+  /** Any measured area that is neither front nor back. */
+  otherSqFt: sqFt,
+  /** Total lawn size: as entered, or front + back + other when left blank. */
   lawnSqFt: sqFt,
   measurementId: z.string().uuid().nullable().optional(),
   gateCode: optText(60),
@@ -207,10 +209,14 @@ export function formatAddress(a: { street?: string | null; city?: string | null;
   return [a.street, cityState].filter(Boolean).join(", ");
 }
 
-/** Front + back when either is given, else the total as entered. */
-export function lawnTotal(p: { frontSqFt?: number | null; backSqFt?: number | null; lawnSqFt?: number | null }): number | null {
-  if (p.frontSqFt != null || p.backSqFt != null) return Math.round((p.frontSqFt ?? 0) + (p.backSqFt ?? 0));
-  return p.lawnSqFt != null ? Math.round(p.lawnSqFt) : null;
+/**
+ * A property's total size: the total as entered (so it can be overridden by hand), or front + back +
+ * other when it's left blank and any of those is given.
+ */
+export function lawnTotal(p: { frontSqFt?: number | null; backSqFt?: number | null; otherSqFt?: number | null; lawnSqFt?: number | null }): number | null {
+  if (p.lawnSqFt != null) return Math.round(p.lawnSqFt);
+  if (p.frontSqFt != null || p.backSqFt != null || p.otherSqFt != null) return Math.round((p.frontSqFt ?? 0) + (p.backSqFt ?? 0) + (p.otherSqFt ?? 0));
+  return null;
 }
 
 /** The day before an ISO date (a replaced bill-to's last day). */

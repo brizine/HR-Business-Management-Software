@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import "leaflet/dist/leaflet.css";
-import { NOTICE_CHANNELS, NOTICE_CHANNEL_LABELS,
+import {
   BACK_REASONS, BACK_REASON_LABELS, BADGE_HINTS, BADGE_LABELS, NOTIFY_BEFORE, NOTIFY_BEFORE_LABELS, PRIORITIES, PRIORITY_LABELS, ROUTE_ORDERS, ROUTE_ORDER_LABELS,
   clock12, formatMoney, visitNumber, type NotifyBefore, type Priority, type RouteOrder, type WaitBadge,
 } from "@crewdesk/shared";
@@ -891,7 +891,7 @@ export function toldParts(r: Told): string[] {
  * "Don't require a card on file" as a switch. Turning it on opens a box for the reason, and it only
  * takes effect once the reason is saved; turning it off requires a card again straight away.
  */
-function CardExemptToggle({ what, on, reason, placeholder, busy, exempting, setExempting, draft, setDraft, onSave }: {
+export function CardExemptToggle({ what, on, reason, placeholder, busy, exempting, setExempting, draft, setDraft, onSave }: {
   what: "customer" | "property"; on: boolean; reason: string; placeholder: string; busy: boolean;
   exempting: boolean; setExempting: (b: boolean) => void; draft: string; setDraft: (s: string) => void; onSave: (on: boolean) => void;
 }) {
@@ -930,45 +930,6 @@ export function CustomerSchedulingPrefs({ customer, onSaved }: { customer: { id:
         </select>
       </label>
       <CardExemptToggle what="customer" on={!!customer.cardExemptAt} reason={customer.cardExemptReason ?? ""} placeholder="Why (e.g. net 30, pays by check)" busy={act.busy}
-        exempting={exempting} setExempting={setExempting} draft={reason} setDraft={setReason} onSave={exempt} />
-      <ErrorBox error={act.error} />
-    </div>
-  );
-}
-
-/** A property's preferred crew and notice (overrides the customer's), and its card exemption. */
-export function PropertySchedulingPrefs({ property, onSaved }: { property: { id: string; notifyBefore?: NotifyBefore | null; chemicalNotice?: string | null; preferredCrewId?: string | null; cardExemptReason?: string | null; cardExemptAt?: string | null }; onSaved: () => void }) {
-  const crews = useApi<{ id: string; name: string; active: boolean }[]>("/crews");
-  const act = useAction();
-  const [reason, setReason] = useState("");
-  const [exempting, setExempting] = useState(false);
-  const put = (patch: { notifyBefore?: NotifyBefore | null; preferredCrewId?: string | null }) => act.run(async () => {
-    await api(`/waitlist/property/${property.id}`, { method: "PUT", body: { notifyBefore: property.notifyBefore ?? null, preferredCrewId: property.preferredCrewId ?? null, ...patch } }); onSaved();
-  });
-  const exempt = (on: boolean) => act.run(async () => { await api("/waitlist/card-exempt", { method: "PUT", body: { propertyId: property.id, exempt: on, reason: on ? reason : undefined } }); setExempting(false); setReason(""); onSaved(); });
-  return (
-    <div className="stack" style={{ gap: 8 }}>
-      <div className="formgrid">
-        <label>Preferred crew
-          <select value={property.preferredCrewId ?? ""} disabled={act.busy} onChange={(e) => put({ preferredCrewId: e.target.value || null })}>
-            <option value="">None</option>
-            {(crews.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </label>
-        <label>Pre Visit Notification
-          <select value={property.notifyBefore ?? ""} disabled={act.busy} onChange={(e) => put({ notifyBefore: (e.target.value || null) as NotifyBefore | null })}>
-            <option value="">Same as the customer</option>
-            {NOTIFY_BEFORE.map((n) => <option key={n} value={n}>{NOTIFY_BEFORE_LABELS[n]}</option>)}
-          </select>
-        </label>
-        <label>After a chemical application
-          <select value={property.chemicalNotice ?? "email"} disabled={act.busy}
-            onChange={(e) => act.run(async () => { await api(`/properties/${property.id}/chemical-notice`, { method: "PUT", body: { chemicalNotice: e.target.value } }); onSaved(); })}>
-            {NOTICE_CHANNELS.map((c) => <option key={c} value={c}>{NOTICE_CHANNEL_LABELS[c]}</option>)}
-          </select>
-        </label>
-      </div>
-      <CardExemptToggle what="property" on={!!property.cardExemptAt} reason={property.cardExemptReason ?? ""} placeholder="Why (e.g. commercial account, net 30)" busy={act.busy}
         exempting={exempting} setExempting={setExempting} draft={reason} setDraft={setReason} onSave={exempt} />
       <ErrorBox error={act.error} />
     </div>

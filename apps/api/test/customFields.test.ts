@@ -2,7 +2,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";
-import { pool } from "../src/db";
+import { eq } from "drizzle-orm";
+import { db, pool } from "../src/db";
+import { customFields, customers, employees, properties } from "../src/db/schema";
 import { flushNotifications, setPushTransport } from "../src/lib/notify";
 
 let app: FastifyInstance;
@@ -59,7 +61,8 @@ describe("custom fields", () => {
     expect((await call("POST", "/custom-fields", "owner", { appliesTo: "workorder", name: "Crew size", type: "integer", defaultValue: "two" })).body.issues?.[0]?.message ?? "").toMatch(/whole number/);
     const list = (await call("GET", "/custom-fields?appliesTo=workorder", "tech")).body;
     expect(list.map((f: any) => f.name)).toEqual(["Front Yard Sq Ft", "Back Yard Sq Ft", "Gallons used", "PO approved"]);
-    expect((await call("GET", "/custom-fields", "tech")).body).toHaveLength(9);
+    // The 9 added here, plus Crewdesk's own 9 property fields.
+    expect((await call("GET", "/custom-fields", "tech")).body).toHaveLength(18);
   });
 
   it("rename, change the default and transferable, reorder", async () => {
@@ -137,5 +140,84 @@ describe("custom fields", () => {
     // Saving values afterwards drops the deleted fields' old values.
     const saved = await call("PUT", `/custom-fields/values/workorder/${ID.wo}`, "office", { values: { [F.woFront]: 4300 } });
     expect(saved.body).toEqual({ [F.woFront]: 4300, [F.woBack]: 1800 });
+  });
+
+  it("a property's own details are custom fields too: listed, renamed, saved to the property, never deleted", async () => {
+    const list = (await call("GET", "/custom-fields?appliesTo=property", "office")).body;
+    // Crewdesk's own first, then the one this company added.
+    expect(list.map((f: any) => f.name)).toEqual(["Map Code", "Front Lawn ft", "Back Lawn ft", "Other ft", "Total ft", "Gate Code", "Pets", "Access Notes", "Notes", "Front Yard Sq Ft"]);
+    const id = (key: string) => list.find((f: any) => f.builtin === key).id as string;
+    expect(list.filter((f: any) => f.builtin).map((f: any) => f.type)).toEqual(["text", "decimal", "decimal", "decimal", "decimal", "text", "text", "text", "text"]);
+
+    // The values: the property's own columns, by field.
+    const before = (await call("GET", `/custom-fields/values/property/${ID.prop}`, "office")).body;
+    expect(before).toEqual({ [id("backSqFt")]: 1800, [id("lawnSqFt")]: 1800, [F.propFront]: 4200 });
+    // Saving through the fields writes the property itself.
+    const saved = await call("PUT", `/custom-fields/values/property/${ID.prop}`, "office", { values: { [id("gateCode")]: "2468", [id("pets")]: "Dog in back", [id("frontSqFt")]: "3,000", [id("lawnSqFt")]: "", [id("mapCode")]: "801" } });
+    expect(saved.status).toBe(200);
+    // Total left blank: front + back.
+    expect(saved.body).toEqual({ [id("gateCode")]: "2468", [id("pets")]: "Dog in back", [id("frontSqFt")]: 3000, [id("backSqFt")]: 1800, [id("lawnSqFt")]: 4800, [id("mapCode")]: "801", [F.propFront]: 4200 });
+    const p = (await call("GET", `/properties/${ID.prop}`, "office")).body;
+    expect(p).toMatchObject({ gateCode: "2468", pets: "Dog in back", frontSqFt: 3000, backSqFt: 1800, lawnSqFt: 4800, mapCode: "801", mapCodeManual: true, custom: { [F.propFront]: 4200 } });
+    // The total can be overridden by hand, and an "other" area added; a blank clears a field.
+    const over = await call("PUT", `/custom-fields/values/property/${ID.prop}`, "office", { values: { [id("lawnSqFt")]: 5200, [id("otherSqFt")]: 350, [id("pets")]: "" } });
+    expect(over.body).toMatchObject({ [id("lawnSqFt")]: 5200, [id("otherSqFt")]: 350, [id("frontSqFt")]: 3000 });
+    expect(over.body).not.toHaveProperty(id("pets"));
+    expect((await call("GET", `/properties/${ID.prop}`, "office")).body).toMatchObject({ lawnSqFt: 5200, otherSqFt: 350, pets: null, gateCode: "2468" });
+    // A number is still checked as a number.
+    expect((await call("PUT", `/custom-fields/values/property/${ID.prop}`, "office", { values: { [id("backSqFt")]: "big" } })).body.error).toBe("Back Lawn ft: Enter a number");
+
+    // Renamed like any field; the property keeps answering by its own name for the phone and the boards.
+    expect((await call("PUT", `/custom-fields/${id("gateCode")}`, "owner", { name: "Gate / Door Code" })).body).toMatchObject({ name: "Gate / Door Code", builtin: "gateCode" });
+    // Never deleted, alone or in a batch.
+    const del = await call("DELETE", `/custom-fields/${id("gateCode")}`, "owner");
+    expect(del.status).toBe(400);
+    expect(del.body.error).toMatch(/Crewdesk uses "Gate \/ Door Code" itself/);
+    expect((await call("POST", "/custom-fields/delete", "owner", { ids: [id("pets"), id("notes")] })).body).toEqual({ deleted: 0, kept: 2 });
+    expect((await call("GET", "/custom-fields?appliesTo=property", "office")).body).toHaveLength(10);
+
+    // A work order field with the same name as a property field fills from it, Crewdesk's own included.
+    F.woGate = await field({ appliesTo: "workorder", name: "Gate / Door Code", type: "text", transferable: true });
+    F.woTotal = await field({ appliesTo: "workorder", name: "Total ft", type: "integer", transferable: true });
+    const wo = await call("POST", "/visits", "office", { title: "Round 2", customerId: ID.rita, propertyId: ID.prop, date: today, lines: [{ description: "Fertilizer", quantity: 1, unitPriceCents: 5000 }] });
+    expect(wo.body.custom).toMatchObject({ [F.woGate]: "2468", [F.woTotal]: 5200 });
+
+    // The property form still saves its own boxes, and values sent as custom values land in the same place.
+    const full = await call("PUT", `/properties/${ID.prop}`, "office", { street: "12 Pecan St", city: "Norman", zip: "73069", frontSqFt: 3000, backSqFt: 1800, otherSqFt: 350, lawnSqFt: null, gateCode: "2468", tagIds: [], custom: { [id("pets")]: "Two cats", [F.propFront]: 4250 } });
+    expect(full.body).toMatchObject({ lawnSqFt: 5150, pets: "Two cats", custom: { [F.propFront]: 4250 } });
+    // A new property takes them the same way.
+    const made = await call("POST", "/properties", "office", { street: "14 Pecan St", city: "Norman", zip: "73069", billToCustomerId: ID.rita, custom: { [id("gateCode")]: "1357", [id("frontSqFt")]: 2000, [id("backSqFt")]: 2500 } });
+    expect(made.body).toMatchObject({ gateCode: "1357", frontSqFt: 2000, backSqFt: 2500, lawnSqFt: 4500, custom: {} });
+  });
+
+  it("a field the company already made under the same name becomes the built-in one, with what was typed in it", async () => {
+    // A company from before this change: its own "Gate Code" and "Total ft" on properties, and a "Pets" that's a checkbox.
+    const token = (await app.inject({ method: "POST", url: "/auth/signup", payload: { companyName: "Older Co", firstName: "Olga", lastName: "Owner", email: email("older"), password: "password123" } })).json().token;
+    T.older = token;
+    const [{ companyId }] = await db.select({ companyId: employees.companyId }).from(employees).where(eq(employees.email, email("older")));
+    const own = await db.insert(customFields).values([
+      { companyId, appliesTo: "property", name: "gate code", type: "text", sortOrder: 0 },
+      { companyId, appliesTo: "property", name: "Total ft", type: "integer", sortOrder: 1 },
+      { companyId, appliesTo: "property", name: "Pets", type: "checkbox", sortOrder: 2 },
+    ]).returning();
+    const [gate, total, pets] = own.map((f) => f.id);
+    const [typedIn] = await db.insert(properties).values({ companyId, street: "1 Old Rd", custom: { [gate]: "9911", [total]: 7500, [pets]: true } }).returning();
+    // Already has its own gate code and size: those win, and the field's old value is simply dropped.
+    const [hasOwn] = await db.insert(properties).values({ companyId, street: "2 Old Rd", gateCode: "0000", lawnSqFt: 6000, custom: { [gate]: "1234", [total]: 6500 } }).returning();
+
+    const list = (await call("GET", "/custom-fields?appliesTo=property", "older")).body;
+    expect(list.find((f: any) => f.id === gate)).toMatchObject({ name: "gate code", builtin: "gateCode" });
+    expect(list.find((f: any) => f.id === total)).toMatchObject({ name: "Total ft", builtin: "lawnSqFt", type: "integer" });
+    // A checkbox can't hold what Crewdesk's Pets field holds, so theirs stays theirs and Crewdesk's gets a different name.
+    expect(list.find((f: any) => f.id === pets)).toMatchObject({ name: "Pets", builtin: null });
+    expect(list.find((f: any) => f.builtin === "pets").name).toBe("Pets (property)");
+    expect(list.filter((f: any) => f.builtin)).toHaveLength(9);
+    const [a] = await db.select().from(properties).where(eq(properties.id, typedIn.id));
+    expect(a).toMatchObject({ gateCode: "9911", lawnSqFt: 7500, custom: { [pets]: true } });
+    const [b] = await db.select().from(properties).where(eq(properties.id, hasOwn.id));
+    expect(b).toMatchObject({ gateCode: "0000", lawnSqFt: 6000, custom: {} });
+    // Asked again: nothing is added twice.
+    expect((await call("GET", "/custom-fields?appliesTo=property", "older")).body).toHaveLength(list.length);
+    await db.delete(customers).where(eq(customers.companyId, companyId));
   });
 });

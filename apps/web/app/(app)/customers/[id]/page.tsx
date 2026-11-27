@@ -220,7 +220,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
               ) : <p className="muted" style={{ margin: 0 }}>None. Add a spouse, property manager or accounts payable contact with Edit.</p>}
             </div>
             <CustomerPrepayments customerId={id} onChange={() => setCreditVersion((v) => v + 1)}
-              properties={propOptions.map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", "), lawnSqFt: p.lawnSqFt, frontSqFt: p.frontSqFt, backSqFt: p.backSqFt }))} />
+              properties={propOptions.map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", "), lawnSqFt: p.lawnSqFt, frontSqFt: p.frontSqFt, backSqFt: p.backSqFt, otherSqFt: p.otherSqFt, custom: p.custom }))} />
             <CustomerCredits customerId={id} onChange={() => setCreditVersion((v) => v + 1)}
               properties={propOptions.map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", ") }))} />
             {c.cancellations.length > 0 && (

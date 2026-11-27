@@ -8,10 +8,10 @@ import { api, fmtDate, today } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { ErrorBox } from "@/components/ui";
 import { CustomerPicker } from "@/components/customers";
-import { LineAreaPicker, areaDraft, areaValue, draftSqFt, serviceArea, usesLawnArea, wholeLawn, type AreaDraft } from "@/components/line-area";
+import { LineAreaPicker, areaDraft, areaValue, draftSqFt, serviceArea, useSizes, usesLawnArea, wholeLawn, type AreaDraft } from "@/components/line-area";
 
 export interface ServiceType { id: string; name: string; description: string | null; invoiceDescription?: string | null; pricing: string; priceCents: number; minimumCents: number; brackets: { upToSqFt: number | null; priceCents: number }[]; incomeAccountCode: string; active: boolean; taxable?: boolean; setupMinutes?: number | null; minutesPer1000?: number | null; tiers?: { fromSqFt: number; ratePer1000Cents: number }[]; bandSizeSqFt?: number | null; bandPricePoint?: number; roundToCents?: number; maxAutoSqFt?: number | null; targetCentsPerHour?: number | null; chemical?: boolean; applicationSite?: string | null;
-  /** The part of the lawn its lines start on: "whole", "front" or "back". */
+  /** The property size its lines are priced from: "whole" (Total ft), "front", "back", "other" or "cf:<field id>". */
   defaultLawnArea?: string | null;
   /** Products it applies, and their cost per 1,000 sq ft today (null: no products). */
   products?: ServiceProductLink[]; materialPer1000Cents?: number | null; materialMissingCost?: number }
@@ -118,21 +118,23 @@ export function InvoiceFields({ value, onChange, lockCustomer, fresh }: { value:
     }
     lastRate.current = rate;
   }, [rate, billing.data, customer.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The property sizes a line can be priced from (the company's number fields on properties).
+  const sizes = useSizes();
   const pickService = (i: number, id: string) => {
     if (!id) return setLine(i, { serviceTypeId: null });
     const s = services.data?.find((x) => x.id === id);
     if (!s) return;
-    // The service's own part of the lawn (whole, front or back) to start with.
+    // The size the service is priced from, to start with.
     const area = serviceArea(s);
     const price = priceFor(s, draftSqFt(area, property));
-    setLine(i, { serviceTypeId: s.id, area, description: value.lines[i].description || withAreaNote(lineTextFor(s, "invoice"), areaValue(area)), price: price != null ? dollars(price) : value.lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)) });
+    setLine(i, { serviceTypeId: s.id, area, description: value.lines[i].description || withAreaNote(lineTextFor(s, "invoice"), areaValue(area), sizes.names), price: price != null ? dollars(price) : value.lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)) });
   };
   /** A line for another part of the lawn: priced from that size, and its wording says so (unless somebody reworded it). */
   const setArea = (i: number, area: AreaDraft) => {
     const l = value.lines[i];
     const s = services.data?.find((x) => x.id === l.serviceTypeId);
     const price = s ? priceFor(s, draftSqFt(area, property)) : null;
-    setLine(i, { area, description: s ? rewordForArea(l.description, [lineTextFor(s, "invoice"), s.name], areaValue(l.area), areaValue(area)) : l.description, ...(s && s.pricing !== "flat" && price != null ? { price: dollars(price) } : {}) });
+    setLine(i, { area, description: s ? rewordForArea(l.description, [lineTextFor(s, "invoice"), s.name], areaValue(l.area), areaValue(area), sizes.names) : l.description, ...(s && s.pricing !== "flat" && price != null ? { price: dollars(price) } : {}) });
   };
   const parsed = value.lines.map((l) => ({ quantity: Number(l.quantity) || 0, unitPriceCents: toCents(l.price) || 0, taxRate: Number(l.tax) || 0 }));
   const lateFees = value.lateFees ?? [];
@@ -173,7 +175,7 @@ export function InvoiceFields({ value, onChange, lockCustomer, fresh }: { value:
                     <option value="">Custom line</option>
                     {(services.data ?? []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                   </select>
-                  {usesLawnArea(s) && <LineAreaPicker label={`Line ${i + 1} lawn area`} value={l.area} onChange={(a) => setArea(i, a)} property={property} />}
+                  {usesLawnArea(s) && <LineAreaPicker label={`Line ${i + 1} lawn area`} value={l.area} onChange={(a) => setArea(i, a)} property={property} sizes={sizes} />}
                   {s && <div className="muted" style={{ fontSize: 12 }}>{describePricing(s)}{unpriced ? " · add the lawn size to price it" : ""}</div>}
                   {!s && (
                     <select aria-label={`Line ${i + 1} income account`} value={l.incomeAccountCode} onChange={(e) => setLine(i, { incomeAccountCode: e.target.value })} style={{ marginTop: 4 }}>

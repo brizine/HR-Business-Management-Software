@@ -10,7 +10,7 @@ import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead } from "@/components/ui";
 import { CrewButtons, VisitForm, VisitStatus, VisitTags, crewNames, trackedLabel, visitWhen, type Visit } from "@/components/visits";
 import { VisitFiles } from "@/components/visit-files";
-import { areaSummary } from "@/components/line-area";
+import { areaSummary, useSizes } from "@/components/line-area";
 import { WorkOrderForms } from "@/components/visit-forms";
 import { useAuth } from "@/lib/auth";
 import { CustomFacts, CustomFieldsCard } from "@/components/custom-fields";
@@ -19,6 +19,8 @@ type Detail = Visit & { seriesLeft: number; today: string; canManage: boolean; i
 
 export default function WorkOrder({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  // The names of the property's size fields, for a line priced from one of them.
+  const sizes = useSizes();
   const router = useRouter();
   const data = useApi<Detail>(`/visits/${id}`);
   const [editing, setEditing] = useState(false);
@@ -78,7 +80,7 @@ export default function WorkOrder({ params }: { params: Promise<{ id: string }> 
             <h2 style={{ margin: 0 }}>Work and billing</h2>
             <table className="pt-lines">
               <tbody>{v.lines.map((l) => (
-                <tr key={l.id}><td>{l.description}{areaSummary(l, v.property) ? <span className="muted"> · {areaSummary(l, v.property)}</span> : null}{l.quantity !== 1 ? ` × ${l.quantity}` : ""}{l.budgetedHours ? <span className="muted"> · {l.budgetedHours} h</span> : null}{v.canManage && l.taxRate ? <span className="muted"> · taxed {formatTaxRate(l.taxRate)}</span> : null}</td>
+                <tr key={l.id}><td>{l.description}{areaSummary(l, v.property, sizes.names) ? <span className="muted"> · {areaSummary(l, v.property, sizes.names)}</span> : null}{l.quantity !== 1 ? ` × ${l.quantity}` : ""}{l.budgetedHours ? <span className="muted"> · {l.budgetedHours} h</span> : null}{v.canManage && l.taxRate ? <span className="muted"> · taxed {formatTaxRate(l.taxRate)}</span> : null}</td>
                   {v.canManage && <td className="num">{formatMoney(l.amountCents)}</td>}</tr>
               ))}</tbody>
               {v.canManage && (() => {

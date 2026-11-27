@@ -1,14 +1,15 @@
 "use client";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
-  CUSTOMER_KIND_LABELS, CUSTOMER_KINDS, DELIVERY_LABELS, DELIVERY_METHODS, LEAD_SOURCES, TAG_COLORS, formatPhoneTyping, lawnTotal,
+  CUSTOMER_KIND_LABELS, CUSTOMER_KINDS, DELIVERY_LABELS, DELIVERY_METHODS, LEAD_SOURCES, TAG_COLORS, customDefault, followPropertyTotal, formatPhoneTyping,
   type CustomerContactInput, type CustomValues,
 } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { ErrorBox } from "@/components/ui";
-import { CustomFieldInputs } from "./custom-fields";
+import { useAuth } from "@/lib/auth";
+import { CustomFieldInputs, FieldInput, NewFieldModal, fieldsChanged, useCustomFields } from "./custom-fields";
 
 export interface Tag { id: string; name: string; color: string; description?: string | null; archived: boolean; customers?: number; properties?: number }
 
@@ -218,7 +219,7 @@ export function customerBody(v: CustomerFormValue) {
 }
 
 export interface PropertyFormValue {
-  name: string; street: string; city: string; state: string; zip: string; mapCode: string; frontSqFt: string; backSqFt: string; lawnSqFt: string;
+  name: string; street: string; city: string; state: string; zip: string; mapCode: string; frontSqFt: string; backSqFt: string; otherSqFt: string; lawnSqFt: string;
   measurementId: string | null; measurementName: string; gateCode: string; pets: string; accessNotes: string; notes: string; tagIds: string[];
   lat: number | null; lng: number | null; custom: CustomValues; newRecord: boolean; taxRate: string;
 }
@@ -227,7 +228,7 @@ export function propertyFormValue(p?: any): PropertyFormValue {
   return {
     name: blank(p?.name), street: blank(p?.street), city: blank(p?.city), state: p?.state ?? "OK", zip: blank(p?.zip), mapCode: blank(p?.mapCode),
     frontSqFt: blank(p?.frontSqFt != null ? Math.round(p.frontSqFt) : ""), backSqFt: blank(p?.backSqFt != null ? Math.round(p.backSqFt) : ""),
-    lawnSqFt: blank(p?.lawnSqFt != null && p?.frontSqFt == null && p?.backSqFt == null ? Math.round(p.lawnSqFt) : ""),
+    otherSqFt: blank(p?.otherSqFt != null ? Math.round(p.otherSqFt) : ""), lawnSqFt: blank(p?.lawnSqFt != null ? Math.round(p.lawnSqFt) : ""),
     measurementId: p?.measurementId ?? null, measurementName: p?.measurement?.name ?? "", gateCode: blank(p?.gateCode), pets: blank(p?.pets),
     accessNotes: blank(p?.accessNotes), notes: blank(p?.notes), tagIds: p?.tagIds ?? [], lat: p?.lat ?? null, lng: p?.lng ?? null,
     custom: p?.custom ?? {}, newRecord: !p, taxRate: p?.taxRate != null ? String(p.taxRate) : "",
@@ -235,22 +236,76 @@ export function propertyFormValue(p?: any): PropertyFormValue {
 }
 
 export function propertyBody(v: PropertyFormValue) {
-  const front = num(v.frontSqFt), back = num(v.backSqFt), total = num(v.lawnSqFt);
+  // The total goes as typed; left blank, the server adds up front + back + other.
   const out: Record<string, unknown> = {
-    street: v.street, state: v.state || "OK", tagIds: v.tagIds, frontSqFt: front, backSqFt: back, lawnSqFt: front == null && back == null ? total : null,
+    street: v.street, state: v.state || "OK", tagIds: v.tagIds, frontSqFt: num(v.frontSqFt), backSqFt: num(v.backSqFt), otherSqFt: num(v.otherSqFt), lawnSqFt: num(v.lawnSqFt),
     measurementId: v.measurementId, lat: v.lat, lng: v.lng, custom: v.custom, taxRate: v.taxRate.trim() === "" ? null : Number(v.taxRate),
   };
   for (const k of ["name", "city", "zip", "mapCode", "gateCode", "pets", "accessNotes", "notes"] as const) if (v[k].trim()) out[k] = v[k];
   return out;
 }
 
-/** Address, Map Code, lawn size (typed, or from a saved Property Measure), access details and tags. */
+/**
+ * A property's details on a form: every custom field, Crewdesk's own (Map Code, the sizes, Gate
+ * Code, Pets, the notes) and the company's, in the company's order. Crewdesk's own are kept in the
+ * form's own values; the rest in its custom values.
+ */
+function PropertyFieldInputs({ value, onChange }: { value: PropertyFormValue; onChange: (v: PropertyFormValue) => void }) {
+  const { can } = useAuth();
+  const admin = can("admin");
+  const list = useCustomFields("property");
+  const fields = list.data ?? [];
+  const [adding, setAdding] = useState(false);
+  const filled = useRef(false);
+  const unified = (): CustomValues => ({ ...value.custom, ...Object.fromEntries(fields.filter((f) => f.builtin).map((f) => [f.id, value[f.builtin!] ?? ""])) });
+  const apply = (next: CustomValues) => {
+    const custom: CustomValues = {};
+    const own: Partial<PropertyFormValue> = {};
+    for (const f of fields) {
+      const v = next[f.id];
+      if (f.builtin) own[f.builtin] = v === undefined || v === null ? "" : String(v);
+      else if (v !== undefined) custom[f.id] = v;
+    }
+    onChange({ ...value, ...own, custom });
+  };
+  // A new property starts with each of the company's fields at its default.
+  useEffect(() => {
+    if (!value.newRecord || filled.current || !list.data) return;
+    filled.current = true;
+    const next = unified();
+    for (const f of list.data) if (!f.builtin && !f.transferable && (next[f.id] === undefined || next[f.id] === "")) { const d = customDefault(f); if (d !== null) next[f.id] = d; }
+    apply(next);
+  }, [list.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!list.data) return null;
+  const now = unified();
+  return (
+    <fieldset className="cf-box">
+      <legend>Property details</legend>
+      <div className="cf-grid">
+        {fields.map((f) => (
+          <div key={f.id} className="cf-row">
+            <label htmlFor={`cf-${f.id}`} className="cf-label">{f.name}</label>
+            <FieldInput f={f} value={now[f.id]} onChange={(v) => apply(followPropertyTotal(fields, now, { ...now, [f.id]: v }))}
+              placeholder={f.builtin === "lawnSqFt" ? "Blank: front + back + other" : f.builtin === "mapCode" ? "e.g. 801" : f.builtin === "pets" ? "Dog in back yard" : undefined} />
+          </div>
+        ))}
+      </div>
+      <div className="row cf-actions">
+        <span className="muted" style={{ fontSize: 13 }}>Total ft follows the front, back and other sizes until you type your own.</span>
+        {admin && <button type="button" className="btn" onClick={() => setAdding(true)}>Add custom field</button>}
+      </div>
+      {adding && <NewFieldModal appliesTo="property" onClose={() => setAdding(false)} onSaved={() => { setAdding(false); fieldsChanged(); }} />}
+    </fieldset>
+  );
+}
+
+/** Address, the property's image (a saved Property Measure, which fills in the sizes), its details and tags. */
 export function PropertyFields({ value, onChange, tags }: { value: PropertyFormValue; onChange: (v: PropertyFormValue) => void; tags: Tag[] }) {
   const set = (patch: Partial<PropertyFormValue>) => onChange({ ...value, ...patch });
   const text = (key: keyof PropertyFormValue, label: string, props: Record<string, unknown> = {}) => (
     <label>{label}<input value={value[key] as string} onChange={(e) => set({ [key]: e.target.value } as Partial<PropertyFormValue>)} {...props} /></label>
   );
-  const total = lawnTotal({ frontSqFt: num(value.frontSqFt), backSqFt: num(value.backSqFt), lawnSqFt: num(value.lawnSqFt) });
+  const whole = (n: number | null | undefined) => (n != null ? String(Math.round(n)) : "");
   return (
     <div className="stack">
       <div className="formgrid">
@@ -259,35 +314,22 @@ export function PropertyFields({ value, onChange, tags }: { value: PropertyFormV
         {text("state", "State", { maxLength: 2 })}
         {text("zip", "ZIP", { inputMode: "numeric" })}
         {text("name", "Label (optional)", { placeholder: "Rental A, Clubhouse…" })}
-        {text("mapCode", "Map Code (MC)", { placeholder: "e.g. 801" })}
-      </div>
-      <MeasurementPicker value={value} onPick={(m) => set(m ? {
-        measurementId: m.id, measurementName: m.name,
-        frontSqFt: m.frontSqFt != null ? String(Math.round(m.frontSqFt)) : "", backSqFt: m.backSqFt != null ? String(Math.round(m.backSqFt)) : "",
-        lawnSqFt: m.frontSqFt == null && m.backSqFt == null ? String(Math.round(m.netSqFt)) : "",
-        lat: value.lat ?? m.lat, lng: value.lng ?? m.lng,
-      } : { measurementId: null, measurementName: "" })} />
-      <div className="formgrid">
-        {text("frontSqFt", "Front lawn (sq ft)", { inputMode: "numeric" })}
-        {text("backSqFt", "Back lawn (sq ft)", { inputMode: "numeric" })}
-        {!value.frontSqFt && !value.backSqFt ? text("lawnSqFt", "Total lawn (sq ft)", { inputMode: "numeric" }) : (
-          <label>Total lawn<input readOnly value={total != null ? `${total.toLocaleString()} sq ft` : ""} /></label>
-        )}
-      </div>
-      <div className="formgrid">
-        {text("gateCode", "Gate code")}
-        {text("pets", "Pets", { placeholder: "Dog in back yard" })}
         {text("taxRate", "Sales tax rate here (%)", { inputMode: "decimal", placeholder: "Blank: the customer's, else the company's" })}
       </div>
-      <label>Access notes<textarea rows={2} value={value.accessNotes} onChange={(e) => set({ accessNotes: e.target.value })} /></label>
+      <MeasurementPicker value={value} onPick={(m) => {
+        if (!m) return set({ measurementId: null, measurementName: "" });
+        // The image's sizes: front, back, anything marked neither, and the total after cut-outs.
+        const front = m.frontSqFt != null ? Math.round(m.frontSqFt) : null, back = m.backSqFt != null ? Math.round(m.backSqFt) : null, total = Math.round(m.netSqFt);
+        const rest = front != null || back != null ? total - (front ?? 0) - (back ?? 0) : 0;
+        set({ measurementId: m.id, measurementName: m.name, frontSqFt: whole(front), backSqFt: whole(back), otherSqFt: rest > 0 ? String(rest) : "", lawnSqFt: String(total), lat: value.lat ?? m.lat, lng: value.lng ?? m.lng });
+      }} />
+      <PropertyFieldInputs value={value} onChange={onChange} />
       <TagPicker value={value.tagIds} onChange={(tagIds) => set({ tagIds })} tags={tags} label="Property tags" />
-      <CustomFieldInputs target="property" values={value.custom} onChange={(custom) => set({ custom })} fresh={value.newRecord} />
-      <label>Notes (for internal use)<textarea rows={2} value={value.notes} onChange={(e) => set({ notes: e.target.value })} /></label>
     </div>
   );
 }
 
-/** Picks a saved Property Measure to take the lawn size from. */
+/** The property's image on a form: picks a saved Property Measure, which fills in the sizes. */
 function MeasurementPicker({ value, onPick }: { value: PropertyFormValue; onPick: (m: any | null) => void }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<any[]>([]);
@@ -299,16 +341,16 @@ function MeasurementPicker({ value, onPick }: { value: PropertyFormValue; onPick
   }, [q, open, value.street]);
   if (value.measurementId && !open) {
     return (
-      <div className="row muted">Lawn size from saved measurement <strong>{value.measurementName || "(linked)"}</strong>
-        <button type="button" className="btn" onClick={() => setOpen(true)}>Change</button>
-        <button type="button" className="btn" onClick={() => onPick(null)}>Unlink</button>
+      <div className="row muted">Property image: <strong>{value.measurementName || "(linked)"}</strong>
+        <button type="button" className="btn" onClick={() => setOpen(true)}>Change image</button>
+        <button type="button" className="btn" onClick={() => onPick(null)} title="Take the image off. The sizes stay as they are.">Remove image</button>
       </div>
     );
   }
-  if (!open) return <div><button type="button" className="btn" onClick={() => setOpen(true)}>Use a saved Property Measure</button></div>;
+  if (!open) return <div><button type="button" className="btn" title="Pick this property's saved Property Measure. Its sizes fill in Front Lawn ft, Back Lawn ft, Other ft and Total ft." onClick={() => setOpen(true)}>Add image</button> <span className="muted">The property&apos;s saved Property Measure; its sizes fill in below.</span></div>;
   return (
     <div className="card inset stack">
-      <label>Find a saved measurement<input type="search" autoFocus value={q} placeholder={value.street || "Name or address"} onChange={(e) => setQ(e.target.value)} /></label>
+      <label>Find a saved Property Measure<input type="search" autoFocus value={q} placeholder={value.street || "Name or address"} onChange={(e) => setQ(e.target.value)} /></label>
       {results.length ? (
         <ul className="pick-list">
           {results.slice(0, 8).map((m) => (

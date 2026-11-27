@@ -1,9 +1,9 @@
 import type { FastifyPluginAsync } from "fastify";
 import { aliasedTable, and, arrayContains, arrayOverlaps, asc, desc, eq, ilike, inArray, isNull, not, or, sql, type SQL } from "drizzle-orm";
-import { NOTICE_CHANNELS, assignmentSchema, cancelSchema, customerName, endAssignmentSchema, lawnTotal, propertyCreateSchema, propertySchema } from "@crewdesk/shared";
+import { NOTICE_CHANNELS, assignmentSchema, cancelSchema, customerName, endAssignmentSchema, lawnTotal, propertyCreateSchema, propertySchema, splitPropertyValues, type CustomValues } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
-import { newRecordCustom, updatedCustom } from "../lib/customFields";
+import { fieldsFor, newRecordCustom, propertyColumnChanges, updatedCustom } from "../lib/customFields";
 import { cancellationReasons, cancellations, customers, measurements, properties, propertyAssignments } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
@@ -15,11 +15,24 @@ const AREA = "customers" as const;
 
 type ListQuery = { q?: string; status?: string; mapCode?: string; tags?: string; anyTags?: string; notTags?: string; customerTags?: string; limit?: string; offset?: string };
 
-/** The lawn sizes from a saved Property Measure (checked to be the company's). */
+/**
+ * The sizes from a saved Property Measure (checked to be the company's): front, back, anything
+ * measured that was marked neither ("other"), and the total after cut-outs.
+ */
 async function measurementSizes(tx: Tx, companyId: string, measurementId: string) {
   const [m] = await tx.select().from(measurements).where(and(eq(measurements.id, measurementId), eq(measurements.companyId, companyId)));
   if (!m) throw new HttpError(400, "That measurement doesn't exist");
-  return { frontSqFt: m.frontSqFt, backSqFt: m.backSqFt, lawnSqFt: m.netSqFt, lat: m.pinLat ?? m.lat, lng: m.pinLng ?? m.lng };
+  const whole = (n: number | null) => (n == null ? null : Math.round(n));
+  const front = whole(m.frontSqFt), back = whole(m.backSqFt), total = whole(m.netSqFt);
+  // "Other" only means something once some of the drawing is marked front or back.
+  const rest = front != null || back != null ? (total ?? 0) - (front ?? 0) - (back ?? 0) : 0;
+  return { frontSqFt: front, backSqFt: back, otherSqFt: rest > 0 ? rest : null, lawnSqFt: total, lat: m.pinLat ?? m.lat, lng: m.pinLng ?? m.lng };
+}
+
+/** Values sent under `custom` that belong to Crewdesk's own fields go to the property's columns; the rest are its custom values. */
+async function ownColumns(companyId: string, raw: unknown, cleaned: CustomValues) {
+  const fields = await fieldsFor(companyId, "property");
+  return splitPropertyValues(fields, raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null, cleaned);
 }
 
 /**
@@ -85,13 +98,16 @@ const routes: FastifyPluginAsync = async (app) => {
     const today = await companyToday(companyId);
     // The bill-to customer's same-named fields can transfer onto the property.
     const [payer] = billToCustomerId ? await db.select({ custom: customers.custom }).from(customers).where(and(eq(customers.id, billToCustomerId), eq(customers.companyId, companyId))) : [];
-    const custom = await newRecordCustom(companyId, "property", (req.body as { custom?: unknown })?.custom, [{ target: "customer", values: payer?.custom }]);
+    const sentCustom = (req.body as { custom?: unknown })?.custom;
+    const own = await ownColumns(companyId, sentCustom, await newRecordCustom(companyId, "property", sentCustom, [{ target: "customer", values: payer?.custom }]));
     return db.transaction(async (tx) => {
       const tagIds = await checkTags(tx, companyId, tags);
       const sizes = body.measurementId ? await measurementSizes(tx, companyId, body.measurementId) : null;
-      const values = { ...body, ...(sizes && body.frontSqFt == null && body.backSqFt == null ? { frontSqFt: sizes.frontSqFt, backSqFt: sizes.backSqFt, lawnSqFt: sizes.lawnSqFt } : {}) };
+      // Sizes typed on the form win; otherwise the linked image's are taken.
+      const typed = [body.frontSqFt, body.backSqFt, body.otherSqFt, body.lawnSqFt, own.columns.frontSqFt, own.columns.backSqFt, own.columns.otherSqFt, own.columns.lawnSqFt].some((v) => v != null);
+      const values = { ...body, ...own.columns, ...(sizes && !typed ? { frontSqFt: sizes.frontSqFt, backSqFt: sizes.backSqFt, otherSqFt: sizes.otherSqFt, lawnSqFt: sizes.lawnSqFt } : {}) };
       if (sizes && values.lat == null) Object.assign(values, { lat: sizes.lat, lng: sizes.lng });
-      const [p] = await tx.insert(properties).values({ ...values, custom, lawnSqFt: lawnTotal(values), tagIds, companyId, createdById: sub }).returning();
+      const [p] = await tx.insert(properties).values({ ...values, custom: own.custom, lawnSqFt: lawnTotal(values), tagIds, companyId, createdById: sub }).returning();
       await recordTagChanges(tx, { companyId, before: [], after: tagIds, propertyId: p.id, source: "hand", byId: sub });
       if (billToCustomerId) {
         await customerInCompany(tx, companyId, billToCustomerId);
@@ -138,16 +154,25 @@ const routes: FastifyPluginAsync = async (app) => {
       const tagIds = await checkTags(tx, companyId, body.tagIds, p.tagIds);
       if (body.measurementId && body.measurementId !== p.measurementId) await measurementSizes(tx, companyId, body.measurementId);
       const mapCodeManual = body.mapCode !== (p.mapCode ?? undefined) ? !!body.mapCode : p.mapCodeManual;
-      const custom = await updatedCustom(companyId, "property", (req.body as { custom?: unknown })?.custom, p.custom);
+      const sentCustom = (req.body as { custom?: unknown })?.custom;
+      const cleaned = await updatedCustom(companyId, "property", sentCustom, p.custom);
+      // Crewdesk's own fields sent as custom values (the property box's Edit) land in the property's columns.
+      const own = cleaned ? await ownColumns(companyId, sentCustom, cleaned) : null;
+      // The property as the form's own boxes leave it: a total left blank is front + back + other (an "other" the form didn't mention is kept).
+      const kept = <K extends "frontSqFt" | "backSqFt" | "otherSqFt">(k: K) => (body[k] !== undefined ? body[k] ?? null : p[k]);
+      const state = {
+        mapCode: body.mapCode ?? null, mapCodeManual, frontSqFt: kept("frontSqFt"), backSqFt: kept("backSqFt"), otherSqFt: kept("otherSqFt"),
+        lawnSqFt: lawnTotal({ otherSqFt: p.otherSqFt, ...body }),
+      };
       const [u] = await tx.update(properties).set({
-        ...body, ...(custom ? { custom } : {}), mapCode: body.mapCode ?? null, mapCodeManual, lawnSqFt: lawnTotal(body), tagIds, updatedAt: new Date(),
+        ...body, ...(own ? { custom: own.custom } : {}), mapCode: state.mapCode, mapCodeManual, lawnSqFt: state.lawnSqFt, tagIds, updatedAt: new Date(),
+        ...(own ? propertyColumnChanges(state, own.columns) : {}),
       }).where(eq(properties.id, p.id)).returning();
       await recordTagChanges(tx, { companyId, before: p.tagIds, after: tagIds, propertyId: p.id, source: "hand", byId: sub });
       return u;
     });
   });
 
-  /** Links a saved Property Measure and takes its front, back and total lawn size. */
   /** How the customer hears about a chemical application here: email, text, printed or none. */
   app.put<{ Params: { id: string } }>("/:id/chemical-notice", async (req) => {
     const { chemicalNotice } = parse(z.object({ chemicalNotice: z.enum(NOTICE_CHANNELS) }), req.body);
@@ -157,6 +182,10 @@ const routes: FastifyPluginAsync = async (app) => {
     return { chemicalNotice };
   });
 
+  /**
+   * The property's image: links a saved Property Measure and takes its sizes (front, back, other and
+   * total), replacing what was there. They can be changed by hand afterwards; the image stays linked.
+   */
   app.post<{ Params: { id: string } }>("/:id/measurement", async (req) => {
     const { measurementId } = parse(z.object({ measurementId: z.string().uuid() }), req.body);
     const { companyId } = req.user;
@@ -164,11 +193,17 @@ const routes: FastifyPluginAsync = async (app) => {
       const p = await propertyInCompany(tx, companyId, req.params.id);
       const s = await measurementSizes(tx, companyId, measurementId);
       const [u] = await tx.update(properties).set({
-        measurementId, frontSqFt: s.frontSqFt, backSqFt: s.backSqFt, lawnSqFt: lawnTotal({ frontSqFt: s.frontSqFt, backSqFt: s.backSqFt, lawnSqFt: s.lawnSqFt }),
+        measurementId, frontSqFt: s.frontSqFt, backSqFt: s.backSqFt, otherSqFt: s.otherSqFt, lawnSqFt: s.lawnSqFt,
         lat: p.lat ?? s.lat, lng: p.lng ?? s.lng, updatedAt: new Date(),
       }).where(eq(properties.id, p.id)).returning();
       return u;
     });
+  });
+  /** Takes the image off the property; the sizes stay as they are. */
+  app.delete<{ Params: { id: string } }>("/:id/measurement", async (req) => {
+    const p = await propertyInCompany(db, req.user.companyId, req.params.id);
+    await db.update(properties).set({ measurementId: null, updatedAt: new Date() }).where(eq(properties.id, p.id));
+    return { ok: true };
   });
 
   /** Puts a customer on the property as bill-to (replacing the current one) or as a resident. */

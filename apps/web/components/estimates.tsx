@@ -9,7 +9,7 @@ import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox } from "@/components/ui";
 import { CustomerPicker } from "@/components/customers";
 import { dollars, toCents, useBillingSettings, type ServiceType } from "@/components/invoices";
-import { LineAreaPicker, areaDraft, areaValue, draftSqFt, serviceArea, usesLawnArea, wholeLawn, type AreaDraft } from "@/components/line-area";
+import { LineAreaPicker, areaDraft, areaValue, draftSqFt, serviceArea, useSizes, usesLawnArea, wholeLawn, type AreaDraft } from "@/components/line-area";
 
 /** Draft, Pending, Accepted, Declined, Changes requested (and Expired), colored. */
 export function EstimateStatus({ status, expired }: { status: string; expired?: boolean }) {
@@ -85,6 +85,8 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
     lastRate.current = rate;
   }, [rate, billing.data, detail.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const setLine = (i: number, patch: Partial<Line>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  // The property sizes a line can be priced from (the company's number fields on properties).
+  const sizes = useSizes();
   const propFor = (l: Line) => properties.find((p) => p.id === (l.propertyId || propertyId)) ?? null;
   /** The square feet a line is for: its part of the lawn at its address. */
   const lawnFor = (l: Line, area: AreaDraft = l.area) => draftSqFt(area, propFor(l));
@@ -98,7 +100,7 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
     // Our cost (each): the service's products for this lawn, at today's prices.
     const material = lineMaterialCents(s, lawnFor(lines[i], area));
     setLine(i, {
-      serviceTypeId: s.id, area, description: lines[i].description || withAreaNote(lineTextFor(s, "estimate"), areaValue(area)), price: price != null ? dollars(price) : lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)),
+      serviceTypeId: s.id, area, description: lines[i].description || withAreaNote(lineTextFor(s, "estimate"), areaValue(area), sizes.names), price: price != null ? dollars(price) : lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)),
       cost: material != null ? dollars(material) : lines[i].cost, costAuto: material != null || (lines[i].costAuto && !lines[i].cost.trim()),
     });
   };
@@ -110,7 +112,7 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
     const price = priceFor(s, lawnFor(l, area));
     const material = lineMaterialCents(s, lawnFor(l, area));
     setLine(i, {
-      area, description: rewordForArea(l.description, [lineTextFor(s, "estimate"), s.name], areaValue(l.area), areaValue(area)),
+      area, description: rewordForArea(l.description, [lineTextFor(s, "estimate"), s.name], areaValue(l.area), areaValue(area), sizes.names),
       ...(s.pricing !== "flat" && price != null ? { price: dollars(price) } : {}),
       ...(l.costAuto || !l.cost.trim() ? { cost: material != null ? dollars(material) : "", costAuto: material != null } : {}),
     });
@@ -124,7 +126,7 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
       const area = serviceArea(s);
       const price = l.unitPriceCents ?? (s ? priceFor(s, draftSqFt(area, property)) : null);
       const material = s ? lineMaterialCents(s, draftSqFt(area, property)) : null;
-      return { ...blankLine(), area, serviceTypeId: l.serviceTypeId ?? null, description: withAreaNote(l.description ?? s?.name ?? "", areaValue(area)), quantity: String(l.quantity ?? 1), price: price != null ? dollars(price) : "", incomeAccountCode: s?.incomeAccountCode ?? "4000", tax: taxText(lineTaxRate(s?.taxable, rate)), hours: l.budgetedHours != null ? String(l.budgetedHours) : "", cost: material != null ? dollars(material) : "", costAuto: material != null };
+      return { ...blankLine(), area, serviceTypeId: l.serviceTypeId ?? null, description: withAreaNote(l.description ?? s?.name ?? "", areaValue(area), sizes.names), quantity: String(l.quantity ?? 1), price: price != null ? dollars(price) : "", incomeAccountCode: s?.incomeAccountCode ?? "4000", tax: taxText(lineTaxRate(s?.taxable, rate)), hours: l.budgetedHours != null ? String(l.budgetedHours) : "", cost: material != null ? dollars(material) : "", costAuto: material != null };
     });
     setLines((ls) => [...ls.filter((l) => l.description.trim() || l.price), ...added]);
   };
@@ -196,7 +198,7 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
                     {(services.data ?? []).filter((x) => x.active || x.id === l.serviceTypeId).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                   </select>
                   <input aria-label={`Line ${i + 1} description`} value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} placeholder="Description" />
-                  {usesLawnArea(s) && <LineAreaPicker label={`Line ${i + 1} lawn area`} value={l.area} onChange={(a) => setArea(i, a)} property={propFor(l)} />}
+                  {usesLawnArea(s) && <LineAreaPicker label={`Line ${i + 1} lawn area`} value={l.area} onChange={(a) => setArea(i, a)} property={propFor(l)} sizes={sizes} />}
                   {s && <span className="muted" style={{ fontSize: 12 }}>{describePricing(s)}</span>}
                 </div>
                 <label>Qty<input aria-label={`Line ${i + 1} quantity`} inputMode="decimal" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></label>

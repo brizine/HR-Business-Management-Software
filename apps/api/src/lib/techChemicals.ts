@@ -57,7 +57,7 @@ function treatedArea(lines: { serviceTypeId: string | null; chemical: boolean | 
 export async function chemicalOptions(visitId: string, companyId: string) {
   const [v] = await db.select({ date: visits.date, propertyId: visits.propertyId }).from(visits).where(eq(visits.id, visitId));
   const day = v?.date ?? (await companyToday(companyId));
-  const [prop] = v?.propertyId ? await db.select({ lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt }).from(properties).where(eq(properties.id, v.propertyId)) : [];
+  const [prop] = v?.propertyId ? await db.select({ lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt, otherSqFt: properties.otherSqFt, custom: properties.custom }).from(properties).where(eq(properties.id, v.propertyId)) : [];
   // Each line's own area: the whole lawn, or the front, back or typed size set on it.
   const lines = (await db.select({ serviceTypeId: visitLines.serviceTypeId, chemical: serviceTypes.chemical, site: serviceTypes.applicationSite, lawnArea: visitLines.lawnArea, lawnAreaSqFt: visitLines.lawnAreaSqFt })
     .from(visitLines).leftJoin(serviceTypes, eq(serviceTypes.id, visitLines.serviceTypeId)).where(eq(visitLines.visitId, visitId)).orderBy(asc(visitLines.sortOrder)))
@@ -129,7 +129,7 @@ export async function snapshotFromTech(tx: Tx, visitId: string, companyId: strin
   const day = v.date ?? (await companyToday(companyId));
   const used = c.items.filter((i) => i.used);
   if (!used.length) return 0;
-  const [prop] = v.propertyId ? await tx.select({ lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt }).from(properties).where(eq(properties.id, v.propertyId)) : [];
+  const [prop] = v.propertyId ? await tx.select({ lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt, otherSqFt: properties.otherSqFt, custom: properties.custom }).from(properties).where(eq(properties.id, v.propertyId)) : [];
   const ids = [...new Set(used.map((i) => i.productId))];
   const ps = await tx.select().from(products).where(and(inArray(products.id, ids), eq(products.companyId, companyId)));
   if (ps.length !== ids.length) throw new HttpError(400, "One of the products isn't in your product list");

@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import {
   CUSTOM_FIELD_TARGETS, CUSTOM_FIELD_TARGET_LABELS, CUSTOM_FIELD_TYPE_LABELS, formatCustomValue,
-  type CustomFieldDef, type CustomFieldTarget,
+  type CustomFieldDef, type CustomFieldTarget, type PropertyBuiltin,
 } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -96,6 +96,13 @@ export default function CustomFields() {
   );
 }
 
+/** What Crewdesk does with each of its own property fields. */
+const BUILTIN_USE: Record<PropertyBuiltin, string> = {
+  mapCode: "it groups routes and the dispatch map", frontSqFt: "a size services can be priced from", backSqFt: "a size services can be priced from",
+  otherSqFt: "a size services can be priced from", lawnSqFt: "the size services are priced from unless they say otherwise", gateCode: "shown to the crew on the work order",
+  pets: "shown to the crew, and flags a dog on the waiting list", accessNotes: "shown to the crew on the work order", notes: "office notes on the property",
+};
+
 function FieldRow({ f, admin, picked, onPick, onUpdate, drag, onDelete, busy }: {
   f: CustomFieldDef; admin: boolean; picked: boolean; onPick: (on: boolean) => void; onUpdate: (body: Record<string, unknown>) => void;
   drag: ReturnType<typeof useDragOrder>; onDelete: () => void; busy: boolean;
@@ -108,7 +115,7 @@ function FieldRow({ f, admin, picked, onPick, onUpdate, drag, onDelete, busy }: 
   return (
     <tr {...drag.row(f.id)}>
       {admin && <td className="drag-col"><Grip drag={drag} id={f.id} name={f.name} /></td>}
-      {admin && <td><input type="checkbox" aria-label={`Select ${f.name}`} checked={picked} onChange={(e) => onPick(e.target.checked)} /></td>}
+      {admin && <td>{f.builtin ? null : <input type="checkbox" aria-label={`Select ${f.name}`} checked={picked} onChange={(e) => onPick(e.target.checked)} />}</td>}
       <td>
         {renaming ? (
           <form className="stack" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); onUpdate({ name, ...(f.type === "select" ? { options: choices.split(/\n|,/).map((s) => s.trim()).filter(Boolean) } : {}) }); setRenaming(false); }}>
@@ -120,6 +127,7 @@ function FieldRow({ f, admin, picked, onPick, onUpdate, drag, onDelete, busy }: 
           <button type="button" className="linkbtn cf-name" title="Rename" onClick={() => setRenaming(true)}>{f.name}</button>
         ) : f.name}
         {f.type === "select" && !renaming && <div className="muted" style={{ fontSize: 12 }}>{f.options.join(" · ")}</div>}
+        {f.builtin && !renaming && <div className="muted" style={{ fontSize: 12 }}>Crewdesk uses this one itself ({BUILTIN_USE[f.builtin]}). Rename it or move it; it can&apos;t be deleted.</div>}
       </td>
       <td>{CUSTOM_FIELD_TYPE_LABELS[f.type]}</td>
       <td>{CUSTOM_FIELD_TARGET_LABELS[f.appliesTo]}</td>
@@ -138,7 +146,7 @@ function FieldRow({ f, admin, picked, onPick, onUpdate, drag, onDelete, busy }: 
       <td><input type="checkbox" aria-label={`${f.name} is transferable`} checked={f.transferable} disabled={!admin || busy} onChange={(e) => onUpdate({ transferable: e.target.checked })} /></td>
       {admin && (
         <td className="cf-row-actions">
-          <button type="button" className="btn danger" aria-label={`Delete ${f.name}`} disabled={busy} onClick={onDelete}>Delete</button>
+          {!f.builtin && <button type="button" className="btn danger" aria-label={`Delete ${f.name}`} disabled={busy} onClick={onDelete}>Delete</button>}
         </td>
       )}
     </tr>

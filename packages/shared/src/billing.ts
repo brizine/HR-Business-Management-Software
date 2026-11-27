@@ -2,7 +2,7 @@ import { z } from "zod";
 import { optionalTaxRateSchema, taxFor, taxRateSchema } from "./tax";
 import { DEFAULT_SEND_SCHEDULE, autoSendSettingsSchema, lateFeeSettingsSchema } from "./billingRules";
 import { formatMoney } from "./money";
-import { SERVICE_LAWN_AREAS, lawnAreaFields } from "./lawnArea";
+import { lawnAreaFields, serviceLawnArea } from "./lawnArea";
 import { DEFAULT_ESTIMATE_DEPOSIT, estimateDepositSettingsSchema } from "./deposits";
 
 export { formatMoney };
@@ -81,8 +81,11 @@ export const serviceTypeSchema = z.object({
   setupMinutes: z.preprocess((v) => (v === "" ? null : v), z.coerce.number().int().min(0).max(600).nullable()).optional(),
   /** A chemical application: work orders with it get the weather recorded when completed. */
   chemical: z.boolean().optional(),
-  /** The part of the lawn its lines start on (each line can still be changed): whole, front or back. */
-  defaultLawnArea: z.enum(SERVICE_LAWN_AREAS).optional(),
+  /**
+   * The property size its price comes from (each line can still be changed): "whole" (Total ft), "front",
+   * "back", "other", or "cf:<id>" for a number field the company added to properties.
+   */
+  defaultLawnArea: serviceLawnArea.optional(),
   /** Chemical records: where it's applied (ODAFF item 16), e.g. "Turf – front and back lawn". */
   applicationSite: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), z.string().trim().max(200).nullable()).optional(),
   minutesPer1000: z.preprocess((v) => (v === "" ? null : v), z.coerce.number().min(0).max(120).nullable()).optional(),

@@ -373,13 +373,33 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
 - **Properties** (Operations → Properties): search by address, ZIP, label or customer; filter by **Map Code
   starts with** (e.g. 80 for 800–809; type **none** for properties without one), status, property tags, and the
   bill-to customer's tags (e.g. properties whose customer is tagged Commercial).
-- **Property page:** Map Code, lawn size (front, back and total), gate code, pets, access notes, tags and the
-  **People** on it. **Add a person** puts an existing customer on the property as a resident, or as the new
-  bill-to: the old bill-to's time ends the day before, their past invoices stay with them, and the property's
-  history stays with the property (**Show history**). **Moved out** ends a resident's time. **Map** opens the
-  address in Google Maps.
-- **Lawn size:** type front and back (the total is worked out) or just a total, or click **Use a saved
-  Property Measure** to take the sizes from a measurement saved on the Property Measure page.
+- **Property page:** the **Property** box and the **People** on it. **Add a person** puts an existing customer
+  on the property as a resident, or as the new bill-to: the old bill-to's time ends the day before, their past
+  invoices stay with them, and the property's history stays with the property (**Show history**). **Moved out**
+  ends a resident's time. **Map** opens the address in Google Maps.
+- **The Property box:** everything about the property in one box, each piece its own item.
+  - **Its details are custom fields.** Map Code, Front Lawn ft, Back Lawn ft, Other ft, Total ft, Gate Code,
+    Pets, Access Notes and Notes come with Crewdesk; your own property fields show right beside them. Rename
+    any of them, change their order or add more in **Resources → Custom fields** (admins can also click **Add
+    custom field** in the box). Crewdesk's own can't be deleted, because it uses them: the gate code, pets and
+    access notes reach the crew's phone, the Map Code groups routes, and the sizes price services.
+  - **Edit details** turns every field into a box to type in; **Save details** saves them all.
+  - **The sizes:** **Total ft** follows Front + Back + Other while you type them. Type your own total and it
+    stays as you typed it (that is how you override it). Leave the total blank and it is added up for you.
+  - **Property Image:** the property's saved Property Measure, shown as a picture (the aerial photo with the
+    measured areas drawn on it). Click **Add image**, find the drawing (the ones for this address come up
+    first) and click it. Its sizes go straight into Front Lawn ft, Back Lawn ft and Total ft, and anything
+    measured that was marked neither front nor back goes into Other ft. You can still change any of them by hand
+    afterwards; the box then says the sizes differ from the image and offers **Use the image's sizes** to put
+    them back (use the same link after redrawing the property in Property Measure). **Change image** picks
+    another, **Open in Property Measure** opens the drawing, and **Remove image** takes it off without touching
+    the sizes. No drawing yet? **Measure this property** in the picker goes to Property Measure.
+  - **Tags**, the **Preferred crew**, the **Pre Visit Notification**, how the customer hears **after a chemical
+    application**, and the **card on file** switch are in the same box.
+  - **In the layout editor** (Settings → Layout editor) every item in the box can be dragged to a new place or
+    hidden, like the items in any other box.
+- **Adding or editing a property** (the **Edit** button, or **Add a property** on a customer): the address, the
+  sales tax rate, **Add image**, the same **Property details** fields and the tags.
 - **Inactive customers and properties:** **Make inactive** (in the customer's **⋯** menu, or at the top of a
   property) asks for a reason from the list, an effective date and a comment (required for some reasons, such as
   Other). Making a customer inactive also makes the properties they're the bill-to for inactive; properties
@@ -434,23 +454,23 @@ billing; admins change prices).
 - **Copy:** each service has a **Copy** button. It opens a new service with everything the other one has
   (pricing, tiers, time estimate, invoice description, taxable and chemical ticks, products and mixes) under the
   name "… (copy)". Change what differs, rename it and save; the original is not touched.
-- **Part of the lawn (front, back or a typed size):** a customer may only want a service on part of the lawn,
-  such as flea & tick in the back yard where the dog is. Every line for a service (on a work order, an estimate
-  or an invoice) has a box under its description that says where its square feet come from: **Whole lawn**,
-  **Front lawn only**, **Back lawn only** (each with the property's size beside it) or **A size you type**.
-  - Changing it re-prices the line from that size straight away, and adds a note to the line's wording, such as
-    "Flea & tick (back lawn only)" or "(3,000 sq ft only)", so the crew sees it on the work order and the
+- **Priced from (which property field a service's size comes from):** every service says which of the
+  property's number fields its price is worked out from. **Priced from** on the service form lists them: **Total
+  ft** (the usual one), **Front Lawn ft**, **Back Lawn ft**, **Other ft**, and any number field you have added
+  to properties in Resources → Custom fields (a side yard, a bed area, a count of trees). Add the field there
+  first, fill it in on each property, then pick it on the service.
+  - **One customer wants it differently** (flea & tick only in the back yard where the dog is): every line for
+    a service, on a work order, an estimate or an invoice, has a box under its description showing the field it
+    is priced from and that property's number. Pick another field there, or **A size you type**.
+  - Changing it re-prices the line straight away and adds a note to the line's wording, such as "Flea & tick
+    (back lawn only)", "(side yard only)" or "(3,000 sq ft only)", so the crew sees it on the work order and the
     customer on the estimate and invoice. A line you have reworded yourself keeps your words.
-  - Everything worked out from the lawn's size follows the line: the **time estimate** on the waiting list, the
+  - Everything worked out from the size follows the line: the **time estimate** on the waiting list, the
     product amounts on the **load sheet**, the amounts the tech sees filled in when completing a chemical work
     order, the **material cost**, and the **area treated** on the chemical record. A whole-lawn round with a
     back-yard-only add-on on the same work order still records the whole lawn as the area treated.
-  - Front and back sizes come from the property (Property Measure, or typed on the property). A property with
-    only a total has no front or back size: the box says "size not on file" and the line isn't priced until you
-    add the sizes or type one.
-  - **Lawn area it covers** on the service form sets what that service's lines start on. Leave it on Whole
-    lawn for most services; set a service you only ever sell for the back yard to **Back lawn only** and its
-    lines start there. Any line can still be changed for one customer.
+  - A property with nothing in the field has no size for that line: the box says "not on file" and the line
+    isn't priced until you fill the field in on the property or type a size.
 - **Rate chart:** for per 1,000 and volume discount pricing the form shows a **Rate chart** with every size the
   service prices (every 1,000 sq ft for a single rate; every 500 sq ft, or every step, for volume discount), up to
   the **Price by hand above** size or about an acre. Click its heading to fold it away or bring it back; the
@@ -1436,9 +1456,9 @@ Your own fields, like Homeworks' Custom Fields: "Gallons used" on work orders, "
     - a work order or to-do copies from its property, then its customer;
     - an invoice made from a work order copies from the work order, then the customer;
     - a property copies from its bill-to customer.
-    For example, Front Yard Sq Ft on a property fills Front Yard Sq Ft on each of its work orders. Fields on work
-    orders and to-dos named Front Yard Sq Ft, Back Yard Sq Ft, Total Sq Ft or Lawn Sq Ft also fill from the
-    property's measured lawn, because Crewdesk keeps those sizes built in.
+    For example, a work order field named Gate Code or Total ft fills from the property's field of the same
+    name. Fields on work orders and to-dos named Front Yard Sq Ft, Back Yard Sq Ft, Total Sq Ft or Lawn Sq Ft
+    also fill from the property's sizes, whatever those are called now.
   - **Default value:** what a new record starts with. A value typed in, or a transferred one, comes first.
 - **The list** shows each field's type, what it applies to, its default and Transferable, with **Applies to** and
   **Search** filters.
@@ -1448,13 +1468,19 @@ Your own fields, like Homeworks' Custom Fields: "Gallons used" on work orders, "
     pages. A field moves among the fields for the same kind of record.
   - **Delete** removes one field, or tick several and **Delete selected**. Deleted fields' values stop showing
     everywhere.
+  - **Crewdesk's own property fields** (Map Code, Front Lawn ft, Back Lawn ft, Other ft, Total ft, Gate Code,
+    Pets, Access Notes, Notes) are in the list too, each with a line saying what Crewdesk uses it for. Rename
+    them and move them like any field; they have no Delete, because Crewdesk needs them. To take one off the
+    property page, hide it in the layout editor. A service can be priced from any **Decimal** or **Integer**
+    field on properties (see **Priced from** under the price list).
 - **Filling them in:** the customer, property, work order and to-do forms have a **Custom fields** box.
   - Each field has an input.
   - **Reset to defaults** puts the defaults back, and **Clear** empties them all.
   - Owners and admins also see **Add custom field**, which adds one without leaving the form.
   - On a new record the defaults are filled in. A transferable field left blank says where it will be filled from.
-- **On each page:** customers, properties, work orders, to-dos, invoices and equipment have a **Custom fields**
-  card. Click **Edit**, change the values, then **Save custom fields**.
+- **On each page:** customers, work orders, to-dos, invoices and equipment have a **Custom fields**
+  card. Click **Edit**, change the values, then **Save custom fields**. A property's fields are in its
+  **Property** box instead (**Edit details**).
   - Customers, properties and invoices: Customers & billing managers can change them.
   - Work orders: managers, or the crew on the work order.
   - To-dos: managers, whoever made it, or the people it's for.

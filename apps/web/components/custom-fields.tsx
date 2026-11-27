@@ -11,7 +11,7 @@ import { Icon } from "./icons";
 import { ErrorBox } from "./ui";
 
 /** Tells every list of custom fields on the page to reload (a field was added). */
-const fieldsChanged = () => window.dispatchEvent(new Event("crewdesk:custom-fields"));
+export const fieldsChanged = () => window.dispatchEvent(new Event("crewdesk:custom-fields"));
 /** The company's custom fields for one kind of record (reloads when one is added anywhere on the page). */
 export function useCustomFields(target: CustomFieldTarget | null) {
   const list = useApi<CustomFieldDef[]>(target ? `/custom-fields?appliesTo=${target}` : null);
@@ -31,7 +31,7 @@ const ONE: Record<CustomFieldTarget, string> = { customer: "customer", property:
 const blank = (v: unknown) => v === null || v === undefined || v === "";
 
 /** One input for a field, by its type. */
-function FieldInput({ f, value, onChange, placeholder }: { f: CustomFieldDef; value: CustomValue | undefined; onChange: (v: CustomValue | "") => void; placeholder?: string }) {
+export function FieldInput({ f, value, onChange, placeholder }: { f: CustomFieldDef; value: CustomValue | undefined; onChange: (v: CustomValue | "") => void; placeholder?: string }) {
   const id = `cf-${f.id}`;
   const str = blank(value) ? "" : String(value);
   switch (f.type) {
@@ -51,6 +51,8 @@ function FieldInput({ f, value, onChange, placeholder }: { f: CustomFieldDef; va
     case "decimal":
       return <input id={id} inputMode={f.type === "integer" ? "numeric" : "decimal"} value={str} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />;
     default:
+      // Crewdesk's own note fields on a property get room to write.
+      if (f.builtin === "accessNotes" || f.builtin === "notes") return <textarea id={id} rows={2} maxLength={2000} value={str} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />;
       return <input id={id} maxLength={2000} value={str} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />;
   }
 }
@@ -60,8 +62,10 @@ function FieldInput({ f, value, onChange, placeholder }: { f: CustomFieldDef; va
  * then Reset to defaults, Clear, and (owners and admins) Add custom field. On a new record the
  * defaults are filled in; transferable fields left blank are filled from the record it's made for.
  */
-export function CustomFieldInputs({ target, values, onChange, fresh, title = "Custom fields" }: {
+export function CustomFieldInputs({ target, values, onChange, fresh, title = "Custom fields", tools = true }: {
   target: CustomFieldTarget; values: CustomValues; onChange: (v: CustomValues) => void; fresh?: boolean; title?: string;
+  /** Reset to defaults and Clear (left out where the box holds a record's main details). */
+  tools?: boolean;
 }) {
   const { can } = useAuth();
   const admin = can("admin");
@@ -98,8 +102,8 @@ export function CustomFieldInputs({ target, values, onChange, fresh, title = "Cu
         </div>
       ) : <p className="muted" style={{ margin: 0 }}>No custom fields for {CUSTOM_FIELD_TARGET_LABELS[target].toLowerCase()} yet.</p>}
       <div className="row cf-actions">
-        {fields.length > 0 && <button type="button" className="btn" onClick={reset}>Reset to defaults</button>}
-        {fields.length > 0 && <button type="button" className="btn" onClick={() => onChange(Object.fromEntries(fields.map((f) => [f.id, ""])))}>Clear</button>}
+        {tools && fields.length > 0 && <button type="button" className="btn" onClick={reset}>Reset to defaults</button>}
+        {tools && fields.length > 0 && <button type="button" className="btn" onClick={() => onChange(Object.fromEntries(fields.map((f) => [f.id, ""])))}>Clear</button>}
         {admin && <button type="button" className="btn" onClick={() => setAdding(true)}><Icon name="plus" size={14} /> Add custom field</button>}
       </div>
       {adding && <NewFieldModal appliesTo={target} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); fieldsChanged(); }} />}
