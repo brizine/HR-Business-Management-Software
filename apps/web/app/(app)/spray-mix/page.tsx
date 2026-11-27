@@ -485,7 +485,7 @@ export default function SprayMix() {
         <>
           <div className="tabs noprint" role="tablist" aria-label="Mix sheets" style={{ marginBottom: 12 }}>
             {data.sheets.map((s: any) => (
-              <button key={s.id} role="tab" aria-selected={s.id === sheet.id} onClick={() => setTab(s.id)}>{s.name}</button>
+              <button key={s.id} role="tab" aria-selected={s.id === sheet.id} data-tip="Show this mix sheet" onClick={() => setTab(s.id)}>{s.name}</button>
             ))}
             {data.canEdit && (
               <button className="btn sm" style={{ marginLeft: "auto", alignSelf: "center" }} onClick={() => {

@@ -148,7 +148,7 @@ export default function Onboarding() {
             <h2>Checklist Templates</h2>
             {templates.data?.length ? templates.data.map((t) => (
               <details key={t.id} style={{ padding: "6px 0" }}>
-                <summary><strong>{t.name}</strong> <span className="muted">({t.tasks.length} tasks)</span></summary>
+                <summary data-tip="Show or hide this checklist's tasks"><strong>{t.name}</strong> <span className="muted">({t.tasks.length} tasks)</span></summary>
                 <ul>{t.tasks.map((x: any, i: number) => (
                   <li key={i}>{x.title} <span className="muted">· {x.assignee === "employee" ? "new hire" : x.assignee} · day {x.dueInDays}{x.action === "form" ? ` · ${FORM_LABELS[x.formType]}` : x.action && x.action !== "none" ? ` · ${ACTION_LABELS[x.action as TaskAction].toLowerCase()}` : ""}</span></li>
                 ))}</ul>

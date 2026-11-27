@@ -6,6 +6,7 @@
 
 /** A label that means the same wherever it appears. */
 export const TIPS_BY_LABEL: Record<string, string> = {
+  "sign and submit": "Sign with your typed name and send the form in",
   // Finishing and leaving
   save: "Save your changes",
   "save changes": "Save your changes",
@@ -232,6 +233,7 @@ export const TIPS_NAV: Record<string, string> = {
 /** Labels that follow a pattern (tested on the label as tipLabel() spells it). */
 export const TIPS_BY_PATTERN: [RegExp, string][] = [
   [/: on or off$/, "Turn this on or off; while off it does nothing"],
+  [/: on or off for /, "On or off for this customer only; everyone else keeps the main setting"],
   [/: review before/, "When on, each one waits for your OK under Review before it goes out"],
   [/: (either|yes|no|with|without)$/, "Filter by this tag: click for only the ones with it, again for the ones without, again for either"],
   [/^open (sun|mon|tues|wednes|thurs|fri|satur)day/, "Open this day"],
@@ -239,6 +241,8 @@ export const TIPS_BY_PATTERN: [RegExp, string][] = [
   [/^how do i /, "Ask the assistant this question"],
   [/^# notes?$/, "Read the notes on this stop"],
   [/^# columns$/, "Choose which columns show, and drag them into order"],
+  [/^print # labels?$/, "Print the QR labels you ticked, to stick on vehicles and equipment"],
+  [/^add (# )?selected \(#h each\)$/, "Add the holidays you ticked, each paid at this many hours"],
   [/^email # customers?$/, "Write one email to these customers: the ones you ticked, or everyone on the list"],
   [/^text # customers?$/, "Write one text to these customers: the ones you ticked, or everyone on the list"],
   [/^who can edit/, "Choose the employees who may change this, besides admins"],
@@ -259,6 +263,9 @@ export const TIPS_BY_CLASS: Record<string, string> = {
   "file-drop": "Choose files from your computer, or drag them onto here",
   "db-notes": "Read the notes on this stop",
   tag: "Click to put this tag on or take it off",
+  "hw-toggle": "Click to turn it on or off",
+  "hw-seq-title": "Show or hide what this sequence does, step by step",
+  "pp-day": "A payday, and the pay period it pays for",
 };
 
 /* The tabs along the top of Settings, and of Chemical Tracking: the same on each of their pages. */
@@ -346,6 +353,7 @@ export const TIPS_BY_PAGE: Record<string, Record<string, string>> = {
     "header - click to show": "Show or hide the letterhead on top of the document",
     "insert customer / company info": "Put in a blank that fills itself, like the customer's name or your phone number",
     "create document": "Start a new letter or form to send or print",
+    "import from homeworks": "Bring in the document templates exported from Homeworks",
   },
   texts: {
     all: "Every conversation", unread: "Conversations with something you haven't read", mine: "Conversations assigned to you",
@@ -375,6 +383,8 @@ export const TIPS_BY_PAGE: Record<string, Record<string, string>> = {
     "pick a date to jump to": "Choose the day to show", table: "Show the day as a table", split: "Show the table and the map side by side", waitlist: "Show services waiting to be scheduled", board: "Show the day as lanes, one per crew",
     assign: "Give the selected events to a crew or person", "route stops": "Build a route from the selected events and put the stops in order",
     "color events by": "Choose what the colors mean: routing status, assignment, service or weekday",
+    "routing status": "Color each event by whether it's on a route yet", assignment: "Color each event by the crew or person it's assigned to",
+    service: "Color each event by its service", "event type": "Color each event by what it is: a work order, a to-do and so on", weekday: "Color each event by the day of the week",
   },
   visits: {
     calendar: "See work orders on the calendar",
@@ -396,6 +406,7 @@ export const TIPS_BY_PAGE: Record<string, Record<string, string>> = {
     "price list": "Open your products and services, to change what they cost",
     drafts: chip("invoices not sent yet"), overdue: chip("invoices past their due date"), paid: chip("invoices paid in full"), "to mail": chip("invoices waiting to be printed and mailed"), all: "Show every invoice",
     "send again": "Email this invoice to the customer once more",
+    "print selected (pdf)": "Open the invoices you ticked as one PDF to print and mail", "mark mailed": "Take the ones you ticked off the to-mail list, with today as the day mailed",
     "save and send": "Save the invoice and choose how it goes to the customer", "save as draft": "Save it without sending; the customer doesn't see it yet",
     "record payment": "Enter a payment made by cash, check or card", "take payment": "Charge the customer's card or bank account on file",
   },
@@ -452,7 +463,8 @@ export const TIPS_BY_PAGE: Record<string, Record<string, string>> = {
     "review timesheets": "Open this period's timesheets to check the hours", "pick a pay period": "Choose the pay period to show",
     "use dates": "Show the dates you typed", "add extra pay": "Add a bonus, tip or other one-off pay for someone", "current period": "Jump to the pay period that's open now", "custom dates": "Show any range of dates instead of a pay period",
   },
-  "pay-periods": { "pick a pay period": "Choose the pay period to show", "current period": "Jump to the pay period that's open now", "custom dates": "Show any range of dates instead of a pay period" },
+  "pay-periods": { "pick a pay period": "Choose the pay period to show", "current period": "Jump to the pay period that's open now", "custom dates": "Show any range of dates instead of a pay period",
+    payroll: "Go back to Payroll", "approve pay period": "Approve everyone's hours for this period; its figures are then locked" },
   people: {
     "sign out everywhere": "Sign this person out of every phone and computer",
     notifications: "Choose which alerts this person gets, and how",
@@ -476,12 +488,30 @@ export const TIPS_BY_PAGE: Record<string, Record<string, string>> = {
   "time-off": {
     "my balance": "How much paid time off you have left", "request time off": "Ask for days off",
     upcoming: "Approved time off still to come", holidays: "The company's paid holidays", rules: "How time off is earned and approved",
+    "turn off": "Stop paying this holiday; it stays on the list to turn back on", "turn on": "Pay this holiday again",
   },
   training: {
     "my training": "The courses assigned to you", "all courses": "Every course the company has", "team progress": "Who has finished which course",
+    "all training": "Go back to the list of courses", "view course": "See the course as your team sees it",
   },
   attendance: { calendar: "See everyone's days on a calendar, colored by how each one went", report: "Lates, absences and points for everyone, for a range of dates", "rules & settings": "What counts as late or absent, and how many points each is worth" },
   onboarding: { task: "Add a step to this checklist" },
+  todos: {
+    "categories and off-seasons · add new ones from the to-do form": "Show or hide your to-do categories and off-seasons, to rename or remove them",
+    return: "Go back to where you came from",
+    "start work": "Start timing work on this to-do", "start work again": "Start timing work on this to-do again; the time adds up", "stop work": "Stop the timer; the time so far is kept",
+  },
+  "job-sites": {
+    deactivate: "Stop using this site without deleting it: handy for a seasonal client", activate: "Start using this site again",
+    "find on map": "Look up the address and show it on the map", "use my current location": "Put the site where you are standing now",
+    "find and check location": "Look up the address, so you can check the pin before adding the site", "add site": "Save this site; punches inside its circle count as on site",
+  },
+  "chemical-tracking/access": { "give access": "Let this person open Chemical Tracking", remove: "Stop this person opening Chemical Tracking" },
+  "chemical-tracking/load-sheet": { "by tech": "Group what to load by applicator", "by truck": "Group what to load by truck", "by day": "One list of everything to load for the day" },
+  "chemical-tracking/notices": { "change the wording": "Open the notice's text to change what customers read", "hide the wording": "Fold the notice's text away" },
+  "tax-forms/w4": { "calculate amounts": "Fill in the dollar amounts from the children and dependents you counted" },
+  wiki: { write: "Type or change the page", preview: "See the page as readers will", "publish page": "Save the page for the people allowed to see it", history: "See earlier versions of this page, and who changed what" },
+  "visit-forms": { "duplicate form": "Make a copy of this form to change, leaving this one as it is" },
   reviews: { "start review": "Open a new review for this person" },
   documents: { sign: "Read this document and sign it" },
   "tax-forms": { "fill out": "Open this form to fill in and sign" },

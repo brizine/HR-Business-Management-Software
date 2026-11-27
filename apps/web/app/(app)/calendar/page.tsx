@@ -118,7 +118,7 @@ function FilterBar({ filters, setFilters, events, tags, services }: { filters: C
         {(close) => !kind ? (
           <>
             <div className="menu-heading">Filter by…</div>
-            {(Object.keys(FILTER_LABELS) as FilterKind[]).map((k) => <button key={k} type="button" role="menuitem" onClick={() => setKind(k)}>{FILTER_LABELS[k]}<Icon name="right" size={14} /></button>)}
+            {(Object.keys(FILTER_LABELS) as FilterKind[]).map((k) => <button key={k} type="button" role="menuitem" data-tip="Show only what matches: pick the values next" onClick={() => setKind(k)}>{FILTER_LABELS[k]}<Icon name="right" size={14} /></button>)}
           </>
         ) : (
           <>
@@ -224,7 +224,7 @@ function CalendarPage() {
                   <>
                     <div className="menu-heading">Show on each card</div>
                     {(Object.keys(DETAILS) as DetailKey[]).map((k) => (
-                      <button key={k} type="button" role="menuitemcheckbox" aria-checked={s.details[k]} className={s.details[k] ? undefined : "muted"} onClick={() => set({ details: { ...s.details, [k]: !s.details[k] } })}>
+                      <button key={k} type="button" role="menuitemcheckbox" aria-checked={s.details[k]} className={s.details[k] ? undefined : "muted"} data-tip={s.details[k] ? "Showing on each card: click to hide it" : "Hidden: click to show it on each card"} onClick={() => set({ details: { ...s.details, [k]: !s.details[k] } })}>
                         {DETAILS[k]}<Icon name={s.details[k] ? "eye" : "eyeOff"} size={14} />
                       </button>
                     ))}
@@ -256,7 +256,7 @@ function CalendarPage() {
               <div className="cal-range-pick">
                 <Menu label="Change the view" text={<><Icon name="calendar" size={15} /> {VIEWS.find((v) => v.key === view)?.label} <Icon name="chevron" size={14} /></>}>
                   {(close) => VIEWS.map((v) => (
-                    <button key={v.key} type="button" role="menuitemradio" aria-checked={view === v.key} onClick={() => { go(v.key); close(); }}><span>{v.label}</span><kbd>{v.hotkey}</kbd></button>
+                    <button key={v.key} type="button" role="menuitemradio" aria-checked={view === v.key} data-tip={`Show one ${v.label.toLowerCase()} at a time (or press ${v.hotkey})`} onClick={() => { go(v.key); close(); }}><span>{v.label}</span><kbd>{v.hotkey}</kbd></button>
                   ))}
                 </Menu>
                 <Menu label="Pick a date" text={<span className="cal-range-text">{rangeLabel(view, at)}</span>}>

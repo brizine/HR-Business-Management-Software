@@ -58,7 +58,7 @@ function ToolButton({ on, label, title, run }: { on?: boolean; label: ReactNode;
 }
 
 /** A toolbar button that opens a short list (Add, Format, Align, the fill-ins). */
-function ToolMenu({ label, title, wide, items }: { label: ReactNode; title: string; wide?: boolean; items: { label: string; run: () => void }[] }) {
+function ToolMenu({ label, title, wide, items, itemTip }: { label: ReactNode; title: string; wide?: boolean; items: { label: string; run: () => void }[]; itemTip?: string }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -74,7 +74,7 @@ function ToolMenu({ label, title, wide, items }: { label: ReactNode; title: stri
       <button type="button" className={`hwd-tool${wide ? " wide" : ""}${open ? " on" : ""}`} title={title} aria-label={title} aria-haspopup="menu" aria-expanded={open} onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen(!open)}>{label}</button>
       {open && (
         <div className="hwd-menu-list" role="menu">
-          {items.map((i) => <button key={i.label} type="button" role="menuitem" onMouseDown={(e) => e.preventDefault()} onClick={() => { setOpen(false); i.run(); }}>{i.label}</button>)}
+          {items.map((i) => <button key={i.label} type="button" role="menuitem" data-tip={itemTip} onMouseDown={(e) => e.preventDefault()} onClick={() => { setOpen(false); i.run(); }}>{i.label}</button>)}
         </div>
       )}
     </div>
@@ -155,7 +155,7 @@ export function DocEditor({ value, onChange, label }: { value: string; onChange:
         <ToolButton on={editor.isActive("strike")} label={<s>S</s>} title="Strikethrough" run={() => c().toggleStrike().run()} />
         <ToolButton on={editor.isActive("link")} label={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5" /></svg>} title="Link" run={() => link(editor)} />
         <div className="hwd-toolbar-break" />
-        <ToolMenu wide label="Insert Customer / Company Info" title="Insert Customer / Company Info" items={DOC_TAGS.map((t) => ({ label: t.label, run: () => insert(t.tag) }))} />
+        <ToolMenu wide label="Insert Customer / Company Info" title="Insert Customer / Company Info" items={DOC_TAGS.map((t) => ({ label: t.label, run: () => insert(t.tag) }))} itemTip="Put this blank where the cursor is; it fills itself in for each customer" />
       </div>
       {source
         ? <textarea ref={area} className="hwd-source" aria-label={`${label} (HTML)`} value={value} onChange={(e) => onChange(e.target.value)} spellCheck={false} />

@@ -29,12 +29,12 @@ export type TipFacts = {
 };
 
 /** A button's label as the lists spell it: lower case, numbers as "#", no arrows, dots or counts on the ends. */
-export function tipLabel(raw: string): string {
+export function tipLabel(raw: string, max = 80): string {
   return raw.replace(/\s+/g, " ").trim()
     .replace(/\d[\d,./:%]*/g, "#")
     .replace(/^[^\p{L}\p{N}#]+/u, "").replace(/[^\p{L}\p{N}#)]+$/u, "")
     .replace(/\s*[(]?#[)]?$/, "")
-    .toLowerCase().slice(0, 80);
+    .toLowerCase().slice(0, max);
 }
 
 const lower = (s: string) => (/^[A-Z][a-z]/.test(s) && !/^[A-Z][a-z]+ [A-Z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
@@ -92,7 +92,8 @@ export function listedTip(rawLabel: string, path: string): string | null {
 }
 /** The description for a label that follows a known pattern ("…: on or off"). */
 export function patternTip(rawLabel: string): string | null {
-  const label = tipLabel(rawLabel);
+  // The whole label: a long name must not lose the ending a pattern looks for.
+  const label = tipLabel(rawLabel, 400);
   for (const [pattern, tip] of TIPS_BY_PATTERN) if (pattern.test(label)) return tip;
   return null;
 }

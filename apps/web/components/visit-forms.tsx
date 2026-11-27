@@ -38,6 +38,19 @@ interface Entry extends WorkOrderForm {
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
+
+/** What each kind of question adds to a form (shown when the pointer rests on its button). */
+const FIELD_TIPS: Record<(typeof FORM_FIELD_TYPES)[number], string> = {
+  text: "Add a question answered in a few words",
+  textarea: "Add a question with room for a longer answer",
+  checkbox: "Add a list of boxes to tick: as many as apply",
+  dropdown: "Add a question answered by picking one choice from a list",
+  yesno: "Add a yes or no question",
+  number: "Add a question answered with a number",
+  date: "Add a question answered with a date",
+  photo: "Ask the crew for photos",
+  signature: "Ask for a signature, drawn on the screen",
+};
 function Dialog({ title, children, foot, onClose, className = "" }: { title: string; children: ReactNode; foot?: ReactNode; onClose: () => void; className?: string }) {
   useEffect(() => { const key = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", key); return () => window.removeEventListener("keydown", key); }, [onClose]);
   return (
@@ -411,7 +424,7 @@ export function FormBuilder({ form }: { form?: VisitFormFull }) {
           </div>
           <div className="hwf-add" role="group" aria-label="Add a field">
             <strong>Add:</strong>
-            {FORM_FIELD_TYPES.map((t) => <button key={t} type="button" onClick={() => add(s.id, t)}>{FORM_FIELD_LABELS[t]}</button>)}
+            {FORM_FIELD_TYPES.map((t) => <button key={t} type="button" data-tip={FIELD_TIPS[t]} onClick={() => add(s.id, t)}>{FORM_FIELD_LABELS[t]}</button>)}
           </div>
         </div>
       ))}
