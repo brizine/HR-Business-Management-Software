@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { statusWord } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAction, useApi, useNewForm } from "@/lib/hooks";
 import { Badge, Empty, ErrorBox, PageHead } from "@/components/ui";
@@ -44,7 +45,7 @@ export default function Properties() {
         <label>Status
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="active">Active</option>
-            <option value="cancelled">Cancelled</option>
+            <option value="cancelled">Inactive</option>
             <option value="all">All</option>
           </select>
         </label>
@@ -64,7 +65,7 @@ export default function Properties() {
                 <td>{p.mapCode ?? <span className="muted">No MC</span>}</td>
                 <td>{p.lawnSqFt ? `${Math.round(p.lawnSqFt).toLocaleString()} sq ft` : "—"}</td>
                 <td><TagChips ids={p.tagIds} tags={tags} /></td>
-                <td><Badge value={p.status} /></td>
+                <td><Badge value={p.status} text={statusWord(p.status)} /></td>
               </tr>
             ))}</tbody>
           </table>

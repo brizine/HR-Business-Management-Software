@@ -44,7 +44,7 @@ export default function PriceList() {
                 <td title={describePricing(s)}>{PRICING_LABELS[s.pricing as PricingKind] ?? s.pricing}</td>
                 <td>{s.incomeAccountCode} {account(s.incomeAccountCode)?.name ?? ""}</td>
                 <td>{s.taxable ? "Yes" : <span className="muted">No</span>}</td>
-                <td>{s.active ? <span className="badge ok">active</span> : <span className="badge">retired</span>}</td>
+                <td>{s.active ? <span className="badge ok">active</span> : <span className="badge">inactive</span>}</td>
                 {admin && (
                   <td className="row">
                     <button className="btn" onClick={() => setEditing(s)}>Edit</button>
@@ -264,7 +264,7 @@ function ServiceForm({ service, copyFrom, onDone }: { service: ServiceType | nul
       </fieldset>
       <label>Notes for your team <span className="muted">(optional; shown under the name on this list, never to customers)</span><input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
       <label className="check"><input type="checkbox" checked={taxable} onChange={(e) => setTaxable(e.target.checked)} /> This is taxable <span className="muted">(gets the sales tax rate on work orders and invoices once sales tax is on)</span></label>
-      {service && <label className="check"><input type="checkbox" checked={!active} onChange={(e) => setActive(!e.target.checked)} /> Retired (kept on past invoices, not offered for new ones)</label>}
+      {service && <label className="check"><input type="checkbox" checked={!active} onChange={(e) => setActive(!e.target.checked)} /> Inactive (kept on past invoices, not offered for new ones)</label>}
       <ErrorBox error={error} />
       <div className="row"><button className="btn primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button><button type="button" className="btn" onClick={onDone}>Cancel</button></div>
     </form>

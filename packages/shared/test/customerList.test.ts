@@ -14,7 +14,7 @@ describe("customer list filters", () => {
     expect(describeFilter({ f: "balance", op: "gt", v: 50 }, { field: f("balance") })).toBe("Balance owed more than $50");
     expect(describeFilter({ f: "name", op: "starts", v: "Jo" }, { field: f("name") })).toBe('Name starts with "Jo"');
     expect(describeFilter({ f: "email", op: "blank" }, { field: f("email") })).toBe("Email is blank");
-    expect(describeFilter({ f: "status", op: "isnot", v: ["cancelled"] }, { field: f("status") })).toBe("Status is not Cancelled");
+    expect(describeFilter({ f: "status", op: "isnot", v: ["cancelled"] }, { field: f("status") })).toBe("Status is not Inactive");
     expect(describeFilter({ f: "tags", op: "any", v: ["a", "b"] }, { field: f("tags"), tagName: (id) => (id === "a" ? "MAP 100" : "MAP 200") })).toBe("Tags has any of MAP 100, MAP 200");
     expect(describeFilter({ f: "since", op: "between", v: "2026-01-01", v2: "2026-03-31" }, { field: f("since") })).toBe("Customer since Jan 1, 2026 – Mar 31, 2026");
     expect(describeFilter({ f: "lastService", op: "never" }, { field: f("lastService") })).toBe("Last service: never");

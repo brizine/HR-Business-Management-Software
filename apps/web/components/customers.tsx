@@ -349,7 +349,7 @@ export function CustomerPicker({ onPick, label = "Customer", exclude = [] }: { o
   );
 }
 
-/** Cancelling asks for a reason from the list, an effective date and an optional comment. */
+/** Making a customer or property inactive asks for a reason from the list, an effective date and an optional comment. */
 export function CancelForm({ what, note, onSubmit, onClose }: { what: string; note?: ReactNode; onSubmit: (body: { reasonId: string; effectiveDate?: string; comment?: string }) => Promise<unknown>; onClose: () => void }) {
   const reasons = useApi<any[]>("/crm/cancel-reasons");
   const [reasonId, setReasonId] = useState("");
@@ -365,7 +365,7 @@ export function CancelForm({ what, note, onSubmit, onClose }: { what: string; no
       try { await onSubmit({ reasonId, ...(date ? { effectiveDate: date } : {}), ...(comment.trim() ? { comment } : {}) }); onClose(); }
       catch (err) { setError((err as Error).message); } finally { setBusy(false); }
     }}>
-      <h2 style={{ fontSize: 16, margin: 0 }}>Cancel {what}</h2>
+      <h2 style={{ fontSize: 16, margin: 0 }}>Make {what} inactive</h2>
       {note && <p className="muted" style={{ margin: 0 }}>{note}</p>}
       <div className="formgrid">
         <label>Reason
@@ -379,8 +379,8 @@ export function CancelForm({ what, note, onSubmit, onClose }: { what: string; no
       <label>Comment{reason?.commentRequired ? " (required)" : ""}<textarea rows={2} required={!!reason?.commentRequired} value={comment} onChange={(e) => setComment(e.target.value)} /></label>
       <ErrorBox error={error} />
       <div className="row">
-        <button className="btn danger" disabled={busy}>Cancel {what}</button>
-        <button type="button" className="btn" onClick={onClose}>Keep</button>
+        <button className="btn danger" disabled={busy}>Make inactive</button>
+        <button type="button" className="btn" onClick={onClose}>Keep active</button>
       </div>
     </form>
   );

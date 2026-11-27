@@ -46,7 +46,7 @@ export default function Products() {
       {editing && <ProductForm key={editing === "new" ? "new" : editing.id} product={editing === "new" ? null : editing} onDone={(saved) => { setEditing(saved ?? null); list.reload(); }} onClose={() => { setEditing(null); list.reload(); }} />}
       <div className="row" style={{ marginBottom: 12 }}>
         <input type="search" placeholder="Search name, maker or EPA #" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 320 }} />
-        <label className="check"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Show retired</label>
+        <label className="check"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Show inactive</label>
       </div>
       <ErrorBox error={list.error} />
       <div className="card tablewrap">
@@ -73,7 +73,7 @@ export default function Products() {
                 <td>
                   {p.trackRecords ? <span className="badge ok">tracked</span> : <span className="muted">not tracked</span>}
                   {p.restrictedUse && <> <span className="badge bad">RUP</span></>}
-                  {!p.active && <> <span className="badge">retired</span></>}
+                  {!p.active && <> <span className="badge">inactive</span></>}
                 </td>
                 {admin && <td><button className="btn" onClick={() => setEditing(p)}>Edit</button></td>}
               </tr>
@@ -246,7 +246,7 @@ function ProductForm({ product, onDone, onClose }: { product: Product | null; on
         </div>
         <label className="check"><input type="checkbox" checked={f.trackRecords} onChange={(e) => set("trackRecords", e.target.checked)} /> Record every application (state chemical records)</label>
         <label className="check"><input type="checkbox" checked={f.taxable} onChange={(e) => set("taxable", e.target.checked)} /> Taxable when sold</label>
-        <label className="check"><input type="checkbox" checked={f.active} onChange={(e) => set("active", e.target.checked)} /> Active <span className="muted">(untick to retire it)</span></label>
+        <label className="check"><input type="checkbox" checked={f.active} onChange={(e) => set("active", e.target.checked)} /> Active <span className="muted">(untick to make it inactive)</span></label>
       </fieldset>
       <ErrorBox error={error} />
       <div className="row">

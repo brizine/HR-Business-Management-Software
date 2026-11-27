@@ -29,3 +29,18 @@ describe("customers", () => {
     expect(dayBefore("2026-03-01")).toBe("2026-02-28");
   });
 });
+
+describe("inactive is the word on screen", () => {
+  it("a cancelled customer or property reads Inactive; a retired asset reads inactive", async () => {
+    const { CUSTOMER_STATUS_LABELS, statusWord, defaultLabel, CUSTOMER_FILTER_FIELDS } = await import("../src");
+    expect(CUSTOMER_STATUS_LABELS).toEqual({ lead: "Lead", active: "Active", cancelled: "Inactive" });
+    expect(statusWord("cancelled")).toBe("inactive");
+    expect(statusWord("active")).toBe("active");
+    expect(statusWord(null)).toBe("");
+    // The stored values don't change, so saved filters and exports keep working.
+    expect(CUSTOMER_FILTER_FIELDS.find((f) => f.key === "status")?.options).toEqual([["active", "Active"], ["lead", "Lead"], ["cancelled", "Inactive"]]);
+    // Asset status: "retired" is still what's stored; a company's own wording (Edit drop-down menus) still wins.
+    expect(defaultLabel("retired")).toBe("inactive");
+    expect(defaultLabel("out_of_service")).toBe("out of service");
+  });
+});

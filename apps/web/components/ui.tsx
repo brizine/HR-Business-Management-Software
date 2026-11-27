@@ -39,11 +39,11 @@ const TONES: Record<string, string> = {
   rejected: "bad", failed: "bad", cancelled: "bad",
 };
 
-/** A status pill. With `menu`, it reads the way the owner worded that choice (Edit drop-down menus). */
-export function Badge({ value, menu }: { value: string | null | undefined; menu?: LabelMenu }) {
+/** A status pill. With `menu`, it reads the way the owner worded that choice (Edit drop-down menus); `text` sets the words outright. */
+export function Badge({ value, menu, text }: { value: string | null | undefined; menu?: LabelMenu; text?: string }) {
   const { label } = useMenuData();
   if (!value) return null;
-  return <span className={`badge ${TONES[value] ?? ""}`}>{menu ? label(menu, value) : value.replace(/_/g, " ")}</span>;
+  return <span className={`badge ${TONES[value] ?? ""}`}>{text ?? (menu ? label(menu, value) : value.replace(/_/g, " "))}</span>;
 }
 
 export function ErrorBox({ error }: { error: string | null | undefined }) {

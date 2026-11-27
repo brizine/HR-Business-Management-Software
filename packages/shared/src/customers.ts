@@ -12,10 +12,15 @@ export const CUSTOMER_KINDS = ["residential", "commercial", "hoa"] as const;
 export type CustomerKind = (typeof CUSTOMER_KINDS)[number];
 export const CUSTOMER_KIND_LABELS: Record<CustomerKind, string> = { residential: "Residential", commercial: "Commercial", hoa: "HOA" };
 
-/** Leads haven't bought yet; cancelled customers are hidden from everyday lists but never deleted. */
+/**
+ * Leads haven't bought yet; inactive customers are hidden from everyday lists but never deleted.
+ * On screen the status reads "Inactive"; it is stored as "cancelled".
+ */
 export const CUSTOMER_STATUSES = ["lead", "active", "cancelled"] as const;
 export type CustomerStatus = (typeof CUSTOMER_STATUSES)[number];
-export const CUSTOMER_STATUS_LABELS: Record<CustomerStatus, string> = { lead: "Lead", active: "Active", cancelled: "Cancelled" };
+export const CUSTOMER_STATUS_LABELS: Record<CustomerStatus, string> = { lead: "Lead", active: "Active", cancelled: "Inactive" };
+/** How a customer's or property's status reads in a badge or a sentence: "inactive" for a cancelled one. */
+export const statusWord = (status: string | null | undefined) => (status === "cancelled" ? "inactive" : (status ?? "").replace(/_/g, " "));
 
 /** How invoices and estimates reach the customer (any of them). */
 export const DELIVERY_METHODS = ["email", "paper", "text"] as const;
@@ -35,7 +40,7 @@ export type TagColor = (typeof TAG_COLORS)[number];
 export const CANCEL_INITIATORS = ["customer", "company"] as const;
 export type CancelInitiator = (typeof CANCEL_INITIATORS)[number];
 
-/** The starting cancellation reasons; admins can rename, reorder, add and retire them. */
+/** The starting reasons for a customer or property going inactive; admins can rename, reorder and add them, or make one inactive. */
 export const DEFAULT_CANCEL_REASONS: { label: string; initiatedBy: CancelInitiator; commentRequired?: boolean }[] = [
   { label: "Moved or sold the home", initiatedBy: "customer" },
   { label: "Price", initiatedBy: "customer" },

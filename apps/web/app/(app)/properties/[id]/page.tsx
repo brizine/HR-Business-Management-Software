@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
-import { PROPERTY_ROLE_LABELS, formatAddress, formatPhone, type PropertyRole } from "@crewdesk/shared";
+import { PROPERTY_ROLE_LABELS, formatAddress, formatPhone, statusWord, type PropertyRole } from "@crewdesk/shared";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -39,12 +39,12 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
   return (
     <>
       <PageHead title={p.street} before={<Link className="btn" href="/properties" aria-label="Back to properties">←</Link>}
-        sub={<>{[p.name, [p.city, p.state, p.zip].filter(Boolean).join(" ")].filter(Boolean).join(" · ")} · <Badge value={p.status} />{p.sample && <> · <span className="tag tag-gray">Sample</span></>}</>}>
+        sub={<>{[p.name, [p.city, p.state, p.zip].filter(Boolean).join(" ")].filter(Boolean).join(" · ")} · <Badge value={p.status} text={statusWord(p.status)} />{p.sample && <> · <span className="tag tag-gray">Sample</span></>}</>}>
         <a className="btn" href={mapsLink} target="_blank" rel="noopener noreferrer">Map</a>
         {billTo && can("manager", "customers") && <button className="btn" onClick={() => setCrediting(!crediting)}>Add credit</button>}
         {p.status !== "cancelled" && <button className="btn" onClick={() => setEditing(!editing)}>Edit</button>}
         {p.status !== "cancelled"
-          ? <button className="btn danger" onClick={() => setCancelling(!cancelling)}>Cancel property</button>
+          ? <button className="btn danger" onClick={() => setCancelling(!cancelling)}>Make inactive</button>
           : <button className="btn primary" disabled={action.busy} onClick={() => action.run(async () => { await api(`/properties/${id}/reactivate`, { method: "POST" }); property.reload(); })}>Reactivate</button>}
         {can("admin", "customers") && (p.sample || p.assignments.length === 0) && (
           <button className="btn danger" disabled={action.busy} onClick={() => confirm("Delete this property? This can't be undone.") && action.run(async () => { await api(`/properties/${id}`, { method: "DELETE" }); router.push("/properties"); })}>Delete</button>
@@ -122,7 +122,7 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
       </div>
       {p.cancellations.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
-          <h2 style={{ fontSize: 16, marginTop: 0 }}>Cancellations</h2>
+          <h2 style={{ fontSize: 16, marginTop: 0 }}>Made inactive</h2>
           <ul className="plain-list">
             {p.cancellations.map((x: any) => (
               <li key={x.id}>

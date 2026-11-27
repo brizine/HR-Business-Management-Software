@@ -235,7 +235,7 @@ const routes: FastifyPluginAsync = async (app) => {
       const cs = await db.select({ x: cancellations, by: name }).from(cancellations).leftJoin(employees, eq(employees.id, cancellations.byId))
         .where(and(eq(cancellations.customerId, c.id), sql`${cancellations.propertyId} is null`));
       for (const { x, by } of cs) {
-        items.push({ kind: "account", id: `cx-${x.id}`, at: iso(x.createdAt), title: `Cancelled: ${x.reasonLabel}`, body: x.comment, by, tone: "bad" });
+        items.push({ kind: "account", id: `cx-${x.id}`, at: iso(x.createdAt), title: `Made inactive: ${x.reasonLabel}`, body: x.comment, by, tone: "bad" });
         if (x.reactivatedAt) items.push({ kind: "account", id: `re-${x.id}`, at: iso(x.reactivatedAt), title: "Reactivated", tone: "ok" });
       }
       items.push({ kind: "account", id: `new-${c.id}`, at: iso(c.createdAt), title: c.status === "lead" ? "Added as a lead" : "Added as a customer" });

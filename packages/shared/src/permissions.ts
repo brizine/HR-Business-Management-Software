@@ -29,7 +29,7 @@ export const PERMISSION_AREAS = [
   { key: "payroll", label: "Payroll & tax forms", levels: { admin: "Preview and export payroll, see tax forms, reopen pay periods", owner: "Payroll settings and pay schedule" } },
   {
     key: "customers", label: "Customers & billing",
-    levels: { manager: "See, add and edit customers and properties; cancel and reactivate; schedule, see and invoice all work orders", admin: "Manage tags and cancellation reasons; add or remove sample customers; delete customers with no history" },
+    levels: { manager: "See, add and edit customers and properties; make them inactive and reactivate them; schedule, see and invoice all work orders", admin: "Manage tags and the reasons for going inactive; add or remove sample customers; delete customers with no history" },
   },
   { key: "fleet", label: "Fleet & equipment", levels: { manager: "Add and edit assets, assign repair orders, set maintenance schedules" } },
   { key: "wiki", label: "Company wiki", levels: { manager: "See manager-level pages", admin: "See and edit admin-level pages, change who can see or edit pages" } },

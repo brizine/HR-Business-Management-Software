@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Forecast, ForecastIcon, ForecastPeriod, WeatherLink } from "@crewdesk/shared";
+import { statusWord, type Forecast, type ForecastIcon, type ForecastPeriod, type WeatherLink } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/icons";
@@ -284,7 +284,7 @@ function CallerBox({ call: c, onClose }: { call: Incoming; onClose: () => void }
         <Icon name="phoneIn" size={18} />
         <div className="call-who">
           <strong>{c.name ?? (c.callerName ? c.callerName : "Unknown caller")}</strong>
-          <span>{c.phoneText}{c.who === "employee" ? " · on your team" : c.who === "unknown" ? " · not in your customers" : c.status && c.status !== "active" ? ` · ${c.status} customer` : ""}</span>
+          <span>{c.phoneText}{c.who === "employee" ? " · on your team" : c.who === "unknown" ? " · not in your customers" : c.status && c.status !== "active" ? ` · ${statusWord(c.status)} customer` : ""}</span>
         </div>
         <button type="button" className="call-x" aria-label="Close" onClick={onClose}><Icon name="close" size={15} /></button>
       </div>

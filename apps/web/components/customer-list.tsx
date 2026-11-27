@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   CUSTOMER_COLUMNS, CUSTOMER_FILTER_FIELDS, CUSTOMER_KIND_LABELS, DEFAULT_CUSTOMER_COLUMNS, DELIVERY_LABELS, FILTER_OPS,
-  describeFilter, filterField, filterReady, formatCustomValue, formatMoney, formatPhone, paymentMethodLabel,
+  describeFilter, filterField, filterReady, formatCustomValue, formatMoney, formatPhone, paymentMethodLabel, statusWord,
   type CustomFieldDef, type CustomerColumn, type CustomerFilter, type CustomerKind, type DeliveryMethod, type FilterField,
 } from "@crewdesk/shared";
 import { Badge } from "./ui";
@@ -265,7 +265,7 @@ export function Cell({ col, c, tags }: { col: Col; c: any; tags: Tag[] }) {
           {c.sample && <span className="muted"> · sample</span>}
         </>
       );
-    case "status": return <Badge value={c.status} />;
+    case "status": return <Badge value={c.status} text={statusWord(c.status)} />;
     case "tags": return <TagChips ids={c.tagIds} tags={tags} />;
     case "email": return c.email ? <a href={`mailto:${c.email}`}>{c.email}</a> : null;
     case "phone": return c.phone ? <a href={`tel:${c.phone}`}>{formatPhone(c.phone)}</a> : null;

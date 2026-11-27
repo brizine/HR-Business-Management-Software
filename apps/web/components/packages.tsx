@@ -37,7 +37,7 @@ export function PackagesCard() {
             return (
               <li key={p.id} style={{ opacity: p.active ? 1 : 0.6 }}>
                 <div className="row" style={{ justifyContent: "space-between" }}>
-                  <strong>{p.name}{!p.active && <span className="badge" style={{ marginLeft: 6 }}>retired</span>}</strong>
+                  <strong>{p.name}{!p.active && <span className="badge" style={{ marginLeft: 6 }}>inactive</span>}</strong>
                   <span className="row">
                     <span className="muted">{total != null ? formatMoney(total) : "Priced for each lawn"}</span>
                     {admin && <button className="btn" onClick={() => setEditing(p)}>Edit</button>}
@@ -124,7 +124,7 @@ function PackageForm({ pkg, onDone }: { pkg: Package | null; onDone: () => void 
       </div>
       <div><button type="button" className="btn" onClick={() => setLines((ls) => [...ls, draft()])}><Icon name="plus" size={14} /> Add item</button></div>
       <p className="muted" style={{ margin: 0 }}>Leave a service&apos;s price blank to price it for each property&apos;s lawn when the package is added.</p>
-      {pkg && <label className="check"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Active (retired packages aren&apos;t offered on work orders)</label>}
+      {pkg && <label className="check"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Active (inactive packages aren&apos;t offered on work orders)</label>}
       <ErrorBox error={save.error || del.error} />
       <div className="row">
         <button className="btn primary" disabled={save.busy}>{save.busy ? "Saving…" : pkg ? "Save package" : "Add package"}</button>

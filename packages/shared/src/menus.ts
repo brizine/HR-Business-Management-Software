@@ -37,8 +37,10 @@ export type StoredList = (typeof STORED_LISTS)[number];
 export type LabelMenu = Extract<(typeof MENU_LISTS)[number], { kind: "labels" }>["key"];
 export const LABEL_MENUS = MENU_LISTS.filter((m) => m.kind === "labels").map((m) => m.key) as LabelMenu[];
 
+/** Fixed choices whose default wording isn't their stored value: an asset taken out of the fleet reads "inactive". */
+const DEFAULT_WORDS: Record<string, string> = { retired: "inactive" };
 /** How a fixed choice reads by default ("in_progress" → "in progress"). */
-export const defaultLabel = (value: string) => value.replace(/_/g, " ");
+export const defaultLabel = (value: string) => DEFAULT_WORDS[value] ?? value.replace(/_/g, " ");
 
 const entry = z.string().trim().min(1).max(80);
 export const menuListSchema = z.object({ values: z.array(entry).max(200).transform((l) => [...new Set(l)]) });

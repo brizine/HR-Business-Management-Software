@@ -30,7 +30,7 @@ export interface FilterField { key: string; label: string; group: string; kind: 
 export const CUSTOMER_FILTER_FIELDS: readonly FilterField[] = [
   { key: "name", label: "Name", group: "Customer", kind: "text" },
   { key: "number", label: "Customer #", group: "Customer", kind: "number" },
-  { key: "status", label: "Status", group: "Customer", kind: "enum", options: [["active", "Active"], ["lead", "Lead"], ["cancelled", "Cancelled"]] },
+  { key: "status", label: "Status", group: "Customer", kind: "enum", options: [["active", "Active"], ["lead", "Lead"], ["cancelled", "Inactive"]] },
   { key: "kind", label: "Type", group: "Customer", kind: "enum", options: CUSTOMER_KINDS.map((k) => [k, CUSTOMER_KIND_LABELS[k]] as const) },
   { key: "tags", label: "Tags", group: "Customer", kind: "tags" },
   { key: "source", label: "Lead source", group: "Customer", kind: "enum", options: LEAD_SOURCES.map((s) => [s, s] as const) },

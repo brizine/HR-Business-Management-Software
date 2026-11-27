@@ -203,7 +203,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const effectiveDate = body.effectiveDate ?? (await companyToday(companyId));
     return db.transaction(async (tx) => {
       const p = await propertyInCompany(tx, companyId, req.params.id);
-      if (p.status === "cancelled") throw new HttpError(400, "That property is already cancelled");
+      if (p.status === "cancelled") throw new HttpError(400, "That property is already inactive");
       const [reason] = await tx.select().from(cancellationReasons).where(and(eq(cancellationReasons.id, body.reasonId), eq(cancellationReasons.companyId, companyId)));
       if (!reason || reason.retired) throw new HttpError(400, "Choose a reason from the list");
       if (reason.commentRequired && !body.comment) throw new HttpError(400, `"${reason.label}" needs a comment`);
@@ -220,7 +220,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const { companyId, sub } = req.user;
     return db.transaction(async (tx) => {
       const p = await propertyInCompany(tx, companyId, req.params.id);
-      if (p.status !== "cancelled") throw new HttpError(400, "That property isn't cancelled");
+      if (p.status !== "cancelled") throw new HttpError(400, "That property isn't inactive");
       await tx.update(properties).set({ status: "active", updatedAt: new Date() }).where(eq(properties.id, p.id));
       await tx.update(cancellations).set({ reactivatedAt: new Date(), reactivatedById: sub }).where(and(eq(cancellations.propertyId, p.id), isNull(cancellations.reactivatedAt)));
       return { ok: true };

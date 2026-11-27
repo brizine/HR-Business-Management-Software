@@ -18,7 +18,7 @@ import { BulkText } from "@/components/texting";
 import { DocumentSender } from "@/components/marketing-docs";
 import { CancelForm, CustomerFields, PropertyFields, customerBody, customerFormValue, propertyBody, propertyFormValue, useTags } from "@/components/customers";
 
-const TABS = [["active", "Customers"], ["lead", "Leads"], ["cancelled", "Cancelled"], ["all", "All"]] as const;
+const TABS = [["active", "Customers"], ["lead", "Leads"], ["cancelled", "Inactive"], ["all", "All"]] as const;
 const SIZES = CUSTOMER_PAGE_SIZES;
 type ListResponse = { total: number; rows: any[]; counts: { active: number; lead: number; cancelled: number; current: number; all: number } };
 
@@ -140,8 +140,8 @@ function Customers() {
   const bulk = useAction();
   const runBulk = (body: Record<string, unknown>, done: string) => bulk.run(async () => {
     const r = await api<{ changed: number; skipped: number; propertiesCancelled: number }>("/customers/bulk", { body: { ...selection, ...body } });
-    const skippedWhy = body.cancel ? "already cancelled" : "cancelled, left as they are";
-    setNotice(`${done}: ${r.changed.toLocaleString()} changed${r.skipped ? `, ${r.skipped.toLocaleString()} ${skippedWhy}` : ""}${r.propertiesCancelled ? `; ${r.propertiesCancelled.toLocaleString()} of their properties cancelled too` : ""}.`);
+    const skippedWhy = body.cancel ? "already inactive" : "inactive, left as they are";
+    setNotice(`${done}: ${r.changed.toLocaleString()} changed${r.skipped ? `, ${r.skipped.toLocaleString()} ${skippedWhy}` : ""}${r.propertiesCancelled ? `; ${r.propertiesCancelled.toLocaleString()} of their properties made inactive too` : ""}.`);
     setOpen(null);
     if (body.cancel) clearSelection();
     await list.reload();
@@ -273,9 +273,9 @@ function Customers() {
       <ErrorBox error={list.error ?? bulk.error} />
       {cancelling && selCount > 0 && (
         <CancelForm what={selCount === 1 ? "1 customer" : `${selCount.toLocaleString()} customers`}
-          note="Each one gets the same reason. Properties they're the current bill-to for are cancelled too; anyone already cancelled is skipped. Reactivate customers one at a time from their page."
+          note="Each one gets the same reason. Properties they're the current bill-to for are made inactive too; anyone already inactive is skipped. Reactivate customers one at a time from their page."
           onSubmit={(cancel) => api("/customers/bulk", { body: { ...selection, cancel } }).then((r: any) => {
-            setNotice(`Cancelled ${r.changed.toLocaleString()} customer${r.changed === 1 ? "" : "s"}${r.skipped ? ` (${r.skipped.toLocaleString()} already cancelled)` : ""}${r.propertiesCancelled ? `; ${r.propertiesCancelled.toLocaleString()} of their properties cancelled too` : ""}.`);
+            setNotice(`Made ${r.changed.toLocaleString()} customer${r.changed === 1 ? "" : "s"} inactive${r.skipped ? ` (${r.skipped.toLocaleString()} already inactive)` : ""}${r.propertiesCancelled ? `; ${r.propertiesCancelled.toLocaleString()} of their properties made inactive too` : ""}.`);
             clearSelection(); list.reload();
           })}
           onClose={() => setCancelling(false)} />
@@ -299,7 +299,7 @@ function Customers() {
                 <button type="button" disabled={bulk.busy} onClick={() => runBulk({ status: "active" }, "Marked active")}>Active</button>
                 <button type="button" disabled={bulk.busy} onClick={() => runBulk({ status: "lead" }, "Marked as leads")}>Lead</button>
                 <hr />
-                <button type="button" className="bad-text" onClick={() => { setCancelling(true); setOpen(null); }}>Cancelled… (asks why)</button>
+                <button type="button" className="bad-text" onClick={() => { setCancelling(true); setOpen(null); }}>Inactive… (asks why)</button>
               </div>
             </Popover>
             <Popover label="Send ▾" open={open === "bulksend"} setOpen={toggle("bulksend")}>

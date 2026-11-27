@@ -194,7 +194,7 @@ export const TIPS_NAV: Record<string, string> = {
   "products & services": "Your price list: what you sell and how each is priced",
   "chemical tracking": "Products applied, application records and notices to customers",
   "custom fields": "Your own boxes on customers, properties, work orders and more",
-  tags: "Labels for customers and properties, and reasons for cancelling",
+  tags: "Labels for customers and properties, and reasons for going inactive",
   "property measure": "Measure a lawn on the map to get its square feet",
   "spray mix calculator": "How much of each product to put in the tank",
   assets: "Trucks, trailers and equipment, with fuel, repairs and costs",
@@ -275,7 +275,7 @@ const SETTINGS_TABS: Record<string, string> = {
   "company info": "The company's name, logo, address, time zone, weather links and test company",
   "layout editor": "Rearrange pages, hide boxes, edit drop-down menus and your user manual",
   permissions: "Who can see and change what, area by area",
-  "customers & billing": "Tags, cancellation reasons, invoice numbering, late fees and automatic sending",
+  "customers & billing": "Tags, reasons for going inactive, invoice numbering, late fees and automatic sending",
   "custom fields": "Your own boxes on customers, properties, work orders and more",
   integrations: "Connect Stripe, Talkroute texting, Bigcapital and other services",
 };
@@ -298,7 +298,7 @@ const chip = (what: string) => `Show only ${what}`;
 /** A label on one page: by the first part (or first two parts) of the page's address. */
 export const TIPS_BY_PAGE: Record<string, Record<string, string>> = {
   customers: {
-    customers: chip("active customers"), leads: chip("leads: people you haven't started work for yet"), cancelled: chip("cancelled customers"), all: "Show every customer, whatever their status",
+    customers: chip("active customers"), leads: chip("leads: people you haven't started work for yet"), cancelled: chip("inactive customers"), inactive: chip("inactive customers"), all: "Show every customer, whatever their status",
     send: "Email or text the customers on this list, or the ones you ticked",
     "document: email or print letters": "Send a letter from Resources → Documents to these customers, by email or printed",
     "text: copy their phone numbers": "List these customers' mobile numbers to copy or download (texting isn't connected yet)",

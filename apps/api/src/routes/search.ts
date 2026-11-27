@@ -49,7 +49,7 @@ const routes: FastifyPluginAsync = async (app) => {
       const ps = await db.select({ id: properties.id, name: properties.name, street: properties.street, city: properties.city, state: properties.state, zip: properties.zip, status: properties.status })
         .from(properties).where(and(eq(properties.companyId, companyId), or(ilike(properties.street, like), ilike(properties.name, like), ilike(properties.zip, like))))
         .orderBy(sql`${properties.status} = 'cancelled'`, asc(properties.street)).limit(6);
-      for (const p of ps) out.push({ kind: "property", id: p.id, title: p.street, sub: [p.name, formatAddress({ city: p.city, state: p.state, zip: p.zip }), p.status === "cancelled" ? "cancelled" : null].filter(Boolean).join(" · "), href: `/properties/${p.id}` });
+      for (const p of ps) out.push({ kind: "property", id: p.id, title: p.street, sub: [p.name, formatAddress({ city: p.city, state: p.state, zip: p.zip }), p.status === "cancelled" ? "inactive" : null].filter(Boolean).join(" · "), href: `/properties/${p.id}` });
 
       const who = { kind: customers.kind, firstName: customers.firstName, lastName: customers.lastName, companyName: customers.companyName };
       const invMatch = [ilike(invoices.poNumber, like)];

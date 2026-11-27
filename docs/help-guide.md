@@ -136,7 +136,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   never covers the next choice. With a keyboard, **Tab** to a button to see it; **Esc**
   or clicking puts it away. Phones and tablets have no pointer to rest, so they don't show these.
 - **Putting a list in order:** wherever a list has an order you can change (services on the price list,
-  cancellation reasons, custom fields, job titles and departments, training lessons, application methods, spray
+  reasons for going inactive, custom fields, job titles and departments, training lessons, application methods, spray
   mix products, and the columns of the Customers, Waiting list and Dispatch pages), each row has a **handle of six
   dots**. Drag the row by it with the mouse or a finger and let go where it belongs; the order is saved when you
   let go. With a keyboard, tab to the handle and press the up or down arrow.
@@ -200,7 +200,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   assistant use the edited copy. When Crewdesk's standard manual is updated, a notice offers the
   **Standard manual** tab so you can copy in what's new.
 - **Permissions:** per-person access by area, with search and filters.
-- **Customers** (admins in Customers & billing): the tag list and the cancellation reasons (see Customers & Properties).
+- **Customers** (admins in Customers & billing): the tag list and the reasons for going inactive (see Customers & Properties).
 - **Integrations** (payroll admins): connections to other systems; today, **Accounting (Bigcapital)**.
 
 ## Notifications
@@ -271,7 +271,7 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
   - **Header row:** the **Customers | Properties** tabs, **Export** (a spreadsheet of every matching customer, with
     the columns you show, in your order), **Print**, **⋯** (sample customers, the test company, custom fields)
     and **+ New** (customer, lead or property).
-  - **Status tabs with counts:** **Customers**, **Leads**, **Cancelled**, **All**. They replace Homeworks' big
+  - **Status tabs with counts:** **Customers**, **Leads**, **Inactive**, **All**. They replace Homeworks' big
     boxes, and the counts follow your search and filters.
   - **Quick search:** name, phone, email, service address or customer number.
   - **+ Filter** (Homeworks' filter box): pick a field, a comparison and a value, e.g. "Balance owed · more than
@@ -299,11 +299,11 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
     **Change status**, **Export selected** or **Print selected**.
     - When the whole page is ticked and more customers match, **Select all N matching** picks every customer the
       tab, search and filters match (up to 5,000), not just this page. **Just this page** goes back.
-    - **Change status → Active** or **Lead**; customers already cancelled are left as they are.
-    - **Change status → Cancelled…** asks for a reason (and a comment if the reason needs one) and an optional
-      effective date, the same as cancelling one customer. Each one gets that reason, and properties they're
-      the current bill-to for are cancelled too. Anyone already cancelled is skipped. Reactivate from the
-      customer's page.
+    - **Change status → Active** or **Lead**; customers already inactive are left as they are.
+    - **Change status → Inactive…** asks for a reason (and a comment if the reason needs one) and an optional
+      effective date, the same as making one customer inactive. Each one gets that reason, and properties
+      they're the current bill-to for are made inactive too. Anyone already inactive is skipped. Reactivate
+      from the customer's page.
   - **Pages:** 25, 50, 100 or 250 rows a page, with Previous and Next.
   - **Send ▾** (top right, or in the bar when customers are ticked) goes to the ticked customers, or, with nothing
     ticked, everyone the list shows (tab, search and filters).
@@ -342,7 +342,7 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
 - **Customer page**, laid out like Homeworks':
   - **At the top:** **Edit**; **Send ▾** (**Email…** writes them an email with fill-in fields and a preview;
     **Text…** shows their number to copy); **Create ▾** (work order, payment, estimate, invoice, to-do,
-    property); **⋯** (print the page, view as customer, cancel or reactivate, delete).
+    property); **⋯** (print the page, view as customer, make inactive or reactivate, delete).
   - **Tabs:** **Customer details**; **Communication** (call notes and the timeline, which you can narrow to
     notes and calls, emails, estimates, payments, work orders or account changes, plus emails sent to many
     customers); and **Photos & documents** (drop in photos, PDFs or short videos, up to 25 MB each).
@@ -365,7 +365,7 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
       happened with them, newest first.
     - **Cards & bank accounts on file**, **Invoice settings** (days to pay, discount, notes on their invoices,
       PO, sales tax, autopay; **Change** edits them), **Customer portal** (the emails that can sign in, and
-      **View as customer**), **Other contacts**, **Prepayments**, **Credits**, cancellations, and photos and
+      **View as customer**), **Other contacts**, **Prepayments**, **Credits**, when it was made inactive and why, and photos and
       documents.
   - **Their own invoice defaults** (Edit → "Their invoices and estimates"): **Discount %**, **Days to pay** and
     **Notes on their invoices**. New invoices use their days to pay and notes. Invoices made from work orders also
@@ -380,22 +380,24 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
   address in Google Maps.
 - **Lawn size:** type front and back (the total is worked out) or just a total, or click **Use a saved
   Property Measure** to take the sizes from a measurement saved on the Property Measure page.
-- **Cancelling:** **Cancel customer** or **Cancel property** asks for a reason from the list, an effective date
-  and a comment (required for some reasons, such as Other). Cancelling a customer also cancels the properties
-  they're the bill-to for; properties where they're only a resident are left alone. Cancelled records are
-  hidden from everyday lists but kept with their history; **Reactivate** brings them back (reactivate each
-  property from its own page).
+- **Inactive customers and properties:** **Make inactive** (in the customer's **⋯** menu, or at the top of a
+  property) asks for a reason from the list, an effective date and a comment (required for some reasons, such as
+  Other). Making a customer inactive also makes the properties they're the bill-to for inactive; properties
+  where they're only a resident are left alone. Inactive records are hidden from everyday lists but kept with
+  their history; **Reactivate** brings them back (reactivate each property from its own page). Crewdesk says
+  **Inactive** everywhere a record is no longer in use: customers, properties, services, packages, chemical
+  products and vehicles or equipment.
 - **Tags** (Settings → Customers, admins): add tags with a name, color and description, **Archive** ones no
   longer used (they stay where they are but can't be added), or **Merge** one tag into another. Every tag added
   or removed is recorded with who did it and when.
-- **Cancellation reasons** (Settings → Customers, admins): add, rename, reorder (drag one by its handle, the six dots), mark as the customer's or
-  your decision, require a comment, or retire reasons.
+- **Reasons for going inactive** (Settings → Customers, admins): add, rename, reorder (drag one by its handle, the six dots), mark as the customer's or
+  your decision, require a comment, or make a reason inactive so it's no longer offered.
 - **Sample customers** (admins, top of the Customers page): **Load sample customers** adds 10 made-up accounts
   plus 2 tenants, tagged Sample, covering the tricky cases (paper invoices, a landlord with tenants, a property
   manager, a PO-number account, an HOA, two properties, a prepay customer and a lead outside the service area).
   Their emails use example.com, so nothing reaches a real person. **Remove sample customers** deletes them all.
 - **Deleting:** admins can delete leads, sample customers and customers or properties with no history; anyone
-  else is cancelled instead, so the history is kept.
+  else is made inactive instead, so the history is kept.
 
 ### Billing: price list and invoices
 
@@ -406,7 +408,7 @@ billing; admins change prices).
   minimum charge), **by lawn size** (brackets such as "up to 8,000 sq ft $75, larger $95"), or **per 1,000 sq ft
   with volume discount** (see below). Each service posts to
   an income account (4000 Lawn Treatment Programs, 4100 Pest Control, 4200 One-Time Lawn Services, 4950 Other
-  Income). Drag a service by its handle (the six dots at the left) to set the order; **Retired** services stay on past invoices but aren't offered for new ones.
+  Income). Drag a service by its handle (the six dots at the left) to set the order; **Inactive** services stay on past invoices but aren't offered for new ones.
   The list's **Priced** column says which of the four ways a service uses; hover over it for the prices themselves.
 - **Which way to price:** under the **Priced** box the form says in a sentence what the chosen way does.
   - **Flat price:** one price for every lawn, whatever its size.
@@ -483,7 +485,7 @@ billing; admins change prices).
   fertilizer + edging + blow-off. Admins add them with **Add package**: pick services from the price list or type
   custom items, with quantity, budgeted hours and price. Leave a service's price blank to price it for each
   property's lawn when the package is added (custom items need a price). On a work order, **Add package…** next to
-  **Add line** adds all its items at once; change any of them after. Retired packages aren't offered; work orders
+  **Add line** adds all its items at once; change any of them after. Inactive packages aren't offered; work orders
   already made from a package keep their items.
 - **New invoice** (Billing → Invoices, the top bar's **+ New**, or **New invoice** on a customer's page): choose the
   customer and service address, then add lines. Picking a service fills in its price from the property's lawn size;
@@ -883,7 +885,7 @@ Customers & billing set them up; managers can see them and work Review Sequence.
   the title to read what it does ("This trigger sequence will kickstart when … wait for … then …"), with **Delete**
   and **Edit**. **New Automation Sequence** opens the editor:
   - **IF Trigger**, then **AND Condition** (all of these must be true: customer has or doesn't have a tag, has no
-    card on file, has no recurring service, is cancelled; estimate is a draft or has a service; to-do has a
+    card on file, has no recurring service, is inactive; estimate is a draft or has a service; to-do has a
     category; invoice is paid or partly paid) and **OR Condition** (starts another group; either group is enough).
   - **Action** adds a step with its **Waiting Period** (Instantly, or After so many Days, Hrs and Min, counted from
     the trigger), the Action and its template, employee, tag or to-do title. A sequence can also **Create & assign

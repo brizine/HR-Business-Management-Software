@@ -275,7 +275,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const effectiveDate = body.effectiveDate ?? (await companyToday(companyId));
     return db.transaction(async (tx) => {
       const c = await customerInCompany(tx, companyId, req.params.id);
-      if (c.status === "cancelled") throw new HttpError(400, "That customer is already cancelled");
+      if (c.status === "cancelled") throw new HttpError(400, "That customer is already inactive");
       const reason = await cancelReason(tx, companyId, body);
       const propertiesCancelled = await cancelCustomer(tx, { companyId, byId: sub, customerId: c.id, reason, effectiveDate, comment: body.comment ?? null });
       return { ok: true, propertiesCancelled };
@@ -287,7 +287,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const { companyId, sub } = req.user;
     return db.transaction(async (tx) => {
       const c = await customerInCompany(tx, companyId, req.params.id);
-      if (c.status !== "cancelled") throw new HttpError(400, "That customer isn't cancelled");
+      if (c.status !== "cancelled") throw new HttpError(400, "That customer isn't inactive");
       await tx.update(customers).set({ status: "active", updatedAt: new Date() }).where(eq(customers.id, c.id));
       await tx.update(cancellations).set({ reactivatedAt: new Date(), reactivatedById: sub })
         .where(and(eq(cancellations.customerId, c.id), isNull(cancellations.propertyId), isNull(cancellations.reactivatedAt)));

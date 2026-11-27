@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
-import { CUSTOMER_KIND_LABELS, customerName, PROPERTY_ROLE_LABELS, formatAddress, formatPhone, type CustomerKind, type PropertyRole } from "@crewdesk/shared";
+import { CUSTOMER_KIND_LABELS, customerName, statusWord, PROPERTY_ROLE_LABELS, formatAddress, formatPhone, type CustomerKind, type PropertyRole } from "@crewdesk/shared";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -78,7 +78,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
   return (
     <>
       <PageHead title={c.name} before={<Link className="btn no-print" href="/customers" aria-label="Back to customers">←</Link>}
-        sub={<>#{c.number} · {CUSTOMER_KIND_LABELS[c.kind as CustomerKind]} · <Badge value={c.status} />{c.sample && <> · <span className="tag tag-gray">Sample</span></>}</>}>
+        sub={<>#{c.number} · {CUSTOMER_KIND_LABELS[c.kind as CustomerKind]} · <Badge value={c.status} text={statusWord(c.status)} />{c.sample && <> · <span className="tag tag-gray">Sample</span></>}</>}>
         {c.status !== "cancelled" && <button className="btn no-print" onClick={() => { setEditing(!editing); setTab("details"); }}>Edit</button>}
         <Popover label={<>Send ▾</>} open={open === "send"} setOpen={toggle("send")} align="right" buttonClass="btn no-print">
           <div className="cl-menu">
@@ -101,7 +101,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
             <button type="button" onClick={() => { setOpen(null); setTimeout(() => window.print(), 50); }}>Print customer</button>
             <button type="button" disabled={action.busy} onClick={() => { setOpen(null); viewAs(); }}>View as customer</button>
             {c.status !== "cancelled"
-              ? <button type="button" className="bad-text" onClick={() => { setCancelling(true); setOpen(null); }}>Cancel customer…</button>
+              ? <button type="button" className="bad-text" onClick={() => { setCancelling(true); setOpen(null); }}>Make inactive…</button>
               : <button type="button" disabled={action.busy} onClick={() => { setOpen(null); action.run(async () => { await api(`/customers/${id}/reactivate`, { method: "POST" }); reload(); }); }}>Reactivate</button>}
             {can("admin", "customers") && (c.status === "lead" || c.sample || c.properties.length === 0) && (
               <button type="button" className="bad-text" disabled={action.busy} onClick={() => { setOpen(null); if (confirm(`Delete ${c.name}? This can't be undone.`)) action.run(async () => { await api(`/customers/${id}`, { method: "DELETE" }); router.push("/customers"); }); }}>Delete</button>
@@ -120,7 +120,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
       {cancelling && (
         <>
           {current.some((p: any) => p.role === "bill_to" && p.status === "active") && (
-            <p className="muted">Properties they&apos;re the bill-to for will be cancelled too. Properties where they&apos;re only a resident stay as they are.</p>
+            <p className="muted">Properties they&apos;re the bill-to for will be made inactive too. Properties where they&apos;re only a resident stay as they are.</p>
           )}
           <CancelForm what="customer" onClose={() => setCancelling(false)} onSubmit={async (body) => { await api(`/customers/${id}/cancel`, { body }); reload(); }} />
         </>
@@ -225,7 +225,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
               properties={propOptions.map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", ") }))} />
             {c.cancellations.length > 0 && (
               <div className="card">
-                <h2 className="cp-h">Cancellations</h2>
+                <h2 className="cp-h">Made inactive</h2>
                 <ul className="plain-list">
                   {c.cancellations.map((x: any) => (
                     <li key={x.id}>
@@ -257,7 +257,7 @@ function PropertyTable({ rows, tags, past }: { rows: any[]; tags: any[]; past?: 
             <td className="nowrap">{p.lastService ? fmtDate(p.lastService) : "—"}</td>
             <td className="nowrap">{p.nextService ? fmtDate(p.nextService) : "—"}</td>
             <td><TagChips ids={p.tagIds} tags={tags} /></td>
-            <td>{past ? `${fmtDate(p.startDate)} – ${fmtDate(p.endDate)}` : <Badge value={p.status} />}</td>
+            <td>{past ? `${fmtDate(p.startDate)} – ${fmtDate(p.endDate)}` : <Badge value={p.status} text={statusWord(p.status)} />}</td>
           </tr>
         ))}</tbody>
       </table>

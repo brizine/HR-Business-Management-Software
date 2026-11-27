@@ -11,13 +11,13 @@ import { TagChip, useTags, type Tag } from "@/components/customers";
 import { AutoSendCard, EstimateDepositCard, LateFeesCard } from "@/components/billing-rules";
 import { CardOnFileCard } from "@/components/waitlist";
 
-/** Customer settings (admins in Customers & billing): the tag list and the cancellation reasons. */
+/** Customer settings (admins in Customers & billing): the tag list and the reasons for going inactive. */
 export default function CustomerSettings() {
   const { can } = useAuth();
   return (
     <>
       <SettingsTabs />
-      <PageHead title="Customers & billing" sub="Invoice numbering and terms, late fees, auto-sending, estimate deposits, card on file, tags and cancellation reasons." />
+      <PageHead title="Customers & billing" sub="Invoice numbering and terms, late fees, auto-sending, estimate deposits, card on file, tags and reasons for going inactive." />
       {can("admin", "customers") ? <><BillingCard /><LateFeesCard /><AutoSendCard /><EstimateDepositCard /><CardRule /><TagsCard /><ReasonsCard /></> : <p className="muted">Only admins in Customers &amp; billing can change these.</p>}
     </>
   );
@@ -113,17 +113,17 @@ function ReasonsCard() {
   return (
     <div className="card">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <h2 style={{ fontSize: 16, margin: 0 }}>Cancellation reasons</h2>
+        <h2 style={{ fontSize: 16, margin: 0 }}>Reasons for going inactive</h2>
         <button className="btn primary" onClick={() => setEditing("new")}>Add reason</button>
       </div>
-      <p className="muted">The drop-down shown when a customer or property is cancelled. Retired reasons stay on past cancellations.</p>
+      <p className="muted">The drop-down shown when a customer or property is made inactive. A reason you no longer use can be made inactive itself; it stays on past records.</p>
       {editing && <ReasonForm reason={editing === "new" ? null : editing} onDone={() => { setEditing(null); reasons.reload(); }} />}
       <ErrorBox error={action.error} />
       <ol className="plain-list drag-list" ref={drag.box}>
         {drag.sorted(list, (r) => r.id).map((r) => (
           <li key={r.id} {...drag.row(r.id, "row")} style={{ opacity: r.retired ? 0.6 : 1 }}>
             <Grip drag={drag} id={r.id} name={r.label} />
-            <span style={{ flex: 1 }}><strong>{r.label}</strong> <span className="muted">{r.initiatedBy === "company" ? "our decision" : "customer's decision"}{r.commentRequired ? " · comment required" : ""}{r.retired ? " · retired" : ""}</span></span>
+            <span style={{ flex: 1 }}><strong>{r.label}</strong> <span className="muted">{r.initiatedBy === "company" ? "our decision" : "customer's decision"}{r.commentRequired ? " · comment required" : ""}{r.retired ? " · inactive" : ""}</span></span>
             <span className="row">
               <button className="btn" onClick={() => setEditing(r)}>Edit</button>
             </span>
@@ -156,7 +156,7 @@ function ReasonForm({ reason, onDone }: { reason: any | null; onDone: () => void
       </div>
       <div className="row">
         <label className="check"><input type="checkbox" checked={commentRequired} onChange={(e) => setCommentRequired(e.target.checked)} /> Comment required</label>
-        {reason && <label className="check"><input type="checkbox" checked={retired} onChange={(e) => setRetired(e.target.checked)} /> Retired</label>}
+        {reason && <label className="check"><input type="checkbox" checked={retired} onChange={(e) => setRetired(e.target.checked)} /> Inactive <span className="muted">(not offered any more)</span></label>}
       </div>
       <ErrorBox error={error} />
       <div className="row"><button className="btn primary" disabled={busy}>Save</button><button type="button" className="btn" onClick={onDone}>Cancel</button></div>
