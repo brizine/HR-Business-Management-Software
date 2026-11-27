@@ -455,21 +455,18 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
 Operations → **Billing** has **Invoices**, and **Resources → Products & services** is the price list (managers in Customers &
 billing; admins change prices).
 
-- **Price list:** each service is priced one of four ways: a **flat price**, **per 1,000 sq ft** (with an optional
-  minimum charge), **by lawn size** (brackets such as "up to 8,000 sq ft $75, larger $95"), or **per 1,000 sq ft
-  with volume discount** (see below). Each service posts to
+- **Price list:** each service is priced one of two ways: a **flat price**, or **per 1,000 sq ft with volume
+  discount** (see below). Each service posts to
   an income account (4000 Lawn Treatment Programs, 4100 Pest Control, 4200 One-Time Lawn Services, 4950 Other
   Income). Drag a service by its handle (the six dots at the left) to set the order; **Inactive** services stay on past invoices but aren't offered for new ones.
-  The list's **Priced** column says which of the four ways a service uses; hover over it for the prices themselves.
+  The list's **Priced** column says which way a service uses; hover over it for the prices themselves.
 - **Which way to price:** under the **Priced** box the form says in a sentence what the chosen way does.
   - **Flat price:** one price for every lawn, whatever its size.
-  - **Per 1,000 sq ft:** the lawn's size times one rate, never less than the minimum. The price rises with every
-    square foot: at $6 per 1,000, an 8,000 sq ft lawn is $48 and an 8,500 sq ft lawn is $51.
-  - **By lawn size:** you type a fixed price for each size range (up to 5,000 sq ft $60, up to 8,000 sq ft $75,
-    anything bigger $95). A lawn pays the price of the first range it fits in. Nothing is multiplied: every lawn in
-    a range pays the same, and the price jumps from one range to the next. Use it when you think in a short list
-    of prices; use per 1,000 when the price should follow the size.
   - **Per 1,000 sq ft with volume discount:** a minimum, then rates that change at the sizes you set (below).
+    For one rate at every size, enter a single tier.
+  - **Per 1,000 sq ft** (one rate) and **By lawn size** (a fixed price for each size range) are no longer
+    offered in the Priced box. A service already priced one of those ways keeps it and prices lawns as before:
+    its Priced box still shows its own way, marked "(no longer offered)", until you pick another.
 - **Invoice description:** what customers read on the invoice or estimate line for the service, such as
   "Granular fertilizer with pre-emergent and broadleaf weed control" for a service you call "Round 1". When it is
   empty the service's name is used. Work orders always show the name, since that is what your crew knows it by;
@@ -502,8 +499,8 @@ billing; admins change prices).
     back-yard-only add-on on the same work order still records the whole lawn as the area treated.
   - A property with nothing in the field has no size for that line: the box says "not on file" and the line
     isn't priced until you fill the field in on the property or type a size.
-- **Rate chart:** for per 1,000 and volume discount pricing the form shows a **Rate chart** with every size the
-  service prices (every 1,000 sq ft for a single rate; every 500 sq ft, or every step, for volume discount), up to
+- **Rate chart:** for volume discount pricing the form shows a **Rate chart** with every size the
+  service prices (every 500 sq ft, or every step), up to
   the **Price by hand above** size or about an acre. Click its heading to fold it away or bring it back; the
   heading still shows how many sizes it covers and the lowest and highest price, and Crewdesk remembers which way
   you left it.

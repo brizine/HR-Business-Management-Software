@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { INCOME_ACCOUNTS, PRICING_KINDS, PRICING_LABELS, describePricing, formatMoney, formatRateAmount, priceFor, sizeMinutes, tieredBreakdown, type PricedService, type PricingKind } from "@crewdesk/shared";
+import { INCOME_ACCOUNTS, PRICING_LABELS, PRICING_OFFERED, describePricing, formatMoney, formatRateAmount, priceFor, pricingChoices, sizeMinutes, tieredBreakdown, type PricedService, type PricingKind } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi, useNewForm } from "@/lib/hooks";
@@ -185,7 +185,9 @@ function ServiceForm({ service, copyFrom, onDone }: { service: ServiceType | nul
       </label>
       <div className="formgrid">
         <label>Priced
-          <select value={pricing} onChange={(e) => setPricing(e.target.value as PricingKind)}>{PRICING_KINDS.map((k) => <option key={k} value={k}>{PRICING_LABELS[k]}</option>)}</select>
+          <select value={pricing} onChange={(e) => setPricing(e.target.value as PricingKind)}>
+            {pricingChoices(from?.pricing).map((k) => <option key={k} value={k}>{PRICING_LABELS[k]}{PRICING_OFFERED.includes(k) ? "" : " (no longer offered)"}</option>)}
+          </select>
         </label>
         {pricing === "flat" && <label>Price ($)<input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} required /></label>}
         {pricing === "tiered" && <label>Minimum charge ($)<input inputMode="decimal" value={minimum} onChange={(e) => setMinimum(e.target.value)} required /></label>}
@@ -194,7 +196,10 @@ function ServiceForm({ service, copyFrom, onDone }: { service: ServiceType | nul
           <label>Minimum charge ($)<input inputMode="decimal" value={minimum} onChange={(e) => setMinimum(e.target.value)} placeholder="optional" /></label>
         </>}
       </div>
-      <p className="muted" style={{ margin: 0, fontSize: 13 }}><strong>{PRICING_LABELS[pricing]}:</strong> {PRICING_HELP[pricing]}</p>
+      <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+        <strong>{PRICING_LABELS[pricing]}:</strong> {PRICING_HELP[pricing]}
+        {!PRICING_OFFERED.includes(pricing) && " This way of pricing is no longer offered for new services. This service keeps it, and prices lawns as before, until you pick another."}
+      </p>
       {pricing === "per_thousand" && (
         <RateChart service={{ pricing: "per_thousand", priceCents: Number.isFinite(toCents(price)) ? toCents(price) : 0, minimumCents: minimum.trim() ? toCents(minimum) : 0, brackets: [] }} {...timing} />
       )}

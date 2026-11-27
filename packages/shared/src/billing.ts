@@ -18,6 +18,17 @@ export { formatMoney };
 export const PRICING_KINDS = ["flat", "per_thousand", "bracket", "tiered"] as const;
 export type PricingKind = (typeof PRICING_KINDS)[number];
 export const PRICING_LABELS: Record<PricingKind, string> = { flat: "Flat price", per_thousand: "Per 1,000 sq ft", bracket: "By lawn size", tiered: "Per 1,000 sq ft with volume discount" };
+/**
+ * The ways a service can be priced from the Priced box. One rate per 1,000 sq ft and By lawn size
+ * are no longer offered; a service already priced one of those ways keeps it, and keeps pricing
+ * lawns the same, until someone picks another.
+ */
+export const PRICING_OFFERED: readonly PricingKind[] = ["flat", "tiered"];
+/** The Priced box's choices: the offered ones, plus the way this service is priced now when that one is no longer offered. */
+export function pricingChoices(current?: string | null): PricingKind[] {
+  const kept = PRICING_KINDS.find((k) => k === current && !PRICING_OFFERED.includes(k));
+  return kept ? [...PRICING_OFFERED, kept] : [...PRICING_OFFERED];
+}
 
 /** Income accounts a service can post to (codes in the books; the same in the real and test books). */
 export const INCOME_ACCOUNTS = [

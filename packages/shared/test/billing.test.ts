@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type PricedService, describePricing, lineTextFor, tieredBreakdown, formatMoney, invoiceSchema, invoiceTotals, isOverdue, priceFor, serviceTypeSchema, invoiceBalance, creditSchema, billingSettingsSchema, prepayTotals, prepaySplit, prepaymentSchema, splitIncome } from "../src/billing";
+import { type PricedService, PRICING_OFFERED, pricingChoices, describePricing, lineTextFor, tieredBreakdown, formatMoney, invoiceSchema, invoiceTotals, isOverdue, priceFor, serviceTypeSchema, invoiceBalance, creditSchema, billingSettingsSchema, prepayTotals, prepaySplit, prepaymentSchema, splitIncome } from "../src/billing";
 
 describe("price list", () => {
   it("prices flat, per 1,000 sq ft (with a minimum) and by lawn size", () => {
@@ -35,6 +35,22 @@ describe("price list", () => {
     const bad = serviceTypeSchema.safeParse({ name: "X", pricing: "bracket", brackets: [{ upToSqFt: null, priceCents: 1 }, { upToSqFt: 5000, priceCents: 2 }] });
     expect(bad.success).toBe(false);
     expect(serviceTypeSchema.safeParse({ name: "X", pricing: "bracket", brackets: [] }).success).toBe(false);
+  });
+});
+
+describe("the Priced box", () => {
+  it("offers a flat price or volume discount; one rate per 1,000 and By lawn size are no longer offered", () => {
+    expect(PRICING_OFFERED).toEqual(["flat", "tiered"]);
+    expect(pricingChoices()).toEqual(["flat", "tiered"]);
+    expect(pricingChoices("tiered")).toEqual(["flat", "tiered"]);
+  });
+
+  it("a service already priced a way that's no longer offered keeps it as a choice, and still prices lawns", () => {
+    expect(pricingChoices("per_thousand")).toEqual(["flat", "tiered", "per_thousand"]);
+    expect(pricingChoices("bracket")).toEqual(["flat", "tiered", "bracket"]);
+    expect(pricingChoices("nonsense")).toEqual(["flat", "tiered"]);
+    expect(priceFor({ pricing: "per_thousand", priceCents: 600, minimumCents: 4000, brackets: [] }, 8000)).toBe(4800);
+    expect(priceFor({ pricing: "bracket", priceCents: 0, minimumCents: 0, brackets: [{ upToSqFt: 5000, priceCents: 6000 }, { upToSqFt: null, priceCents: 9500 }] }, 8000)).toBe(9500);
   });
 });
 
