@@ -41,6 +41,13 @@ let locator: Locator = async (address) => geocode(address).catch(() => null);
 export function setDispatchLocator(fn: Locator) { locator = fn; }
 export const locateAddress = (address: string) => locator(address);
 
+/**
+ * What a company has until an admin chooses otherwise: drives measured by real roads, and new
+ * routes planned for curbside arrival. (DISPATCH_DEFAULTS=plain starts a company on estimates with
+ * no curbside arrival instead. The tests run that way, so they never call an outside routing server.)
+ */
+const startsWith = () => (process.env.DISPATCH_DEFAULTS === "plain" ? { routing: "estimate" as const, curbside: false } : { routing: "road" as const, curbside: true });
+
 /** The company's dispatch settings. The business address is located once and remembered. */
 export async function dispatchSettings(companyId: string): Promise<DispatchSettings> {
   const [co] = await db.select({ s: companies.dispatchSettings, line1: companies.addressLine1, city: companies.city, state: companies.state, zip: companies.zip }).from(companies).where(eq(companies.id, companyId));
@@ -52,7 +59,8 @@ export async function dispatchSettings(companyId: string): Promise<DispatchSetti
     depot = at ? { address, lat: at.lat, lng: at.lng } : null;
     await db.update(companies).set({ dispatchSettings: { ...s, depot, depotTried: address } as Partial<DispatchSettings> }).where(eq(companies.id, companyId));
   }
-  return { routing: s.routing === "road" ? "road" : "estimate", roadUrl: s.roadUrl ?? null, curbside: !!s.curbside, start: s.start ?? null, end: s.end ?? null, depot };
+  const start = startsWith();
+  return { routing: s.routing === "road" || s.routing === "estimate" ? s.routing : start.routing, roadUrl: s.roadUrl ?? null, curbside: s.curbside ?? start.curbside, start: s.start ?? null, end: s.end ?? null, depot };
 }
 
 export async function saveDispatchSettings(companyId: string, b: DispatchSettingsInput) {
@@ -66,7 +74,9 @@ export async function saveDispatchSettings(companyId: string, b: DispatchSetting
     if (!at) throw new HttpError(400, `Couldn't find the ${what} address on the map. Check it, or leave it empty to use the business address.`);
     return { address, lat: at.lat, lng: at.lng };
   };
-  const next = { ...s, routing: b.routing, roadUrl: b.roadUrl ?? null, curbside: b.curbside ?? !!s.curbside, start: await place(b.startAddress, s.start ?? null, "start"), end: await place(b.endAddress, s.end ?? null, "end") };
+  // Whatever isn't said stays as it is; a first save writes down what the company started with.
+  const first = startsWith();
+  const next = { ...s, routing: b.routing ?? s.routing ?? first.routing, roadUrl: b.roadUrl ?? null, curbside: b.curbside ?? s.curbside ?? first.curbside, start: await place(b.startAddress, s.start ?? null, "start"), end: await place(b.endAddress, s.end ?? null, "end") };
   await db.update(companies).set({ dispatchSettings: next }).where(eq(companies.id, companyId));
   return dispatchSettings(companyId);
 }
@@ -301,7 +311,8 @@ async function measure(settings: Pick<DispatchSettings, "routing" | "roadUrl">, 
   return {
     legs, endLeg, steps, endSteps: end && located.length ? m.steps?.[m.legs.length - 1] ?? null : null,
     totalMeters: all.reduce((s, l) => s + l.meters, 0), totalDriveSeconds: all.reduce((s, l) => s + l.seconds, 0),
-    geometry: m.geometry, measured: m.measured, curbside: m.curbside,
+    // With no stop on the map there is no drive to bring in curbside, so nothing was refused.
+    geometry: m.geometry, measured: m.measured, curbside: m.curbside || (!!o.curbside && located.length === 0 && m.measured === "road"),
   };
 }
 

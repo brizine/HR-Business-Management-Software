@@ -410,8 +410,8 @@ export const DISPATCH_ROUTING = ["estimate", "road"] as const;
 export type DispatchRouting = (typeof DISPATCH_ROUTING)[number];
 export const DEFAULT_ROAD_URL = "https://router.project-osrm.org";
 export const dispatchSettingsSchema = z.object({
-  /** "estimate": straight-line estimates. "road": ask a routing server for real roads. */
-  routing: z.enum(DISPATCH_ROUTING).default("estimate"),
+  /** "estimate": straight-line estimates. "road": ask a routing server for real roads. Left out: stays as it is. */
+  routing: z.enum(DISPATCH_ROUTING).optional(),
   /** An OSRM-compatible routing server. */
   roadUrl: z.preprocess(blankToNull, z.string().trim().url("Enter the server's address, starting with https://").max(300).nullable()).optional(),
   /** Where routes start and end when it isn't the business address. */

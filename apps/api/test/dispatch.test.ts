@@ -475,6 +475,25 @@ describe("settings", () => {
     expect(down.stops[0].leg.seconds).toBeGreaterThan(0);
     await call("PUT", "/dispatch/settings", "owner", { routing: "estimate" });
   });
+  it("a company starts on real roads with curbside arrival, until an admin chooses otherwise", async () => {
+    // These tests run with DISPATCH_DEFAULTS=plain (estimates, no curbside) so nothing calls an outside server. Without it:
+    const was = process.env.DISPATCH_DEFAULTS;
+    delete process.env.DISPATCH_DEFAULTS;
+    try {
+      T.fresh = (await app.inject({ method: "POST", url: "/auth/signup", payload: { companyName: "Fresh Routes Co", firstName: "Fay", lastName: "Owner", email: email("fresh"), password: "password123" } })).json().token;
+      await call("PUT", "/auth/policy", "fresh", { twoFactorRequiredFor: "none" });
+      expect((await call("GET", "/dispatch", "fresh")).body.settings).toMatchObject({ routing: "road", curbside: true, roadUrl: null });
+      expect((await call("GET", "/dispatch/list", "fresh")).body).toMatchObject({ routing: "road", curbside: true });
+      // Saving something else (where routes start) doesn't change either.
+      expect((await call("PUT", "/dispatch/settings", "fresh", { startAddress: "" })).body).toMatchObject({ routing: "road", curbside: true });
+      // An admin's own choice sticks.
+      expect((await call("PUT", "/dispatch/settings", "fresh", { routing: "estimate", curbside: false })).body).toMatchObject({ routing: "estimate", curbside: false });
+      expect((await call("GET", "/dispatch", "fresh")).body.settings).toMatchObject({ routing: "estimate", curbside: false });
+      expect((await call("PUT", "/dispatch/settings", "fresh", { curbside: true })).body).toMatchObject({ routing: "estimate", curbside: true });
+    } finally { process.env.DISPATCH_DEFAULTS = was; }
+    // A company that never chose (this file's own) is on estimates here only because of that switch.
+    expect(process.env.DISPATCH_DEFAULTS).toBe("plain");
+  });
   it("curbside arrival: brings the truck in on each stop's side of the street, and the route remembers the choice", async () => {
     await call("PUT", "/dispatch/settings", "owner", { routing: "road", roadUrl });
     const day = plus(today, 14);
@@ -490,6 +509,10 @@ describe("settings", () => {
     roadCalls.length = 0;
     expect((await call("POST", "/dispatch/routes/preview", "mgr", { date: day, keys })).body).toMatchObject({ measured: "road", curbside: false, curbsideMeasured: false });
     expect(roadCalls.join(" ")).not.toContain("approaches");
+    // Stops that aren't on the map have no drive to bring in curbside: nothing is reported as refused.
+    const unmapped = (await board()).events.filter((e: any) => e.location?.lat == null).map((e: any) => e.key);
+    expect(unmapped.length).toBeGreaterThan(0);
+    expect((await call("POST", "/dispatch/routes/preview", "mgr", { date: today, keys: unmapped, curbside: true })).body).toMatchObject({ measured: "road", totalDriveSeconds: 0, curbside: true, curbsideMeasured: true });
     // Where the server can't do it, the route is still measured by road, and says it isn't curbside.
     refuseCurb = true;
     expect((await call("POST", "/dispatch/routes/preview", "mgr", { date: day, keys, curbside: true, optimize: true })).body).toMatchObject({ measured: "road", curbside: true, curbsideMeasured: false });

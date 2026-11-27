@@ -1186,9 +1186,17 @@ Homeworks' New Dispatch. They show the
 same work orders, crews, routes and stop numbers, so a change made on one shows on the other. Use both; one will
 be kept.
 
-**How drive times are worked out:** to start, drive times and miles are **estimates** from the straight-line
-distance (the board says so). An admin can switch to **real roads** on the New Dispatch board: **View → Routing
-and capacity…**. Only map coordinates are sent to the routing service, never names or addresses. The same window
+**How drive times are worked out:** to start, drive times and miles come from **real roads**: a routing service
+works out the actual drive along the streets, which also gives the route's line on the map, turn-by-turn
+directions when you print a route, and curbside arrival. Only map coordinates are sent to it, never names or
+addresses. New routes also start with **curbside arrival** on (the truck pulls up on each stop's own side of the
+street); any one route can be switched while you order it.
+
+An admin can change both on the New Dispatch board: **View → Routing and capacity…**. **Estimates** work drive
+times out from the straight-line distance instead, with nothing leaving Crewdesk (the board then says the times
+are estimated, and curbside arrival is greyed out). If the routing service can't be reached, Crewdesk uses
+estimates for that route so one can always be built. The free public OpenStreetMap service is used unless you
+enter another server's address; it is meant for light use, so a busy company may want its own. The same window
 sets where routes start and end (your company address unless you type another) and each person's daily hours.
 
 ### Dispatch board (from the Crewdesk plan)
