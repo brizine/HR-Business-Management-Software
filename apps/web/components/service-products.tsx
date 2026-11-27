@@ -71,8 +71,10 @@ export function ServiceChemicalsEditor({ value, onChange, source }: { value: Ser
   };
   const applying = links.filter((l) => l.productRateId && appliesOn({ startDate: l.startDate || null, endDate: l.endDate || null }, today));
   const mixesApplying = mixes.filter((m) => m.mixId && appliesOn({ startDate: m.startDate || null, endDate: m.endDate || null }, today));
-  const material = applying.length || mixesApplying.length
-    ? applying.reduce((s, l) => s + (linkCost(l).cost ?? 0), 0) + mixesApplying.reduce((s, m) => s + (mixCost(m.mixId) ?? 0), 0) : null;
+  // What it costs today, from the products and mixes that have a cost; the ones without are counted, not shown as $0.
+  const parts = [...applying.map((l) => linkCost(l).cost), ...mixesApplying.map((m) => mixCost(m.mixId))];
+  const noCost = parts.filter((c) => c == null).length;
+  const material = parts.some((c) => c != null) ? parts.reduce((s: number, c) => s + (c ?? 0), 0) : null;
   const setLinks = (next: ProductDraft[]) => onChange({ ...value, links: next });
   const setMixes = (next: MixDraft[]) => onChange({ ...value, mixes: next });
   return (
@@ -130,6 +132,7 @@ export function ServiceChemicalsEditor({ value, onChange, source }: { value: Ser
         <button type="button" className="btn" onClick={() => setLinks([...links, { productId: "", productRateId: "", startDate: "", endDate: "" }])}>Add a product</button>
         <button type="button" className="btn" disabled={!mixOptions.data?.some((x) => x.active)} onClick={() => setMixes([...mixes, { mixId: "", startDate: "", endDate: "" }])}>Add a mix</button>
         {material != null && <strong>Material today: {formatMoney(Math.round(material))} per 1,000 sq ft</strong>}
+        {noCost > 0 && <span className="muted">{material != null ? `(${noCost} without a cost yet, so not counted)` : "Material cost: none yet. Add what you pay for it in Chemical Tracking → Products."}</span>}
         {catalog.data && !catalog.data.length && <span className="muted">Add products in Chemical Tracking → Products first.</span>}
         {mixOptions.data && !mixOptions.data.some((x) => x.active) && <span className="muted">Mixes are made in Chemical Tracking → Mixes.</span>}
       </div>
