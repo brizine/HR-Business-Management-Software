@@ -2,6 +2,7 @@ import { z } from "zod";
 import { formatMoney } from "./money";
 import { ESTIMATE_DEPOSIT_MODES, checkEstimateDeposit } from "./deposits";
 import { taxFor, taxRateSchema } from "./tax";
+import { lawnAreaFields } from "./lawnArea";
 
 /**
  * Estimates, like Homeworks': a numbered quote with lines (quantity × rate × visits, tax), optional
@@ -33,6 +34,8 @@ export const estimateLineSchema = z.object({
   description: z.string().trim().min(1, "Describe the line").max(500),
   quantity: z.coerce.number().positive("The quantity must be more than 0").max(100_000).multipleOf(0.01),
   unitPriceCents: z.coerce.number().int().min(0, "Prices can't be negative").max(100_000_000),
+  /** The part of the lawn the line is for (its price and cost are worked out from that size). */
+  ...lawnAreaFields,
   /** How many visits it's for (e.g. 6 fertilizer rounds); the line total is quantity × price × visits. */
   visits: z.coerce.number().int().min(1).max(365).default(1),
   taxRate: taxRateSchema.default(0),

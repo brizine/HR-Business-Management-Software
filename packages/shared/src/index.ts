@@ -27,6 +27,7 @@ export * from "./measure";
 export * from "./addresses";
 export * from "./measureSnap";
 export * from "./customers";
+export * from "./lawnArea";
 export * from "./billing";
 export * from "./todos";
 export * from "./calendar";

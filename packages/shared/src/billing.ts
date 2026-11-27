@@ -2,6 +2,7 @@ import { z } from "zod";
 import { optionalTaxRateSchema, taxFor, taxRateSchema } from "./tax";
 import { DEFAULT_SEND_SCHEDULE, autoSendSettingsSchema, lateFeeSettingsSchema } from "./billingRules";
 import { formatMoney } from "./money";
+import { SERVICE_LAWN_AREAS, lawnAreaFields } from "./lawnArea";
 import { DEFAULT_ESTIMATE_DEPOSIT, estimateDepositSettingsSchema } from "./deposits";
 
 export { formatMoney };
@@ -80,6 +81,8 @@ export const serviceTypeSchema = z.object({
   setupMinutes: z.preprocess((v) => (v === "" ? null : v), z.coerce.number().int().min(0).max(600).nullable()).optional(),
   /** A chemical application: work orders with it get the weather recorded when completed. */
   chemical: z.boolean().optional(),
+  /** The part of the lawn its lines start on (each line can still be changed): whole, front or back. */
+  defaultLawnArea: z.enum(SERVICE_LAWN_AREAS).optional(),
   /** Chemical records: where it's applied (ODAFF item 16), e.g. "Turf – front and back lawn". */
   applicationSite: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), z.string().trim().max(200).nullable()).optional(),
   minutesPer1000: z.preprocess((v) => (v === "" ? null : v), z.coerce.number().min(0).max(120).nullable()).optional(),
@@ -227,6 +230,8 @@ export const invoiceLineSchema = z.object({
   taxRate: taxRateSchema.default(0),
   /** A late fee Crewdesk added (not discounted or taxed). */
   isLateFee: z.boolean().default(false),
+  /** The part of the lawn the line was priced from. */
+  ...lawnAreaFields,
 });
 export type InvoiceLineInput = z.infer<typeof invoiceLineSchema>;
 

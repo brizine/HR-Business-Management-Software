@@ -5,6 +5,7 @@ import { DEFAULT_TODO_COLOR } from "./todos";
 import { checkWaitWindow, waitWindowFields } from "./waitlist";
 import { chemicalCompletionSchema } from "./chemicalRecords";
 import { VISIT_FORMS_MAX } from "./visitForms";
+import { lawnAreaFields } from "./lawnArea";
 
 /**
  * Work orders: scheduled jobs at a customer's property (Homeworks calls them visits). Each has the
@@ -50,6 +51,8 @@ export const visitLineSchema = z.object({
   unitPriceCents: z.coerce.number().int().min(0, "Prices can't be negative").max(100_000_000),
   /** Sales tax on this line, in percent (0 = not taxed); invoices made from the work order keep it. */
   taxRate: taxRateSchema.default(0),
+  /** The part of the lawn the line is for: its price, time and product amounts come from that size. */
+  ...lawnAreaFields,
 });
 export type VisitLineInput = z.infer<typeof visitLineSchema>;
 

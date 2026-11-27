@@ -22,7 +22,7 @@ export default function NewWorkOrder() {
         customer: { id: e.customer.id, name: e.customer.name }, propertyId: e.propertyId ?? e.lines.find((l: any) => l.propertyId)?.propertyId ?? undefined,
         title: e.title || `Estimate ${e.number}`, estimateId: e.id,
         notes: e.lines.some((l: any) => l.included && l.visits > 1) ? `From estimate ${e.number}: ${e.lines.filter((l: any) => l.included && l.visits > 1).map((l: any) => `${l.description} × ${l.visits} visits`).join("; ")}. Set it to repeat below.` : undefined,
-        lines: e.lines.filter((l: any) => l.included).map((l: any) => ({ serviceTypeId: l.serviceTypeId, description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, taxRate: l.taxRate, budgetedHours: l.budgetedHours })),
+        lines: e.lines.filter((l: any) => l.included).map((l: any) => ({ serviceTypeId: l.serviceTypeId, description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, taxRate: l.taxRate, budgetedHours: l.budgetedHours, lawnArea: l.lawnArea, lawnAreaSqFt: l.lawnAreaSqFt })),
       }), () => setPreset({}));
       return;
     }

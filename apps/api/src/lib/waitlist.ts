@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import {
-  customerName, eligibleFrom, formatAddress, historyMinutes, holidaysBetween, sizeMinutes, waitBadges,
+  customerName, eligibleFrom, formatAddress, historyMinutes, holidaysBetween, lineSqFt, sizeMinutes, waitBadges,
   type NotifyBefore, type Priority, type WaitBadge,
 } from "@crewdesk/shared";
 import { db } from "../db";
@@ -20,11 +20,11 @@ export async function estimateMinutes(rows: { id: string; propertyId: string | n
   const out = new Map<string, { minutes: number | null; source: EstSource; used: number; leftOut: number }>();
   if (!rows.length) return out;
   const ids = rows.map((r) => r.id);
-  const lines = await db.select({ visitId: visitLines.visitId, serviceTypeId: visitLines.serviceTypeId, sortOrder: visitLines.sortOrder }).from(visitLines).where(inArray(visitLines.visitId, ids));
+  const lines = await db.select({ visitId: visitLines.visitId, serviceTypeId: visitLines.serviceTypeId, sortOrder: visitLines.sortOrder, lawnArea: visitLines.lawnArea, lawnAreaSqFt: visitLines.lawnAreaSqFt }).from(visitLines).where(inArray(visitLines.visitId, ids));
   const typeIds = [...new Set(lines.map((l) => l.serviceTypeId).filter((x): x is string => !!x))];
   const rates = new Map((typeIds.length ? await db.select({ id: serviceTypes.id, setupMinutes: serviceTypes.setupMinutes, minutesPer1000: serviceTypes.minutesPer1000 }).from(serviceTypes).where(inArray(serviceTypes.id, typeIds)) : []).map((r) => [r.id, r]));
   const propIds = [...new Set(rows.map((r) => r.propertyId).filter((x): x is string => !!x))];
-  const sizes = new Map((propIds.length ? await db.select({ id: properties.id, sqFt: properties.lawnSqFt }).from(properties).where(inArray(properties.id, propIds)) : []).map((p) => [p.id, p.sqFt]));
+  const sizes = new Map((propIds.length ? await db.select({ id: properties.id, lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt }).from(properties).where(inArray(properties.id, propIds)) : []).map((p) => [p.id, p]));
   // The property's past visits of the same main service, Start to Complete (newest first).
   const past = !propIds.length ? [] : await db.select({ propertyId: visits.propertyId, startedAt: visits.startedAt, completedAt: visits.completedAt, serviceTypeId: sql<string | null>`(select l.service_type_id from visit_lines l where l.visit_id = "visits"."id" order by l.sort_order limit 1)` })
     .from(visits).where(and(inArray(visits.propertyId, propIds), eq(visits.status, "completed"), isNotNull(visits.startedAt), isNotNull(visits.completedAt), gte(visits.completedAt, new Date(Date.now() - 2 * 365 * 86_400_000))))
@@ -34,8 +34,9 @@ export async function estimateMinutes(rows: { id: string; propertyId: string | n
   for (const r of rows) {
     if (r.budgetedHours != null && r.budgetedHours > 0) { out.set(r.id, { minutes: Math.round(r.budgetedHours * 60), source: "set", used: 0, leftOut: 0 }); continue; }
     const ls = (byLine.get(r.id) ?? []).sort((a, b) => a.sortOrder - b.sortOrder);
-    const sqFt = r.propertyId ? sizes.get(r.propertyId) ?? null : null;
-    const sizeParts = ls.map((l) => (l.serviceTypeId && rates.get(l.serviceTypeId) ? sizeMinutes(rates.get(l.serviceTypeId)!, sqFt) : null)).filter((m): m is number => m != null);
+    // Each line's time is for the part of the lawn it covers (a back-yard-only line takes less).
+    const lawn = r.propertyId ? sizes.get(r.propertyId) ?? null : null;
+    const sizeParts = ls.map((l) => (l.serviceTypeId && rates.get(l.serviceTypeId) ? sizeMinutes(rates.get(l.serviceTypeId)!, lineSqFt(l, lawn)) : null)).filter((m): m is number => m != null);
     const size = sizeParts.length ? sizeParts.reduce((a, b) => a + b, 0) : null;
     const main = ls.find((l) => l.serviceTypeId)?.serviceTypeId ?? null;
     const durations = main ? past.filter((p) => p.propertyId === r.propertyId && p.serviceTypeId === main).map((p) => (p.completedAt!.getTime() - p.startedAt!.getTime()) / 60_000) : [];

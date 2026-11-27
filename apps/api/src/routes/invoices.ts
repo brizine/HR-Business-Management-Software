@@ -389,7 +389,7 @@ const routes: FastifyPluginAsync = async (app) => {
       payLink: payLinkFor(inv), onlinePayments: !!(await stripeConfig(companyId)),
       customer: { id: cust.id, number: cust.number, name: customerName(cust), email: cust.email, delivery: cust.delivery, poRequired: cust.poRequired, status: cust.status,
         billTo: billToLines(cust, prop), copies },
-      property: prop ? { id: prop.id, street: prop.street, name: prop.name, address: formatAddress(prop), lawnSqFt: prop.lawnSqFt } : null,
+      property: prop ? { id: prop.id, street: prop.street, name: prop.name, address: formatAddress(prop), lawnSqFt: prop.lawnSqFt, frontSqFt: prop.frontSqFt, backSqFt: prop.backSqFt } : null,
     };
   });
 

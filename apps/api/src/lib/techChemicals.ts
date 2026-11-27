@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { DEFAULT_APPLICATION_METHODS, costOn, costPerUseUnitCents, type ChemicalCompletion } from "@crewdesk/shared";
+import { DEFAULT_APPLICATION_METHODS, costOn, costPerUseUnitCents, lineSqFt, type ChemicalCompletion } from "@crewdesk/shared";
 import { db } from "../db";
 import { applicationMethods, chemicalMixItems, chemicalMixes, productCosts, productRates, products, properties, serviceTypes, visitLines, visitProducts, visits } from "../db/schema";
 import { HttpError } from "./errors";
@@ -40,6 +40,16 @@ function defaultMethod(methods: Method[], rate: { applicationMethodId?: string |
 }
 
 /**
+ * The area treated on a work order: what its chemical lines cover (the largest, when they differ:
+ * a whole-lawn round plus a back-yard-only add-on is still the whole lawn). With no chemical line
+ * it's the whole lawn, as before.
+ */
+function treatedArea(lines: { serviceTypeId: string | null; chemical: boolean | null; area: number | null }[], byService: Map<string, { applies: boolean }[]>, whole: number | null) {
+  const sizes = lines.filter((l) => l.chemical || (l.serviceTypeId && (byService.get(l.serviceTypeId) ?? []).some((p) => p.applies))).map((l) => l.area).filter((a): a is number => a != null && a > 0);
+  return sizes.length ? Math.max(...sizes) : whole;
+}
+
+/**
  * What the tech sees when completing a chemical work order: the service's products prefilled
  * (how they're usually applied and the amount for this lawn), the company's application methods,
  * and every active product to add, with its rate for each method. No costs: crews don't see them.
@@ -47,10 +57,11 @@ function defaultMethod(methods: Method[], rate: { applicationMethodId?: string |
 export async function chemicalOptions(visitId: string, companyId: string) {
   const [v] = await db.select({ date: visits.date, propertyId: visits.propertyId }).from(visits).where(eq(visits.id, visitId));
   const day = v?.date ?? (await companyToday(companyId));
-  const lines = await db.select({ serviceTypeId: visitLines.serviceTypeId, chemical: serviceTypes.chemical, site: serviceTypes.applicationSite })
-    .from(visitLines).leftJoin(serviceTypes, eq(serviceTypes.id, visitLines.serviceTypeId)).where(eq(visitLines.visitId, visitId)).orderBy(asc(visitLines.sortOrder));
-  const [prop] = v?.propertyId ? await db.select({ lawnSqFt: properties.lawnSqFt }).from(properties).where(eq(properties.id, v.propertyId)) : [];
-  const area = prop?.lawnSqFt ?? null;
+  const [prop] = v?.propertyId ? await db.select({ lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt }).from(properties).where(eq(properties.id, v.propertyId)) : [];
+  // Each line's own area: the whole lawn, or the front, back or typed size set on it.
+  const lines = (await db.select({ serviceTypeId: visitLines.serviceTypeId, chemical: serviceTypes.chemical, site: serviceTypes.applicationSite, lawnArea: visitLines.lawnArea, lawnAreaSqFt: visitLines.lawnAreaSqFt })
+    .from(visitLines).leftJoin(serviceTypes, eq(serviceTypes.id, visitLines.serviceTypeId)).where(eq(visitLines.visitId, visitId)).orderBy(asc(visitLines.sortOrder)))
+    .map((l) => ({ ...l, area: lineSqFt(l, prop) }));
   const serviceIds = [...new Set(lines.map((l) => l.serviceTypeId).filter((x): x is string => !!x))];
   const byService = await serviceProductLines(serviceIds, day);
   const methods = await methodsFor(companyId);
@@ -68,6 +79,7 @@ export async function chemicalOptions(visitId: string, companyId: string) {
     };
   });
   const items = lines.flatMap((l) => (l.serviceTypeId ? byService.get(l.serviceTypeId) ?? [] : []).filter((p) => p.applies).map((p) => {
+    const area = l.area;
     // A mix on the service: the mix's rate and method, grouped under the mix's name.
     if (p.mixId) {
       const method = methods.find((m) => m.id === p.applicationMethodId) ?? defaultMethod(methods, { carrierGalPer1000: p.carrierGalPer1000 });
@@ -97,7 +109,7 @@ export async function chemicalOptions(visitId: string, companyId: string) {
   return {
     mixes: mixList,
     chemical: lines.some((l) => l.chemical) || items.length > 0,
-    areaSqFt: area,
+    areaSqFt: treatedArea(lines, byService, prop?.lawnSqFt ?? null),
     site: lines.find((l) => l.site)?.site ?? null,
     methods: methods.map((m) => ({ id: m.id, name: m.name, galPer1000: m.galPer1000 })),
     items,
@@ -117,15 +129,18 @@ export async function snapshotFromTech(tx: Tx, visitId: string, companyId: strin
   const day = v.date ?? (await companyToday(companyId));
   const used = c.items.filter((i) => i.used);
   if (!used.length) return 0;
-  const [prop] = v.propertyId ? await tx.select({ lawnSqFt: properties.lawnSqFt }).from(properties).where(eq(properties.id, v.propertyId)) : [];
-  const area = c.areaSqFt ?? prop?.lawnSqFt ?? 0;
+  const [prop] = v.propertyId ? await tx.select({ lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt }).from(properties).where(eq(properties.id, v.propertyId)) : [];
   const ids = [...new Set(used.map((i) => i.productId))];
   const ps = await tx.select().from(products).where(and(inArray(products.id, ids), eq(products.companyId, companyId)));
   if (ps.length !== ids.length) throw new HttpError(400, "One of the products isn't in your product list");
   const methods = await methodsFor(companyId, tx, { all: true });
   const costs = await tx.select().from(productCosts).where(inArray(productCosts.productId, ids));
-  const lines = await tx.select({ serviceTypeId: visitLines.serviceTypeId }).from(visitLines).where(eq(visitLines.visitId, visitId));
+  const lines = (await tx.select({ serviceTypeId: visitLines.serviceTypeId, chemical: serviceTypes.chemical, lawnArea: visitLines.lawnArea, lawnAreaSqFt: visitLines.lawnAreaSqFt })
+    .from(visitLines).leftJoin(serviceTypes, eq(serviceTypes.id, visitLines.serviceTypeId)).where(eq(visitLines.visitId, visitId)).orderBy(asc(visitLines.sortOrder)))
+    .map((l) => ({ ...l, area: lineSqFt(l, prop) }));
   const byService = await serviceProductLines([...new Set(lines.map((l) => l.serviceTypeId).filter((x): x is string => !!x))], day, tx);
+  // The area the tech confirmed, else the part of the lawn the chemical lines cover.
+  const area = c.areaSqFt ?? treatedArea(lines, byService, prop?.lawnSqFt ?? null) ?? 0;
   const links = [...byService.values()].flat().filter((l) => l.applies);
 
   const rows = used.map((i, n) => {

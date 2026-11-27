@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { INCOME_ACCOUNTS, PREPAYMENT_STATUS_LABELS, PREPAY_HOW, PREPAY_HOW_LABELS, formatMoney, lineTextFor, prepayTotals, priceFor, type PrepayHow } from "@crewdesk/shared";
+import { INCOME_ACCOUNTS, PREPAYMENT_STATUS_LABELS, PREPAY_HOW, PREPAY_HOW_LABELS, formatMoney, lineSqFt, lineTextFor, prepayTotals, priceFor, withAreaNote, type PrepayHow } from "@crewdesk/shared";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
@@ -10,7 +10,7 @@ import { useServices } from "@/components/invoices";
 
 /* Prepayments (staff): take one (or send a pay link), see what's left, take back the discount, refund the rest. */
 
-type Prop = { id: string; address: string; lawnSqFt?: number | null };
+type Prop = { id: string; address: string; lawnSqFt?: number | null; frontSqFt?: number | null; backSqFt?: number | null };
 type Line = { serviceTypeId: string; description: string; quantity: number; unitPriceCents: number };
 type Prepayment = {
   id: string; number: number; description: string; status: string; method: string | null; methodDetail: string | null; reference: string | null; receivedOn: string | null;
@@ -38,14 +38,17 @@ export function PrepaymentForm({ customerId, properties, onDone, onClose }: { cu
   const [note, setNote] = useState("");
   const [incomeCode, setIncomeCode] = useState("4000");
   const { busy, error, run } = useAction();
-  const sqFt = properties.find((p) => p.id === prop)?.lawnSqFt ?? properties.find((p) => p.lawnSqFt)?.lawnSqFt ?? null;
+  const lawn = properties.find((p) => p.id === prop && p.lawnSqFt) ?? properties.find((p) => p.lawnSqFt) ?? null;
+  const sqFt = lawn?.lawnSqFt ?? null;
   const covers = mode === "services" ? lines.reduce((s, l) => s + Math.round(l.quantity * l.unitPriceCents), 0) : cents(amount) || 0;
   const t = prepayTotals(covers, discountKind, discountKind === "amount" ? cents(discount) || 0 : Number(discount) || 0);
   const addService = (id: string) => {
     const s = services.list.find((x) => x.id === id);
     if (!s) return;
-    const price = priceFor(s as never, sqFt) ?? 0;
-    setLines([...lines, { serviceTypeId: s.id, description: lineTextFor(s, "invoice"), quantity: 1, unitPriceCents: price }]);
+    // A service set to the front or back lawn is priced from that part, and the line says so.
+    const area = { lawnArea: s.defaultLawnArea ?? "whole" };
+    const price = priceFor(s as never, lineSqFt(area, lawn)) ?? 0;
+    setLines([...lines, { serviceTypeId: s.id, description: withAreaNote(lineTextFor(s, "invoice"), area), quantity: 1, unitPriceCents: price }]);
     if (!description) setDescription(`${new Date().getFullYear() + (new Date().getMonth() >= 9 ? 1 : 0)} season`);
   };
   const valid = covers > 0 && description.trim() && t.amountCents > 0 && (how !== "check" || reference.trim());

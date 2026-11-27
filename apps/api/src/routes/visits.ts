@@ -9,6 +9,7 @@ import {
   INACTIVE_STATUSES, VISIT_FILES_MAX, VISIT_STATUS_LABELS, customerName, describeRepeat, formatAddress, formatMoney, formatTodoTime, invoiceTotals, lineAmount,
   cleanFormAnswers, cleanFormSignatures, formAnswersSchema, formChanges, formFields, isImageType, isSigned, missingRequired,
   visitCompleteSchema, visitDates, visitLineHours, visitNumber, visitSchema, visitSkipSchema, visitTotal, visitUpdateSchema,
+  lineAreaValues, withAreaNote,
   type VisitStatus, type VisitUpdate,
 } from "@crewdesk/shared";
 import { db } from "../db";
@@ -56,7 +57,7 @@ export async function presentVisits(req: FastifyRequest, rows: Visit[]) {
   const people = [...new Set(rows.flatMap((v) => [v.finishedById, v.createdById]).filter((x): x is string => !!x))];
   const cs = await db.select({ id: customers.id, kind: customers.kind, firstName: customers.firstName, lastName: customers.lastName, companyName: customers.companyName, phone: customers.phone, tagIds: customers.tagIds })
     .from(customers).where(inArray(customers.id, custIds));
-  const ps = propIds.length ? await db.select({ id: properties.id, name: properties.name, street: properties.street, city: properties.city, state: properties.state, zip: properties.zip, gateCode: properties.gateCode, pets: properties.pets, accessNotes: properties.accessNotes, lawnSqFt: properties.lawnSqFt, lat: properties.lat, lng: properties.lng, custom: properties.custom })
+  const ps = propIds.length ? await db.select({ id: properties.id, name: properties.name, street: properties.street, city: properties.city, state: properties.state, zip: properties.zip, gateCode: properties.gateCode, pets: properties.pets, accessNotes: properties.accessNotes, lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt, lat: properties.lat, lng: properties.lng, custom: properties.custom })
     .from(properties).where(inArray(properties.id, propIds)) : [];
   const inv = invIds.length ? await db.select({ id: invoices.id, number: invoices.number, status: invoices.status }).from(invoices).where(inArray(invoices.id, invIds)) : [];
   const es = people.length ? await db.select({ id: employees.id, firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(inArray(employees.id, people)) : [];
@@ -77,7 +78,7 @@ export async function presentVisits(req: FastifyRequest, rows: Visit[]) {
       lines: lines.filter((l) => l.visitId === v.id).map((l) => ({ ...l, unitPriceCents: showPrices ? l.unitPriceCents : null, amountCents: showPrices ? l.amountCents : null })),
       assignees: crew.filter((x) => x.visitId === v.id).map(({ id, firstName, lastName }) => ({ id, firstName, lastName })),
       customer: { id: c.id, name: customerName(c), phone: c.phone, tagIds: c.tagIds },
-      property: p ? { id: p.id, name: p.name, address: formatAddress(p), gateCode: p.gateCode, pets: p.pets, accessNotes: p.accessNotes, lawnSqFt: p.lawnSqFt, lat: p.lat, lng: p.lng, custom: p.custom } : null,
+      property: p ? { id: p.id, name: p.name, address: formatAddress(p), gateCode: p.gateCode, pets: p.pets, accessNotes: p.accessNotes, lawnSqFt: p.lawnSqFt, frontSqFt: p.frontSqFt, backSqFt: p.backSqFt, lat: p.lat, lng: p.lng, custom: p.custom } : null,
       invoice: i ? { id: i.id, number: i.number, status: i.status } : null,
       crew: cr.find((x) => x.id === v.crewId) ?? null,
       fileCount: fileCounts.find((x) => x.visitId === v.id)?.n ?? 0,
@@ -145,7 +146,7 @@ const fields = (b: VisitUpdate) => ({
 });
 const lineRows = (visitId: string, b: VisitUpdate) => b.lines.map((l, i) => ({
   visitId, serviceTypeId: l.serviceTypeId ?? null, description: l.description, quantity: l.quantity, budgetedHours: l.budgetedHours ?? null,
-  unitPriceCents: l.unitPriceCents, amountCents: lineAmount(l), taxRate: l.taxRate ?? 0, sortOrder: i,
+  unitPriceCents: l.unitPriceCents, amountCents: lineAmount(l), taxRate: l.taxRate ?? 0, ...lineAreaValues(l), sortOrder: i,
 }));
 
 const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
@@ -187,11 +188,13 @@ export async function invoiceVisitsFor(companyId: string, sub: string | null, id
     const made: { id: string; visits: number; totalCents: number }[] = [];
     for (const group of groups.values()) {
       const several = group.length > 1;
-      // A line still carrying the service's plain name gets the service's invoice description; one that was reworded keeps its words.
-      const worded = (l: typeof visitLines.$inferSelect, name: string | null, invoiceText: string | null) => (invoiceText?.trim() && name && l.description.trim() === name.trim() ? invoiceText.trim() : l.description);
+      // A line still carrying the service's plain name (with its "back lawn only" note, if any) gets the service's invoice
+      // description with the same note; one that was reworded keeps its words.
+      const worded = (l: typeof visitLines.$inferSelect, name: string | null, invoiceText: string | null) =>
+        (invoiceText?.trim() && name && [name.trim(), withAreaNote(name.trim(), l)].includes(l.description.trim()) ? withAreaNote(invoiceText.trim(), l) : l.description);
       const items = group.flatMap((v) => lines.filter((x) => x.l.visitId === v.id).map(({ l, account, name, invoiceText }) => ({
         serviceTypeId: l.serviceTypeId, description: several && v.date ? `${fmtDay(v.date)}: ${worded(l, name, invoiceText)}` : worded(l, name, invoiceText),
-        quantity: l.quantity, unitPriceCents: l.unitPriceCents, incomeAccountCode: account ?? "4000", taxRate: l.taxRate,
+        quantity: l.quantity, unitPriceCents: l.unitPriceCents, incomeAccountCode: account ?? "4000", taxRate: l.taxRate, lawnArea: l.lawnArea, lawnAreaSqFt: l.lawnAreaSqFt,
       })));
       const [payer] = await tx.select({ custom: customers.custom, discountPercent: customers.discountPercent, invoiceNotes: customers.invoiceNotes, termsDays: customers.termsDays })
         .from(customers).where(eq(customers.id, group[0].customerId));

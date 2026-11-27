@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { AutomationAction, AutomationDef, CustomValues, FormAnswers, FormChange, FormDef, FormSignature, FormSignatures, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, MeasureShape, MeasureImagerySettings, WeatherSettings, ChemicalNoticeSettings, TemplateDefaults } from "@crewdesk/shared";
+import type { AutomationAction, AutomationDef, CustomValues, FormAnswers, FormChange, FormDef, FormSignature, FormSignatures, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, LawnArea, ServiceLawnArea, MeasureShape, MeasureImagerySettings, WeatherSettings, ChemicalNoticeSettings, TemplateDefaults } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -1676,6 +1676,9 @@ export const estimateLines = pgTable(
     description: text("description").notNull(),
     quantity: doublePrecision("quantity").notNull().default(1),
     unitPriceCents: integer("unit_price_cents").notNull().default(0),
+    /** The part of the lawn the line is for ("whole", "front", "back" or "custom" with its typed size). */
+    lawnArea: text("lawn_area").$type<LawnArea>().notNull().default("whole"),
+    lawnAreaSqFt: doublePrecision("lawn_area_sq_ft"),
     visits: integer("visits").notNull().default(1),
     taxRate: doublePrecision("tax_rate").notNull().default(0),
     incomeAccountCode: text("income_account_code").notNull().default("4000"),
@@ -1779,6 +1782,8 @@ export const serviceTypes = pgTable(
     description: text("description"),
     /** What customers read on the invoice or estimate line for this service (the name when empty). */
     invoiceDescription: text("invoice_description"),
+    /** The part of the lawn its lines start on: "whole", "front" or "back" (each line can be changed). */
+    defaultLawnArea: text("default_lawn_area").$type<ServiceLawnArea>().notNull().default("whole"),
     /** "flat", "per_thousand" or "bracket". */
     pricing: text("pricing").notNull().default("flat"),
     priceCents: integer("price_cents").notNull().default(0),
@@ -1889,6 +1894,9 @@ export const invoiceLines = pgTable(
     taxRate: doublePrecision("tax_rate").notNull().default(0),
     /** A late fee Crewdesk added (not discounted or taxed). */
     isLateFee: boolean("is_late_fee").notNull().default(false),
+    /** The part of the lawn the line is for ("whole", "front", "back" or "custom" with its typed size). */
+    lawnArea: text("lawn_area").$type<LawnArea>().notNull().default("whole"),
+    lawnAreaSqFt: doublePrecision("lawn_area_sq_ft"),
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (t) => [index("invoice_lines_invoice_idx").on(t.invoiceId)],
@@ -2376,6 +2384,9 @@ export const visitLines = pgTable(
     amountCents: integer("amount_cents").notNull().default(0),
     /** Sales tax on the line, in percent (0 = not taxed). */
     taxRate: doublePrecision("tax_rate").notNull().default(0),
+    /** The part of the lawn the line is for ("whole", "front", "back" or "custom" with its typed size). */
+    lawnArea: text("lawn_area").$type<LawnArea>().notNull().default("whole"),
+    lawnAreaSqFt: doublePrecision("lawn_area_sq_ft"),
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (t) => [index("visit_lines_visit_idx").on(t.visitId)],

@@ -2,13 +2,14 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
-  ESTIMATE_STATUS_LABELS, INCOME_ACCOUNTS, depositCents, describeDepositRule, describePricing, estimateLineAmount, estimateTotals, formatMoney, lineMaterialCents, lineTaxRate, priceFor, taxRateFor, type EstimateStatus as Status, lineTextFor,
+  ESTIMATE_STATUS_LABELS, INCOME_ACCOUNTS, depositCents, describeDepositRule, describePricing, estimateLineAmount, estimateTotals, formatMoney, lineMaterialCents, lineTaxRate, priceFor, taxRateFor, type EstimateStatus as Status, lineTextFor, rewordForArea, withAreaNote,
 } from "@crewdesk/shared";
 import { api, fmtDate, today } from "@/lib/api";
 import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox } from "@/components/ui";
 import { CustomerPicker } from "@/components/customers";
 import { dollars, toCents, useBillingSettings, type ServiceType } from "@/components/invoices";
+import { LineAreaPicker, areaDraft, areaValue, draftSqFt, serviceArea, usesLawnArea, wholeLawn, type AreaDraft } from "@/components/line-area";
 
 /** Draft, Pending, Accepted, Declined, Changes requested (and Expired), colored. */
 export function EstimateStatus({ status, expired }: { status: string; expired?: boolean }) {
@@ -22,13 +23,15 @@ type Line = {
   incomeAccountCode: string; cost: string; hours: string; optional: boolean; selected: boolean; recommended: boolean; more: boolean;
   /** "Our cost" from the service's products (kept up to date while open) rather than typed in. */
   costAuto: boolean;
+  /** The part of the lawn the line is for (its price and cost come from that size). */
+  area: AreaDraft;
 };
-const blankLine = (): Line => ({ serviceTypeId: null, propertyId: "", description: "", quantity: "1", price: "", visits: "1", tax: "", incomeAccountCode: "4000", cost: "", hours: "", optional: false, selected: true, recommended: false, more: false, costAuto: false });
+const blankLine = (): Line => ({ serviceTypeId: null, propertyId: "", description: "", quantity: "1", price: "", visits: "1", tax: "", incomeAccountCode: "4000", cost: "", hours: "", optional: false, selected: true, recommended: false, more: false, costAuto: false, area: wholeLawn() });
 const taxText = (r: number | null | undefined) => (r ? String(Number(r.toFixed(3))) : "");
 const fromLine = (l: any): Line => ({
   id: l.id, serviceTypeId: l.serviceTypeId, propertyId: l.propertyId ?? "", description: l.description, quantity: String(l.quantity), price: dollars(l.unitPriceCents), visits: String(l.visits ?? 1),
   tax: taxText(l.taxRate), incomeAccountCode: l.incomeAccountCode ?? "4000", cost: l.costCents != null ? dollars(l.costCents) : "", hours: l.budgetedHours != null ? String(l.budgetedHours) : "",
-  costAuto: !!l.costAuto, optional: l.optional, selected: l.selected, recommended: l.recommended, more: l.costCents != null || l.budgetedHours != null || l.optional || l.recommended || !!l.propertyId,
+  area: areaDraft(l), costAuto: !!l.costAuto, optional: l.optional, selected: l.selected, recommended: l.recommended, more: l.costCents != null || l.budgetedHours != null || l.optional || l.recommended || !!l.propertyId,
 });
 
 /** New or changed estimate, laid out like Homeworks': details, lines (with visits, optional and recommended lines, cost and hours), totals with profit, terms and notes. */
@@ -82,17 +85,34 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
     lastRate.current = rate;
   }, [rate, billing.data, detail.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const setLine = (i: number, patch: Partial<Line>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
-  const lawnFor = (l: Line) => (properties.find((p) => p.id === (l.propertyId || propertyId))?.lawnSqFt ?? null);
+  const propFor = (l: Line) => properties.find((p) => p.id === (l.propertyId || propertyId)) ?? null;
+  /** The square feet a line is for: its part of the lawn at its address. */
+  const lawnFor = (l: Line, area: AreaDraft = l.area) => draftSqFt(area, propFor(l));
   const pickService = (i: number, id: string) => {
     if (!id) return setLine(i, { serviceTypeId: null });
     const s = services.data?.find((x) => x.id === id);
     if (!s) return;
-    const price = priceFor(s, lawnFor(lines[i]));
+    // The service's own part of the lawn (whole, front or back) to start with.
+    const area = serviceArea(s);
+    const price = priceFor(s, lawnFor(lines[i], area));
     // Our cost (each): the service's products for this lawn, at today's prices.
-    const material = lineMaterialCents(s, lawnFor(lines[i]));
+    const material = lineMaterialCents(s, lawnFor(lines[i], area));
     setLine(i, {
-      serviceTypeId: s.id, description: lines[i].description || lineTextFor(s, "estimate"), price: price != null ? dollars(price) : lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)),
+      serviceTypeId: s.id, area, description: lines[i].description || withAreaNote(lineTextFor(s, "estimate"), areaValue(area)), price: price != null ? dollars(price) : lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)),
       cost: material != null ? dollars(material) : lines[i].cost, costAuto: material != null || (lines[i].costAuto && !lines[i].cost.trim()),
+    });
+  };
+  /** A line for another part of the lawn: priced and costed from that size, and its wording says so (unless somebody reworded it). */
+  const setArea = (i: number, area: AreaDraft) => {
+    const l = lines[i];
+    const s = services.data?.find((x) => x.id === l.serviceTypeId);
+    if (!s) return setLine(i, { area });
+    const price = priceFor(s, lawnFor(l, area));
+    const material = lineMaterialCents(s, lawnFor(l, area));
+    setLine(i, {
+      area, description: rewordForArea(l.description, [lineTextFor(s, "estimate"), s.name], areaValue(l.area), areaValue(area)),
+      ...(s.pricing !== "flat" && price != null ? { price: dollars(price) } : {}),
+      ...(l.costAuto || !l.cost.trim() ? { cost: material != null ? dollars(material) : "", costAuto: material != null } : {}),
     });
   };
   const addPackage = (id: string) => {
@@ -100,9 +120,11 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
     if (!p) return;
     const added = p.lines.map((l: any) => {
       const s = services.data?.find((x) => x.id === l.serviceTypeId);
-      const price = l.unitPriceCents ?? (s ? priceFor(s, property?.lawnSqFt ?? null) : null);
-      const material = s ? lineMaterialCents(s, property?.lawnSqFt ?? null) : null;
-      return { ...blankLine(), serviceTypeId: l.serviceTypeId ?? null, description: l.description ?? s?.name ?? "", quantity: String(l.quantity ?? 1), price: price != null ? dollars(price) : "", incomeAccountCode: s?.incomeAccountCode ?? "4000", tax: taxText(lineTaxRate(s?.taxable, rate)), hours: l.budgetedHours != null ? String(l.budgetedHours) : "", cost: material != null ? dollars(material) : "", costAuto: material != null };
+      // Each line is priced from the part of the lawn its service covers, and says so.
+      const area = serviceArea(s);
+      const price = l.unitPriceCents ?? (s ? priceFor(s, draftSqFt(area, property)) : null);
+      const material = s ? lineMaterialCents(s, draftSqFt(area, property)) : null;
+      return { ...blankLine(), area, serviceTypeId: l.serviceTypeId ?? null, description: withAreaNote(l.description ?? s?.name ?? "", areaValue(area)), quantity: String(l.quantity ?? 1), price: price != null ? dollars(price) : "", incomeAccountCode: s?.incomeAccountCode ?? "4000", tax: taxText(lineTaxRate(s?.taxable, rate)), hours: l.budgetedHours != null ? String(l.budgetedHours) : "", cost: material != null ? dollars(material) : "", costAuto: material != null };
     });
     setLines((ls) => [...ls.filter((l) => l.description.trim() || l.price), ...added]);
   };
@@ -123,7 +145,7 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
         if (!l.description.trim()) throw new Error(`Line ${i + 1} needs a description`);
         if (!(p.quantity > 0)) throw new Error(`Line ${i + 1}: enter a quantity`);
         if (!Number.isFinite(toCents(l.price || "0"))) throw new Error(`Line ${i + 1}: check the price`);
-        out.push({ ...p, quantity: Math.round(p.quantity * 100) / 100, serviceTypeId: l.serviceTypeId, propertyId: l.propertyId || null, description: l.description.trim(), incomeAccountCode: l.incomeAccountCode, recommended: l.recommended, costAuto: l.costAuto && !!l.serviceTypeId });
+        out.push({ ...p, quantity: Math.round(p.quantity * 100) / 100, serviceTypeId: l.serviceTypeId, propertyId: l.propertyId || null, description: l.description.trim(), incomeAccountCode: l.incomeAccountCode, recommended: l.recommended, costAuto: l.costAuto && !!l.serviceTypeId, ...areaValue(l.area) });
       }
       if (!out.length) throw new Error("Add at least one line");
       const body = {
@@ -174,6 +196,7 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
                     {(services.data ?? []).filter((x) => x.active || x.id === l.serviceTypeId).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                   </select>
                   <input aria-label={`Line ${i + 1} description`} value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} placeholder="Description" />
+                  {usesLawnArea(s) && <LineAreaPicker label={`Line ${i + 1} lawn area`} value={l.area} onChange={(a) => setArea(i, a)} property={propFor(l)} />}
                   {s && <span className="muted" style={{ fontSize: 12 }}>{describePricing(s)}</span>}
                 </div>
                 <label>Qty<input aria-label={`Line ${i + 1} quantity`} inputMode="decimal" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></label>

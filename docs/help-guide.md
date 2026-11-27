@@ -432,6 +432,23 @@ billing; admins change prices).
 - **Copy:** each service has a **Copy** button. It opens a new service with everything the other one has
   (pricing, tiers, time estimate, invoice description, taxable and chemical ticks, products and mixes) under the
   name "… (copy)". Change what differs, rename it and save; the original is not touched.
+- **Part of the lawn (front, back or a typed size):** a customer may only want a service on part of the lawn,
+  such as flea & tick in the back yard where the dog is. Every line for a service (on a work order, an estimate
+  or an invoice) has a box under its description that says where its square feet come from: **Whole lawn**,
+  **Front lawn only**, **Back lawn only** (each with the property's size beside it) or **A size you type**.
+  - Changing it re-prices the line from that size straight away, and adds a note to the line's wording, such as
+    "Flea & tick (back lawn only)" or "(3,000 sq ft only)", so the crew sees it on the work order and the
+    customer on the estimate and invoice. A line you have reworded yourself keeps your words.
+  - Everything worked out from the lawn's size follows the line: the **time estimate** on the waiting list, the
+    product amounts on the **load sheet**, the amounts the tech sees filled in when completing a chemical work
+    order, the **material cost**, and the **area treated** on the chemical record. A whole-lawn round with a
+    back-yard-only add-on on the same work order still records the whole lawn as the area treated.
+  - Front and back sizes come from the property (Property Measure, or typed on the property). A property with
+    only a total has no front or back size: the box says "size not on file" and the line isn't priced until you
+    add the sizes or type one.
+  - **Lawn area it covers** on the service form sets what that service's lines start on. Leave it on Whole
+    lawn for most services; set a service you only ever sell for the back yard to **Back lawn only** and its
+    lines start there. Any line can still be changed for one customer.
 - **Rate chart:** for per 1,000 and volume discount pricing the form shows a **Rate chart** with every size the
   service prices (every 1,000 sq ft for a single rate; every 500 sq ft, or every step, for volume discount), up to
   the **Price by hand above** size or about an acre. Click its heading to fold it away or bring it back; the
@@ -1116,7 +1133,7 @@ are numbered **WO-1001**, **WO-1002** and so on. Open them from **Schedule → W
   - **Title or description**, the **customer** and their **property** (required), an optional **location** and a
     **color**.
   - **Billing:** **Invoice services** or **Don't invoice** (a free call-back, an estimate visit).
-  - **Line items:** pick a service from the price list (it's priced for the property's lawn size, like invoices)
+  - **Line items:** pick a service from the price list (it's priced for the property's lawn size, like invoices; the box under the description prices it from the front or back lawn only, or a size you type)
     or type a custom item; set the quantity, **budgeted hours** and rate. The total is what it bills.
   - **Scheduling:** **Single work order**, a **Repeating series** (every N days, weeks, months or years until a
     date, up to three years), or **Add to the waitlist** (no date yet). A series can skip an **off-season** (tap

@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
-import { customerName } from "@crewdesk/shared";
+import { customerName, lineSqFt } from "@crewdesk/shared";
 import { db } from "../db";
 import { assets, crews, customers, employees, properties, serviceTypes, visitAssignees, visitLines, visits } from "../db/schema";
 import { serviceProductLines } from "./productCosts";
@@ -29,13 +29,13 @@ export async function loadSheet(companyId: string, date: string, by: LoadBy) {
   const vs = await db.select({
     id: visits.id, number: visits.number, time: visits.startTime, status: visits.status, crewId: visits.crewId, propertyId: visits.propertyId,
     c: { kind: customers.kind, firstName: customers.firstName, lastName: customers.lastName, companyName: customers.companyName },
-    street: properties.street, city: properties.city, lawnSqFt: properties.lawnSqFt,
+    street: properties.street, city: properties.city, lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt,
   }).from(visits).innerJoin(customers, eq(customers.id, visits.customerId)).leftJoin(properties, eq(properties.id, visits.propertyId))
     .where(and(eq(visits.companyId, companyId), eq(visits.date, date), ne(visits.status, "skipped")))
     .orderBy(asc(visits.startTime), asc(visits.number));
   if (!vs.length) return { date, by, groups: [] as Group[] };
   const ids = vs.map((v) => v.id);
-  const lines = await db.select({ visitId: visitLines.visitId, serviceTypeId: visitLines.serviceTypeId, quantity: visitLines.quantity, chemical: serviceTypes.chemical })
+  const lines = await db.select({ visitId: visitLines.visitId, serviceTypeId: visitLines.serviceTypeId, quantity: visitLines.quantity, chemical: serviceTypes.chemical, lawnArea: visitLines.lawnArea, lawnAreaSqFt: visitLines.lawnAreaSqFt })
     .from(visitLines).leftJoin(serviceTypes, eq(serviceTypes.id, visitLines.serviceTypeId)).where(inArray(visitLines.visitId, ids)).orderBy(asc(visitLines.sortOrder));
   const byService = await serviceProductLines([...new Set(lines.map((l) => l.serviceTypeId).filter((x): x is string => !!x))], date);
   const people = await db.select({ visitId: visitAssignees.visitId, id: employees.id, first: employees.firstName, last: employees.lastName })
@@ -47,9 +47,10 @@ export async function loadSheet(companyId: string, date: string, by: LoadBy) {
   const groups = new Map<string, Group>();
   for (const v of vs) {
     const vl = lines.filter((l) => l.visitId === v.id);
-    const sqFtOf = (q: number) => (v.lawnSqFt ? v.lawnSqFt * (q || 1) : null);
+    // The size a line covers (the whole lawn, or the front, back or typed size set on it) × its quantity.
+    const sqFtOf = (l: (typeof vl)[number]) => { const a = lineSqFt(l, v); return a ? a * (l.quantity || 1) : null; };
     const items: Item[] = vl.flatMap((l) => (l.serviceTypeId ? byService.get(l.serviceTypeId) ?? [] : []).filter((p) => p.applies).map((p) => {
-      const sq = sqFtOf(l.quantity);
+      const sq = sqFtOf(l);
       return {
         productId: p.productId, product: p.productName, unit: p.unit, method: p.applicationMethodName ?? null,
         amount: sq == null ? 0 : (p.amountPer1000 * sq) / 1000,
@@ -74,9 +75,9 @@ export async function loadSheet(companyId: string, date: string, by: LoadBy) {
     const g = groups.get(key) ?? { key, label, stops: [], totals: [], spray: [], missingSize: 0 };
     g.stops.push({
       visitId: v.id, number: v.number, time: v.time, status: v.status, customer: customerName(v.c),
-      address: [v.street, v.city].filter(Boolean).join(", "), sqFt: v.lawnSqFt ? vl.reduce((s, l) => s + (sqFtOf(l.quantity) ?? 0), 0) || v.lawnSqFt : null, items,
+      address: [v.street, v.city].filter(Boolean).join(", "), sqFt: vl.reduce((s, l) => s + (sqFtOf(l) ?? 0), 0) || v.lawnSqFt || null, items,
     });
-    if (!v.lawnSqFt) g.missingSize++;
+    if (vl.some((l) => l.serviceTypeId && (l.chemical || (byService.get(l.serviceTypeId) ?? []).some((p) => p.applies)) && !sqFtOf(l))) g.missingSize++;
     for (const it of items) {
       const t = g.totals.find((x) => x.productId === it.productId && x.method === it.method && x.unit === it.unit);
       if (t) { t.amount += it.amount; t.sprayGal = t.sprayGal == null && it.sprayGal == null ? null : (t.sprayGal ?? 0) + (it.sprayGal ?? 0); t.stops++; }

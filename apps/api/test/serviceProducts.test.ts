@@ -121,4 +121,58 @@ describe("products on services", () => {
     await call("POST", `/visits/${ID.summerWo}/reopen`, "office", {});
     expect((await call("GET", `/visits/${ID.summerWo}/products`, "office")).body).toEqual([]);
   });
+
+  it("a line for part of the lawn: time, load sheet, tech amounts, products and the invoice all use that size", async () => {
+    const prop = (await call("GET", `/properties/${ID.janeProp}`, "office")).body;
+    const back: number = prop.backSqFt;
+    expect(back).toBeGreaterThan(0);
+    expect(back).toBeLessThan(lawn);
+    // The customer only wants it in the back yard where the dog is, plus 2,000 sq ft by the kennel.
+    const lines = [
+      { serviceTypeId: ID.round, description: "Lawn round (back lawn only)", quantity: 1, unitPriceCents: 4000, lawnArea: "back" },
+      { serviceTypeId: ID.round, description: "Lawn round", quantity: 1, unitPriceCents: 1500, lawnArea: "custom", lawnAreaSqFt: 2000 },
+    ];
+    // Waiting first: its time estimate is for the two areas, not two whole lawns (4 min setup + 3 per 1,000, each).
+    const made = await call("POST", "/visits", "office", { ...workOrder(""), scheduling: "waitlist", lines });
+    expect(made.status).toBe(200);
+    ID.backWo = made.body.id;
+    expect(made.body.lines.map((l: any) => [l.lawnArea, l.lawnAreaSqFt])).toEqual([["back", null], ["custom", 2000]]);
+    expect(made.body.property).toMatchObject({ lawnSqFt: lawn, backSqFt: back });
+    const waiting = (await call("GET", "/waitlist", "office")).body.rows.find((r: any) => r.id === ID.backWo);
+    expect(waiting).toMatchObject({ estSource: "size", estMinutes: Math.round(4 + (3 * back) / 1000) + Math.round(4 + 3 * 2) });
+
+    // On a day: the load sheet pulls product for the back lawn and the 2,000 sq ft, not the whole lawn twice.
+    const day = "2026-04-20";
+    expect((await call("PUT", `/visits/${ID.backWo}`, "office", { ...workOrder(day), lines })).status).toBe(200);
+    const sheet = (await call("GET", `/chemical-tracking/load-sheet?date=${day}&by=day`, "office")).body;
+    const stop = sheet.groups[0].stops.find((s: any) => s.visitId === ID.backWo);
+    expect(stop.sqFt).toBe(back + 2000);
+    expect(stop.items.map((i: any) => [i.product, i.amount])).toEqual([["Liquid A", back / 1000], ["Liquid A", 2]]);
+    expect(sheet.groups[0].missingSize).toBe(0);
+
+    // The tech's chemical step: amounts for each line's own area; the area treated is the larger of the two.
+    const step = (await call("GET", `/visits/${ID.backWo}/chemicals`, "tech")).body;
+    expect(step.areaSqFt).toBe(back);
+    expect(step.items.map((i: any) => [i.productName, i.amount])).toEqual([["Liquid A", back / 1000], ["Liquid A", 2]]);
+
+    // Completed from the office: what it applied is saved for those sizes.
+    await call("POST", `/visits/${ID.backWo}/complete`, "office", {});
+    const applied = (await call("GET", `/visits/${ID.backWo}/products`, "office")).body;
+    expect(applied.map((r: any) => [r.productName, r.areaSqFt, r.amount])).toEqual([["Liquid A", back, back / 1000], ["Liquid A", 2000, 2]]);
+
+    // Invoiced: the lines keep their part of the lawn, and take the service's invoice description with the same note.
+    const svc = { name: "Lawn round", pricing: "flat", priceCents: 6500, incomeAccountCode: "4000", setupMinutes: 4, minutesPer1000: 3 };
+    const set = await call("PUT", `/service-types/${ID.round}`, "owner", { ...svc, invoiceDescription: "Fertilizer and weed control", defaultLawnArea: "back" });
+    expect(set.body).toMatchObject({ defaultLawnArea: "back", invoiceDescription: "Fertilizer and weed control" });
+    // A save that doesn't mention the area leaves it alone.
+    expect((await call("PUT", `/service-types/${ID.round}`, "owner", { ...svc, invoiceDescription: "Fertilizer and weed control" })).body.defaultLawnArea).toBe("back");
+    const inv = await call("POST", `/visits/${ID.backWo}/invoice`, "office");
+    const invoice = (await call("GET", `/invoices/${inv.body.invoiceId}`, "office")).body;
+    expect(invoice.lines.map((l: any) => [l.description, l.lawnArea, l.lawnAreaSqFt, l.unitPriceCents])).toEqual([
+      ["Fertilizer and weed control (back lawn only)", "back", null, 4000],
+      ["Fertilizer and weed control (2,000 sq ft only)", "custom", 2000, 1500],
+    ]);
+    expect(invoice.property).toMatchObject({ backSqFt: back });
+    await call("PUT", `/service-types/${ID.round}`, "owner", { ...svc, defaultLawnArea: "whole" });
+  });
 });

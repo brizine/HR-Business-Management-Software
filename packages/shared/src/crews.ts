@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { lineAmount, priceFor, type PricedService } from "./billing";
+import { lineSqFt, type LawnSizes, type ServiceLawnArea } from "./lawnArea";
 
 /**
  * Crews and packages (like Homeworks'). A crew is a named team (a lead, members and the truck they
@@ -51,18 +52,22 @@ export const packageSchema = z.object({
 export type PackageInput = z.infer<typeof packageSchema>;
 
 /**
- * A package's lines as work order line items for a lawn of `sqFt`: a set price wins, otherwise the
- * service's price for that lawn (null when it can't be worked out, e.g. no lawn size yet).
+ * A package's lines as work order line items for a lawn: a set price wins, otherwise the service's
+ * price for that lawn (null when it can't be worked out, e.g. no lawn size yet). Give the property's
+ * sizes (not just a number) and each line is priced from the part of the lawn its service covers.
  */
 export function packageToLines(
   lines: { serviceTypeId?: string | null; description: string; quantity: number; budgetedHours?: number | null; unitPriceCents?: number | null }[],
-  services: (PricedService & { id: string })[],
-  sqFt: number | null | undefined,
+  services: (PricedService & { id: string; defaultLawnArea?: string | null })[],
+  lawn: number | LawnSizes | null | undefined,
 ) {
+  const sizes: LawnSizes | null = typeof lawn === "number" ? { lawnSqFt: lawn } : lawn ?? null;
   return lines.map((l) => {
     const s = l.serviceTypeId ? services.find((x) => x.id === l.serviceTypeId) : undefined;
-    const price = l.unitPriceCents ?? (s ? priceFor(s, sqFt) : null);
-    return { serviceTypeId: l.serviceTypeId ?? null, description: l.description, quantity: l.quantity, budgetedHours: l.budgetedHours ?? null, unitPriceCents: price };
+    // Only a whole property's sizes can say what "front" or "back" is; a bare number is the whole lawn.
+    const lawnArea = (typeof lawn === "number" || !s?.defaultLawnArea ? "whole" : s.defaultLawnArea) as ServiceLawnArea;
+    const price = l.unitPriceCents ?? (s ? priceFor(s, lineSqFt({ lawnArea }, sizes)) : null);
+    return { serviceTypeId: l.serviceTypeId ?? null, description: l.description, quantity: l.quantity, budgetedHours: l.budgetedHours ?? null, unitPriceCents: price, lawnArea };
   });
 }
 

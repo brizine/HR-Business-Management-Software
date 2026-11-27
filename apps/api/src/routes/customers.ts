@@ -231,7 +231,7 @@ const routes: FastifyPluginAsync = async (app) => {
       .select({
         assignmentId: propertyAssignments.id, role: propertyAssignments.role, startDate: propertyAssignments.startDate, endDate: propertyAssignments.endDate,
         id: properties.id, name: properties.name, street: properties.street, city: properties.city, state: properties.state, zip: properties.zip,
-        mapCode: properties.mapCode, lawnSqFt: properties.lawnSqFt, status: properties.status, tagIds: properties.tagIds, taxRate: properties.taxRate,
+        mapCode: properties.mapCode, lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt, status: properties.status, tagIds: properties.tagIds, taxRate: properties.taxRate,
         lastService: sql<string | null>`(select max(v.date)::text from visits v where v.property_id = ${properties.id} and v.status = 'completed')`,
         nextService: sql<string | null>`(select min(v.date)::text from visits v where v.property_id = ${properties.id} and v.status in ('open', 'on_site') and v.date >= current_date)`,
       })

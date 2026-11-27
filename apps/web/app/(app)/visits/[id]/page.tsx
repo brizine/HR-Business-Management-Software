@@ -10,6 +10,7 @@ import { useAction, useApi } from "@/lib/hooks";
 import { ErrorBox, PageHead } from "@/components/ui";
 import { CrewButtons, VisitForm, VisitStatus, VisitTags, crewNames, trackedLabel, visitWhen, type Visit } from "@/components/visits";
 import { VisitFiles } from "@/components/visit-files";
+import { areaSummary } from "@/components/line-area";
 import { WorkOrderForms } from "@/components/visit-forms";
 import { useAuth } from "@/lib/auth";
 import { CustomFacts, CustomFieldsCard } from "@/components/custom-fields";
@@ -77,7 +78,7 @@ export default function WorkOrder({ params }: { params: Promise<{ id: string }> 
             <h2 style={{ margin: 0 }}>Work and billing</h2>
             <table className="pt-lines">
               <tbody>{v.lines.map((l) => (
-                <tr key={l.id}><td>{l.description}{l.quantity !== 1 ? ` × ${l.quantity}` : ""}{l.budgetedHours ? <span className="muted"> · {l.budgetedHours} h</span> : null}{v.canManage && l.taxRate ? <span className="muted"> · taxed {formatTaxRate(l.taxRate)}</span> : null}</td>
+                <tr key={l.id}><td>{l.description}{areaSummary(l, v.property) ? <span className="muted"> · {areaSummary(l, v.property)}</span> : null}{l.quantity !== 1 ? ` × ${l.quantity}` : ""}{l.budgetedHours ? <span className="muted"> · {l.budgetedHours} h</span> : null}{v.canManage && l.taxRate ? <span className="muted"> · taxed {formatTaxRate(l.taxRate)}</span> : null}</td>
                   {v.canManage && <td className="num">{formatMoney(l.amountCents)}</td>}</tr>
               ))}</tbody>
               {v.canManage && (() => {

@@ -3,13 +3,14 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   DEFAULT_TODO_COLOR, MONTH_SHORT, PRIORITIES, PRIORITY_LABELS, REPEAT_UNITS, TODO_COLORS, VISIT_BILLING, VISIT_BILLING_LABELS, VISIT_SCHEDULING, VISIT_SCHEDULING_LABELS,
-  describePricing, formatMoney, formatTodoTime, isInactive, lineAmount, lineTaxRate, packageToLines, priceFor, taxFor as taxForLines, taxRateFor, visitDates, visitLineHours, visitNumber,
+  describePricing, formatMoney, formatTodoTime, isInactive, lineAmount, lineTaxRate, packageToLines, priceFor, rewordForArea, taxFor as taxForLines, taxRateFor, visitDates, visitLineHours, visitNumber, withAreaNote,
   type CustomValues, type Priority, type RepeatUnit, type VisitBilling, type VisitScheduling,
 } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { VisitFormsPicker, type WorkOrderForm } from "./visit-forms";
+import { LineAreaPicker, areaDraft, areaValue, draftSqFt, serviceArea, usesLawnArea, type AreaDraft } from "./line-area";
 import { CustomerPicker, TagChip, TagPicker, useTags } from "./customers";
 import { Icon } from "./icons";
 import { useBillingSettings } from "./invoices";
@@ -17,7 +18,7 @@ import { CustomFieldInputs } from "./custom-fields";
 import { ChemicalsStep, loadChemicalOptions, type ChemicalOptions } from "@/components/chemicals-step";
 import { ErrorBox } from "./ui";
 
-export interface VisitLine { id?: string; serviceTypeId: string | null; description: string; quantity: number; budgetedHours: number | null; unitPriceCents: number | null; amountCents: number | null; taxRate?: number }
+export interface VisitLine { id?: string; serviceTypeId: string | null; description: string; quantity: number; budgetedHours: number | null; unitPriceCents: number | null; amountCents: number | null; taxRate?: number; lawnArea?: string | null; lawnAreaSqFt?: number | null }
 export interface Visit {
   id: string; number: number; title: string; color: string; location: string | null; billing: VisitBilling;
   date: string | null; endDate: string | null; startTime: string | null; endTime: string | null; budgetedHours: number | null; totalCents: number | null;
@@ -27,7 +28,7 @@ export interface Visit {
   crewId: string | null; crew: { id: string; name: string; color: string } | null;
   tagIds: string[]; tags: { id: string; name: string; color: string }[]; fileCount: number; custom: CustomValues;
   customer: { id: string; name: string; phone: string | null };
-  property: { id: string; name: string | null; address: string; gateCode: string | null; pets: string | null; accessNotes: string | null; lawnSqFt: number | null; lat: number | null; lng: number | null; custom?: CustomValues } | null;
+  property: { id: string; name: string | null; address: string; gateCode: string | null; pets: string | null; accessNotes: string | null; lawnSqFt: number | null; frontSqFt?: number | null; backSqFt?: number | null; lat: number | null; lng: number | null; custom?: CustomValues } | null;
   invoice: { id: string; number: number | null; status: string } | null;
   lines: VisitLine[]; assignees: { id: string; firstName: string; lastName: string }[];
   finishedBy: string | null; createdBy: string | null;
@@ -103,9 +104,10 @@ export function CrewButtons({ v, onChange, compact }: { v: Visit; onChange: (v: 
   );
 }
 
-type LineDraft = { serviceTypeId: string | null; description: string; quantity: string; hours: string; price: string; tax: string };
+/** `area`: the part of the lawn the line is for (its price comes from that size). */
+type LineDraft = { serviceTypeId: string | null; description: string; quantity: string; hours: string; price: string; tax: string; area: AreaDraft };
 const taxText = (r: number | null | undefined) => (r ? String(Number(r.toFixed(3))) : "");
-const draftLine = (l?: VisitLine): LineDraft => ({ serviceTypeId: l?.serviceTypeId ?? null, description: l?.description ?? "", quantity: l ? String(l.quantity) : "1", hours: l?.budgetedHours != null ? String(l.budgetedHours) : "", price: dollars(l?.unitPriceCents), tax: taxText(l?.taxRate) });
+const draftLine = (l?: VisitLine): LineDraft => ({ serviceTypeId: l?.serviceTypeId ?? null, description: l?.description ?? "", quantity: l ? String(l.quantity) : "1", hours: l?.budgetedHours != null ? String(l.budgetedHours) : "", price: dollars(l?.unitPriceCents), tax: taxText(l?.taxRate), area: areaDraft(l) });
 
 /**
  * New or changed work order, laid out like Homeworks' visit form: title; customer, property, color and
@@ -173,8 +175,17 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
     if (!id) return setLine(i, { serviceTypeId: null });
     const s = services.data?.find((x) => x.id === id);
     if (!s) return;
-    const price = priceFor(s, property?.lawnSqFt ?? null);
-    setLine(i, { serviceTypeId: s.id, description: lines[i].description && lines[i].serviceTypeId === null ? lines[i].description : s.name, price: price != null ? dollars(price) : lines[i].price, tax: taxFor(s.id) });
+    // The service's own part of the lawn (whole, front or back) to start with.
+    const area = serviceArea(s);
+    const price = priceFor(s, draftSqFt(area, property));
+    setLine(i, { serviceTypeId: s.id, area, description: lines[i].description && lines[i].serviceTypeId === null ? lines[i].description : withAreaNote(s.name, areaValue(area)), price: price != null ? dollars(price) : lines[i].price, tax: taxFor(s.id) });
+  };
+  /** A line for another part of the lawn: priced from that size, and its wording says so (unless somebody reworded it). */
+  const setArea = (i: number, area: AreaDraft) => {
+    const l = lines[i];
+    const s = services.data?.find((x) => x.id === l.serviceTypeId);
+    const price = s ? priceFor(s, draftSqFt(area, property)) : null;
+    setLine(i, { area, description: s ? rewordForArea(l.description, [s.name, s.invoiceDescription], areaValue(l.area), areaValue(area)) : l.description, ...(s && s.pricing !== "flat" && price != null ? { price: dollars(price) } : {}) });
   };
   // A different customer or property: taxable lines take its rate.
   const lastRate = useRef<number | null>(null);
@@ -188,11 +199,11 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
     if (!property || !services.data) return;
     setLines((ls) => ls.map((l) => {
       const s = services.data!.find((x) => x.id === l.serviceTypeId);
-      const p = s ? priceFor(s, property.lawnSqFt ?? null) : null;
+      const p = s ? priceFor(s, draftSqFt(l.area, property)) : null;
       return s && s.pricing !== "flat" && p != null ? { ...l, price: dollars(p) } : l;
     }));
   }, [propertyId, services.data]); // eslint-disable-line react-hooks/exhaustive-deps
-  const parsed = lines.filter((l) => l.description.trim()).map((l) => ({ serviceTypeId: l.serviceTypeId, description: l.description.trim(), quantity: Number(l.quantity) || 0, budgetedHours: l.hours.trim() === "" ? null : Number(l.hours), unitPriceCents: toCents(l.price || "0"), taxRate: Number(l.tax) || 0 }));
+  const parsed = lines.filter((l) => l.description.trim()).map((l) => ({ serviceTypeId: l.serviceTypeId, description: l.description.trim(), quantity: Number(l.quantity) || 0, budgetedHours: l.hours.trim() === "" ? null : Number(l.hours), unitPriceCents: toCents(l.price || "0"), taxRate: Number(l.tax) || 0, ...areaValue(l.area) }));
   const total = parsed.reduce((s, l) => s + (Number.isFinite(l.unitPriceCents) ? lineAmount(l) : 0), 0);
   const tax = taxForLines(parsed.filter((l) => Number.isFinite(l.unitPriceCents)));
   const lineHours = visitLineHours(parsed);
@@ -260,7 +271,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
           <thead><tr><th style={{ width: "34%" }}>Item / service</th><th style={{ width: 80 }}>Qty</th><th style={{ width: 100 }}>Budgeted hours</th><th style={{ width: 110 }}>Rate</th>{showTax && <th style={{ width: 90 }}>Tax %</th>}<th style={{ width: 100, textAlign: "right" }}>Total</th><th style={{ width: 40 }} /></tr></thead>
           <tbody>{lines.map((l, i) => {
             const s = services.data?.find((x) => x.id === l.serviceTypeId);
-            const unpriced = s && priceFor(s, property?.lawnSqFt ?? null) == null;
+            const unpriced = s && priceFor(s, draftSqFt(l.area, property)) == null;
             const amount = { quantity: Number(l.quantity) || 0, unitPriceCents: toCents(l.price || "0") };
             return (
               <tr key={i}>
@@ -270,6 +281,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
                     {(services.data ?? []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                   </select>
                   <input aria-label={`Line ${i + 1} description`} value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} placeholder="Description" style={{ marginTop: 4 }} />
+                  {usesLawnArea(s) && <LineAreaPicker label={`Line ${i + 1} lawn area`} value={l.area} onChange={(a) => setArea(i, a)} property={property} />}
                   {s && <div className="muted" style={{ fontSize: 12 }}>{describePricing(s)}{unpriced ? " · add the lawn size to price it" : ""}</div>}
                 </td>
                 <td><input aria-label={`Line ${i + 1} quantity`} inputMode="decimal" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></td>
@@ -288,8 +300,9 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
                 <select aria-label="Add a package" value="" className="pkg-select" onChange={(e) => {
                   const pkg = pkgs.data?.find((p) => p.id === e.target.value);
                   if (!pkg) return;
-                  const added = packageToLines(pkg.lines, services.data ?? [], property?.lawnSqFt ?? null).map((l) => ({
-                    serviceTypeId: l.serviceTypeId, description: l.description, quantity: String(l.quantity), hours: l.budgetedHours != null ? String(l.budgetedHours) : "", price: dollars(l.unitPriceCents), tax: taxFor(l.serviceTypeId),
+                  // Each line is priced from the part of the lawn its service covers, and says so.
+                  const added = packageToLines(pkg.lines, services.data ?? [], property ?? null).map((l) => ({
+                    serviceTypeId: l.serviceTypeId, description: withAreaNote(l.description, l), quantity: String(l.quantity), hours: l.budgetedHours != null ? String(l.budgetedHours) : "", price: dollars(l.unitPriceCents), tax: taxFor(l.serviceTypeId), area: areaDraft(l),
                   }));
                   // An untouched empty first line is replaced.
                   setLines((ls) => [...ls.filter((l) => l.description.trim() || l.price.trim()), ...added]);

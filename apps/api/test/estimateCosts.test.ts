@@ -48,20 +48,23 @@ afterAll(async () => {
 
 describe("estimate costs", () => {
   it("open estimates follow product and mix changes; typed costs and closed estimates don't", async () => {
-    const open = (await call("POST", "/estimates", "owner", { customerId: ID.cust, propertyId: ID.prop, title: "Open", lines: [line(500, true), line(777, false)] })).body.id;
+    // A line for 2,500 sq ft by the kennel only: its cost follows that size, not the 10,000 sq ft lawn.
+    const kennel = { ...line(125, true), lawnArea: "custom", lawnAreaSqFt: 2500 };
+    const open = (await call("POST", "/estimates", "owner", { customerId: ID.cust, propertyId: ID.prop, title: "Open", lines: [line(500, true), line(777, false), kennel] })).body.id;
     const closed = (await call("POST", "/estimates", "owner", { customerId: ID.cust, propertyId: ID.prop, title: "Accepted", lines: [line(500, true)] })).body.id;
-    expect(await costs(open)).toEqual([[500, true], [777, false]]);
+    expect(await costs(open)).toEqual([[500, true], [777, false], [125, true]]);
+    expect((await call("GET", `/estimates/${open}`, "owner")).body.lines.map((l: any) => [l.lawnArea, l.lawnAreaSqFt])).toEqual([["whole", null], ["whole", null], ["custom", 2500]]);
     await call("POST", `/estimates/${closed}/send`, "owner", {});
     expect((await call("POST", `/estimates/${closed}/respond`, "owner", { action: "accept" })).status).toBe(200);
 
     // The product's cost doubles.
     await call("POST", `/products/${ID.product}/costs`, "owner", { costPerPurchaseUnitCents: 20000, effectiveFrom: "2021-01-01" });
-    expect(await costs(open)).toEqual([[1000, true], [777, false]]);
+    expect(await costs(open)).toEqual([[1000, true], [777, false], [250, true]]);
     expect(await costs(closed)).toEqual([[500, true]]);
 
     // A mix is added to the service: $0.30 per 1,000 more.
     const mix = (await call("POST", "/chemical-tracking/mixes", "owner", { name: "Tank", applicationMethodId: ID.method, items: [{ productId: ID.product, ratePer1000: 0.15 }] })).body.id;
     await call("PUT", `/chemical-tracking/services/${ID.round}/mixes`, "owner", { mixes: [{ mixId: mix }] });
-    expect(await costs(open)).toEqual([[1300, true], [777, false]]);
+    expect(await costs(open)).toEqual([[1300, true], [777, false], [325, true]]);
   });
 });

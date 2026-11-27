@@ -1,5 +1,5 @@
 import { asc, eq, inArray } from "drizzle-orm";
-import { APPLICATION_METHOD_LABELS, appliesOn, costOn, costPerUseUnitCents, type ApplicationMethod } from "@crewdesk/shared";
+import { APPLICATION_METHOD_LABELS, appliesOn, costOn, costPerUseUnitCents, lineSqFt, type ApplicationMethod } from "@crewdesk/shared";
 import { db } from "../db";
 import { applicationMethods, chemicalMixItems, chemicalMixes, productCosts, productRates, products, properties, serviceMixes, serviceProducts, visitLines, visitProducts, visits } from "../db/schema";
 import { companyToday } from "./payRates";
@@ -87,22 +87,23 @@ export function materialSummary(lines: { applies: boolean; costPer1000Cents: num
 
 /**
  * Saves what a completed visit applied: each line's service products that apply on the visit's day,
- * × the property's lawn size × the line's quantity, at the cost in force that day. Replaces any rows
- * saved before (a reopened visit completed again). Lines without a lawn size save nothing.
+ * × the size the line covers (the whole lawn, or the front, back or typed size set on the line) × the
+ * line's quantity, at the cost in force that day. Replaces any rows saved before (a reopened visit
+ * completed again). Lines without a size save nothing.
  */
 export async function snapshotVisitProducts(tx: Tx, visitId: string, companyId: string) {
   const [v] = await tx.select({ id: visits.id, date: visits.date, propertyId: visits.propertyId }).from(visits).where(eq(visits.id, visitId));
   await tx.delete(visitProducts).where(eq(visitProducts.visitId, visitId));
   if (!v) return 0;
   const day = v.date ?? (await companyToday(companyId));
-  const [prop] = v.propertyId ? await tx.select({ lawnSqFt: properties.lawnSqFt }).from(properties).where(eq(properties.id, v.propertyId)) : [];
-  const area = prop?.lawnSqFt ?? null;
-  if (!area || area <= 0) return 0;
-  const lines = await tx.select({ serviceTypeId: visitLines.serviceTypeId, quantity: visitLines.quantity }).from(visitLines).where(eq(visitLines.visitId, visitId)).orderBy(asc(visitLines.sortOrder));
+  const [prop] = v.propertyId ? await tx.select({ lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt }).from(properties).where(eq(properties.id, v.propertyId)) : [];
+  const lines = (await tx.select({ serviceTypeId: visitLines.serviceTypeId, quantity: visitLines.quantity, lawnArea: visitLines.lawnArea, lawnAreaSqFt: visitLines.lawnAreaSqFt }).from(visitLines).where(eq(visitLines.visitId, visitId)).orderBy(asc(visitLines.sortOrder)))
+    .map((l) => ({ ...l, area: lineSqFt(l, prop) })).filter((l): l is typeof l & { area: number } => l.area != null && l.area > 0);
+  if (!lines.length) return 0;
   const serviceIds = [...new Set(lines.map((l) => l.serviceTypeId).filter((x): x is string => !!x))];
   const byService = await serviceProductLines(serviceIds, day, tx);
   const rows = lines.flatMap((l, li) => (l.serviceTypeId ? byService.get(l.serviceTypeId) ?? [] : []).filter((p) => p.applies).map((p, pi) => {
-    const sqFt = area * (l.quantity || 1);
+    const sqFt = l.area * (l.quantity || 1);
     const amount = (p.amountPer1000 * sqFt) / 1000;
     return {
       companyId, visitId, serviceTypeId: l.serviceTypeId, productId: p.productId, productRateId: p.productRateId, productCostId: p.costId,

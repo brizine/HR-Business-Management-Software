@@ -1,15 +1,18 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  INCOME_ACCOUNTS, INVOICE_STATUS_LABELS, describePricing, formatMoney, invoiceTotals, lineAmount, lineTaxRate, priceFor, taxRateFor, type EstimateDepositSettings, type InvoiceStatus, lineTextFor,
+  INCOME_ACCOUNTS, INVOICE_STATUS_LABELS, describePricing, formatMoney, invoiceTotals, lineAmount, lineTaxRate, priceFor, taxRateFor, type EstimateDepositSettings, type InvoiceStatus, lineTextFor, rewordForArea, withAreaNote,
 } from "@crewdesk/shared";
 import Link from "next/link";
 import { api, fmtDate, today } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { ErrorBox } from "@/components/ui";
 import { CustomerPicker } from "@/components/customers";
+import { LineAreaPicker, areaDraft, areaValue, draftSqFt, serviceArea, usesLawnArea, wholeLawn, type AreaDraft } from "@/components/line-area";
 
 export interface ServiceType { id: string; name: string; description: string | null; invoiceDescription?: string | null; pricing: string; priceCents: number; minimumCents: number; brackets: { upToSqFt: number | null; priceCents: number }[]; incomeAccountCode: string; active: boolean; taxable?: boolean; setupMinutes?: number | null; minutesPer1000?: number | null; tiers?: { fromSqFt: number; ratePer1000Cents: number }[]; bandSizeSqFt?: number | null; bandPricePoint?: number; roundToCents?: number; maxAutoSqFt?: number | null; targetCentsPerHour?: number | null; chemical?: boolean; applicationSite?: string | null;
+  /** The part of the lawn its lines start on: "whole", "front" or "back". */
+  defaultLawnArea?: string | null;
   /** Products it applies, and their cost per 1,000 sq ft today (null: no products). */
   products?: ServiceProductLink[]; materialPer1000Cents?: number | null; materialMissingCost?: number }
 export interface ServiceProductLink { id: string; productId: string; productRateId: string; startDate: string | null; endDate: string | null; productName: string; rateName: string; amountPer1000: number; unit: string; costPer1000Cents: number | null; applies: boolean }
@@ -28,8 +31,9 @@ export const toCents = (s: string) => {
 };
 export const dollars = (c: number) => (c / 100).toFixed(2);
 
-type Line = { serviceTypeId: string | null; description: string; quantity: string; price: string; incomeAccountCode: string; tax: string };
-const blankLine = (): Line => ({ serviceTypeId: null, description: "", quantity: "1", price: "", incomeAccountCode: "4000", tax: "" });
+/** `area`: the part of the lawn the line was priced from. */
+type Line = { serviceTypeId: string | null; description: string; quantity: string; price: string; incomeAccountCode: string; tax: string; area: AreaDraft };
+const blankLine = (): Line => ({ serviceTypeId: null, description: "", quantity: "1", price: "", incomeAccountCode: "4000", tax: "", area: wholeLawn() });
 const taxText = (r: number | null | undefined) => (r ? String(Number(r.toFixed(3))) : "");
 
 /** The company's billing settings (sales tax on or off, its name and default rate). */
@@ -51,7 +55,7 @@ export function invoiceFormValue(inv?: any, customer?: { id: string; name: strin
     poNumber: inv.poNumber ?? "", notes: inv.notes ?? "", discountKind: inv.discountKind,
     discount: inv.discountKind === "amount" ? dollars(inv.discountValue) : inv.discountKind === "percent" ? String(inv.discountValue) : "",
     lateFees: inv.lines.filter((l: any) => l.isLateFee).map((l: any) => ({ description: l.description, cents: l.amountCents })),
-    lines: inv.lines.filter((l: any) => !l.isLateFee).map((l: any) => ({ serviceTypeId: l.serviceTypeId, description: l.description, quantity: String(l.quantity), price: dollars(l.unitPriceCents), incomeAccountCode: l.incomeAccountCode, tax: taxText(l.taxRate) })),
+    lines: inv.lines.filter((l: any) => !l.isLateFee).map((l: any) => ({ serviceTypeId: l.serviceTypeId, description: l.description, quantity: String(l.quantity), price: dollars(l.unitPriceCents), incomeAccountCode: l.incomeAccountCode, tax: taxText(l.taxRate), area: areaDraft(l) })),
   };
 }
 
@@ -67,7 +71,7 @@ export function invoiceBody(v: InvoiceFormValue): { body?: Record<string, unknow
     if (!Number.isFinite(unitPriceCents)) return { error: `Line ${i + 1}: enter a price` };
     const taxRate = l.tax.trim() ? Number(l.tax) : 0;
     if (!(taxRate >= 0 && taxRate <= 30)) return { error: `Line ${i + 1}: the tax rate must be 0 to 30%` };
-    lines.push({ serviceTypeId: l.serviceTypeId, description: l.description.trim(), quantity: Math.round(quantity * 100) / 100, unitPriceCents, incomeAccountCode: l.incomeAccountCode, taxRate });
+    lines.push({ serviceTypeId: l.serviceTypeId, description: l.description.trim(), quantity: Math.round(quantity * 100) / 100, unitPriceCents, incomeAccountCode: l.incomeAccountCode, taxRate, ...areaValue(l.area) });
   }
   if (!lines.length) return { error: "Add at least one line" };
   const discountValue = v.discountKind === "amount" ? toCents(v.discount || "0") : v.discountKind === "percent" ? Number(v.discount || 0) : 0;
@@ -118,8 +122,17 @@ export function InvoiceFields({ value, onChange, lockCustomer, fresh }: { value:
     if (!id) return setLine(i, { serviceTypeId: null });
     const s = services.data?.find((x) => x.id === id);
     if (!s) return;
-    const price = priceFor(s, property?.lawnSqFt ?? null);
-    setLine(i, { serviceTypeId: s.id, description: value.lines[i].description || lineTextFor(s, "invoice"), price: price != null ? dollars(price) : value.lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)) });
+    // The service's own part of the lawn (whole, front or back) to start with.
+    const area = serviceArea(s);
+    const price = priceFor(s, draftSqFt(area, property));
+    setLine(i, { serviceTypeId: s.id, area, description: value.lines[i].description || withAreaNote(lineTextFor(s, "invoice"), areaValue(area)), price: price != null ? dollars(price) : value.lines[i].price, incomeAccountCode: s.incomeAccountCode, tax: taxText(lineTaxRate(s.taxable, rate)) });
+  };
+  /** A line for another part of the lawn: priced from that size, and its wording says so (unless somebody reworded it). */
+  const setArea = (i: number, area: AreaDraft) => {
+    const l = value.lines[i];
+    const s = services.data?.find((x) => x.id === l.serviceTypeId);
+    const price = s ? priceFor(s, draftSqFt(area, property)) : null;
+    setLine(i, { area, description: s ? rewordForArea(l.description, [lineTextFor(s, "invoice"), s.name], areaValue(l.area), areaValue(area)) : l.description, ...(s && s.pricing !== "flat" && price != null ? { price: dollars(price) } : {}) });
   };
   const parsed = value.lines.map((l) => ({ quantity: Number(l.quantity) || 0, unitPriceCents: toCents(l.price) || 0, taxRate: Number(l.tax) || 0 }));
   const lateFees = value.lateFees ?? [];
@@ -152,7 +165,7 @@ export function InvoiceFields({ value, onChange, lockCustomer, fresh }: { value:
           <thead><tr><th style={{ width: "26%" }}>Service</th><th>Description</th><th style={{ width: 80 }}>Qty</th><th style={{ width: 110 }}>Price</th>{showTax && <th style={{ width: 90 }}>Tax %</th>}<th style={{ width: 110, textAlign: "right" }}>Amount</th><th style={{ width: 40 }} /></tr></thead>
           <tbody>{value.lines.map((l, i) => {
             const s = services.data?.find((x) => x.id === l.serviceTypeId);
-            const unpriced = s && priceFor(s, property?.lawnSqFt ?? null) == null;
+            const unpriced = s && priceFor(s, draftSqFt(l.area, property)) == null;
             return (
               <tr key={i}>
                 <td>
@@ -160,6 +173,7 @@ export function InvoiceFields({ value, onChange, lockCustomer, fresh }: { value:
                     <option value="">Custom line</option>
                     {(services.data ?? []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                   </select>
+                  {usesLawnArea(s) && <LineAreaPicker label={`Line ${i + 1} lawn area`} value={l.area} onChange={(a) => setArea(i, a)} property={property} />}
                   {s && <div className="muted" style={{ fontSize: 12 }}>{describePricing(s)}{unpriced ? " · add the lawn size to price it" : ""}</div>}
                   {!s && (
                     <select aria-label={`Line ${i + 1} income account`} value={l.incomeAccountCode} onChange={(e) => setLine(i, { incomeAccountCode: e.target.value })} style={{ marginTop: 4 }}>

@@ -3,7 +3,7 @@ import { and, asc, desc, eq, ilike, inArray, or, sql, type SQL } from "drizzle-o
 import { z } from "zod";
 import {
   ESTIMATE_STATUSES, ESTIMATE_STATUS_LABELS, customerName, estimateLineAmount, estimateResponseSchema, estimateSchema, estimateTotals, formatAddress,
-  formatMoney, lineIncluded, sendEstimateSchema, type EstimateInput, type EstimateResponse,
+  formatMoney, lineAreaValues, lineIncluded, sendEstimateSchema, type EstimateInput, type EstimateResponse,
   systemTemplate,
 } from "@crewdesk/shared";
 import { db } from "../db";
@@ -51,7 +51,7 @@ async function saveLines(tx: Tx, e: Estimate, body: EstimateInput) {
   await tx.delete(estimateLines).where(eq(estimateLines.estimateId, e.id));
   const rows = body.lines.map((l, i) => ({
     ...(l.id && keep.has(l.id) ? { id: l.id } : {}), estimateId: e.id, serviceTypeId: l.serviceTypeId ?? null, propertyId: l.propertyId ?? null, description: l.description,
-    quantity: l.quantity, unitPriceCents: l.unitPriceCents, visits: l.visits, taxRate: l.taxRate, incomeAccountCode: l.incomeAccountCode,
+    quantity: l.quantity, unitPriceCents: l.unitPriceCents, visits: l.visits, taxRate: l.taxRate, incomeAccountCode: l.incomeAccountCode, ...lineAreaValues(l),
     costCents: l.costCents ?? null, costAuto: !!l.costAuto && !!l.serviceTypeId, budgetedHours: l.budgetedHours ?? null, optional: l.optional, selected: l.optional ? l.selected : true, recommended: l.recommended,
     amountCents: estimateLineAmount(l), sortOrder: i,
   }));
@@ -84,7 +84,7 @@ async function estimateView(e: Estimate, opts: { office: boolean }) {
       id: l.id, serviceTypeId: l.serviceTypeId, propertyId: l.propertyId, address: l.propertyId ? addr.get(l.propertyId) ?? null : null, description: l.description,
       quantity: l.quantity, unitPriceCents: l.unitPriceCents, visits: l.visits, taxRate: l.taxRate, amountCents: l.amountCents,
       optional: l.optional, selected: l.selected, recommended: l.recommended, included: lineIncluded(l, chosen),
-      ...(opts.office ? { incomeAccountCode: l.incomeAccountCode, costCents: l.costCents, costAuto: l.costAuto, budgetedHours: l.budgetedHours } : {}),
+      ...(opts.office ? { incomeAccountCode: l.incomeAccountCode, costCents: l.costCents, costAuto: l.costAuto, budgetedHours: l.budgetedHours, lawnArea: l.lawnArea, lawnAreaSqFt: l.lawnAreaSqFt } : {}),
     })),
   };
   if (!opts.office) return base;
@@ -332,7 +332,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const inv = await db.transaction(async (tx) => {
       const invLines = lines.map((l, i) => {
         const quantity = Math.round(l.quantity * l.visits * 100) / 100;
-        return { serviceTypeId: l.serviceTypeId, description: l.description, quantity, unitPriceCents: l.unitPriceCents, incomeAccountCode: l.incomeAccountCode, taxRate: l.taxRate, amountCents: Math.round(quantity * l.unitPriceCents), sortOrder: i };
+        return { serviceTypeId: l.serviceTypeId, description: l.description, quantity, unitPriceCents: l.unitPriceCents, incomeAccountCode: l.incomeAccountCode, taxRate: l.taxRate, lawnArea: l.lawnArea, lawnAreaSqFt: l.lawnAreaSqFt, amountCents: Math.round(quantity * l.unitPriceCents), sortOrder: i };
       });
       const t = estimateTotals(lines.map((l) => ({ ...l, optional: false })), e.discountPercent);
       const [row] = await tx.insert(invoices).values({

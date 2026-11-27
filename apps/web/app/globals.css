@@ -2686,3 +2686,9 @@ button.hp-card:hover { border-color: var(--primary); }
 .rate-chart > summary { cursor: pointer; font-size: 14px; padding: 2px 0; }
 .rate-chart[open] > summary { margin-bottom: 4px; }
 .rate-chart-table td, .rate-chart-table th { padding-top: 5px; padding-bottom: 5px; }
+
+/* ───────────── Which part of the lawn a line is for ───────────── */
+.line-area { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.line-area select { flex: 1 1 170px; min-width: 0; }
+.line-area input { flex: 0 1 96px; min-width: 70px; }
+.line-area .muted { font-size: 12px; flex-basis: 100%; }
