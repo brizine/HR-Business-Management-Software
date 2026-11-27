@@ -1233,10 +1233,24 @@ list, then **Edit work orders** to move them.
 - **Drag a row** onto another row to change its place in the route, or onto another crew's heading (or its rows)
   to give it to that crew; in the week view that can also be another day. The crew's heading shows what the drop
   would do while you hold it there.
-- **Routes three ways:** by hand (drag the stops, or click pins on the map in the order they should be visited
-  and choose **More → Route in the order selected**); **Optimize** on a crew's heading (or **Optimize routes**
-  for every crew) to order them from the shop and back with the least driving; or click the **lock** by a stop
-  number to keep that stop at its place, and Optimize orders the others around it.
+- **Route stops** (the button above the map, on a crew's heading, or in the bar when rows are ticked) opens one
+  crew's day as a list to put in order. Pick the **Crew** at the top if it isn't the one you want.
+  - **By hand:** drag a stop by its handle (⠿) to where you want it, or click the handle and press the up and
+    down arrow keys. **Reverse** turns the whole order around. If you ticked stops on the board first, **Ticked
+    first** puts those at the front in the order you ticked them.
+  - **Optimize** lets Crewdesk order the stops for the shortest drive, from the shop and back, keeping locked
+    stops where they are. You can still drag stops afterwards.
+  - **Curbside arrival** plans the drive so the truck pulls up on each stop's own side of the street, so nobody
+    crosses the road. It can add a little driving (a trip round the block). It needs real-road drive times; on
+    estimates the box is greyed out and says so. Where the routing server can't reach a stop from its own side,
+    the route is measured the ordinary way and the window tells you.
+  - Each drive, each arrival time and the totals are measured again as you change things. Nothing changes on
+    the board until **Save order**. The crew's route then keeps the order and the curbside choice through later
+    changes (dragging a row, Optimize, moving a stop off it).
+- **Routes other ways:** drag rows on the board itself; click pins on the map in the order they should be
+  visited and choose **More → Route in the order selected**; **Optimize** on a crew's heading (or **Optimize
+  routes** for every crew) to order them from the shop and back with the least driving; or click the **lock** by
+  a stop number to keep that stop at its place, and Optimize orders the others around it.
 - **More** (on a selection): back to the waiting list, route in the order selected, lock or unlock, set the
   priority, skip (with why), or delete (admins).
 - **Rain or wind day…** (or **Rain day** on a crew's heading) moves the whole day's, or one crew's, open work
@@ -1269,6 +1283,11 @@ map. It shows work orders and to-dos.
   map), set the start time and how arrival times are shown, **Optimize** or **Reverse**, then **Save**. **Save and
   apply to future weeks** copies the order to the same weekday in the weeks ahead for visits that repeat. A route
   holds up to 100 stops.
+- **Curbside arrival** (a tick box in the yellow bar while you order a route): the drive is planned so the truck
+  pulls up on each stop's own side of the street. The route remembers it. It needs **Real roads** under
+  **View → Routing and capacity**; the same window has **Curbside arrival on new routes**, which decides whether
+  the box starts ticked (an admin sets it). Both dispatch boards share the routes, so a choice made on one shows
+  on the other.
 - **Moving a stop** to another day, another crew or the waitlist takes it off its route, and the rest renumber.
   Stops with no route show **00**.
 - **Custom areas:** draw areas on the map, name and color them, and hide or show them; everyone sees the same ones.

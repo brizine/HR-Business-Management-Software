@@ -45,7 +45,7 @@ const routes: FastifyPluginAsync = async (app) => {
       crews: crews.map((c) => ({ id: c.id, name: c.name, color: c.color, dailyHours: c.dailyHours, memberIds: c.memberIds, truck: c.assetName })),
       people,
       // The routing server's address is for admins only: a hosted one can carry a key.
-      settings: { routing: settings.routing, roadUrl: hasRole(roleIn(req, AREA), "admin") ? settings.roadUrl : null, startAddress: settings.start?.address ?? null, endAddress: settings.end?.address ?? null },
+      settings: { routing: settings.routing, curbside: settings.curbside, roadUrl: hasRole(roleIn(req, AREA), "admin") ? settings.roadUrl : null, startAddress: settings.start?.address ?? null, endAddress: settings.end?.address ?? null },
       start: settings.start ?? settings.depot, end: settings.end ?? settings.depot, depot: settings.depot,
     };
   });
@@ -76,7 +76,7 @@ const routes: FastifyPluginAsync = async (app) => {
       ...list, from, to, routes: routeRows.filter((r) => r.crewId), holidays, waiting,
       crews: crews.map((c) => ({ id: c.id, name: c.name, color: c.color, dailyHours: c.dailyHours, memberIds: c.memberIds, truck: c.assetName })),
       people: people.map((p) => ({ id: p.id, firstName: p.firstName, name: p.name, color: p.color })),
-      routing: settings.routing, start: settings.start ?? settings.depot,
+      routing: settings.routing, curbside: settings.curbside, start: settings.start ?? settings.depot,
     };
   });
   /** Edit work orders: onto a day (crew, window, place in the route), or back to the waiting list. */
@@ -104,7 +104,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const stops = await db.select().from(dispatchStops).where(eq(dispatchStops.routeId, r.id)).orderBy(asc(dispatchStops.stopOrder));
     const point = (kind: string, label: string | null, lat: number | null, lng: number | null) => (kind === "none" ? { kind: "none" as const } : lat != null && lng != null ? { kind: "custom" as const, label, lat, lng } : { kind: "company" as const });
     const { events: _events, ...p } = await previewRoute(req.user.companyId, {
-      date: r.date, keys: stops.map((s) => (s.visitId ? `v:${s.visitId}` : `t:${s.todoId}`)), start: point(r.startKind, r.startLabel, r.startLat, r.startLng), end: point(r.endKind, r.endLabel, r.endLat, r.endLng), steps: true,
+      date: r.date, keys: stops.map((s) => (s.visitId ? `v:${s.visitId}` : `t:${s.todoId}`)), start: point(r.startKind, r.startLabel, r.startLat, r.startLng), end: point(r.endKind, r.endLabel, r.endLat, r.endLng), steps: true, curbside: r.curbside,
     });
     return p;
   });
@@ -171,7 +171,7 @@ const routes: FastifyPluginAsync = async (app) => {
 
   app.put("/settings", admin, async (req) => {
     const s = await saveDispatchSettings(req.user.companyId, parse(dispatchSettingsSchema, req.body));
-    return { routing: s.routing, roadUrl: s.roadUrl, startAddress: s.start?.address ?? null, endAddress: s.end?.address ?? null };
+    return { routing: s.routing, curbside: s.curbside, roadUrl: s.roadUrl, startAddress: s.start?.address ?? null, endAddress: s.end?.address ?? null };
   });
   /** Each person's daily (and weekly) budgeted-hour capacity, and who doesn't count toward a crew's. */
   app.put("/capacity", admin, async (req) => {

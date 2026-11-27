@@ -383,6 +383,8 @@ export const TIPS_BY_PAGE: Record<string, Record<string, string>> = {
     "pick a date to jump to": "Choose the day to show", table: "Show the day as a table", split: "Show the table and the map side by side", waitlist: "Show services waiting to be scheduled", board: "Show the day as lanes, one per crew",
     assign: "Give the selected events to a crew or person", "route stops": "Build a route from the selected events and put the stops in order",
     "color events by": "Choose what the colors mean: routing status, assignment, service or weekday",
+    "curbside arrival": "Plan the drive so the truck pulls up on each stop's own side of the street. It can add a little driving. Needs real roads (View → Routing and capacity).",
+    "new routes arrive curbside": "New routes start out planned for curbside arrival; any one route can still be switched",
     "routing status": "Color each event by whether it's on a route yet", assignment: "Color each event by the crew or person it's assigned to",
     service: "Color each event by its service", "event type": "Color each event by what it is: a work order, a to-do and so on", weekday: "Color each event by the day of the week",
   },

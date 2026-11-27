@@ -16,13 +16,15 @@ import {
 } from "@/components/waitlist";
 import { dispatchApi, type DRoute, type Preview } from "./data";
 import { Ico } from "./beta-parts";
+import { RouteStops } from "./route-stops";
 
 /**
  * The Dispatch board from the Crewdesk plan. It is the same page as the waiting list, for the work
  * that has a day: the view picker and filter chips on top, a large map (each crew's route in its
  * color with numbered pins, waiting-list services in gray), the week's workload, then the list with
  * a totals row. The list is grouped by truck or crew in route order; drag rows to reorder or to give
- * them to another crew. Select rows or pins and Edit work orders moves them.
+ * them to another crew. Select rows or pins and Edit work orders moves them. Route stops opens one
+ * crew's day to put in order by hand or optimize, with curbside arrival.
  */
 
 type Note = { id: string; body: string; by: string | null; at: string };
@@ -30,7 +32,7 @@ type BoardRow = WaitRow & { assigneeIds: string[]; route: { id: string; order: n
 type BCrew = Crew & { memberIds: string[]; truck: string | null };
 type BoardData = {
   today: string; from: string; to: string; requireCard: boolean; rows: BoardRow[]; routes: DRoute[]; holidays: Record<string, string>; waiting: number;
-  crews: BCrew[]; people: { id: string; firstName: string; name: string; color: string }[]; routing: "estimate" | "road"; start: { address: string; lat: number; lng: number } | null;
+  crews: BCrew[]; people: { id: string; firstName: string; name: string; color: string }[]; routing: "estimate" | "road"; /** New routes start out planned for curbside arrival. */ curbside: boolean; start: { address: string; lat: number; lng: number } | null;
 };
 type Eta = { at: number; off: "late" | "early" | null; leg: Leg | null };
 type Ctx = { crews: BCrew[]; people: Map<string, { firstName: string; name: string }>; eta: Map<string, Eta>; onNotes: () => void };
@@ -129,6 +131,7 @@ export function DispatchBoard() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [edit, setEdit] = useState<{ date?: string; crewId?: string | null; to?: "board" | "waitlist" } | null>(null);
   const [rain, setRain] = useState<{ who: string } | null>(null);
+  const [routing, setRouting] = useState<{ date: string; crewId?: string | null } | null>(null);
   const [notice, setNotice] = useState<{ text: string; bad?: boolean } | null>(null);
   const [workKey, setWorkKey] = useState(0);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -250,9 +253,12 @@ export function DispatchBoard() {
     return out;
   }, [d, days, crews, shown, all, span, view.filters.length]);
 
+  // Route stops works on a crew's whole day, whatever the filters are hiding.
+  const routeLanes = useMemo(() => (d ? days.flatMap((date) => crews.map((crew) => ({ key: laneKey(date, crew.id), date, crew, all: inRouteOrder(all.filter((r) => r.date === date && r.crewId === crew.id)), route: d.routes.find((r) => r.date === date && r.crewId === crew.id) }))) : []), [d, days, crews, all]);
+
   const say = (text: string, bad = false) => setNotice({ text, bad });
   const refresh = async () => { await data.reload(); if (pins || waitOpen) waiting.reload(); if (span === "day") load.reload(); setWorkKey((k) => k + 1); };
-  const done = (msg: string) => { say(msg); setSelected(new Set()); setEdit(null); setRain(null); refresh(); };
+  const done = (msg: string) => { say(msg); setSelected(new Set()); setEdit(null); setRain(null); setRouting(null); refresh(); };
   const toggle = (ids: string[]) => { const n = new Set(selected); const allOn = ids.every((id) => n.has(id)); for (const id of ids) if (allOn) n.delete(id); else n.add(id); setSelected(n); };
   const removeFilter = (i: number) => { const f = view.filters[i]; if (f.key === "q") setQ(""); setView({ ...view, filters: view.filters.filter((_, j) => j !== i) }); };
   const onSort = (key: string) => setView({ ...view, sort: { key, dir: view.sort?.key === key && view.sort.dir === "asc" ? "desc" : "asc" } });
@@ -457,6 +463,7 @@ export function DispatchBoard() {
             {unordered && !joining && <span className="db-warn">Some have no place in the route yet</span>}
             <span className="db-group-acts">
               {needs && (needs.products.length > 0 || needs.spray.length > 0) && <ToLoad needs={needs} date={l.date} />}
+              {l.crew && l.all.length > 0 && <button type="button" className="linkbtn" disabled={!!busy} title="Put this crew's stops in order by hand (drag them) or optimize them, with curbside arrival" onClick={() => setRouting({ date: l.date, crewId: l.crew!.id })}>Route stops</button>}
               {l.crew && l.all.filter((r) => r.status === "open").length > 1 && <button type="button" className="linkbtn" disabled={!!busy} title="Order this crew's stops to keep the drive shortest, from the shop and back. Locked stops keep their place." onClick={() => optimize([l])}>Optimize</button>}
               {l.all.some((r) => r.status === "open") && span === "day" && <button type="button" className="linkbtn" title="Rain or wind: move this crew's open work to another day or back to the waiting list" onClick={() => setRain({ who: l.crew?.id ?? "none" })}>Rain day</button>}
             </span>
@@ -493,6 +500,7 @@ export function DispatchBoard() {
           </span>
         </span>
         <span style={{ marginLeft: "auto" }} />
+        {d && span === "day" && lanes.some((l) => l.crew && l.all.length > 0) && <button type="button" className="btn" disabled={!!busy} title="Put a crew's stops in order by hand (drag them) or optimize them, with curbside arrival" onClick={() => setRouting({ date: d.from, crewId: picked.find((r) => !r.waiting && r.crewId)?.crewId })}><Ico name="route" size={14} /> Route stops</button>}
         {d && lanes.some((l) => l.crew && l.all.filter((r) => r.status === "open").length > 1) && <button type="button" className="btn" disabled={!!busy} title="Order every crew's stops to keep the drive shortest, from the shop and back. Locked stops keep their place." onClick={() => optimize(lanes)}>{busy === "all" ? "Ordering…" : "Optimize routes"}</button>}
         {d && span === "day" && all.some((r) => r.status === "open") && <button type="button" className="btn" onClick={() => setRain({ who: "all" })}>Rain or wind day…</button>}
         <button type="button" className="btn" onClick={() => d && exportRows(picked.length ? picked : shown, columns, ctx, d.from)} disabled={!shown.length}><Icon name="download" size={14} /> Export{picked.length ? ` ${picked.length}` : ""}</button>
@@ -537,6 +545,7 @@ export function DispatchBoard() {
                   <strong>{picked.length} selected</strong>
                   <span className="muted">{h1(pickedTotals.minutes / 60)} h · {Math.round(pickedTotals.sqFt).toLocaleString()} sq ft · {formatMoney(pickedTotals.cents)}{picked.some((r) => r.waiting) ? ` · ${picked.filter((r) => r.waiting).length} from the waiting list` : ""}</span>
                   <button type="button" className="btn primary" onClick={() => setEdit(span === "day" ? { date: d.from } : {})}>Edit work orders</button>
+                  {picked.some((r) => !r.waiting && r.crewId && r.date) && <button type="button" className="btn" title="Open this crew's day to put its stops in order by hand or optimize them, with curbside arrival. The ones you ticked can go first, in the order you ticked them." onClick={() => { const r = picked.find((x) => !x.waiting && x.crewId && x.date)!; setRouting({ date: r.date!, crewId: r.crewId }); }}><Ico name="route" size={14} /> Route stops</button>}
                   <Popover open={bulkOpen} setOpen={setBulkOpen} label="More ▾">
                     <div className="cl-menu">
                       {picked.some((r) => !r.waiting && r.status !== "completed") && <button type="button" onClick={() => { setBulkOpen(false); setEdit({ to: "waitlist" }); }}>Back to the waiting list…</button>}
@@ -602,6 +611,7 @@ export function DispatchBoard() {
         </div>
       )}
       {edit && d && <EditWorkOrders board rows={picked} crews={crews} today={d.today} initial={edit} onClose={() => setEdit(null)} onDone={done} />}
+      {routing && d && <RouteStops lanes={routeLanes.filter((l) => l.date === routing.date)} crewId={routing.crewId} picked={[...selected]} routing={d.routing} curbsideDefault={d.curbside} onClose={() => setRouting(null)} onSaved={done} />}
       {rain && d && <RainDay rows={all} crews={crews} date={d.from} who={rain.who} onClose={() => setRain(null)} onDone={done} />}
     </>
   );

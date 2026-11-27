@@ -3300,6 +3300,8 @@ export const dispatchRoutes = pgTable(
     startTime: text("start_time").notNull().default("08:00"),
     /** The first stop holds its place when the route is optimized or reversed. */
     pinnedFirst: boolean("pinned_first").notNull().default(false),
+    /** Planned so the truck pulls up on each stop's side of the street (road routing only). */
+    curbside: boolean("curbside").notNull().default(false),
     totalMeters: doublePrecision("total_meters"),
     totalDriveSeconds: integer("total_drive_seconds"),
     /** The drive from the last stop back to the end. */

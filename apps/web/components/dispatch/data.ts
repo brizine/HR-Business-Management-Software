@@ -29,7 +29,7 @@ export type DEvent = {
 };
 export type DPoint = { kind: string; label: string | null; lat: number | null; lng: number | null };
 export type DRoute = {
-  id: string; date: string; crewId: string | null; startTime: string; pinnedFirst: boolean; start: DPoint; end: DPoint;
+  id: string; date: string; crewId: string | null; startTime: string; pinnedFirst: boolean; /** Planned for curbside arrival. */ curbside: boolean; start: DPoint; end: DPoint;
   totalMeters: number; totalDriveSeconds: number; endLeg: Leg | null; measured: "road" | "estimate"; geometry: [number, number][] | null;
   stops: { key: string; order: number; leg: Leg | null; locked: boolean }[];
 };
@@ -39,13 +39,15 @@ export type Place = { address: string; lat: number; lng: number };
 export type Board = {
   today: string; from: string; to: string; events: DEvent[]; routes: DRoute[]; holidays: Record<string, string>; waiting: number;
   crews: DCrew[]; people: DPerson[];
-  settings: { routing: "estimate" | "road"; roadUrl: string | null; startAddress: string | null; endAddress: string | null };
+  settings: { routing: "estimate" | "road"; /** New routes start out planned for curbside arrival. */ curbside: boolean; roadUrl: string | null; startAddress: string | null; endAddress: string | null };
   start: Place | null; end: Place | null; depot: Place | null;
 };
 export type Preview = {
   date: string; keys: string[]; start: (DPoint & { lat: number; lng: number }) | null; end: (DPoint & { lat: number; lng: number }) | null;
   stops: { key: string; leg: Leg | null; minutes: number | null; located: boolean; steps: { text: string; meters: number }[] | null }[];
   endLeg: Leg | null; endSteps: { text: string; meters: number }[] | null; totalMeters: number; totalDriveSeconds: number; geometry: [number, number][] | null; measured: "road" | "estimate"; optimized: boolean;
+  /** Curbside arrival was asked for, and whether the drives really arrive that way (never on estimates). */
+  curbside: boolean; curbsideMeasured: boolean;
 };
 export type Area = { id: string; name: string; color: string; points: [number, number][] };
 export type Truck = { employeeId: string; name: string; color: string; lat: number; lng: number; at: string };
@@ -300,7 +302,7 @@ export const dispatchApi = {
   saveRoute: (body: Record<string, unknown>) => post<{ id: string; stops: number; future: { days: number; stops: number } | null }>("/routes", body),
   future: (body: Record<string, unknown>) => post<{ days: { date: string; stops: number; different: number }[]; repeating: number }>("/routes/future", body),
   lock: (key: string, locked: boolean) => post<{ key: string; locked: boolean }>("/lock", { key, locked }),
-  lane: (date: string, crewId: string | null, keys: string[]) => post<{ stops: number; totalDriveSeconds?: number }>("/lane", { date, crewId, keys }),
+  lane: (date: string, crewId: string | null, keys: string[], curbside?: boolean) => post<{ stops: number; totalDriveSeconds?: number; totalMeters?: number }>("/lane", { date, crewId, keys, ...(curbside === undefined ? {} : { curbside }) }),
   rain: (body: Record<string, unknown>) => post<{ moved: number; to: string | null; texted: number; notTexted: number; toCall: string[] }>("/rain", body),
   note: (key: string, body: string) => post<{ key: string; dispatchNotes: DEvent["dispatchNotes"] }>("/notes", { key, body }),
   /** Open, Complete or Skipped, one event at a time, through each record's own rules. */

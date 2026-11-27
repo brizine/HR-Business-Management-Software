@@ -311,6 +311,8 @@ export const routePreviewSchema = z.object({
   locked: z.array(key).max(DISPATCH_ROUTE_MAX).default([]),
   /** Turn-by-turn steps too (for printed directions). */
   steps: z.boolean().default(false),
+  /** Curbside arrival: plan the drive so the truck pulls up on each stop's side of the street. Needs road routing. */
+  curbside: z.boolean().optional(),
 });
 export const routeSaveSchema = z.object({
   /** The saved route being changed; without it a new route is made. */
@@ -321,6 +323,8 @@ export const routeSaveSchema = z.object({
   end: routePointSchema.default({ kind: "company" }),
   startTime: hhmm.default("08:00"),
   pinnedFirst: z.boolean().default(false),
+  /** Curbside arrival. Left out: a saved route keeps its choice, a new one takes the company's. */
+  curbside: z.boolean().optional(),
   /** "Assign all": give every stop this crew or these people as it saves. */
   assign: z.object({ crewId: z.preprocess(blankToNull, uuid.nullable()).optional(), employeeIds: z.array(uuid).max(30).default([]) }).optional(),
   /** Copy the order to the same weekday in future weeks, for the stops that repeat. */
@@ -333,7 +337,11 @@ export const routeSaveSchema = z.object({
 export type RouteSaveInput = z.infer<typeof routeSaveSchema>;
 
 /** The plan's board: a lane (a crew's day, or No crew yet) in the order given. */
-export const laneOrderSchema = z.object({ date: isoDate, crewId: z.preprocess(blankToNull, uuid.nullable()), keys: z.array(key).max(200) });
+export const laneOrderSchema = z.object({
+  date: isoDate, crewId: z.preprocess(blankToNull, uuid.nullable()), keys: z.array(key).max(200),
+  /** Curbside arrival for this crew's route. Left out: the route keeps its choice, a new one takes the company's. */
+  curbside: z.boolean().optional(),
+});
 
 /** Rain or wind day: a crew's or the whole day's open services go back to the waiting list or to the next working day. */
 export const rainDaySchema = z.object({
@@ -409,10 +417,14 @@ export const dispatchSettingsSchema = z.object({
   /** Where routes start and end when it isn't the business address. */
   startAddress: z.preprocess(blankToNull, z.string().trim().max(300).nullable()).optional(),
   endAddress: z.preprocess(blankToNull, z.string().trim().max(300).nullable()).optional(),
+  /** New routes start out planned for curbside arrival (each route can still be changed). Left out: stays as it is. */
+  curbside: z.boolean().optional(),
 });
 export type DispatchSettingsInput = z.infer<typeof dispatchSettingsSchema>;
 export type DispatchSettings = {
   routing: DispatchRouting; roadUrl: string | null;
+  /** Whether new routes start out planned for curbside arrival. */
+  curbside: boolean;
   start: { address: string; lat: number; lng: number } | null;
   end: { address: string; lat: number; lng: number } | null;
   /** The business address, located once and remembered. */

@@ -10,7 +10,7 @@ import { pad2 } from "./beta-dialogs";
 /* Route ordering on the beta board: pick stops, set where the route starts and ends, order them, save. */
 
 export type PointChoice = { kind: "company" | "crew" | "employee" | "custom" | "none"; label?: string | null; lat?: number | null; lng?: number | null };
-export type Draft = { id?: string; date: string; keys: string[]; start: PointChoice; end: PointChoice; startTime: string; pinnedFirst: boolean; dirty: boolean; optimized: boolean };
+export type Draft = { id?: string; date: string; keys: string[]; start: PointChoice; end: PointChoice; startTime: string; pinnedFirst: boolean; /** Curbside arrival: the truck pulls up on each stop's side of the street. */ curbside: boolean; dirty: boolean; optimized: boolean };
 
 const asChoice = (p: DRoute["start"]): PointChoice => (p.kind === "none" ? { kind: "none" } : p.kind === "company" ? { kind: "company" } : { kind: p.kind as PointChoice["kind"], label: p.label, lat: p.lat, lng: p.lng });
 
@@ -20,7 +20,7 @@ export function useRouteDraft(o: { board: Board | null; toast: (text: string, ba
   const [preview, setPreview] = useState<Preview | null>(null);
   const [measuring, setMeasuring] = useState(false);
   const [working, setWorking] = useState(false);
-  const shape = draft ? `${draft.date}|${draft.keys.join(",")}|${JSON.stringify(draft.start)}|${JSON.stringify(draft.end)}` : "";
+  const shape = draft ? `${draft.date}|${draft.keys.join(",")}|${JSON.stringify(draft.start)}|${JSON.stringify(draft.end)}|${draft.curbside}` : "";
   const latest = useRef(o);
   latest.current = o;
 
@@ -31,7 +31,7 @@ export function useRouteDraft(o: { board: Board | null; toast: (text: string, ba
     setMeasuring(true);
     const timer = setTimeout(async () => {
       try {
-        const p = await dispatchApi.preview({ date: draft.date, keys: draft.keys, start: draft.start, end: draft.end });
+        const p = await dispatchApi.preview({ date: draft.date, keys: draft.keys, start: draft.start, end: draft.end, curbside: draft.curbside });
         if (!off) setPreview(p);
       } catch (e) {
         if (!off) latest.current.toast((e as Error).message, true);
@@ -47,9 +47,10 @@ export function useRouteDraft(o: { board: Board | null; toast: (text: string, ba
   const api2 = {
     draft, preview, measuring, working,
     /** A new route from the selection (stops already routed keep their saved order first), or a saved route reopened whole. */
-    begin(keys: string[], date: string, route?: DRoute) {
-      if (route) setDraft({ id: route.id, date: route.date, keys: route.stops.map((s) => s.key), start: asChoice(route.start), end: asChoice(route.end), startTime: route.startTime, pinnedFirst: route.pinnedFirst, dirty: false, optimized: false });
-      else setDraft({ date, keys: keys.slice(0, DISPATCH_ROUTE_MAX), ...latest.current.defaults, pinnedFirst: false, dirty: true, optimized: false });
+    begin(keys: string[], date: string, route?: DRoute, curbside = false) {
+      if (route) setDraft({ id: route.id, date: route.date, keys: route.stops.map((s) => s.key), start: asChoice(route.start), end: asChoice(route.end), startTime: route.startTime, pinnedFirst: route.pinnedFirst, curbside: route.curbside, dirty: false, optimized: false });
+      // A new route starts from the company's choice for curbside arrival.
+      else setDraft({ date, keys: keys.slice(0, DISPATCH_ROUTE_MAX), ...latest.current.defaults, pinnedFirst: false, curbside, dirty: true, optimized: false });
     },
     exit() { setDraft(null); },
     toggle(key: string) {
@@ -81,12 +82,14 @@ export function useRouteDraft(o: { board: Board | null; toast: (text: string, ba
     },
     setStart(start: PointChoice) { if (draft) { change({ start }); latest.current.onDefaults({ start, end: draft.end, startTime: draft.startTime }); } },
     setEnd(end: PointChoice) { if (draft) { change({ end }); latest.current.onDefaults({ start: draft.start, end, startTime: draft.startTime }); } },
+    /** Curbside arrival on or off: the drives are measured again, and the best order may differ. */
+    setCurbside(curbside: boolean) { if (draft) change({ curbside }); },
     setStartTime(startTime: string) { if (draft) { change({ startTime }, true); latest.current.onDefaults({ start: draft.start, end: draft.end, startTime }); } },
     async optimize() {
       if (!draft || draft.keys.length < 2) return;
       setWorking(true);
       try {
-        const p = await dispatchApi.preview({ date: draft.date, keys: draft.keys, start: draft.start, end: draft.end, optimize: true, pinnedFirst: draft.pinnedFirst });
+        const p = await dispatchApi.preview({ date: draft.date, keys: draft.keys, start: draft.start, end: draft.end, optimize: true, pinnedFirst: draft.pinnedFirst, curbside: draft.curbside });
         setDraft((d) => (d ? { ...d, keys: p.keys, dirty: true, optimized: true } : d));
         setPreview(p);
         latest.current.toast(`Optimized: ${clockText(p.totalDriveSeconds)} drive, ${milesText(p.totalMeters)} mi, ${p.keys.length} stop${p.keys.length === 1 ? "" : "s"}`);
@@ -96,7 +99,7 @@ export function useRouteDraft(o: { board: Board | null; toast: (text: string, ba
       if (!draft) return false;
       setWorking(true);
       try {
-        const r = await dispatchApi.saveRoute({ id: draft.id, date: draft.date, keys: draft.keys, start: draft.start, end: draft.end, startTime: draft.startTime, pinnedFirst: draft.pinnedFirst, ...extra });
+        const r = await dispatchApi.saveRoute({ id: draft.id, date: draft.date, keys: draft.keys, start: draft.start, end: draft.end, startTime: draft.startTime, pinnedFirst: draft.pinnedFirst, curbside: draft.curbside, ...extra });
         latest.current.toast(extra.future ? `Route order saved for future weeks (${r.stops} stops${r.future ? `, ${r.future.days} more day${r.future.days === 1 ? "" : "s"}` : ""})` : `Route order saved (${r.stops} stop${r.stops === 1 ? "" : "s"})`);
         setDraft(null);
         return true;
@@ -112,12 +115,19 @@ export function RouteBanner({ r, board, onExit, onAssignAll, onFuture }: { r: Ro
   const [save, setSave] = useState<ReturnType<typeof anchorOf> | null>(null);
   const d = r.draft!;
   const n = d.keys.length;
+  const roads = board.settings.routing === "road";
   return (
     <div className="dx-bar dx-routebar">
       <button type="button" className="dx-icon-btn" aria-label="Exit order mode" onClick={onExit}><Ico name="x" /></button>
       <strong>{d.id ? "Edit route" : "Route"} {n} stop{n === 1 ? "" : "s"}</strong>
       {board.settings.routing === "estimate" && <span className="dx-muted dx-routebar-note" title="Turn on road routing under View → Routing and capacity for real road times and the line along the streets.">Drive times are estimates</span>}
       <span style={{ flex: 1 }} />
+      <label className={`dx-curb${roads ? "" : " off"}`} title={roads
+        ? "Plan the drive so the truck pulls up on each stop's own side of the street, so nobody crosses the road. It can add a little driving."
+        : "Curbside arrival needs real roads: switch Drive times to Real roads under View → Routing and capacity. Estimates don't know which side of the street a stop is on."}>
+        <Check checked={d.curbside} disabled={!roads} label="Curbside arrival" onChange={(v) => r.setCurbside(v)} /> Curbside arrival
+      </label>
+      {roads && d.curbside && r.preview && !r.measuring && !r.preview.curbsideMeasured && r.preview.measured === "road" && <span className="dx-muted dx-routebar-note" title="The routing server couldn't bring the truck in on its own side at one of these stops, so the drive is measured the ordinary way.">not possible at every stop</span>}
       <button type="button" className="dx-btn" disabled={!n} onClick={onAssignAll}><Ico name="users" /> Assign all ({n})</button>
       <button type="button" className="dx-btn" disabled={n < 2 || r.working || d.optimized} onClick={() => r.optimize()}><Ico name="sparkles" /> {d.optimized ? "Optimized" : r.working ? "Optimizing…" : "Optimize"}</button>
       <button type="button" className="dx-btn" disabled={n < 2} onClick={() => r.reverse()}><Ico name="updown" /> Reverse</button>

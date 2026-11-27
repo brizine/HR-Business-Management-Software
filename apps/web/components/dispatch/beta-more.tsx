@@ -162,6 +162,7 @@ export function WaitlistPanel({ date, today, oneDay, onClose, onAdded, toast }: 
 export function SettingsDialog({ board, isAdmin, onClose, onSaved }: { board: Board; isAdmin: boolean; onClose: () => void; onSaved: () => void }) {
   const [routing, setRouting] = useState(board.settings.routing);
   const [roadUrl, setRoadUrl] = useState(board.settings.roadUrl ?? "");
+  const [curbside, setCurbside] = useState(board.settings.curbside);
   const [start, setStart] = useState(board.settings.startAddress ?? "");
   const [end, setEnd] = useState(board.settings.endAddress ?? "");
   const [people, setPeople] = useState(board.people.map((p) => ({ id: p.id, name: p.name, dailyHours: String(p.dailyHours), weeklyHours: p.weeklyHours == null ? "" : String(p.weeklyHours), excluded: p.excluded })));
@@ -171,7 +172,7 @@ export function SettingsDialog({ board, isAdmin, onClose, onSaved }: { board: Bo
     <Dialog title="Routing and capacity" onClose={onClose} wide footer={<>
       <button type="button" className="dx-btn" onClick={onClose}>{isAdmin ? "Cancel" : "Close"}</button>
       {isAdmin && <button type="button" className="dx-btn dark" disabled={busy} onClick={() => run(async () => {
-        await api("/dispatch/settings", { method: "PUT", body: { routing, roadUrl: roadUrl.trim() || null, startAddress: start.trim(), endAddress: end.trim() } });
+        await api("/dispatch/settings", { method: "PUT", body: { routing, roadUrl: roadUrl.trim() || null, curbside, startAddress: start.trim(), endAddress: end.trim() } });
         await api("/dispatch/capacity", { method: "PUT", body: { employees: people.map((p) => ({ id: p.id, dailyHours: Number(p.dailyHours) || 0, weeklyHours: p.weeklyHours.trim() === "" ? null : Number(p.weeklyHours), excluded: p.excluded })) } });
         onSaved(); onClose();
       })}>{busy ? "Saving…" : "Save"}</button>}
@@ -182,6 +183,10 @@ export function SettingsDialog({ board, isAdmin, onClose, onSaved }: { board: Bo
         <label className="dx-radio"><input type="radio" checked={routing === "estimate"} onChange={() => setRouting("estimate")} /> <span><strong>Estimates</strong>: the straight line stretched to road length, at in-town speeds. Nothing leaves Crewdesk.</span></label>
         <label className="dx-radio"><input type="radio" checked={routing === "road"} onChange={() => setRouting("road")} /> <span><strong>Real roads</strong>: a routing server works out the drive, the line along the streets and turn-by-turn directions. Only map coordinates are sent to it, never names or addresses.</span></label>
         {routing === "road" && <label className="dx-field col">Routing server (OSRM-compatible)<input className="dx-input" value={roadUrl} onChange={(e) => setRoadUrl(e.target.value)} placeholder={DEFAULT_ROAD_URL} /><small className="dx-muted">Left empty, the public OpenStreetMap routing server is used. It's free and meant for light use; if it's down, Crewdesk falls back to estimates.</small></label>}
+        <label className={`dx-check-line${routing === "road" ? "" : " dx-muted"}`}>
+          <Check checked={curbside} disabled={!isAdmin || routing !== "road"} label="New routes arrive curbside" onChange={setCurbside} />
+          <span><strong>Curbside arrival</strong> on new routes: the drive is planned so the truck pulls up on each stop&apos;s own side of the street. It can add a little driving. Any one route can still be switched while you order it.{routing !== "road" && " Needs Real roads: estimates don't know which side of the street a stop is on."}</span>
+        </label>
       </fieldset>
       <fieldset className="dx-set" disabled={!isAdmin}>
         <legend>Where routes start and end</legend>

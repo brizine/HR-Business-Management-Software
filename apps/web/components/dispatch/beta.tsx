@@ -222,7 +222,7 @@ export function BetaDispatch() {
     if (oneRoute && picked.every((e) => e.route?.id === oneRoute.id)) return route.begin([], range.from, oneRoute);
     // Stops already on a route come first, in their saved order.
     const ordered = [...picked].sort((a, c) => (a.route && c.route ? a.route.id.localeCompare(c.route.id) || a.route.order - c.route.order : a.route ? -1 : c.route ? 1 : 0));
-    route.begin(ordered.map((e) => e.key), range.from);
+    route.begin(ordered.map((e) => e.key), range.from, undefined, !!b?.settings.curbside);
     setViewing(null);
   };
   const exitRoute = () => (route.draft?.dirty && (route.draft.id || route.draft.keys.length) ? setDialog({ kind: "discard", keys: [] }) : route.exit());

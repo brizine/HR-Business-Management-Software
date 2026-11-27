@@ -1,0 +1,1 @@
+ALTER TABLE "dispatch_routes" ADD COLUMN "curbside" boolean DEFAULT false NOT NULL;

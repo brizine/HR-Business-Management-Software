@@ -52,7 +52,7 @@ export async function dispatchSettings(companyId: string): Promise<DispatchSetti
     depot = at ? { address, lat: at.lat, lng: at.lng } : null;
     await db.update(companies).set({ dispatchSettings: { ...s, depot, depotTried: address } as Partial<DispatchSettings> }).where(eq(companies.id, companyId));
   }
-  return { routing: s.routing === "road" ? "road" : "estimate", roadUrl: s.roadUrl ?? null, start: s.start ?? null, end: s.end ?? null, depot };
+  return { routing: s.routing === "road" ? "road" : "estimate", roadUrl: s.roadUrl ?? null, curbside: !!s.curbside, start: s.start ?? null, end: s.end ?? null, depot };
 }
 
 export async function saveDispatchSettings(companyId: string, b: DispatchSettingsInput) {
@@ -66,7 +66,7 @@ export async function saveDispatchSettings(companyId: string, b: DispatchSetting
     if (!at) throw new HttpError(400, `Couldn't find the ${what} address on the map. Check it, or leave it empty to use the business address.`);
     return { address, lat: at.lat, lng: at.lng };
   };
-  const next = { ...s, routing: b.routing, roadUrl: b.roadUrl ?? null, start: await place(b.startAddress, s.start ?? null, "start"), end: await place(b.endAddress, s.end ?? null, "end") };
+  const next = { ...s, routing: b.routing, roadUrl: b.roadUrl ?? null, curbside: b.curbside ?? !!s.curbside, start: await place(b.startAddress, s.start ?? null, "start"), end: await place(b.endAddress, s.end ?? null, "end") };
   await db.update(companies).set({ dispatchSettings: next }).where(eq(companies.id, companyId));
   return dispatchSettings(companyId);
 }
@@ -133,7 +133,7 @@ async function routeLookup(companyId: string, o: { visitIds?: string[]; todoIds?
 export async function routesBetween(companyId: string, from: string, to: string) {
   const { routes } = await routeLookup(companyId, { from, to });
   return routes.map((r) => ({
-    id: r.id, date: r.date, crewId: r.crewId, startTime: r.startTime, pinnedFirst: r.pinnedFirst,
+    id: r.id, date: r.date, crewId: r.crewId, startTime: r.startTime, pinnedFirst: r.pinnedFirst, curbside: r.curbside,
     start: { kind: r.startKind, label: r.startLabel, lat: r.startLat, lng: r.startLng },
     end: { kind: r.endKind, label: r.endLabel, lat: r.endLat, lng: r.endLng },
     totalMeters: r.totalMeters ?? 0, totalDriveSeconds: r.totalDriveSeconds ?? 0,
@@ -279,11 +279,17 @@ async function resolvePoint(settings: DispatchSettings, p: RoutePointInput, whic
   return { kind: p.kind, label: p.label ?? null, lat: p.lat, lng: p.lng };
 }
 
-/** The drive into each stop, back to the end, and the totals. Stops with no location add no drive. */
-async function measure(settings: Pick<DispatchSettings, "routing" | "roadUrl">, start: Pt | null, stops: (Pt | null)[], end: Pt | null, o: { steps?: boolean } = {}) {
+/**
+ * The drive into each stop, back to the end, and the totals. Stops with no location add no drive.
+ * With `curbside`, each stop is reached on its own side of the street (the start and end, the shop
+ * or a home, from either side).
+ */
+async function measure(settings: Pick<DispatchSettings, "routing" | "roadUrl">, start: Pt | null, stops: (Pt | null)[], end: Pt | null, o: { steps?: boolean; curbside?: boolean } = {}) {
   const located = stops.map((p, i) => ({ p, i })).filter((x): x is { p: Pt; i: number } => !!x.p);
-  const chain: Pt[] = [...(start ? [start] : []), ...located.map((x) => x.p), ...(end && located.length ? [end] : [])];
-  const m = await measureLegs(settings, chain, o);
+  const closes = !!end && located.length > 0;
+  const chain: Pt[] = [...(start ? [start] : []), ...located.map((x) => x.p), ...(closes ? [end!] : [])];
+  const curb = o.curbside ? [...(start ? [false] : []), ...located.map(() => true), ...(closes ? [false] : [])] : undefined;
+  const m = await measureLegs(settings, chain, { steps: o.steps, curb });
   const legs: (Leg | null)[] = stops.map(() => null);
   const steps: (Step[] | null)[] = stops.map(() => null);
   located.forEach((x, n) => {
@@ -295,15 +301,17 @@ async function measure(settings: Pick<DispatchSettings, "routing" | "roadUrl">, 
   return {
     legs, endLeg, steps, endSteps: end && located.length ? m.steps?.[m.legs.length - 1] ?? null : null,
     totalMeters: all.reduce((s, l) => s + l.meters, 0), totalDriveSeconds: all.reduce((s, l) => s + l.seconds, 0),
-    geometry: m.geometry, measured: m.measured,
+    geometry: m.geometry, measured: m.measured, curbside: m.curbside,
   };
 }
 
 const onDay = (e: { date: string; endDate: string | null }, date: string) => e.date <= date && (e.endDate ?? e.date) >= date;
 
 /** A route before it's saved: the order (optimized when asked), each drive, the totals and the line to draw. */
-export async function previewRoute(companyId: string, b: { date: string; keys: string[]; start: RoutePointInput; end: RoutePointInput; optimize?: boolean; pinnedFirst?: boolean; locked?: string[]; steps?: boolean }, o: { estimateOnly?: boolean; anyDay?: boolean } = {}) {
+export async function previewRoute(companyId: string, b: { date: string; keys: string[]; start: RoutePointInput; end: RoutePointInput; optimize?: boolean; pinnedFirst?: boolean; locked?: string[]; steps?: boolean; curbside?: boolean }, o: { estimateOnly?: boolean; anyDay?: boolean } = {}) {
   const settings = await dispatchSettings(companyId);
+  // Left unsaid, the company's own choice for new routes.
+  const curbside = b.curbside ?? settings.curbside;
   const how = o.estimateOnly ? { routing: "estimate" as const, roadUrl: null } : settings;
   const events = await eventsFor(companyId, b.keys);
   // "What if these went on that day": work orders still on the waiting list or another day are fine to measure.
@@ -317,7 +325,7 @@ export async function previewRoute(companyId: string, b: { date: string; keys: s
     const pts = events.map(at);
     const located = pts.map((p, i) => ({ p, i })).filter((x): x is { p: Pt; i: number } => !!x.p);
     const all: Pt[] = [...(start ? [start] : []), ...located.map((x) => x.p), ...(end ? [end] : [])];
-    const matrix = await driveMatrix(how, all);
+    const matrix = await driveMatrix(how, all, curbside ? [...(start ? [false] : []), ...located.map(() => true), ...(end ? [false] : [])] : undefined);
     const col = new Map(located.map((x, n) => [x.i, n + (start ? 1 : 0)]));
     const idx = (i: number) => (i === START ? 0 : i === END ? all.length - 1 : col.get(i)!);
     const held = new Set(b.locked ?? []);
@@ -330,9 +338,11 @@ export async function previewRoute(companyId: string, b: { date: string; keys: s
     });
     order = seq.map((i) => events[i]);
   }
-  const m = await measure(how, start, order.map(at), end, { steps: b.steps });
+  const m = await measure(how, start, order.map(at), end, { steps: b.steps, curbside });
   return {
     date: b.date, keys: order.map((e) => e.key), start, end,
+    // What was asked for, and whether the drives really arrive that way (not on estimates, or where the server couldn't).
+    curbside, curbsideMeasured: m.curbside,
     stops: order.map((e, i) => ({ key: e.key, leg: m.legs[i], minutes: e.estMinutes, located: !!at(e), steps: m.steps[i] })),
     endLeg: m.endLeg, endSteps: m.endSteps, totalMeters: m.totalMeters, totalDriveSeconds: m.totalDriveSeconds, geometry: m.geometry, measured: m.measured,
     optimized: !!b.optimize, events: order,
@@ -373,7 +383,7 @@ export async function refreshRoutes(companyId: string, routeIds: string[], o: { 
     if (tIds.length) for (const x of await db.select({ id: todos.id, lat: properties.lat, lng: properties.lng }).from(todos).leftJoin(properties, eq(properties.id, todos.propertyId)).where(inArray(todos.id, tIds))) where.set(x.id, x.lat != null && x.lng != null ? { lat: x.lat, lng: x.lng } : null);
     const start = r.startKind !== "none" && r.startLat != null && r.startLng != null ? { lat: r.startLat, lng: r.startLng } : null;
     const end = r.endKind !== "none" && r.endLat != null && r.endLng != null ? { lat: r.endLat, lng: r.endLng } : null;
-    const m = await measure(how, start, stops.map((s) => where.get((s.visitId ?? s.todoId)!) ?? null), end);
+    const m = await measure(how, start, stops.map((s) => where.get((s.visitId ?? s.todoId)!) ?? null), end, { curbside: r.curbside });
     await db.transaction(async (tx) => {
       for (const [i, s] of stops.entries()) await tx.update(dispatchStops).set({ stopOrder: i + 1, driveSeconds: m.legs[i]?.seconds ?? null, driveMeters: m.legs[i]?.meters ?? null }).where(eq(dispatchStops.id, s.id));
       await tx.update(dispatchRoutes).set({ totalMeters: m.totalMeters, totalDriveSeconds: m.totalDriveSeconds, endMeters: m.endLeg?.meters ?? null, endSeconds: m.endLeg?.seconds ?? null, geometry: m.geometry, measured: m.measured, updatedAt: new Date() }).where(eq(dispatchRoutes.id, r.id));
@@ -541,14 +551,14 @@ export async function deleteEvents(companyId: string, keys: string[]) {
 
 async function writeRoute(tx: Tx, o: {
   companyId: string; by: string | null; id?: string; date: string; crewId: string | null; start: Point | null; end: Point | null; startKind: string; endKind: string;
-  startTime: string; pinnedFirst: boolean; keys: string[]; legs: (Leg | null)[]; endLeg: Leg | null; totalMeters: number; totalDriveSeconds: number; geometry: [number, number][] | null; measured: string;
+  startTime: string; pinnedFirst: boolean; curbside: boolean; keys: string[]; legs: (Leg | null)[]; endLeg: Leg | null; totalMeters: number; totalDriveSeconds: number; geometry: [number, number][] | null; measured: string;
 }) {
   const parsed = o.keys.map(parseEventKey);
   // Stops that were on other routes leave them.
   const elsewhere = await unrouteOthers(tx, parsed, o.id);
   const values = {
     date: o.date, crewId: o.crewId, startKind: o.startKind, startLabel: o.start?.label ?? null, startLat: o.start?.lat ?? null, startLng: o.start?.lng ?? null,
-    endKind: o.endKind, endLabel: o.end?.label ?? null, endLat: o.end?.lat ?? null, endLng: o.end?.lng ?? null, startTime: o.startTime, pinnedFirst: o.pinnedFirst,
+    endKind: o.endKind, endLabel: o.end?.label ?? null, endLat: o.end?.lat ?? null, endLng: o.end?.lng ?? null, startTime: o.startTime, pinnedFirst: o.pinnedFirst, curbside: o.curbside,
     totalMeters: o.totalMeters, totalDriveSeconds: o.totalDriveSeconds, endMeters: o.endLeg?.meters ?? null, endSeconds: o.endLeg?.seconds ?? null, geometry: o.geometry, measured: o.measured, updatedAt: new Date(),
   };
   let id = o.id;
@@ -595,18 +605,21 @@ const commonCrew = (events: { crewId: string | null }[]) => (events.length && ev
 export async function saveRoute(companyId: string, by: string, b: RouteSaveInput) {
   if (b.keys.length > DISPATCH_ROUTE_MAX) throw new HttpError(400, `A route is limited to ${DISPATCH_ROUTE_MAX} stops. Split it into smaller routes.`);
   if (new Set(b.keys).size !== b.keys.length) throw new HttpError(400, "A stop is on the route twice");
+  // Curbside arrival: what was chosen now; else what the saved route had; else the company's choice for new routes.
+  let curbside = b.curbside;
   if (b.id) {
-    const [r] = await db.select({ id: dispatchRoutes.id, date: dispatchRoutes.date }).from(dispatchRoutes).where(and(eq(dispatchRoutes.id, b.id), eq(dispatchRoutes.companyId, companyId)));
+    const [r] = await db.select({ id: dispatchRoutes.id, date: dispatchRoutes.date, curbside: dispatchRoutes.curbside }).from(dispatchRoutes).where(and(eq(dispatchRoutes.id, b.id), eq(dispatchRoutes.companyId, companyId)));
     if (!r) throw new HttpError(404, "That route isn't there any more. Someone may have changed it; reload the board.");
+    curbside ??= r.curbside;
   }
   const to = b.assign ? await checkAssignment(companyId, { crewId: b.assign.crewId, employeeIds: b.assign.employeeIds }) : null;
-  const p = await previewRoute(companyId, { date: b.date, keys: b.keys, start: b.start, end: b.end });
+  const p = await previewRoute(companyId, { date: b.date, keys: b.keys, start: b.start, end: b.end, curbside });
   const rows = await rowsFor(companyId, b.keys);
   const saved = await db.transaction(async (tx) => {
     if (to) await assignIn(tx, rows, to);
     return writeRoute(tx, {
       companyId, by, id: b.id, date: b.date, crewId: to ? to.crewId : commonCrew(p.events), start: p.start, end: p.end, startKind: b.start.kind, endKind: b.end.kind,
-      startTime: b.startTime, pinnedFirst: b.pinnedFirst, keys: p.keys, legs: p.stops.map((s) => s.leg), endLeg: p.endLeg,
+      startTime: b.startTime, pinnedFirst: b.pinnedFirst, curbside: p.curbside, keys: p.keys, legs: p.stops.map((s) => s.leg), endLeg: p.endLeg,
       totalMeters: p.totalMeters, totalDriveSeconds: p.totalDriveSeconds, geometry: p.geometry, measured: p.measured,
     });
   });
@@ -663,10 +676,10 @@ async function applyToFutureWeeks(companyId: string, by: string, o: { routeId: s
     }
     const start = route.startKind !== "none" && route.startLat != null && route.startLng != null ? { kind: route.startKind as "custom", label: route.startLabel, lat: route.startLat, lng: route.startLng } : { kind: route.startKind === "none" ? "none" as const : "company" as const };
     const end = route.endKind !== "none" && route.endLat != null && route.endLng != null ? { kind: route.endKind as "custom", label: route.endLabel, lat: route.endLat, lng: route.endLng } : { kind: route.endKind === "none" ? "none" as const : "company" as const };
-    const p = await previewRoute(companyId, { date: day.date, keys: day.keys, start, end }, { estimateOnly: true });
+    const p = await previewRoute(companyId, { date: day.date, keys: day.keys, start, end, curbside: route.curbside }, { estimateOnly: true });
     const again = await eventsFor(companyId, day.keys, false);
     const res = await db.transaction((tx) => writeRoute(tx, {
-      companyId, by, date: day.date, crewId: commonCrew(again), start: p.start, end: p.end, startKind: route.startKind, endKind: route.endKind, startTime: route.startTime, pinnedFirst: route.pinnedFirst,
+      companyId, by, date: day.date, crewId: commonCrew(again), start: p.start, end: p.end, startKind: route.startKind, endKind: route.endKind, startTime: route.startTime, pinnedFirst: route.pinnedFirst, curbside: route.curbside,
       keys: p.keys, legs: p.stops.map((s) => s.leg), endLeg: p.endLeg, totalMeters: p.totalMeters, totalDriveSeconds: p.totalDriveSeconds, geometry: p.geometry, measured: p.measured,
     }));
     await refreshRoutes(companyId, res.elsewhere, { estimateOnly: true });
@@ -682,7 +695,7 @@ async function applyToFutureWeeks(companyId: string, by: string, o: { routeId: s
  * the crew's route for the day becomes this order. With no crew, they lose their crew and come off
  * their routes ("No crew yet").
  */
-export async function setLane(companyId: string, by: string, b: { date: string; crewId: string | null; keys: string[] }) {
+export async function setLane(companyId: string, by: string, b: { date: string; crewId: string | null; keys: string[]; curbside?: boolean }) {
   if (!b.keys.length && !b.crewId) return { stops: 0 };
   const r = b.keys.length ? await rowsFor(companyId, b.keys) : { visitIds: [], todoIds: [], visitRows: [] as Visit[], todoRows: [] as Todo[] };
   if (r.todoRows.length) throw new HttpError(400, "Only work orders go in a crew's lane");
@@ -714,16 +727,17 @@ export async function setLane(companyId: string, by: string, b: { date: string; 
   }
   const start = keep && keep.startKind !== "company" ? { kind: keep.startKind as "custom", label: keep.startLabel, lat: keep.startLat, lng: keep.startLng } : { kind: "company" as const };
   const end = keep && keep.endKind !== "company" ? { kind: keep.endKind as "custom", label: keep.endLabel, lat: keep.endLat, lng: keep.endLng } : { kind: "company" as const };
-  const p = await previewRoute(companyId, { date: b.date, keys: b.keys, start, end });
+  // Curbside arrival: what was chosen now; else what the crew's route had; else the company's choice for new routes.
+  const p = await previewRoute(companyId, { date: b.date, keys: b.keys, start, end, curbside: b.curbside ?? keep?.curbside });
   const saved = await db.transaction(async (tx) => {
     if (existing.length > 1) await tx.delete(dispatchRoutes).where(inArray(dispatchRoutes.id, existing.slice(1).map((x) => x.id)));
     return writeRoute(tx, {
-      companyId, by, id: keep?.id, date: b.date, crewId: b.crewId, start: p.start, end: p.end, startKind: start.kind, endKind: end.kind, startTime: keep?.startTime ?? "08:00", pinnedFirst: keep?.pinnedFirst ?? false,
+      companyId, by, id: keep?.id, date: b.date, crewId: b.crewId, start: p.start, end: p.end, startKind: start.kind, endKind: end.kind, startTime: keep?.startTime ?? "08:00", pinnedFirst: keep?.pinnedFirst ?? false, curbside: p.curbside,
       keys: p.keys, legs: p.stops.map((s) => s.leg), endLeg: p.endLeg, totalMeters: p.totalMeters, totalDriveSeconds: p.totalDriveSeconds, geometry: p.geometry, measured: p.measured,
     });
   });
   await refreshRoutes(companyId, saved.elsewhere);
-  return { stops: p.keys.length, routeId: saved.id, totalDriveSeconds: p.totalDriveSeconds, totalMeters: p.totalMeters };
+  return { stops: p.keys.length, routeId: saved.id, totalDriveSeconds: p.totalDriveSeconds, totalMeters: p.totalMeters, curbside: p.curbside, curbsideMeasured: p.curbsideMeasured };
 }
 
 /** The next day that's a weekday and not one of the company's holidays. */
@@ -826,7 +840,7 @@ async function orderWith(companyId: string, o: { date: string; crewId: string; k
   // optimized); "Add to the end" moves the picked ones behind the others. Newcomers start at the end either way.
   const keys = o.routeOrder === "end" ? [...laneKeys.filter((k) => !picked.has(k)), ...laneKeys.filter((k) => picked.has(k)), ...joining] : [...laneKeys, ...joining];
   if (keys.length > DISPATCH_ROUTE_MAX) throw new HttpError(400, `A route is limited to ${DISPATCH_ROUTE_MAX} stops. Split the day between crews.`);
-  const preview = await previewRoute(companyId, { date: o.date, keys, ...laneEnds(route), optimize: o.routeOrder === "optimize", locked: lane.filter((e) => e.route?.locked).map((e) => e.key) }, { anyDay: true });
+  const preview = await previewRoute(companyId, { date: o.date, keys, ...laneEnds(route), optimize: o.routeOrder === "optimize", locked: lane.filter((e) => e.route?.locked).map((e) => e.key), curbside: route?.curbside }, { anyDay: true });
   return { keys: preview.keys, lane, route, preview };
 }
 

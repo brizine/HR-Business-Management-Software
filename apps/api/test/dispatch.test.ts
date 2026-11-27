@@ -39,6 +39,8 @@ const SPOTS: Record<string, { lat: number; lng: number }> = { a: { lat: 35.222, 
 let roadServer: Server;
 let roadUrl = "";
 const roadCalls: string[] = [];
+/** The pretend server can't bring a truck in curbside while this is on. */
+let refuseCurb = false;
 
 beforeAll(async () => {
   setPushTransport({ send: async (m) => m.map(() => ({ status: "ok" as const, id: "x" })) });
@@ -48,6 +50,7 @@ beforeAll(async () => {
     roadCalls.push(req.url ?? "");
     const n = (req.url ?? "").split("/driving/")[1]?.split("?")[0].split(";").length ?? 0;
     res.setHeader("content-type", "application/json");
+    if (refuseCurb && /approaches=[^&]*curb/.test(req.url ?? "")) { res.end(JSON.stringify({ code: "NoRoute" })); return; }
     if ((req.url ?? "").startsWith("/route/")) {
       res.end(JSON.stringify({ code: "Ok", routes: [{ geometry: { coordinates: [[-97.465, 35.26], [-97.445, 35.222]] }, legs: Array.from({ length: n - 1 }, () => ({ distance: 1000, duration: 100, steps: [{ name: "W Gray St", distance: 400, maneuver: { type: "turn", modifier: "left" } }, { name: "", distance: 0, maneuver: { type: "arrive" } }] })) }] }));
     } else {
@@ -472,6 +475,53 @@ describe("settings", () => {
     expect(down.stops[0].leg.seconds).toBeGreaterThan(0);
     await call("PUT", "/dispatch/settings", "owner", { routing: "estimate" });
   });
+  it("curbside arrival: brings the truck in on each stop's side of the street, and the route remembers the choice", async () => {
+    await call("PUT", "/dispatch/settings", "owner", { routing: "road", roadUrl });
+    const day = plus(today, 14);
+    const keys = (await board(day)).events.map((e: any) => e.key);
+    // Each stop from its own side; the shop at either end from any side. The best order is worked out the same way.
+    const side = `approaches=${["unrestricted", ...keys.map(() => "curb"), "unrestricted"].join(";")}`;
+    roadCalls.length = 0;
+    const p = (await call("POST", "/dispatch/routes/preview", "mgr", { date: day, keys, curbside: true, optimize: true })).body;
+    expect(p).toMatchObject({ measured: "road", curbside: true, curbsideMeasured: true });
+    expect(roadCalls.find((u) => u.startsWith("/route/"))).toContain(side);
+    expect(roadCalls.find((u) => u.startsWith("/table/"))).toContain(side);
+    // Not asked for: the server is asked the ordinary way.
+    roadCalls.length = 0;
+    expect((await call("POST", "/dispatch/routes/preview", "mgr", { date: day, keys })).body).toMatchObject({ measured: "road", curbside: false, curbsideMeasured: false });
+    expect(roadCalls.join(" ")).not.toContain("approaches");
+    // Where the server can't do it, the route is still measured by road, and says it isn't curbside.
+    refuseCurb = true;
+    expect((await call("POST", "/dispatch/routes/preview", "mgr", { date: day, keys, curbside: true, optimize: true })).body).toMatchObject({ measured: "road", curbside: true, curbsideMeasured: false });
+    refuseCurb = false;
+
+    // Saved on the route. Saving it again without saying keeps the choice, and it's measured curbside from then on.
+    const saved = (await board(day)).routes[0];
+    expect(saved.curbside).toBe(false);
+    const routeKeys = saved.stops.map((x: any) => x.key);
+    await call("POST", "/dispatch/routes", "mgr", { id: saved.id, date: day, keys: routeKeys, curbside: true });
+    expect((await board(day)).routes[0]).toMatchObject({ id: saved.id, curbside: true });
+    roadCalls.length = 0;
+    await call("POST", "/dispatch/routes", "mgr", { id: saved.id, date: day, keys: [...routeKeys].reverse() });
+    expect((await board(day)).routes[0].curbside).toBe(true);
+    expect(roadCalls.some((u) => u.startsWith("/route/") && u.includes("curb"))).toBe(true);
+    roadCalls.length = 0;
+    await call("GET", `/dispatch/routes/${saved.id}/directions`, "mgr");
+    expect(roadCalls[0]).toContain("curb");
+    // Switched off on the route again.
+    await call("POST", "/dispatch/routes", "mgr", { id: saved.id, date: day, keys: routeKeys, curbside: false });
+    expect((await board(day)).routes[0].curbside).toBe(false);
+
+    // The company's choice for new routes: an admin's to set; saving other settings leaves it alone.
+    expect((await call("PUT", "/dispatch/settings", "mgr", { routing: "road", curbside: true })).status).toBe(403);
+    expect((await call("PUT", "/dispatch/settings", "owner", { routing: "road", roadUrl, curbside: true })).body.curbside).toBe(true);
+    expect((await call("GET", "/dispatch", "mgr")).body.settings.curbside).toBe(true);
+    expect((await call("POST", "/dispatch/routes/preview", "mgr", { date: day, keys })).body).toMatchObject({ curbside: true, curbsideMeasured: true });
+    expect((await call("PUT", "/dispatch/settings", "owner", { routing: "estimate" })).body.curbside).toBe(true);
+    // On estimates there are no streets to pick a side of: the choice is kept for when roads are on, and nothing claims to be curbside.
+    expect((await call("POST", "/dispatch/routes/preview", "mgr", { date: day, keys, curbside: true })).body).toMatchObject({ measured: "estimate", curbside: true, curbsideMeasured: false });
+    expect((await call("PUT", "/dispatch/settings", "owner", { routing: "estimate", curbside: false })).body.curbside).toBe(false);
+  });
 });
 
 describe("the Dispatch board from the plan: the scheduled work as a list, edited like the waiting list", () => {
@@ -544,6 +594,27 @@ describe("the Dispatch board from the plan: the scheduled work as a list, edited
     const moved = (await list()).routes[0].stops.map((x: any) => x.key);
     expect(moved.slice(2)).toEqual([before[0], before[2]]);
     for (const k of [before[0], before[2]]) await call("POST", "/dispatch/lock", "mgr", { key: k, locked: false });
+  });
+  it("Route stops: a crew's day in the order given, with curbside arrival kept on its route through later changes", async () => {
+    const before = (await list()).routes[0];
+    expect(before.curbside).toBe(false);
+    const order = [...before.stops.map((x: any) => x.key)].reverse();
+    // The order is exactly what was sent (manual routing), and the choice is saved with it.
+    const r = (await call("POST", "/dispatch/lane", "mgr", { date: day(), crewId: before.crewId, keys: order, curbside: true })).body;
+    expect(r).toMatchObject({ stops: order.length, curbside: true });
+    const after = (await list()).routes[0];
+    expect(after).toMatchObject({ id: before.id, curbside: true });
+    expect(after.stops.map((x: any) => x.key)).toEqual(order);
+    // Dragging a row, optimizing the crew's day or re-measuring it later doesn't lose the choice.
+    await call("POST", "/dispatch/lane", "mgr", { date: day(), crewId: before.crewId, keys: before.stops.map((x: any) => x.key) });
+    expect((await list()).routes[0].curbside).toBe(true);
+    await edit({ visitIds: order.map((k: string) => k.slice(2)), to: "board", date: day(), routeOrder: "optimize" });
+    expect((await list()).routes[0].curbside).toBe(true);
+    // And off again.
+    await call("POST", "/dispatch/lane", "mgr", { date: day(), crewId: before.crewId, keys: (await list()).routes[0].stops.map((x: any) => x.key), curbside: false });
+    expect((await list()).routes[0].curbside).toBe(false);
+    // The board is told the company's choice for new routes, to start the tick box from.
+    expect((await list()).curbside).toBe(false);
   });
 
   it("moves work orders to another crew at the end of its route, keeps the order, or keeps the crew and changes the day", async () => {

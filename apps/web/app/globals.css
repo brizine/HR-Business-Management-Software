@@ -2648,3 +2648,25 @@ button.hp-card:hover { border-color: var(--primary); }
 .tip.left::before { left: auto; right: -5px; transform: rotate(135deg); }
 @keyframes tip-in { from { opacity: 0; transform: translateY(2px); } }
 @media print { .tip { display: none; } }
+
+/* ───────────── Route stops (components/dispatch/route-stops.tsx) ───────────── */
+.rs { gap: 10px; }
+.rs-head { gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.rs-crew { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+.rs-crew select { width: auto; min-width: 180px; }
+.rs-tools { gap: 8px; flex-wrap: wrap; align-items: center; }
+.rs-curb { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; white-space: nowrap; cursor: pointer; }
+.rs-curb input { width: auto; min-height: 0; }
+.rs-curb.off { color: var(--muted); cursor: help; }
+.rs-note { margin: 0; font-size: 13px; }
+.rs-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 10px; max-height: min(52vh, 560px); overflow-y: auto; }
+.rs-stop { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.rs-stop:last-child { border-bottom: 0; }
+.rs-stop.done { opacity: .6; }
+.rs-num { flex: none; width: 24px; height: 24px; border-radius: 50%; color: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.rs-main { flex: 1; min-width: 0; }
+.rs-sub { display: block; font-size: 12px; }
+.rs-when { flex: none; text-align: right; font-size: 13px; white-space: nowrap; }
+.rs-lock { flex: none; color: var(--muted); display: inline-flex; }
+.rs-total { font-size: 14px; min-height: 20px; }
+@media (max-width: 640px) { .rs-stop { flex-wrap: wrap; } .rs-when { width: 100%; text-align: left; padding-left: 72px; } }
