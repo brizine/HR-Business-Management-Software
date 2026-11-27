@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { PageHead } from "@/components/ui";
 import { DocTemplatesTab, DocumentsTab } from "@/components/marketing-docs";
 
-/** Marketing → Documents, laid out like Homeworks: Documents | Document Templates. */
+/** Resources → Documents, laid out like Homeworks: Documents | Document Templates. */
 export default function MarketingDocsPage() {
   const tab = useSearchParams().get("tab") === "templates" ? "templates" : "documents";
   return (

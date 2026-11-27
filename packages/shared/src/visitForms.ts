@@ -2,7 +2,7 @@ import { z } from "zod";
 import { designId } from "./emailDesign";
 
 /**
- * Marketing → Visit Forms, like Homeworks: a form the crew fills in on a work order (a service
+ * Resources → Visit Forms, like Homeworks: a form the crew fills in on a work order (a service
  * checklist, a quality check, notes on conditions), built from sections of short text, long text,
  * checkbox and dropdown questions, with a signature box if wanted. A form is picked on the work
  * orders it's for (or attached to every new one), each work order gets its own copy, and the

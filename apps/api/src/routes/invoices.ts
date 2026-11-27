@@ -139,7 +139,7 @@ export async function sendInvoice(companyId: string, invoiceId: string, body: { 
     const copies = (await db.select({ email: customerContacts.email }).from(customerContacts)
       .where(and(eq(customerContacts.customerId, cust.id), eq(customerContacts.getsInvoices, true), isNotNull(customerContacts.email))))
       .map((c) => c.email!).filter((e) => e !== to);
-    // The invoice template chosen in Marketing → Templates (Crewdesk's own unless another was picked).
+    // The invoice template chosen in Resources → Templates (Crewdesk's own unless another was picked).
     const chosen = await messageTemplates(companyId, "invoice");
     const tpl = chosen.email ?? { id: null, subject: systemTemplate("invoice_email")!.subject!, body: systemTemplate("invoice_email")!.body };
     await sendTemplateEmail({

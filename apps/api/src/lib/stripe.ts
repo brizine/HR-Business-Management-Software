@@ -202,7 +202,7 @@ async function recordAgain(companyId: string, piId: string) {
   return { status: p?.status ?? "unknown", paymentId: p?.id };
 }
 
-/** The "payment received" email (and text, for customers who get texts), from the receipt template in Marketing → Templates. */
+/** The "payment received" email (and text, for customers who get texts), from the receipt template in Resources → Templates. */
 async function sendReceipt(companyId: string, invoiceId: string, paymentId: string | undefined) {
   if (!paymentId) return;
   const [row] = await db.select({ inv: invoices, cust: customers }).from(invoices).innerJoin(customers, eq(customers.id, invoices.customerId)).where(eq(invoices.id, invoiceId));

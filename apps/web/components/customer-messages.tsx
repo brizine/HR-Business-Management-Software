@@ -25,7 +25,7 @@ const NEEDS_WORDS: Record<string, string> = { invoice: "an invoice", estimate: "
 export function EmailComposer({ selection, audience, onClose, onSent }: { selection: Selection; audience: string; onClose: () => void; onSent: (m: { id: string; sending: number }) => void }) {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  // An email template from Marketing → Templates, sent as designed, instead of a typed message.
+  // An email template from Resources → Templates, sent as designed, instead of a typed message.
   const [templateId, setTemplateId] = useState("");
   const templates = useApi<{ id: string; name: string; channel: string; audience: string }[]>("/templates");
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -73,7 +73,7 @@ export function EmailComposer({ selection, audience, onClose, onSent }: { select
           </label>
           {templateId ? (
             <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-              It goes out as designed in <Link href="/templates">Marketing → Templates</Link>, filled in for each customer, with your company details and an unsubscribe link underneath.
+              It goes out as designed in <Link href="/templates">Resources → Templates</Link>, filled in for each customer, with your company details and an unsubscribe link underneath.
               {preview?.needs?.length ? <span className="bad-text"> This template has fill-ins about {preview.needs.map((k) => NEEDS_WORDS[k] ?? k).join(" and ")}; they&apos;ll be blank in an email to a list.</span> : null}
             </p>
           ) : (<>

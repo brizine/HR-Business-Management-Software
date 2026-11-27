@@ -265,7 +265,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const [u] = await db.update(estimates).set({ status: "sent", token: e.token ?? randomToken(24), sentAt: new Date(), emailedTo: to, updatedAt: new Date() })
       .where(eq(estimates.id, e.id)).returning();
     const pdf = await pdfFor(u);
-    // The estimate template chosen in Marketing → Templates (Crewdesk's own unless another was picked).
+    // The estimate template chosen in Resources → Templates (Crewdesk's own unless another was picked).
     const chosen = await messageTemplates(companyId, "estimate");
     const tpl = chosen.email ?? { id: null, subject: systemTemplate("estimate_email")!.subject!, body: systemTemplate("estimate_email")!.body };
     await sendTemplateEmail({

@@ -130,7 +130,7 @@ describe("customer emails", () => {
     expect((await call("POST", `/customer-messages/${r.body.id}/stop`, "office")).status).toBe(400);
   });
 
-  it("sends an email template from Marketing → Templates to the list, as designed", async () => {
+  it("sends an email template from Resources → Templates to the list, as designed", async () => {
     failFor = null;
     await pool.query("update customers set email_opt_out_at = null where id = any($1)", [[ID.ann, ID.bob]]);
     const design = { v: 1, p: { width: 600 }, rows: [{ id: "r", p: {}, columns: [{ id: "c", span: 12, p: {}, blocks: [

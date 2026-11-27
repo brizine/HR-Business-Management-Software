@@ -15,7 +15,7 @@ import type { Selection } from "./customer-messages";
 import { Icon } from "./icons";
 
 /**
- * Marketing → Documents, laid out like Homeworks: the form on the left (template, name, header,
+ * Resources → Documents, laid out like Homeworks: the form on the left (template, name, header,
  * content), the list on the right, and pop-ups to email or print a document for chosen customers.
  */
 
@@ -636,7 +636,7 @@ export function DocumentSender({ selection, audience, onClose, onSent }: { selec
           </label>
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>
             {docs.data && !docs.data.length ? "You haven't written any documents yet. " : ""}
-            Documents are written in <Link href="/docs">Marketing → Documents</Link>.
+            Documents are written in <Link href="/docs">Resources → Documents</Link>.
           </p>
           <label>Email Template
             <select value={emailTemplate} onChange={(e) => setEmailTemplate(e.target.value)} aria-label="Email Template">

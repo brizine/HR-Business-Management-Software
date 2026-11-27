@@ -21,7 +21,7 @@ export interface EmailMessage {
   fromName?: string;
   cc?: string[];
   /**
-   * A customer email: logged with the company, customer and template (Marketing → Sent / History).
+   * A customer email: logged with the company, customer and template (Resources → Templates → Sent / History).
    * `keepBody` saves the plain-text message too; `opens` adds a tracking image to count opens.
    */
   track?: { companyId: string; customerId?: string | null; templateId?: string | null; keepBody?: boolean; opens?: boolean };

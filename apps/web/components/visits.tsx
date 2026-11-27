@@ -31,7 +31,7 @@ export interface Visit {
   invoice: { id: string; number: number | null; status: string } | null;
   lines: VisitLine[]; assignees: { id: string; firstName: string; lastName: string }[];
   finishedBy: string | null; createdBy: string | null;
-  /** Its visit forms (Marketing → Visit Forms), and whether each has been submitted. */
+  /** Its visit forms (Resources → Visit Forms), and whether each has been submitted. */
   forms?: WorkOrderForm[];
   /** The waiting-list window (see the Waiting list page). */
   releaseOn?: string | null; dueBy?: string | null; minDaysAfterLast?: number | null; priority?: Priority; windowStart?: string | null; windowEnd?: string | null;

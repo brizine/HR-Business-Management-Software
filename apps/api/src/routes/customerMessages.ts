@@ -23,7 +23,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
   app.addHook("preHandler", requireRole("manager", AREA));
 
-  /** The email template picked instead of writing a message (one for customers, from Marketing → Templates). */
+  /** The email template picked instead of writing a message (one for customers, from Resources → Templates). */
   const pickedTemplate = async (companyId: string, raw: Record<string, unknown>) => {
     if (!raw.templateId) return null;
     const id = parse(z.string().uuid(), raw.templateId);

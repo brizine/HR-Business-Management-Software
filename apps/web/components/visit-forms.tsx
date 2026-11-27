@@ -15,7 +15,7 @@ import { Icon } from "./icons";
 import { shrink } from "./visit-files";
 
 /**
- * Marketing → Visit Forms, laid out like Homeworks: the forms list, the form builder (sections of
+ * Resources → Visit Forms, laid out like Homeworks: the forms list, the form builder (sections of
  * questions, a signature box, attach to every new work order or by service), the preview, and the
  * form as the crew fills it in on a work order. Crewdesk adds required questions, more kinds of
  * question, answers that tag or make a to-do, a PDF and an optional copy to the customer, a
@@ -255,7 +255,7 @@ export function FormView({ def, answers, signature, signatures = {}, onAnswers, 
 
 /* ───────────── The list ───────────── */
 
-/** Marketing → Visit Forms: Homeworks' table (Form Name, Last Modified, linked work orders, Auto Attached, Actions). */
+/** Resources → Visit Forms: Homeworks' table (Form Name, Last Modified, linked work orders, Auto Attached, Actions). */
 export function VisitFormsList() {
   const list = useApi<VisitFormRow[]>("/visit-forms");
   const [del, setDel] = useState<VisitFormRow | null>(null);
@@ -456,7 +456,7 @@ export function FormBuilder({ form }: { form?: VisitFormFull }) {
       </div>
       <label className="hwf-check"><input type="checkbox" checked={!!def.mustSubmit} onChange={(e) => setDef((d) => ({ ...d, mustSubmit: e.target.checked }))} /> Must be submitted before the work order can be marked Completed</label>
       <label className="hwf-check"><input type="checkbox" checked={!!def.emailCopy} onChange={(e) => setDef((d) => ({ ...d, emailCopy: e.target.checked }))} /> Email the customer a copy when the work order is completed</label>
-      {def.emailCopy && <p className="muted hwf-note hwf-indent">The copy goes as a PDF with the “Visit form copy (Crewdesk)” email, which you can reword under <Link href="/templates">Marketing → Templates</Link>. Leave this off and a copy can still be sent by hand from any submitted form.</p>}
+      {def.emailCopy && <p className="muted hwf-note hwf-indent">The copy goes as a PDF with the “Visit form copy (Crewdesk)” email, which you can reword under <Link href="/templates">Resources → Templates</Link>. Leave this off and a copy can still be sent by hand from any submitted form.</p>}
       {form && form.linked > 0 && <p className="muted hwf-note">On {form.linked} work order{form.linked === 1 ? "" : "s"}{form.submitted ? `, submitted on ${form.submitted}` : ""}. Saving changes the copies that haven&apos;t been submitted; submitted ones stay as they were answered.</p>}
       {save.error && <div className="hwf-error" role="alert">{save.error}</div>}
       {saved && <div className="hwd-success" role="status"><div>{saved}</div><button type="button" aria-label="Close" onClick={() => setSaved(null)}>×</button></div>}
@@ -524,7 +524,7 @@ export function VisitFormsPicker({ value, onChange, attached = [], serviceIds = 
   // A form that was on it has been taken off: Homeworks' notice.
   const takenOff = attached.some((a) => a.formId && !picked.includes(a.formId));
   const kept = attached.filter((a) => a.submitted && (!a.formId || !picked.includes(a.formId)));
-  if (list.data && !forms.length && !attached.length) return <p className="muted" style={{ margin: 0 }}>No visit forms yet. Make one on <Link href="/visit-forms">Marketing → Visit Forms</Link>.</p>;
+  if (list.data && !forms.length && !attached.length) return <p className="muted" style={{ margin: 0 }}>No visit forms yet. Make one on <Link href="/visit-forms">Resources → Visit Forms</Link>.</p>;
   return (
     <div className="hwf-picker" ref={wrap}>
       {takenOff && <div className="hwf-alert" role="status"><strong>Any Unfilled forms will be removed from visit event.</strong> Saved form will remain.</div>}
@@ -681,7 +681,7 @@ interface SubmittedRow {
   workOrder: { number: number; title: string; date: string | null; status: string }; customer: { id: string; name: string }; address: string;
 }
 
-/** Marketing → Visit Forms → Submitted: every submitted form, narrowed by form, dates, who and words; open one, or export the list. */
+/** Resources → Visit Forms → Submitted: every submitted form, narrowed by form, dates, who and words; open one, or export the list. */
 export function SubmittedForms({ customerId }: { customerId?: string }) {
   const filters = useApi<{ names: string[]; people: { id: string; name: string }[] }>("/visit-forms/submitted/filters");
   const [name, setName] = useState("");

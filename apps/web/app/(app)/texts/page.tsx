@@ -5,7 +5,7 @@ import { PageHead } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { SendTextsTab, TextErrorsTab, TextMessagesTab } from "@/components/texting";
 
-/** Homeworks' tabs, in its order. Text Message Templates opens Marketing → Templates, where the text templates are kept. */
+/** Homeworks' tabs, in its order. Text Message Templates opens Resources → Templates, where the text templates are kept. */
 const TABS = [
   ["messages", "Text Messages", "/texts"],
   ["send", "Send Text Messages", "/texts?tab=send"],
@@ -13,7 +13,7 @@ const TABS = [
   ["errors", "Error Log", "/texts?tab=errors"],
 ] as const;
 
-/** Marketing → Text, laid out like Homeworks: conversations by text, sending to one or many, and what didn't go. */
+/** Resources → Text, laid out like Homeworks: conversations by text, sending to one or many, and what didn't go. */
 export default function Texts() {
   const params = useSearchParams();
   const { can } = useAuth();

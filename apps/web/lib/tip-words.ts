@@ -146,24 +146,24 @@ export const TIPS_TABS: Record<string, string> = {
   "/customers": "Everyone you work for: find, filter, add, email or text them",
   "/properties": "The addresses you service, with lawn sizes, gate codes and notes",
   "/customers/messages": "Every email sent to a list of customers at once: how many went, who was skipped, and the email itself",
-  // Marketing → Automations
+  // Resources → Automations
   "/automations": "Emails, texts and to-dos that send themselves when something happens",
   "/automations?tab=automations": "One trigger, one action: an email, text or to-do that sends itself when something happens",
   "/automations?tab=sequences": "A chain of steps after a trigger, with waits between them",
   "/automations?tab=sequence-history": "Every step a sequence has queued: when it was added, scheduled and sent",
   "/automations?tab=review": "Sequence steps waiting for your OK before they go out",
   "/automations?tab=history": "What automations did: each email, text or to-do, and anything skipped",
-  "/templates?tab=text": "The wording of your text messages (opens Marketing → Templates)",
-  "/templates?tab=email": "The designs of your emails (opens Marketing → Templates)",
+  "/templates?tab=text": "The wording of your text messages (opens Resources → Templates)",
+  "/templates?tab=email": "The designs of your emails (opens Resources → Templates)",
   "/templates?tab=history": "Every email and text Crewdesk has sent",
-  // Marketing → Documents
+  // Resources → Documents
   "/docs": "Letters and forms made for customers: open, email or print them",
   "/docs?tab=documents": "Letters and forms made for customers: open, email or print them",
   "/docs?tab=templates": "The starting points for letters and forms: write or change them here",
-  // Marketing → Visit Forms
+  // Resources → Visit Forms
   "/visit-forms": "The checklists and questions crews fill in: build and change them here",
   "/visit-forms?tab=submitted": "Everything the crews have filled in, to read, search and export",
-  // Marketing → Text
+  // Resources → Text
   "/texts": "Conversations by text with customers and your team",
   "/texts?tab=send": "Write a text to one person or to many at once",
   "/texts?tab=errors": "Texts that didn't go through, and the reason for each",
@@ -220,9 +220,9 @@ export const TIPS_NAV: Record<string, string> = {
   settings: "Your account, the company's details and how Crewdesk is set up",
   notifications: "Your alerts, and which ones reach you by phone or email",
   schedule: "Calendar, dispatch, work orders, the waiting list and to-dos",
-  marketing: "Templates, automations, documents, visit forms and texting",
+  marketing: "Kept for what's coming: your website and other marketing tools",
   billing: "Invoices, estimates and the sales tax report",
-  resources: "The price list, chemical tracking, custom fields and tags",
+  resources: "The price list, chemical tracking, custom fields, tags, templates, automations, documents, visit forms and texting",
   field: "Property Measure and the Spray Mix Calculator",
   fleet: "Assets, repair orders and inspections",
   reports: "Operations reports",
@@ -301,7 +301,7 @@ export const TIPS_BY_PAGE: Record<string, Record<string, string>> = {
   customers: {
     customers: chip("active customers"), leads: chip("leads: people you haven't started work for yet"), cancelled: chip("cancelled customers"), all: "Show every customer, whatever their status",
     send: "Email or text the customers on this list, or the ones you ticked",
-    "document: email or print letters": "Send a letter from Marketing → Documents to these customers, by email or printed",
+    "document: email or print letters": "Send a letter from Resources → Documents to these customers, by email or printed",
     "text: copy their phone numbers": "List these customers' mobile numbers to copy or download (texting isn't connected yet)",
     "bulk emails sent": "See every email sent to a list of customers, and how each went",
     "sample customers": "Add or remove ten made-up customers to practise with",
@@ -497,6 +497,8 @@ export const TIPS_BY_PAGE: Record<string, Record<string, string>> = {
   },
   attendance: { calendar: "See everyone's days on a calendar, colored by how each one went", report: "Lates, absences and points for everyone, for a range of dates", "rules & settings": "What counts as late or absent, and how many points each is worth" },
   onboarding: { task: "Add a step to this checklist" },
+  // The Marketing page only points to where its old pages went.
+  marketing: { templates: TIPS_NAV.templates, automations: TIPS_NAV.automations, documents: TIPS_NAV.documents, "visit forms": TIPS_NAV["visit forms"], text: TIPS_NAV.text },
   todos: {
     "categories and off-seasons · add new ones from the to-do form": "Show or hide your to-do categories and off-seasons, to rename or remove them",
     return: "Go back to where you came from",

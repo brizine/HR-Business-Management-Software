@@ -15,7 +15,7 @@ import { parseSelection, selectedIds } from "./customers";
 const AREA = "customers" as const;
 
 /**
- * Marketing → Documents (like Homeworks): documents and document templates with fill-ins, the
+ * Resources → Documents (like Homeworks): documents and document templates with fill-ins, the
  * letterhead, a document's history, and emailing or printing it for chosen customers.
  */
 const routes: FastifyPluginAsync = async (app) => {

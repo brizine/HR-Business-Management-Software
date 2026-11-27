@@ -3,7 +3,7 @@ import Link from "next/link";
 import { PageHead } from "@/components/ui";
 import { FormBuilder } from "@/components/visit-forms";
 
-/** Marketing → Visit Forms → New Form. */
+/** Resources → Visit Forms → New Form. */
 export default function NewVisitFormPage() {
   return (
     <div className="hw hwf" data-lkeep="">

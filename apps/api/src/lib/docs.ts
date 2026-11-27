@@ -10,7 +10,7 @@ import { billToLines, type PdfCompany } from "./invoicePdf";
 import { storage } from "./storage";
 import { cleanEmailHtml, customerTemplateVars, renderTemplateEmail, sendTemplateEmail, templateVars } from "./templates";
 
-/** Marketing → Documents: the letters for chosen customers, emailing them, previews, the history and the Homeworks import. */
+/** Resources → Documents: the letters for chosen customers, emailing them, previews, the history and the Homeworks import. */
 
 export type DocRow = typeof marketingDocs.$inferSelect;
 

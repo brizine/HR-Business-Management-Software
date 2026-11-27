@@ -117,7 +117,7 @@ async function nextNumber(companyId: string) {
   return n + 1;
 }
 
-/** Marketing → Automations: automations and sequences, Review, history, the customer tab, and the Homeworks import. */
+/** Resources → Automations: automations and sequences, Review, history, the customer tab, and the Homeworks import. */
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
   app.addHook("preHandler", requireRole("manager", AREA));

@@ -6,7 +6,7 @@ import { PageHead } from "@/components/ui";
 import { AutomationHistoryTab, AutomationsTab, ReviewTab, SequenceHistoryTab } from "@/components/automations";
 import { SequencesTab } from "@/components/automation-sequences";
 
-/** Homeworks' tabs, in its order. The two template tabs open Marketing → Templates, as they open their own page there. */
+/** Homeworks' tabs, in its order. The two template tabs open Resources → Templates, as they open their own page there. */
 const TABS = [
   ["automations", "Automations", "/automations?tab=automations"],
   ["sequences", "Sequence Automations", "/automations?tab=sequences"],
@@ -17,7 +17,7 @@ const TABS = [
   ["history", "Automation History", "/automations?tab=history"],
 ] as const;
 
-/** Marketing → Automations, laid out like Homeworks. */
+/** Resources → Automations, laid out like Homeworks. */
 export default function AutomationsPage() {
   const params = useSearchParams();
   const tab = params.get("tab") || "automations";

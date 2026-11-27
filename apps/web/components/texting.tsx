@@ -15,7 +15,7 @@ import { Icon } from "./icons";
 import { TagMenu } from "./templates";
 
 /**
- * Texting from the company's own number (Talkroute), laid out like Homeworks' Marketing → Text:
+ * Texting from the company's own number (Talkroute), laid out like Homeworks' Resources → Text:
  * Text Messages (every conversation, with the one that's open beside the list), Send Text Messages
  * (to customers, groups, the team, crews or a number), and the Error Log. Also the connection on
  * Settings → Integrations, with who's told when a text comes in, and a customer's texts on their page.
@@ -75,7 +75,7 @@ export function TextingCard() {
     <div className="card stack">
       <div>
         <h2 style={{ margin: 0 }}>Texting (Talkroute)</h2>
-        <p className="muted" style={{ margin: "4px 0 0" }}>Text customers from your Talkroute number, so they keep texting the number they know. Conversations are on <Link href="/texts">Marketing → Text</Link> and each customer&apos;s page, and the people you pick are told on their phones when a text comes in.</p>
+        <p className="muted" style={{ margin: "4px 0 0" }}>Text customers from your Talkroute number, so they keep texting the number they know. Conversations are on <Link href="/texts">Resources → Text</Link> and each customer&apos;s page, and the people you pick are told on their phones when a text comes in.</p>
       </div>
       <ErrorBox error={s.error} />
       {d?.connected ? (
@@ -143,7 +143,7 @@ function NotifyPicker({ settings, onSaved }: { settings: Settings; onSaved: () =
       <div>
         <h3 style={{ margin: 0, fontSize: 15 }}>Who&apos;s told when a text comes in</h3>
         <p className="muted" style={{ margin: "2px 0 0", fontSize: 13 }}>
-          Each person ticked gets a notification on their phone (and in their Crewdesk inbox) for every incoming text, and can read and answer texts on Marketing → Text and in the phone app, even if they aren&apos;t a Customers &amp; billing manager.
+          Each person ticked gets a notification on their phone (and in their Crewdesk inbox) for every incoming text, and can read and answer texts on Resources → Text and in the phone app, even if they aren&apos;t a Customers &amp; billing manager.
           {!settings.notify.picked && " Nobody is ticked yet, so the Customers & billing managers are told."}
         </p>
       </div>

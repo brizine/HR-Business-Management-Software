@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Email designs: what the email template builder (Marketing → Templates) makes. A design is rows,
+ * Email designs: what the email template builder (Resources → Templates) makes. A design is rows,
  * each with one or more columns, each holding content blocks (title, paragraph, image, button…),
  * plus page settings — the same shape Homeworks' builder uses, so its templates open as blocks.
  * `renderDesign` turns one into email-safe HTML (tables and inline styles, columns that stack on a

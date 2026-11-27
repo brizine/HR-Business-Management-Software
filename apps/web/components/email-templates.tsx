@@ -15,7 +15,7 @@ import { Icon } from "./icons";
 import type { Template } from "./templates";
 
 /**
- * Marketing → Templates → Email Templates, laid out like Homeworks: the Templates List on top
+ * Resources → Templates → Email Templates, laid out like Homeworks: the Templates List on top
  * (edit, delete, copy), then Template Name, Subject (with Insert Tags) and the builder, with
  * Create / Update Template underneath. Sent / History is the second tab.
  */

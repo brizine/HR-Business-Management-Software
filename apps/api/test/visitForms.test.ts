@@ -1,4 +1,4 @@
-/** Marketing → Visit Forms: building forms, putting them on work orders (picked, automatic, series), the crew filling them in, and what a change or a delete does. */
+/** Resources → Visit Forms: building forms, putting them on work orders (picked, automatic, series), the crew filling them in, and what a change or a delete does. */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";

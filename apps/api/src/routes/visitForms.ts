@@ -10,7 +10,7 @@ import { answerPairs, formUse, refreshUnfilled, submittedForms, type SubmittedFi
 const AREA = "customers" as const;
 
 /**
- * Marketing → Visit Forms (like Homeworks): the forms crews fill in on work orders. Filling one
+ * Resources → Visit Forms (like Homeworks): the forms crews fill in on work orders. Filling one
  * in is on the work order itself (/visits/:id/forms).
  */
 const routes: FastifyPluginAsync = async (app) => {

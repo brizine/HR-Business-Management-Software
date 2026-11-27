@@ -2,7 +2,7 @@ import { z } from "zod";
 import { designHasContent, emailDesignSchema } from "./emailDesign";
 
 /**
- * Message templates (Marketing → Templates), like Homeworks' email and text templates: one library
+ * Message templates (Resources → Templates), like Homeworks' email and text templates: one library
  * of emails and texts with merge tags such as {{CUSTOMER_FIRST_NAME}} (the same names Homeworks
  * uses, so imported templates work unchanged). Invoices, estimates and receipts are sent with the
  * template chosen for them; automations and the bulk Send pick from the same list.

@@ -69,7 +69,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
     there. Calls need to be reported for any of this: Settings → Integrations shows whether they are.
 - **Text** (right of Search, for the people who answer texts): opens the Text page; the red number is how many
   conversations have something unread.
-- **Email** (right of Search, for Customers & billing managers): opens **Marketing → Templates** on its
+- **Email** (right of Search, for Customers & billing managers): opens **Resources → Templates** on its
   **Sent / History** tab: every email Crewdesk has sent, with the email templates one tab over.
 - **To-dos button:** the red number is how many of your to-dos are due today or overdue. Click it to see them,
   tick them off, add one (**+ New to-do**) or open the To-dos page (**View all**).
@@ -110,9 +110,13 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   see Invoices, Estimates and Sales tax report, and click it again to fold it away. The section you're in starts
   open, and the menu remembers which ones you opened or closed.
 - **Operations:** **Customers** (Customers, Properties), **Schedule** (Calendar, Work orders, To-dos), **Billing** (Invoices,
-  Estimates, Sales tax report), **Marketing** (Templates, Automations, Documents, Visit Forms, Text), **Resources** (Products & services, Chemical Tracking, Custom fields, Tags; like Homeworks' Resources), **Field**
-  (Property Measure, Spray Mix Calculator), **Fleet** (Assets, Repair Orders, Inspections) and **Reports**
-  (managers).
+  Estimates, Sales tax report), **Resources** (Products & services, Chemical Tracking, Custom fields, Tags, Templates, Automations, Documents, Visit Forms, Text), **Field**
+  (Property Measure, Spray Mix Calculator), **Fleet** (Assets, Repair Orders, Inspections), **Reports**
+  (managers) and, last, **Marketing**.
+- **Marketing** (the megaphone, under Reports) is being kept for what's coming: your website and other marketing
+  tools. It has nothing of its own yet. Templates, Automations, Documents, Visit Forms and Text used to be here
+  and are under **Resources** now, working exactly as before; the Marketing page has a button to each in case
+  you go looking.
 - **Team:** **Dashboard** (managers), **People** (Team, Shifts, Crews, Time Clock, Attendance, Time Off, Reviews &
   Discipline, Training, Documents, Onboarding, Hiring), **Pay** (Payroll, Accounting, Pay & Tax Forms) and
   **Reports** (managers).
@@ -308,15 +312,15 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
       first customer. It shows how many will get it and who's skipped: no email address, unsubscribed, sample
       customers, and a second customer with the same address (each address gets it once). A misspelled field
       like {frist_name} is pointed out.
-    - **Template** (top of the form) sends one of your designed emails from **Marketing → Templates** instead of
+    - **Template** (top of the form) sends one of your designed emails from **Resources → Templates** instead of
       a typed message: pick it and the right side shows it filled in for the first customer, as designed. Your
       company details and an unsubscribe link go underneath, as always. A template with fill-ins about one
       invoice or estimate is flagged, since those are blank in an email to a list.
     - **Send me a test** emails it to you first. **Send to N customers** sends it; this can't be undone.
-    - **Document: email or print letters…** sends a document from Marketing → Documents (a price increase letter,
+    - **Document: email or print letters…** sends a document from Resources → Documents (a price increase letter,
       a thank you…) to the same list: pick the document, see it filled in for the first customer as an **Email**
       or a **Printed letter**, then **Email N customers**, **Print letters for all**, or **Print letters for the
-      ones email can't reach** (no email address, or unsubscribed). See *Documents* under Marketing below.
+      ones email can't reach** (no email address, or unsubscribed). See *Documents* below.
     - The emails go out one at a time in the background (about four a second), from your company name, with
       replies going to your company email. Each has your company's name, address and phone and an
       **Unsubscribe** link at the bottom. Customers who unsubscribe still get invoices and receipts.
@@ -618,7 +622,7 @@ Deposits are **off** until an admin sets them in **Settings → Customers & bill
 
 ### Templates
 
-**Marketing → Templates** (Customers & billing managers) holds the emails and texts Crewdesk sends. The first two
+**Resources → Templates** (Customers & billing managers) holds the emails and texts Crewdesk sends. The first two
 tabs, **Email Templates** and **Sent / History**, are laid out like Homeworks, with the same kind of drag-and-drop
 template builder. **Text Templates** and **Defaults** follow.
 
@@ -700,7 +704,7 @@ template builder. **Text Templates** and **Defaults** follow.
 
 ### Texting customers
 
-Texts go from your **Talkroute number**, so customers keep texting the number they know. **Marketing → Text** (and
+Texts go from your **Talkroute number**, so customers keep texting the number they know. **Resources → Text** (and
 the chat bubble at the top right, which shows how many conversations have something unread) is laid out like
 Homeworks' Text page.
 
@@ -715,7 +719,7 @@ Homeworks' Text page.
   - Texts sent from Talkroute's own app or website show up in the Crewdesk conversation too.
 - **Who's told when a text comes in:** on the same card, tick the people. Each one gets a notification on their
   phone (and in their Crewdesk inbox) for every incoming text; tapping it opens the conversation. The people ticked
-  can read and answer texts on Marketing → Text and in the phone app even if they aren't Customers & billing
+  can read and answer texts on Resources → Text and in the phone app even if they aren't Customers & billing
   managers (they see the customer's name, not the customer's page). With nobody ticked, the Customers & billing
   managers are told. Each person can still tune it under **Notification settings → Text messages**.
 - **Text Messages** (the first tab): every conversation, newest first, with the open one beside the list.
@@ -737,7 +741,7 @@ Homeworks' Text page.
   - **Groups:** on the Groups tab, type a name under **Add Customer Group** and press **Add Group**. The person
     icon opens its members (add customers or employees with **+**, take them out with **×**), the pencil renames
     it, and the red × deletes it.
-- **Text Message Templates** opens Marketing → Templates, where text templates are kept.
+- **Text Message Templates** opens Resources → Templates, where text templates are kept.
 - **Error Log:** texts that didn't go, with the date, what Talkroute said, and the number.
 - **From the Customers page:** **Send ▾ → Text N customers…** texts the customers ticked (or everyone the list
   matches), each with their own tags filled in. Until texting is connected it offers their phone numbers to copy.
@@ -761,7 +765,7 @@ Homeworks' Text page.
 - **Send later:** press **Send later…**, pick the date and time, then **Schedule**. The text waits at the bottom
   of the conversation ("Goes Nov 27, 8:00 AM") with **Take it back** beside it until it goes. Sends to several
   people can wait the same way; **Take back** is under Messages History.
-- **Quiet hours:** each person can tick **Quiet hours** at the top of Marketing → Text and set a start and end
+- **Quiet hours:** each person can tick **Quiet hours** at the top of Resources → Text and set a start and end
   (9:00 PM to 7:00 AM, say). During them, texts still land in their Crewdesk inbox but their phone doesn't buzz.
   Admins can set them for each person under Settings → Integrations.
 - **After-hours reply** (Settings → Integrations): tick it, write the reply, and set the hours the office is open
@@ -781,10 +785,10 @@ Homeworks' Text page.
 
 ### Automations
 
-**Marketing → Automations** sends emails and texts, adds or removes tags, and makes to-dos on its own when something
+**Resources → Automations** sends emails and texts, adds or removes tags, and makes to-dos on its own when something
 happens. It's laid out and worded like Homeworks' Automations page, tab for tab: **Automations**, **Sequence
 Automations**, **Sequence History**, **Review Sequence**, **Text Message Templates**, **Email Templates** (these two
-open Marketing → Templates) and **Automation History**. A Homeworks "Visit" is a Crewdesk work order. Admins in
+open Resources → Templates) and **Automation History**. A Homeworks "Visit" is a Crewdesk work order. Admins in
 Customers & billing set them up; managers can see them and work Review Sequence.
 
 - **Automations tab:** the five lists at the top (Trigger Condition, Run Time, Action, Sub Action, Status) and
@@ -829,7 +833,7 @@ Customers & billing set them up; managers can see them and work Review Sequence.
   at a time. **Sequence History** lists every action a sequence queued, with when it was Added, Scheduled and
   Executed (PENDING until it runs); click those three headings to sort.
 - **For one customer:** their page's **Automations** tab has the same filters and table, where On / Off is for that
-  customer only (one that's off for everyone has to be turned on in Marketing → Automations first). Sequences are
+  customer only (one that's off for everyone has to be turned on in Resources → Automations first). Sequences are
   listed under it, then what has run for them, with **Stop** for something still waiting.
 - **Leaves things alone:** emails skip customers who unsubscribed, texts skip ones who replied STOP, sample
   customers are only used in the test company, and an action about a voided invoice, a work order that's no longer
@@ -845,7 +849,7 @@ Customers & billing set them up; managers can see them and work Review Sequence.
 
 ### Documents (letters, contracts, proposals)
 
-**Marketing → Documents** (Customers & billing managers) is where you write a letter, contract or proposal once
+**Resources → Documents** (Customers & billing managers) is where you write a letter, contract or proposal once
 and email or print it for the customers you pick, each one filled in with that customer's own details. It's laid
 out like Homeworks' Documents: the form on the left, the list on the right, and two tabs, **Documents** and
 **Document Templates**. (**Team → Documents** is a different page: employees' paperwork and signatures.)
@@ -893,7 +897,7 @@ Homeworks' **Send By Regular Mail** (its paid stamps service) isn't in Crewdesk:
 
 ### Visit forms
 
-**Marketing → Visit Forms** (Customers & billing managers) is laid out like Homeworks'. A visit form is something
+**Resources → Visit Forms** (Customers & billing managers) is laid out like Homeworks'. A visit form is something
 the crew fills in on a work order: a service checklist, a quality check, notes on the lawn or the weather, a
 sign-off.
 
@@ -931,7 +935,7 @@ sign-off.
   - **Email the customer a copy when the work order is completed** is off unless you tick it. With it on, the
     customer gets the submitted form as a PDF when the work order is marked Completed (or right away, if it's
     submitted after that). It's sent once, never to sample customers, and only if the customer has an email
-    address that's working. The wording is the **Visit form copy (Crewdesk)** email under Marketing → Templates.
+    address that's working. The wording is the **Visit form copy (Crewdesk)** email under Resources → Templates.
     With it off, nothing is sent unless someone presses **Email to customer** on a submitted form.
   - **Preview** shows the form as the crew will see it (try it; nothing is saved) and can **Print** a blank copy.
   - **Save Form** saves it. Leftover empty questions and options are dropped. HTML isn't allowed in a form.
@@ -1082,7 +1086,7 @@ are numbered **WO-1001**, **WO-1002** and so on. Open them from **Schedule → W
 - **Visit forms** (like Homeworks'): checklists and sign-offs the crew fills in on the work order. Pick them in the
   **Visit Forms** box when making or editing a work order (forms tied to a service are picked when that service is
   added); they're listed on the work order with whether each has been submitted. A form can be set so the work
-  order can't be marked Completed until it's submitted. See **Visit forms** under Marketing.
+  order can't be marked Completed until it's submitted. See **Visit forms** (Resources → Visit Forms).
 - **The Work orders page:** **Show** Coming up, Waitlist, **Ready to invoice**, Completed, Skipped or All;
   filter by **Person**, **Crew**, **Tag** and **Search** (WO number, title or notes). Overdue open ones are marked;
   📎 shows how many photos and documents one has, and its tags show under the title.

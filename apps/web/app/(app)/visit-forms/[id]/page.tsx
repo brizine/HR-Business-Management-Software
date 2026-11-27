@@ -5,7 +5,7 @@ import { ErrorBox, PageHead } from "@/components/ui";
 import { FormBuilder, type VisitFormFull } from "@/components/visit-forms";
 import { useApi } from "@/lib/hooks";
 
-/** Marketing → Visit Forms → a form. */
+/** Resources → Visit Forms → a form. */
 export default function VisitFormPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const form = useApi<VisitFormFull>(`/visit-forms/${id}`);

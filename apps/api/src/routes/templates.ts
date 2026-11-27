@@ -39,7 +39,7 @@ const view = (t: TemplateRow, usedFor: MessageKind[] = [], usedBy: string[] = []
   homeworksPictures: homeworksPictures(t.design),
 });
 
-/** Marketing → Templates: the email and text template library, previews, the defaults and the Sent / History. */
+/** Resources → Templates: the email and text template library, previews, the defaults and the Sent / History. */
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
   app.addHook("preHandler", requireRole("manager", AREA));

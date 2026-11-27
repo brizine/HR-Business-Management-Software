@@ -101,7 +101,7 @@ export async function createCustomerMessage(o: {
   /** Who it's for: the customers, or the list already worked out with `recipientsFor`. */
   customerIds?: string[]; rows?: Recipient[];
   /**
-   * Formatted, with {{TAGS}}: an email template (Marketing → Templates), or a Marketing → Documents
+   * Formatted, with {{TAGS}}: an email template (Resources → Templates), or a Resources → Documents
    * document (as the email itself or attached as a PDF).
    */
   doc?: { emailTemplateId: string | null; docId?: string | null; docName?: string | null; docContent?: string | null; attachPdf?: boolean };
@@ -193,7 +193,7 @@ async function drain() {
       try {
         if (!transport) throw new Error("Email isn't set up on this server");
         if (m.format === "template") {
-          // A document (Marketing → Documents): the templates' tags and letterhead, and the PDF when asked for.
+          // A document (Resources → Documents): the templates' tags and letterhead, and the PDF when asked for.
           const { sendDocMessage } = await import("./docs");
           await sendDocMessage(m, { customerId: r.customerId, email: r.email! });
         } else {

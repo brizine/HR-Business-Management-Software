@@ -17,7 +17,7 @@ import {
 } from "@/components/automation-bits";
 
 /**
- * Marketing → Automations, screen for screen like Homeworks: the Automations tab (filters, the
+ * Resources → Automations, screen for screen like Homeworks: the Automations tab (filters, the
  * table with its On / Off and Review pills, pencil and trash), the add / edit form, Review
  * Sequence, Sequence History and Automation History, and a customer's own Automations tab.
  * Sequence Automations are in automation-sequences.tsx.
@@ -508,7 +508,7 @@ export function CustomerAutomations({ customerId, name }: { customerId: string; 
   // Why a switch wouldn't turn on, shown under that automation's name.
   const [refused, setRefused] = useState<Record<string, string>>({});
   const toggle = (a: Automation, on: boolean) => {
-    if (on && !a.enabled) { setRefused((r) => ({ ...r, [a.id]: "It's off for everyone. Turn it on in Marketing → Automations first." })); return; }
+    if (on && !a.enabled) { setRefused((r) => ({ ...r, [a.id]: "It's off for everyone. Turn it on in Resources → Automations first." })); return; }
     run(async () => { await api(`/automations/customer/${customerId}/${a.id}`, { method: "PUT", body: { on } }); setRefused(({ [a.id]: _gone, ...rest }) => rest); list.reload(); history.reload(); });
   };
   const rows = history.data?.rows ?? [];

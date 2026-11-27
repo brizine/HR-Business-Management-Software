@@ -107,7 +107,7 @@ export function TopBar(props: {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
   if (!me) return null;
-  // The envelope is for people who can open the email page (Marketing → Templates).
+  // The envelope is for people who can open the email page (Resources → Templates).
   const canEmail = SIDES.some((s) => props.visibleItems(s.key).some((i) => i.href === "/templates"));
   return (
     <header className={`topbar${me.company.isTest ? " is-test" : ""}`}>

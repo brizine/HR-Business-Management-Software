@@ -76,7 +76,7 @@ const visitFields = z.object({
   /** For the crew (gate, where to start, what to watch for). */
   notes: z.preprocess(blankToNull, z.string().trim().max(5000).nullable()).optional(),
   /**
-   * The visit forms the crew fills in on it (Marketing → Visit Forms). Left out of a new work
+   * The visit forms the crew fills in on it (Resources → Visit Forms). Left out of a new work
    * order, it gets the forms set to attach automatically; left out of a change, its forms stay.
    */
   formIds: z.array(z.string().uuid()).max(VISIT_FORMS_MAX).optional(),

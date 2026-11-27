@@ -1,4 +1,4 @@
-/** Marketing → Templates: the library, Crewdesk's own templates, previews, the defaults, invoices sent with them, history and opens, import. */
+/** Resources → Templates: the library, Crewdesk's own templates, previews, the defaults, invoices sent with them, history and opens, import. */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app";

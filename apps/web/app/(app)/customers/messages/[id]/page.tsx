@@ -9,7 +9,7 @@ import { MESSAGE_STATUS, RECIPIENT_STATUS_LABELS } from "@/components/customer-m
 type Recipient = { id: string; customerId: string | null; name: string; email: string | null; status: string; skipLabel: string | null; error: string | null; sentAt: string | null };
 type Message = {
   id: string; subject: string; body: string; status: keyof typeof MESSAGE_STATUS; audience: string | null; byName: string | null; createdAt: string; finishedAt: string | null;
-  /** "template": a document (Marketing → Documents), formatted, with {{TAGS}}. */
+  /** "template": a document (Resources → Documents), formatted, with {{TAGS}}. */
   format?: string; docName?: string | null; attachPdf?: boolean;
   counts: Record<string, number> | null; recipients: Recipient[];
 };

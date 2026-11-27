@@ -3,7 +3,7 @@ import { formatPhone } from "@crewdesk/shared";
 import { H, IN, INK, LINE, MUTED, W, companyLines, embedLogo, type PdfCompany } from "./invoicePdf";
 
 /**
- * Letters (Marketing → Documents) as PDFs: one letter per customer on the company's letterhead.
+ * Letters (Resources → Documents) as PDFs: one letter per customer on the company's letterhead.
  * Laid out for a standard #10 double-window envelope like the invoices: the return address shows
  * through the top window and the customer's name and address through the bottom one when the page
  * is folded in thirds. The words are the document's formatted text (headings, bold, lists…),

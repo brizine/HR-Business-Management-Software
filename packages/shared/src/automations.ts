@@ -2,7 +2,7 @@ import { z } from "zod";
 import { templateImportSchema } from "./templates";
 
 /**
- * Automations, laid out and worded like Homeworks' Marketing → Automations. Two kinds, one engine:
+ * Automations, laid out and worded like Homeworks' Resources → Automations. Two kinds, one engine:
  *
  * - Automations: when the Trigger Condition happens, at the Run Time (instantly, minutes or days
  *   after, or days before a work order / due date), do one Action: text or email the customer, the

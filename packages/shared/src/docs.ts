@@ -2,7 +2,7 @@ import { z } from "zod";
 import { htmlToText } from "./templates";
 
 /**
- * Marketing → Documents, like Homeworks: letters, contracts and proposals written once (from a
+ * Resources → Documents, like Homeworks: letters, contracts and proposals written once (from a
  * document template or from scratch) with fill-ins such as {{CUSTOMER_NAME}}, then emailed or
  * printed for the customers you pick, one letter each on the company's letterhead.
  */

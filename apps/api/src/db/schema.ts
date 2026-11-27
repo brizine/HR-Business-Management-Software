@@ -40,7 +40,7 @@ export const companies = pgTable("companies", {
   stripeWebhookSecret: text("stripe_webhook_secret"),
   /** Invoice numbering, terms and the printed footer (Settings → Billing); defaults apply when unset. */
   billing: jsonb("billing").$type<Partial<BillingSettings>>(),
-  /** Which template goes out with invoices, estimates and receipts (Marketing → Templates), and the review link. */
+  /** Which template goes out with invoices, estimates and receipts (Resources → Templates), and the review link. */
   templateDefaults: jsonb("template_defaults").$type<Partial<TemplateDefaults>>(),
   /** The company's colour for emails made in the builder (its header band, new buttons). */
   emailBrandColor: text("email_brand_color"),
@@ -1708,7 +1708,7 @@ export const customerMessages = pgTable(
     audience: text("audience"),
     /**
      * "plain": plain text with {first_name} fields. "template": formatted, with {{TAGS}} like the
-     * templates (a Marketing → Documents document, or an email template sent with one).
+     * templates (a Resources → Documents document, or an email template sent with one).
      */
     format: text("format").notNull().default("plain"),
     /** A document being sent: which one, and its name and words when it was sent (for the PDF). */
@@ -2466,7 +2466,7 @@ export const visitFiles = pgTable(
 );
 
 
-/** Marketing → Visit Forms: what the crew fills in on a work order (a checklist, a quality check…). */
+/** Resources → Visit Forms: what the crew fills in on a work order (a checklist, a quality check…). */
 export const visitForms = pgTable(
   "visit_forms",
   {
@@ -2697,7 +2697,7 @@ export const phoneCalls = pgTable(
 );
 
 /**
- * Marketing → Automations (like Homeworks'): an automation (one trigger, one action) or a sequence
+ * Resources → Automations (like Homeworks'): an automation (one trigger, one action) or a sequence
  * (IF/ELSE blocks of timed actions, with stop conditions). See shared/automations.
  */
 export const automations = pgTable(
@@ -3149,7 +3149,7 @@ export const serviceMixes = pgTable(
 );
 
 /**
- * Message templates (Marketing → Templates): emails (formatted) and texts with merge tags like
+ * Message templates (Resources → Templates): emails (formatted) and texts with merge tags like
  * {{CUSTOMER_FIRST_NAME}}. `systemKey` marks Crewdesk's own invoice, estimate and receipt
  * templates: changeable and resettable, not deletable.
  */
@@ -3184,7 +3184,7 @@ export const templates = pgTable(
 );
 
 /**
- * Marketing → Documents (like Homeworks' Documents): letters, contracts and proposals with
+ * Resources → Documents (like Homeworks' Documents): letters, contracts and proposals with
  * fill-ins such as {{CUSTOMER_NAME}}, emailed or printed for chosen customers. (Team → Documents,
  * the `documents` table, is employees' paperwork; this is separate.) Document templates are the
  * starting points.

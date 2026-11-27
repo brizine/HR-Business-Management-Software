@@ -1,4 +1,4 @@
-/** Marketing → Documents: document templates, documents and their history, the letter PDF, emailing to chosen customers, the Homeworks import. */
+/** Resources → Documents: document templates, documents and their history, the letter PDF, emailing to chosen customers, the Homeworks import. */
 import { inflateSync } from "node:zlib";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";

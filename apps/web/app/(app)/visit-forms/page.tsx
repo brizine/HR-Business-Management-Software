@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { PageHead } from "@/components/ui";
 import { SubmittedForms, VisitFormsList } from "@/components/visit-forms";
 
-/** Marketing → Visit Forms, laid out like Homeworks: the forms crews fill in on work orders, and the ones they've submitted. */
+/** Resources → Visit Forms, laid out like Homeworks: the forms crews fill in on work orders, and the ones they've submitted. */
 export default function VisitFormsPage() {
   const params = useSearchParams();
   const submitted = params.get("tab") === "submitted";

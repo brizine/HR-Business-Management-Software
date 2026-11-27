@@ -24,18 +24,6 @@ export const NAV: Record<Side, NavGroup[]> = {
       ],
     },
     {
-      // Like Homeworks' Marketing: what Crewdesk says to customers, and when.
-      key: "marketing", label: "Marketing", icon: "megaphone",
-      items: [
-        { href: "/templates", label: "Templates", min: "manager", area: "customers" },
-        { href: "/automations", label: "Automations", min: "manager", area: "customers" },
-        { href: "/docs", label: "Documents", min: "manager", area: "customers" },
-        { href: "/visit-forms", label: "Visit Forms", min: "manager", area: "customers" },
-        // Customers & billing managers, and anyone picked to answer texts.
-        { href: "/texts", label: "Text", gate: "texting" },
-      ],
-    },
-    {
       key: "schedule", label: "Schedule", icon: "calendar",
       items: [
         { href: "/calendar", label: "Calendar" },
@@ -65,6 +53,13 @@ export const NAV: Record<Side, NavGroup[]> = {
         { href: "/chemical-tracking/weather", label: "Weather", min: "manager", area: "customers", gate: "noChemical" },
         { href: "/custom-fields", label: "Custom fields", min: "admin" },
         { href: "/settings/customers", label: "Tags", min: "admin", area: "customers" },
+        // What Crewdesk says to customers, and when. These were the Marketing group (as in Homeworks).
+        { href: "/templates", label: "Templates", min: "manager", area: "customers" },
+        { href: "/automations", label: "Automations", min: "manager", area: "customers" },
+        { href: "/docs", label: "Documents", min: "manager", area: "customers" },
+        { href: "/visit-forms", label: "Visit Forms", min: "manager", area: "customers" },
+        // Customers & billing managers, and anyone picked to answer texts.
+        { href: "/texts", label: "Text", gate: "texting" },
       ],
     },
     {
@@ -83,6 +78,8 @@ export const NAV: Record<Side, NavGroup[]> = {
       ],
     },
     { key: "reports", label: "Reports", icon: "reports", items: [{ href: "/reports/operations", label: "Operations reports", min: "manager", area: "fleet" }] },
+    // Kept for what's coming (the website and the like): one page for now, saying where its old pages went.
+    { key: "marketing", label: "Marketing", icon: "megaphone", items: [{ href: "/marketing", label: "Marketing", min: "manager", area: "customers" }] },
   ],
   team: [
     { key: "dashboard", label: "Dashboard", icon: "dashboard", items: [{ href: "/dashboard", label: "Dashboard", min: "manager", area: "dashboard" }] },

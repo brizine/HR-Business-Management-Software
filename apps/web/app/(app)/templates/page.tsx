@@ -13,7 +13,7 @@ const TABS = [["email", "Email Templates"], ["history", "Sent / History"], ["tex
 type Tab = (typeof TABS)[number][0];
 
 /**
- * Marketing → Templates. Email Templates and Sent / History are laid out like Homeworks, with its
+ * Resources → Templates. Email Templates and Sent / History are laid out like Homeworks, with its
  * drag-and-drop builder; Text Templates keeps the list on the left and the editor on the right.
  */
 export default function TemplatesPage() {
