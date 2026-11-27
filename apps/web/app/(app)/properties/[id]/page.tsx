@@ -12,6 +12,7 @@ import { Badge, ErrorBox, PageHead } from "@/components/ui";
 import { CancelForm, CustomerPicker, PropertyFields, propertyBody, propertyFormValue, useTags } from "@/components/customers";
 import { CreditForm } from "@/components/credits";
 import { PropertyBox } from "@/components/property-box";
+import { ContactForm, ContactRow, PastContact, type PropertyContact } from "@/components/property-contacts";
 
 export default function PropertyDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -22,6 +23,7 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
   const [editing, setEditing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [assigning, setAssigning] = useState(false);
+  const [addingContact, setAddingContact] = useState(false);
   const [showPast, setShowPast] = useState(false);
   const [crediting, setCrediting] = useState(false);
   const [creditNote, setCreditNote] = useState<string | null>(null);
@@ -31,6 +33,10 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
   if (!p) return <PageHead title="Property" sub="Loading…" />;
   const current = p.assignments.filter((a: any) => !a.endDate);
   const past = p.assignments.filter((a: any) => a.endDate);
+  // Tenants and other contacts who aren't customers.
+  const contacts: PropertyContact[] = (p.contacts ?? []).filter((c: PropertyContact) => !c.endDate);
+  const pastContacts: PropertyContact[] = (p.contacts ?? []).filter((c: PropertyContact) => c.endDate);
+  const active = p.status !== "cancelled";
   const billTo = current.find((a: any) => a.role === "bill_to");
   const mapsLink = p.lat != null && p.lng != null ? `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formatAddress(p))}`;
 
@@ -64,9 +70,15 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
           <div className="card">
             <div className="row" style={{ justifyContent: "space-between" }}>
               <h2 style={{ fontSize: 16, margin: 0 }}>People</h2>
-              {p.status !== "cancelled" && <button className="btn" onClick={() => setAssigning(!assigning)}>Add a person</button>}
+              {active && (
+                <div className="row">
+                  <button className="btn" title="Add a tenant, or anyone else to reach about this address, without making them a customer. They can be ticked to get this property's service notifications." onClick={() => { setAddingContact(true); setAssigning(false); }}>Add contact</button>
+                  <button className="btn" title="Put an existing customer on this property: as the bill-to who gets the invoices, or as a resident" onClick={() => { setAssigning(!assigning); setAddingContact(false); }}>Add a customer</button>
+                </div>
+              )}
             </div>
             {!billTo && <p className="warn-text">No bill-to yet: nobody gets invoices for this property.</p>}
+            {addingContact && <ContactForm propertyId={id} onDone={(saved) => { setAddingContact(false); if (saved) property.reload(); }} />}
             {assigning && <AssignPerson propertyId={id} hasBillTo={!!billTo} exclude={current.map((a: any) => a.customerId)} onDone={() => { setAssigning(false); property.reload(); }} />}
             <ul className="plain-list" style={{ marginTop: 12 }}>
               {current.map((a: any) => (
@@ -81,10 +93,11 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
                   )}
                 </li>
               ))}
+              {contacts.map((c) => <ContactRow key={c.id} propertyId={id} contact={c} canEdit={active} onChanged={property.reload} />)}
             </ul>
-            {past.length > 0 && (
+            {past.length + pastContacts.length > 0 && (
               <>
-                <button className="btn" style={{ marginTop: 12 }} onClick={() => setShowPast(!showPast)}>{showPast ? "Hide" : "Show"} history ({past.length})</button>
+                <button className="btn" style={{ marginTop: 12 }} onClick={() => setShowPast(!showPast)}>{showPast ? "Hide" : "Show"} history ({past.length + pastContacts.length})</button>
                 {showPast && (
                   <ul className="plain-list" style={{ marginTop: 8 }}>
                     {past.map((a: any) => (
@@ -92,6 +105,7 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
                         {PROPERTY_ROLE_LABELS[a.role as PropertyRole]}: <Link href={`/customers/${a.customerId}`}>{a.name}</Link> · {fmtDate(a.startDate)} – {fmtDate(a.endDate)}
                       </li>
                     ))}
+                    {pastContacts.map((c) => <PastContact key={c.id} propertyId={id} contact={c} canEdit={active} onChanged={property.reload} />)}
                   </ul>
                 )}
               </>
@@ -145,12 +159,12 @@ function AssignPerson({ propertyId, hasBillTo, exclude, onDone }: { propertyId: 
       run(async () => { await api(`/properties/${propertyId}/assign`, { body: { customerId: who.id, role, ...(startDate ? { startDate } : {}) } }); onDone(); });
     }}>
       {who ? <div className="row"><strong>{who.name}</strong><button type="button" className="btn" onClick={() => setWho(null)}>Change</button></div>
-        : <CustomerPicker onPick={setWho} exclude={exclude} label="Customer (add new customers on the Customers page first)" />}
+        : <CustomerPicker onPick={setWho} exclude={exclude} label="Customer (someone who isn't a customer, such as a tenant, goes under Add contact)" />}
       <div className="formgrid">
         <label>As the
           <select value={role} onChange={(e) => setRole(e.target.value as "bill_to" | "resident")}>
             <option value="bill_to">{hasBillTo ? "New bill-to (replaces the current one)" : "Bill-to (gets the invoices)"}</option>
-            <option value="resident">Resident (tenant; gets reminders)</option>
+            <option value="resident">Resident (a customer who lives here)</option>
           </select>
         </label>
         <label>Starting<input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></label>

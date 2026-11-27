@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { and, asc, desc, eq, ilike, inArray, not, or, sql } from "drizzle-orm";
 import { PAYMENT_METHOD_LABELS, customerName, formatAddress, hasRole, isInactive, type PaymentMethod } from "@crewdesk/shared";
 import { db } from "../db";
-import { assets, customers, employees, invoicePayments, invoices, properties, serviceTypes, todos, visits, workOrders } from "../db/schema";
+import { assets, customers, employees, invoicePayments, invoices, properties, propertyContacts, serviceTypes, todos, visits, workOrders } from "../db/schema";
 import { authenticate, roleIn } from "../lib/auth";
 import { todoVisibility } from "./todos";
 import { visitVisibility } from "./visits";
@@ -50,6 +50,18 @@ const routes: FastifyPluginAsync = async (app) => {
         .from(properties).where(and(eq(properties.companyId, companyId), or(ilike(properties.street, like), ilike(properties.name, like), ilike(properties.zip, like))))
         .orderBy(sql`${properties.status} = 'cancelled'`, asc(properties.street)).limit(6);
       for (const p of ps) out.push({ kind: "property", id: p.id, title: p.street, sub: [p.name, formatAddress({ city: p.city, state: p.state, zip: p.zip }), p.status === "cancelled" ? "inactive" : null].filter(Boolean).join(" · "), href: `/properties/${p.id}` });
+
+      // A tenant or other contact on a property (not a customer): their name, email or phone finds the property.
+      const kMatch = [ilike(propertyContacts.name, like), ilike(propertyContacts.nickname, like), ilike(propertyContacts.email, like)];
+      if (digits.length >= 4) kMatch.push(sql`regexp_replace(concat_ws(' ', ${propertyContacts.cellPhone}, ${propertyContacts.homePhone}, ${propertyContacts.workPhone}, ${propertyContacts.otherPhone}), '\\D', '', 'g') like ${`%${digits}%`}`);
+      const ks = await db.select({ id: properties.id, street: properties.street, city: properties.city, name: propertyContacts.name, relation: propertyContacts.relation, phone: propertyContacts.phone, endDate: propertyContacts.endDate })
+        .from(propertyContacts).innerJoin(properties, eq(properties.id, propertyContacts.propertyId))
+        .where(and(eq(propertyContacts.companyId, companyId), or(...kMatch)))
+        .orderBy(sql`${propertyContacts.endDate} is not null`, asc(propertyContacts.name)).limit(6);
+      for (const k of ks) {
+        if (out.some((h) => h.kind === "property" && h.id === k.id)) continue;
+        out.push({ kind: "property", id: k.id, title: k.street, sub: [`${k.relation}: ${k.name}${k.endDate ? " (moved out)" : ""}`, k.phone, k.city].filter(Boolean).join(" · "), href: `/properties/${k.id}` });
+      }
 
       const who = { kind: customers.kind, firstName: customers.firstName, lastName: customers.lastName, companyName: customers.companyName };
       const invMatch = [ilike(invoices.poNumber, like)];

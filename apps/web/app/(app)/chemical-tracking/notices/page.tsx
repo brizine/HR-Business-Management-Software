@@ -7,7 +7,7 @@ import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox, PageHead } from "@/components/ui";
 
 interface Notice {
-  id: string; recordId: string; channel: string; status: string; to: string | null; subject: string | null; body: string; detail: string | null;
+  id: string; recordId: string; channel: string; status: string; to: string | null; recipient: string | null; subject: string | null; body: string; detail: string | null;
   sentAt: string | null; printedAt: string | null; createdAt: string; customerId: string | null; customerName: string; siteAddress: string | null; appliedOn: string;
 }
 type Settings = ChemicalNoticeSettings & { emailReady: boolean; textingReady: boolean };
@@ -57,8 +57,8 @@ export default function Notices() {
               <tr key={n.id}>
                 <td>{n.channel === "printed" && <input type="checkbox" aria-label={`Pick ${n.customerName}`} checked={picked.includes(n.id)} onChange={(e) => setPicked(e.target.checked ? [...picked, n.id] : picked.filter((x) => x !== n.id))} />}</td>
                 <td><Link href={`/chemical-tracking/records/${n.recordId}`}>{fmtDate(n.appliedOn)}</Link></td>
-                <td>{n.customerId ? <Link href={`/customers/${n.customerId}`}>{n.customerName}</Link> : n.customerName}<div className="muted">{n.siteAddress}</div></td>
-                <td>{NOTICE_CHANNEL_LABELS[n.channel as NoticeChannel] ?? n.channel}{n.to ? <div className="muted">{n.to}</div> : null}</td>
+                <td>{n.customerId ? <Link href={`/customers/${n.customerId}`}>{n.customerName}</Link> : n.customerName}{n.recipient && <div title="A contact on the property who is ticked to get its service notifications">To {n.recipient}</div>}<div className="muted">{n.siteAddress}</div></td>
+                <td>{n.channel === "call" ? "Phone call" : NOTICE_CHANNEL_LABELS[n.channel as NoticeChannel] ?? n.channel}{n.to ? <div className="muted">{n.to}</div> : null}</td>
                 <td>
                   <span className={`badge ${TONE[n.status] ?? ""}`}>{NOTICE_STATUS_LABELS[n.status] ?? n.status}</span>
                   <div className="muted">{n.detail ?? (n.sentAt ? fmtDateTime(n.sentAt) : n.printedAt ? fmtDateTime(n.printedAt) : "")}</div>

@@ -7,6 +7,7 @@ import { db } from "../db";
 import { crews, customerPaymentMethods, customers, dispatchRoutes, holidays, properties, serviceTypes, visitLines, visits } from "../db/schema";
 import { billingSettings } from "./invoices";
 import { companyToday } from "./payRates";
+import { notifyContactCounts } from "./propertyContacts";
 
 /**
  * The waiting list (Crewdesk plan): open work orders with no date yet, each with its window
@@ -62,7 +63,8 @@ export type WaitRow = {
   estMinutes: number | null; estSource: EstSource; estUsed: number; estLeftOut: number; totalCents: number; crewId: string | null; preferredCrewId: string | null;
   service: { id: string | null; name: string }; serviceTypeIds: string[]; tagIds: string[];
   customer: { id: string; name: string; notifyBefore: NotifyBefore; tagIds: string[] };
-  property: { id: string; address: string; street: string; city: string | null; zip: string | null; lat: number | null; lng: number | null; mapCode: string | null; sqFt: number | null; pets: string | null; tagIds: string[] };
+  /** `notifyContacts`: how many contacts on the property (tenants and the like) get its service notifications. */
+  property: { id: string; address: string; street: string; city: string | null; zip: string | null; lat: number | null; lng: number | null; mapCode: string | null; sqFt: number | null; pets: string | null; tagIds: string[]; notifyContacts: number };
   needsCard: boolean; badges: WaitBadge[];
 };
 
@@ -86,6 +88,7 @@ export async function waitingList(companyId: string, o: { upcoming?: boolean; id
     .from(visits).where(and(inArray(visits.propertyId, propIds), eq(visits.status, "completed"))).groupBy(visits.propertyId)).map((r) => [r.propertyId, r.on]));
   const est = await estimateMinutes(rows.map((r) => ({ id: r.v.id, propertyId: r.v.propertyId, budgetedHours: r.v.budgetedHours })));
   const carded = requireCard ? await customersWithCard([...new Set(rows.map((r) => r.c.id))], today) : new Set<string>();
+  const contacts = await notifyContactCounts(companyId, propIds);
   const now = Date.now();
   return {
     today, requireCard,
@@ -104,7 +107,7 @@ export async function waitingList(companyId: string, o: { upcoming?: boolean; id
         crewId: v.crewId, preferredCrewId: p.preferredCrewId,
         service: { id: main?.serviceTypeId ?? null, name: main?.name ?? main?.description ?? v.title }, serviceTypeIds: [...new Set(ls.map((l) => l.serviceTypeId).filter((x): x is string => !!x))], tagIds: v.tagIds,
         customer: { id: c.id, name: customerName(c), notifyBefore: (c.notifyBefore || "none") as NotifyBefore, tagIds: c.tagIds },
-        property: { id: p.id, address: formatAddress(p), street: p.street, city: p.city, zip: p.zip, lat: p.lat, lng: p.lng, mapCode: p.mapCode, sqFt: p.lawnSqFt, pets: p.pets, tagIds: p.tagIds },
+        property: { id: p.id, address: formatAddress(p), street: p.street, city: p.city, zip: p.zip, lat: p.lat, lng: p.lng, mapCode: p.mapCode, sqFt: p.lawnSqFt, pets: p.pets, tagIds: p.tagIds, notifyContacts: contacts.get(p.id) ?? 0 },
         needsCard, badges: waitBadges({ today, dueBy: v.dueBy, eligible, needsCard, pets: p.pets, notify, priority: (v.priority || "normal") as Priority }),
       };
     }),

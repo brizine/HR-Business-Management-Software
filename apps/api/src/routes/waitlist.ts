@@ -82,10 +82,12 @@ const routes: FastifyPluginAsync = async (app) => {
       const window = b.windowStart ? ` ${b.windowEnd ? `between ${time12(b.windowStart)} and ${time12(b.windowEnd)}` : `after ${time12(b.windowStart)}`}` : "";
       for (const r of rows) {
         const pref = (await db.select({ p: properties.notifyBefore }).from(properties).where(eq(properties.id, r.property.id)))[0]?.p ?? r.customer.notifyBefore;
-        await teller.tell(pref, r.customer, {
+        const notice = {
           subject: `your ${r.service.name.toLowerCase()} is scheduled for ${longDay(b.date)}`,
           sentence: `we're scheduled for ${r.service.name.toLowerCase()} at ${r.property.street} on ${longDay(b.date)}${window}.`,
-        });
+        };
+        await teller.tell(pref, r.customer, notice);
+        await teller.tellContacts(r.property.id, notice);
       }
     }
     return { scheduled: rows.length, early: early.length, ...teller.told };

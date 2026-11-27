@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
-import { PRIORITY_LABELS, VISIT_BILLING_LABELS, formatMoney, formatRateAmount, formatTaxRate, taxFor, visitNumber } from "@crewdesk/shared";
+import { CONTACT_PHONES, FORM_OF_CONTACT_LABELS, PRIORITY_LABELS, VISIT_BILLING_LABELS, type FormOfContact, formatMoney, formatPhone, formatRateAmount, formatTaxRate, taxFor, visitNumber } from "@crewdesk/shared";
 import { api, fmtDate, fmtDateTime } from "@/lib/api";
 import { BackToWaitlist, windowText } from "@/components/waitlist";
 import { WorkOrderWeather } from "@/components/weather";
@@ -57,6 +57,18 @@ export default function WorkOrder({ params }: { params: Promise<{ id: string }> 
               {v.property?.gateCode && <><dt>Gate code</dt><dd>{v.property.gateCode}</dd></>}
               {v.property?.pets && <><dt>Pets</dt><dd>{v.property.pets}</dd></>}
               {v.property?.accessNotes && <><dt>Access</dt><dd>{v.property.accessNotes}</dd></>}
+              {(v.property?.contacts ?? []).map((k, i) => (
+                <div key={i} style={{ display: "contents" }}>
+                  <dt>{k.relation}</dt>
+                  <dd>
+                    {k.name}{k.nickname && k.nickname !== k.name && <span className="muted"> “{k.nickname}”</span>}
+                    {CONTACT_PHONES.filter(([key]) => k[key]).map(([key, label]) => <span key={key}> · {label} <a href={`tel:${k[key]}`}>{formatPhone(k[key]!)}</a></span>)}
+                    {k.email && <> · <a href={`mailto:${k.email}`}>{k.email}</a></>}
+                    {k.formOfContact && <span className="muted"> · prefers {FORM_OF_CONTACT_LABELS[k.formOfContact as FormOfContact]?.toLowerCase()}</span>}
+                    {k.notes && <div className="muted" style={{ whiteSpace: "pre-wrap" }}>{k.notes}</div>}
+                  </dd>
+                </div>
+              ))}
               {v.property?.lawnSqFt && <><dt>Lawn</dt><dd>{Math.round(v.property.lawnSqFt).toLocaleString()} sq ft</dd></>}
               <CustomFacts target="property" values={v.property?.custom} />
               {v.location && <><dt>Location</dt><dd>{v.location}</dd></>}

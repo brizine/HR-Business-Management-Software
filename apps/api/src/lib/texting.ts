@@ -3,7 +3,7 @@ import { and, asc, desc, eq, inArray, isNull, lte, notInArray, or, sql } from "d
 import type { FastifyRequest } from "fastify";
 import { INACTIVE_STATUSES, customerName, formatPhone, inQuietHours, officeOpen, textKeyword, textingChoices, toE164, type TextingJob, type TextingOptions } from "@crewdesk/shared";
 import { db } from "../db";
-import { companies, customerContacts, customerFiles, customerTexts, customers, employees, phoneCalls, textBatches, textMedia, textThreads, todoAssignees, todos } from "../db/schema";
+import { companies, customerContacts, customerFiles, customerTexts, customers, employees, phoneCalls, propertyContacts, textBatches, textMedia, textThreads, todoAssignees, todos } from "../db/schema";
 import { isManager } from "./auth";
 import { PUBLIC_API_URL } from "./channels";
 import { decrypt, encrypt } from "./crypto";
@@ -489,6 +489,8 @@ export async function receiveText(companyId: string, m: Inbound, o: { history?: 
   if (direction === "out") return row;
   const kw = textKeyword(m.body);
   if (thread.customerId && kw) await db.update(customers).set({ textOptOutAt: kw === "stop" ? m.at : null }).where(eq(customers.id, thread.customerId));
+  // A property contact (a tenant, say) who gets service notifications by text can stop them the same way.
+  if (kw) await db.update(propertyContacts).set({ textOptOutAt: kw === "stop" ? m.at : null }).where(and(eq(propertyContacts.companyId, companyId), sql`${digits10(propertyContacts.cellPhone)} = ${phone.replace(/\D/g, "").slice(-10)}`));
   if (o.history) return row;
   const who = await threadName(thread);
   const told = await tellAbout(companyId, thread);

@@ -784,9 +784,11 @@ export async function rainDay(companyId: string, by: string, b: { date: string; 
     for (const e of await eventsFor(companyId, keys, false)) {
       if (!e.customer) continue;
       const what = (e.services[0]?.name ?? e.title).toLowerCase();
-      await teller.tell(e.notifyBefore, e.customer, toDate
+      const notice = toDate
         ? { subject: `your ${what} is moving to ${longDay(toDate)}`, sentence: `because of ${reason}, your ${what} is moving to ${longDay(toDate)}.` }
-        : { subject: `your ${what} on ${longDay(b.date)}`, sentence: `because of ${reason}, we couldn't get to your ${what} on ${longDay(b.date)}. We'll be in touch with a new day.` });
+        : { subject: `your ${what} on ${longDay(b.date)}`, sentence: `because of ${reason}, we couldn't get to your ${what} on ${longDay(b.date)}. We'll be in touch with a new day.` };
+      await teller.tell(e.notifyBefore, e.customer, notice);
+      await teller.tellContacts(e.propertyId, notice);
     }
   }
   return { moved: rows.length, to: toDate, ...teller.told };
@@ -889,7 +891,10 @@ export async function editWorkOrders(companyId: string, by: string, b: DispatchE
     if (!b.notify || !list.length) return teller.told;
     // The property's own preference, else the customer's.
     const prefs = new Map((await db.select({ id: properties.id, p: properties.notifyBefore }).from(properties).where(inArray(properties.id, list.map((r) => r.property.id)))).map((p) => [p.id, p.p]));
-    for (const r of list) await teller.tell(prefs.get(r.property.id) ?? r.customer.notifyBefore, r.customer, notice(r));
+    for (const r of list) {
+      await teller.tell(prefs.get(r.property.id) ?? r.customer.notifyBefore, r.customer, notice(r));
+      await teller.tellContacts(r.property.id, notice(r));
+    }
     return teller.told;
   };
 

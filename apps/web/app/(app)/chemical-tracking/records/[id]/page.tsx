@@ -100,7 +100,7 @@ export default function ChemicalRecord({ params }: { params: Promise<{ id: strin
 
 /** The customer's notice for this application: what went out, and sending or printing one now. */
 function RecordNotices({ recordId }: { recordId: string }) {
-  const list = useApi<{ id: string; channel: string; status: string; to: string | null; detail: string | null; sentAt: string | null; createdAt: string }[]>(`/chemical-tracking/notices?recordId=${recordId}`);
+  const list = useApi<{ id: string; channel: string; status: string; to: string | null; recipient: string | null; detail: string | null; sentAt: string | null; createdAt: string }[]>(`/chemical-tracking/notices?recordId=${recordId}`);
   const act = useAction();
   const send = (channel: "email" | "text") => act.run(async () => { await api(`/chemical-tracking/records/${recordId}/notice`, { method: "POST", body: { channel } }); list.reload(); });
   const rows = list.data ?? [];
@@ -116,7 +116,7 @@ function RecordNotices({ recordId }: { recordId: string }) {
       </div>
       {rows.length ? (
         <ul className="plain-list">{rows.map((n) => (
-          <li key={n.id}>{NOTICE_CHANNEL_LABELS[n.channel as NoticeChannel] ?? n.channel}{n.to ? ` to ${n.to}` : ""}: <strong>{NOTICE_STATUS_LABELS[n.status] ?? n.status}</strong> <span className="muted">{fmtDateTime(n.sentAt ?? n.createdAt)}{n.detail ? ` · ${n.detail}` : ""}</span></li>
+          <li key={n.id}>{n.channel === "call" ? "Phone call" : NOTICE_CHANNEL_LABELS[n.channel as NoticeChannel] ?? n.channel}{n.recipient ? ` for ${n.recipient}` : ""}{n.to ? ` to ${n.to}` : ""}: <strong>{NOTICE_STATUS_LABELS[n.status] ?? n.status}</strong> <span className="muted">{fmtDateTime(n.sentAt ?? n.createdAt)}{n.detail ? ` · ${n.detail}` : ""}</span></li>
         ))}</ul>
       ) : <p className="muted" style={{ margin: 0 }}>No notice for this application yet.</p>}
       <ErrorBox error={list.error ?? act.error} />

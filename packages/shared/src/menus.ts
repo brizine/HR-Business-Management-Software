@@ -2,6 +2,7 @@ import { z } from "zod";
 import { APPLICANT_STAGES, ASSET_TYPES, EMPLOYEE_STATUSES, EMPLOYMENT_TYPES, PAY_TYPES, WORK_ORDER_STATUSES } from "./schemas";
 import { ROLES } from "./roles";
 import { MIX_UNITS } from "./sprayMix";
+import { PROPERTY_CONTACT_TYPES } from "./customers";
 
 /**
  * Drop-down menus the owner can edit (Settings → Company, and the layout editor's Edit drop-down
@@ -25,6 +26,7 @@ export const MENU_LISTS = [
   { key: "documentCategories", label: "Document categories", noun: "category", kind: "list", defaults: ["general", "tax", "id", "policy", "certification", "contract", "registration", "insurance", "manual"], pages: ["/documents", "/people/:id", "/fleet/:id"] },
   { key: "mixUnits", label: "Spray Mix measurements", noun: "measurement", kind: "list", defaults: [...MIX_UNITS], pages: ["/spray-mix"] },
   { key: "assetTypes", label: "Asset types", noun: "asset type", kind: "list", defaults: [...ASSET_TYPES], pages: ["/fleet", "/fleet/:id"] },
+  { key: "contactTypes", label: "Contact types", noun: "contact type", kind: "list", defaults: [...PROPERTY_CONTACT_TYPES], pages: ["/properties/:id"] },
   { key: "assetStatus", label: "Asset status", kind: "labels", values: ["active", "in_shop", "out_of_service", "retired"], pages: ["/fleet", "/fleet/:id"] },
   { key: "workOrderStatus", label: "Repair order status", kind: "labels", values: WORK_ORDER_STATUSES, pages: ["/work-orders", "/fleet/:id"] },
   { key: "workOrderPriority", label: "Repair order priority", kind: "labels", values: ["low", "medium", "high", "critical"], pages: ["/work-orders", "/fleet/:id"] },
@@ -32,7 +34,7 @@ export const MENU_LISTS = [
 
 export type MenuKey = (typeof MENU_LISTS)[number]["key"];
 /** Lists stored in companies.menu_lists (job titles and departments have their own columns). */
-export const STORED_LISTS = ["documentCategories", "mixUnits", "assetTypes"] as const;
+export const STORED_LISTS = ["documentCategories", "mixUnits", "assetTypes", "contactTypes"] as const;
 export type StoredList = (typeof STORED_LISTS)[number];
 export type LabelMenu = Extract<(typeof MENU_LISTS)[number], { kind: "labels" }>["key"];
 export const LABEL_MENUS = MENU_LISTS.filter((m) => m.kind === "labels").map((m) => m.key) as LabelMenu[];

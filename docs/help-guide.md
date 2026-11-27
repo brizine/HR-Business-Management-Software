@@ -373,10 +373,41 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
 - **Properties** (Operations → Properties): search by address, ZIP, label or customer; filter by **Map Code
   starts with** (e.g. 80 for 800–809; type **none** for properties without one), status, property tags, and the
   bill-to customer's tags (e.g. properties whose customer is tagged Commercial).
-- **Property page:** the **Property** box and the **People** on it. **Add a person** puts an existing customer
-  on the property as a resident, or as the new bill-to: the old bill-to's time ends the day before, their past
-  invoices stay with them, and the property's history stays with the property (**Show history**). **Moved out**
-  ends a resident's time. **Map** opens the address in Google Maps.
+- **Property page:** the **Property** box and the **People** on it. **Map** opens the address in Google Maps.
+- **People on a property:**
+  - **Add contact:** someone to reach about the address who is **not a customer**: a tenant, an on-site
+    manager, a neighbor with the gate key. The **Add Contact** window opens with **First Name**, **Last Name**,
+    **Nickname**, **Contact Type**, **Email**, **Home Phone**, **Work Phone**, **Cell Phone**, **Other Phone**,
+    **FAX**, **Form of Contact** and **Birthday**, plus **Moved In** and **Notes**. Only a first or last name is
+    needed. They get no invoices and need no account, and nothing is added to your customer list.
+  - **Contact Type** is a drop-down of your own choices (Tenant, Property manager, Owner, Spouse, Family member,
+    Neighbor, Other to start). The owner changes the list with **Edit drop-down menus** in the layout editor;
+    renaming a type renames it on every contact that has it.
+  - **Form of Contact** is how they would rather be reached: a phone call, a text or an email. It needs the
+    matching detail (a cell phone for a text, an email address for an email).
+  - **Receive service notifications for this property:** tick it and the contact hears about the service at this
+    address, the same news the customer can get: when a visit here is **scheduled**, **moved to another day** or
+    **sent back to the waiting list** (when the office ticks "Notify customers by their preference"), and the
+    **notice after a chemical application** (once those are on under Chemical Tracking → Customer notices). It
+    goes by their Form of Contact; with none picked, by email, else a text to their cell. Someone reached only by
+    phone is not sent anything: they are listed for the office to call. The window says how they will be reached
+    before you save.
+    - It does not depend on what the customer chose. A landlord can want no notices while the tenant gets them.
+    - They never get invoices, statements, estimates, bulk emails or automations.
+    - A contact who replies **STOP** to a text gets no more texts until they reply START (or their cell phone
+      number is changed). Untick the box to stop everything.
+    - The notify box on the waiting list and the dispatch board counts them ("2 property contacts"), and the
+      Customer notices log shows who each notice went to.
+  - **Change** edits a contact, **Moved out** keeps them in the property's history and stops their
+    notifications (**Show history**, where **Bring back** puts them on it again), and **Delete** removes one
+    added by mistake.
+  - Contacts show on the property's **work orders** (under Where and who, with every phone number and their
+    notes), so the office and the crew know who to call or knock for, and the **search box** finds the property
+    by a contact's name, nickname, email or any of their phone numbers.
+  - **Add a customer** puts an existing customer on the property as a resident, or as the new bill-to: the old
+    bill-to's time ends the day before, their past invoices stay with them, and the property's history stays
+    with the property. Use it for a landlord, an owner or anyone you invoice. **Moved out** ends a resident's
+    time.
 - **The Property box:** everything about the property in one box, each piece its own item.
   - **Its details are custom fields.** Map Code, Front Lawn ft, Back Lawn ft, Other ft, Total ft, Gate Code,
     Pets, Access Notes and Notes come with Crewdesk; your own property fields show right beside them. Rename
@@ -1248,8 +1279,10 @@ the list, then **Edit work orders** to schedule them.
   the current order**). It shows what it adds to that crew's day ("Adds 1.8 h on site + 14 min drive. Truck 2 Tue
   Nov 24: 5.3 of 8 h") and warns about holidays, missed windows, anyone reached after their time window, and
   ones that aren't eligible yet (those need a reason). Options: **Make the crew the preferred crew** for those
-  properties, and **Notify customers by their preference** (a text to those who want one, when texting is
-  connected; the ones to call are listed for you). The crew's people are put on any work order with nobody on it.
+  properties, and **Notify customers by their preference** (a text or an email to those who want one; the ones
+  to call are listed for you). A property's contacts who are ticked to receive its service notifications, such
+  as a tenant, are told as well, and counted beside the box. The crew's people are put on any work order with
+  nobody on it.
   The same window is on the Dispatch board, where it can also send work back to the waiting list.
 - **More (on a selection):** set the **priority**, **Skip** (with why), or **Delete** (admins; ones on an invoice stay).
 - **Back to waiting list:** on a scheduled work order, choose why (rain, wind, no access, customer asked, other) with

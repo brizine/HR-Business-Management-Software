@@ -1,10 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 import { aliasedTable, and, arrayContains, arrayOverlaps, asc, desc, eq, ilike, inArray, isNull, not, or, sql, type SQL } from "drizzle-orm";
-import { NOTICE_CHANNELS, assignmentSchema, cancelSchema, customerName, endAssignmentSchema, lawnTotal, propertyCreateSchema, propertySchema, splitPropertyValues, type CustomValues } from "@crewdesk/shared";
+import { NOTICE_CHANNELS, assignmentSchema, cancelSchema, customerName, endAssignmentSchema, lawnTotal, propertyContactSchema, propertyCreateSchema, propertySchema, splitPropertyValues, type CustomValues } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
 import { fieldsFor, newRecordCustom, propertyColumnChanges, updatedCustom } from "../lib/customFields";
-import { cancellationReasons, cancellations, customers, measurements, properties, propertyAssignments } from "../db/schema";
+import { contactColumns } from "../lib/propertyContacts";
+import { cancellationReasons, cancellations, customers, measurements, properties, propertyAssignments, propertyContacts } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
@@ -138,8 +139,12 @@ const routes: FastifyPluginAsync = async (app) => {
       ? await db.select({ id: measurements.id, name: measurements.name, netSqFt: measurements.netSqFt, updatedAt: measurements.updatedAt }).from(measurements).where(eq(measurements.id, p.measurementId))
       : [];
     const history = await db.select().from(cancellations).where(eq(cancellations.propertyId, p.id)).orderBy(desc(cancellations.createdAt));
+    // Tenants and other contacts who aren't customers: the current ones first, then those who've moved out.
+    const contacts = await db.select().from(propertyContacts).where(eq(propertyContacts.propertyId, p.id))
+      .orderBy(sql`${propertyContacts.endDate} is not null`, asc(propertyContacts.sortOrder), asc(propertyContacts.createdAt));
     return {
       ...p,
+      contacts,
       assignments: people.map((a) => ({ ...a, name: customerName(a) })),
       measurement: measurement ?? null,
       cancellations: history,
@@ -203,6 +208,48 @@ const routes: FastifyPluginAsync = async (app) => {
   app.delete<{ Params: { id: string } }>("/:id/measurement", async (req) => {
     const p = await propertyInCompany(db, req.user.companyId, req.params.id);
     await db.update(properties).set({ measurementId: null, updatedAt: new Date() }).where(eq(properties.id, p.id));
+    return { ok: true };
+  });
+
+  // ---- Contacts who aren't customers (tenants and the like).
+
+  const contactOn = async (companyId: string, propertyId: string, contactId: string) => {
+    const [c] = await db.select().from(propertyContacts).where(and(eq(propertyContacts.id, contactId), eq(propertyContacts.propertyId, propertyId), eq(propertyContacts.companyId, companyId)));
+    if (!c) throw new HttpError(404, "Contact not found");
+    return c;
+  };
+  /** Adds a tenant or other contact to the property. They are not a customer: no account, no invoices. */
+  app.post<{ Params: { id: string } }>("/:id/contacts", async (req) => {
+    const body = parse(propertyContactSchema, req.body);
+    const { companyId, sub } = req.user;
+    const p = await propertyInCompany(db, companyId, req.params.id);
+    const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(propertyContacts).where(eq(propertyContacts.propertyId, p.id));
+    if (n >= 50) throw new HttpError(400, "Up to 50 contacts on a property. Delete ones no longer needed first.");
+    const [row] = await db.insert(propertyContacts).values({ companyId, propertyId: p.id, ...contactColumns(body), sortOrder: n, createdById: sub }).returning();
+    return row;
+  });
+  app.put<{ Params: { id: string; contactId: string } }>("/:id/contacts/:contactId", async (req) => {
+    const body = parse(propertyContactSchema, req.body);
+    const c = await contactOn(req.user.companyId, req.params.id, req.params.contactId);
+    if (c.startDate && c.endDate && body.startDate && body.startDate > c.endDate) throw new HttpError(400, "They can't move in after they moved out");
+    const cols = contactColumns(body);
+    // A different cell phone hasn't replied STOP.
+    const [row] = await db.update(propertyContacts).set({ ...cols, ...(cols.cellPhone !== c.cellPhone ? { textOptOutAt: null } : {}) }).where(eq(propertyContacts.id, c.id)).returning();
+    return row;
+  });
+  /** Moved out: they stay on the property's history. `back: true` puts them on it again. */
+  app.post<{ Params: { id: string; contactId: string } }>("/:id/contacts/:contactId/end", async (req) => {
+    const body = parse(endAssignmentSchema.extend({ back: z.boolean().optional() }), req.body ?? {});
+    const c = await contactOn(req.user.companyId, req.params.id, req.params.contactId);
+    const endDate = body.back ? null : body.endDate ?? (await companyToday(req.user.companyId));
+    if (endDate && c.startDate && endDate < c.startDate) throw new HttpError(400, "They can't move out before they moved in");
+    const [row] = await db.update(propertyContacts).set({ endDate }).where(eq(propertyContacts.id, c.id)).returning();
+    return row;
+  });
+  /** Removes a contact added by mistake (use Moved out to keep them as history). */
+  app.delete<{ Params: { id: string; contactId: string } }>("/:id/contacts/:contactId", async (req) => {
+    const c = await contactOn(req.user.companyId, req.params.id, req.params.contactId);
+    await db.delete(propertyContacts).where(eq(propertyContacts.id, c.id));
     return { ok: true };
   });
 

@@ -5,7 +5,7 @@ import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
 import { EMPLOYEE_PRIVATE_CONTACT_FIELDS, payRateSchema, rateOn, employeeContactSchema, employeeMenusSchema, employeeSchema, hasRole, isInactive, menuRenameSchema, pageLayoutsUpdateSchema, MENU_LISTS, STORED_LISTS, defaultLabel, defaultList, menuLabelsSchema, menuListRenameSchema, menuListSchema, type Role, type StoredList } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
-import { assets, companies, documents, employees, jobs, mixProducts, mixSheets, payPeriods, payRates, recoveryCodes } from "../db/schema";
+import { assets, companies, documents, employees, jobs, mixProducts, mixSheets, payPeriods, payRates, propertyContacts, recoveryCodes } from "../db/schema";
 import { companyToday, setRate, syncCurrentPay } from "../lib/payRates";
 import { authenticate, canManageAccount, requireRole, signOutEverywhere, roleIn } from "../lib/auth";
 import { sendInvite } from "../lib/invites";
@@ -88,6 +88,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const docs = await db.select({ v: documents.category }).from(documents).where(eq(documents.companyId, companyId));
     const units = await db.select({ v: mixProducts.unit }).from(mixProducts).innerJoin(mixSheets, eq(mixSheets.id, mixProducts.sheetId)).where(eq(mixSheets.companyId, companyId));
     const types = await db.select({ v: assets.type }).from(assets).where(eq(assets.companyId, companyId));
+    const contactTypes = await db.select({ v: propertyContacts.relation }).from(propertyContacts).where(eq(propertyContacts.companyId, companyId));
     const count = (vals: (string | null)[]) => vals.reduce<Record<string, number>>((n, v) => (v ? { ...n, [v]: (n[v] ?? 0) + 1 } : n), {});
     const lists = Object.fromEntries(STORED_LISTS.map((k) => [k, c.menuLists[k] ?? defaultList(k)])) as Record<StoredList, string[]>;
     return {
@@ -101,6 +102,7 @@ const routes: FastifyPluginAsync = async (app) => {
         documentCategories: count(docs.map((d) => d.v)),
         mixUnits: count(units.map((d) => d.v)),
         assetTypes: count(types.map((d) => d.v)),
+        contactTypes: count(contactTypes.map((d) => d.v)),
       },
     };
   }
@@ -153,6 +155,7 @@ const routes: FastifyPluginAsync = async (app) => {
       await tx.update(companies).set({ menuLists: { ...c.menuLists, [key]: list.map((v) => (v === from ? to : v)) } }).where(eq(companies.id, companyId));
       if (key === "documentCategories") await tx.update(documents).set({ category: to }).where(and(eq(documents.companyId, companyId), eq(documents.category, from)));
       if (key === "assetTypes") await tx.update(assets).set({ type: to }).where(and(eq(assets.companyId, companyId), eq(assets.type, from)));
+      if (key === "contactTypes") await tx.update(propertyContacts).set({ relation: to }).where(and(eq(propertyContacts.companyId, companyId), eq(propertyContacts.relation, from)));
       if (key === "mixUnits") {
         const sheetIds = (await tx.select({ id: mixSheets.id }).from(mixSheets).where(eq(mixSheets.companyId, companyId))).map((r) => r.id);
         if (sheetIds.length) await tx.update(mixProducts).set({ unit: to }).where(and(inArray(mixProducts.sheetId, sheetIds), eq(mixProducts.unit, from)));

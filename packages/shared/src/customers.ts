@@ -166,6 +166,69 @@ export const assignmentSchema = z.object({
 });
 export const endAssignmentSchema = z.object({ endDate: isoDate.optional() });
 
+/**
+ * A contact on a property who isn't a customer: a tenant, a property manager's on-site person, a
+ * neighbor with the gate key. They don't get invoices and have no account; they're who the office
+ * or the crew reaches about that address, and (when ticked) who gets the property's service
+ * notifications. The fields follow Service Autopilot's Add Contact form.
+ */
+/** The contact types a company starts with (the list can be edited: Edit drop-down menus on a property page). */
+export const PROPERTY_CONTACT_TYPES = ["Tenant", "Property manager", "Owner", "Spouse", "Family member", "Neighbor", "Other"] as const;
+/** How they'd rather be reached; also how a service notification goes to them. */
+export const FORMS_OF_CONTACT = ["call", "text", "email"] as const;
+export type FormOfContact = (typeof FORMS_OF_CONTACT)[number];
+export const FORM_OF_CONTACT_LABELS: Record<FormOfContact, string> = { call: "Phone call", text: "Text", email: "Email" };
+/** The phone boxes, in the order the best number to show is picked. */
+export const CONTACT_PHONES = [["cellPhone", "Cell"], ["homePhone", "Home"], ["workPhone", "Work"], ["otherPhone", "Other"]] as const;
+
+const optDate = isoDate.optional().or(z.literal("").transform(() => undefined));
+export const propertyContactSchema = z.object({
+  firstName: optText(80),
+  lastName: optText(80),
+  nickname: optText(80),
+  /** Contact type: who they are to the property; "Tenant" unless something else is picked. */
+  relation: z.string().trim().max(60).optional().transform((v) => v || "Tenant"),
+  email: optEmail,
+  homePhone: optPhone,
+  workPhone: optPhone,
+  cellPhone: optPhone,
+  otherPhone: optPhone,
+  fax: optPhone,
+  formOfContact: z.preprocess((v) => (v === "" ? null : v), z.enum(FORMS_OF_CONTACT).nullable()).optional(),
+  birthday: optDate,
+  notes: optText(1000),
+  /** Receives this property's service notifications (the pre-visit notice and the after-application notice). */
+  notify: z.boolean().default(false),
+  /** When they moved in or started (optional). */
+  startDate: optDate,
+}).superRefine((c, ctx) => {
+  if (!c.firstName && !c.lastName) ctx.addIssue({ code: "custom", path: ["firstName"], message: "Enter the contact's first or last name" });
+  const anyPhone = c.cellPhone || c.homePhone || c.workPhone || c.otherPhone;
+  if (c.formOfContact === "email" && !c.email) ctx.addIssue({ code: "custom", path: ["formOfContact"], message: "Form of contact is Email, so enter their email address" });
+  if (c.formOfContact === "text" && !c.cellPhone) ctx.addIssue({ code: "custom", path: ["formOfContact"], message: "Form of contact is Text, so enter their cell phone" });
+  if (c.formOfContact === "call" && !anyPhone) ctx.addIssue({ code: "custom", path: ["formOfContact"], message: "Form of contact is Phone call, so enter a phone number" });
+  if (c.notify && !c.email && !anyPhone) ctx.addIssue({ code: "custom", path: ["notify"], message: "To get service notifications they need an email address or a phone number" });
+});
+export type PropertyContactInput = z.infer<typeof propertyContactSchema>;
+
+type ContactReach = { email?: string | null; cellPhone?: string | null; homePhone?: string | null; workPhone?: string | null; otherPhone?: string | null; formOfContact?: string | null };
+/** "Tina Tenant", or the nickname when that's all there is. */
+export const contactName = (c: { firstName?: string | null; lastName?: string | null; nickname?: string | null }) =>
+  [c.firstName, c.lastName].map((x) => x?.trim()).filter(Boolean).join(" ") || c.nickname?.trim() || "";
+/** The number to show or call first: cell, then home, work, other. */
+export const contactPhone = (c: ContactReach) => c.cellPhone || c.homePhone || c.workPhone || c.otherPhone || null;
+/**
+ * How a service notification reaches a contact: their form of contact when they have what it needs
+ * (a cell phone for a text, an email address for an email, any phone for a call), else the next
+ * thing they do have: email, then a text, then a call from the office. Null: no way to reach them.
+ */
+export function contactChannel(c: ContactReach): FormOfContact | null {
+  const can: Record<FormOfContact, boolean> = { email: !!c.email, text: !!c.cellPhone, call: !!contactPhone(c) };
+  const wanted = c.formOfContact as FormOfContact | null | undefined;
+  if (wanted && can[wanted]) return wanted;
+  return (["email", "text", "call"] as const).find((k) => can[k]) ?? null;
+}
+
 export const cancelSchema = z.object({
   reasonId: z.string().uuid({ message: "Choose a reason" }),
   effectiveDate: isoDate.optional(),

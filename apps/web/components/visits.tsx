@@ -28,7 +28,7 @@ export interface Visit {
   crewId: string | null; crew: { id: string; name: string; color: string } | null;
   tagIds: string[]; tags: { id: string; name: string; color: string }[]; fileCount: number; custom: CustomValues;
   customer: { id: string; name: string; phone: string | null };
-  property: { id: string; name: string | null; address: string; gateCode: string | null; pets: string | null; accessNotes: string | null; lawnSqFt: number | null; frontSqFt?: number | null; backSqFt?: number | null; otherSqFt?: number | null; lat: number | null; lng: number | null; custom?: CustomValues } | null;
+  property: { id: string; name: string | null; address: string; gateCode: string | null; pets: string | null; accessNotes: string | null; lawnSqFt: number | null; frontSqFt?: number | null; backSqFt?: number | null; otherSqFt?: number | null; contacts?: { name: string; nickname: string | null; relation: string; phone: string | null; cellPhone: string | null; homePhone: string | null; workPhone: string | null; otherPhone: string | null; email: string | null; formOfContact: string | null; notes: string | null }[]; lat: number | null; lng: number | null; custom?: CustomValues } | null;
   invoice: { id: string; number: number | null; status: string } | null;
   lines: VisitLine[]; assignees: { id: string; firstName: string; lastName: string }[];
   finishedBy: string | null; createdBy: string | null;

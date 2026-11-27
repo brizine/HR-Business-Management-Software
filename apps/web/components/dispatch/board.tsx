@@ -645,6 +645,8 @@ function RainDay({ rows, crews, date, who: first, onClose, onDone }: { rows: Boa
   const open = rows.filter((r) => r.date === date && r.status === "open" && (who === "all" || (who === "none" ? !r.crewId : r.crewId === who)));
   const hear = (b: "text_ahead" | "email_ahead" | "call_ahead") => new Set(open.filter((r) => r.badges.includes(b)).map((r) => r.customer.id)).size;
   const texts = hear("text_ahead"), emails = hear("email_ahead"), calls = hear("call_ahead");
+  // Tenants and other property contacts ticked for service notifications hear too (once per property).
+  const contacts = [...new Map(open.map((r) => [r.property.id, r.property.notifyContacts ?? 0])).values()].reduce((a, b) => a + b, 0);
   return (
     <div className="cal-modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form className="cal-modal card stack wl-edit" role="dialog" aria-modal="true" aria-label="Rain or wind day" onSubmit={(e) => {
@@ -674,7 +676,7 @@ function RainDay({ rows, crews, date, who: first, onClose, onDone }: { rows: Boa
           <label>Why<select value={reason} onChange={(e) => setReason(e.target.value as (typeof BACK_REASONS)[number])}>{BACK_REASONS.map((r) => <option key={r} value={r}>{BACK_REASON_LABELS[r]}</option>)}</select></label>
           <label>Note (optional)<input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="Gusts over 20 mph" /></label>
         </div>
-        <label className="check"><input type="checkbox" checked={notify && texts + emails + calls > 0} disabled={!texts && !emails && !calls} onChange={(e) => setNotify(e.target.checked)} /> Notify customers by their preference{texts || emails || calls ? ` (${[texts && `${texts} by text`, emails && `${emails} by email`, calls && `${calls} to call`].filter(Boolean).join(", ")})` : " (none asked for notice)"}</label>
+        <label className="check"><input type="checkbox" checked={notify && texts + emails + calls + contacts > 0} disabled={!texts && !emails && !calls && !contacts} onChange={(e) => setNotify(e.target.checked)} /> Notify customers by their preference{texts || emails || calls || contacts ? ` (${[texts && `${texts} by text`, emails && `${emails} by email`, calls && `${calls} to call`, contacts && `${contacts} property contact${contacts === 1 ? "" : "s"}`].filter(Boolean).join(", ")})` : " (none asked for notice)"}</label>
         <p className="wl-adds" style={{ margin: 0 }}><strong>{open.length}</strong> work order{open.length === 1 ? "" : "s"} will move. Who does them stays the same; they come off their routes.</p>
         <ErrorBox error={act.error} />
         <div className="row">

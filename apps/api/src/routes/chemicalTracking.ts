@@ -10,7 +10,7 @@ import { HttpError, parse } from "../lib/errors";
 import { companyToday, materialSummary, serviceProductLines } from "../lib/productCosts";
 import { methodsFor } from "../lib/techChemicals";
 import { loadSheet } from "../lib/loadSheet";
-import { buildNotice, deliverNotice, noticeCounts, noticeRows } from "../lib/chemicalNotices";
+import { buildNotice, deliverNotice, noticeContacts, noticeCounts, noticeRows } from "../lib/chemicalNotices";
 import { emailTransport } from "../lib/channels";
 import { textingConfig } from "../lib/texting";
 
@@ -233,12 +233,18 @@ const routes: FastifyPluginAsync = async (app) => {
     if (!n) throw new HttpError(404, "Notice not found");
     return n;
   });
-  /** A notice for a record now: email or text it, or queue it to print (any record, any time). */
+  /**
+   * A notice for a record now: email or text it, or queue it to print (any record, any time).
+   * Emailing or texting it also reaches the property's contacts who get its service notifications
+   * and haven't had this one yet.
+   */
   app.post<{ Params: { recordId: string } }>("/records/:recordId/notice", async (req) => {
     const { channel } = parse(z.object({ channel: z.enum(["email", "text", "printed"]) }), req.body);
     const [r] = await db.select({ id: applicationRecords.id }).from(applicationRecords).where(and(eq(applicationRecords.id, req.params.recordId), eq(applicationRecords.companyId, req.user.companyId)));
     if (!r) throw new HttpError(404, "Record not found");
-    return deliverNotice(r.id, channel, req.user.sub);
+    const row = await deliverNotice(r.id, channel, req.user.sub);
+    if (channel !== "printed") await noticeContacts(r.id, req.user.sub);
+    return row;
   });
   /** What a record's notice would say (for printing one that wasn't queued). */
   app.get<{ Params: { recordId: string } }>("/records/:recordId/notice-preview", async (req) => {

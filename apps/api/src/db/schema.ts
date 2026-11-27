@@ -1480,6 +1480,50 @@ export const properties = pgTable(
 );
 
 /**
+ * Contacts on a property who aren't customers: tenants, an on-site manager, a neighbor with the key.
+ * No account and no invoices; who to reach about the address. "Moved out" sets the end date and
+ * keeps the record as history.
+ */
+export const propertyContacts = pgTable(
+  "property_contacts",
+  {
+    id: id(),
+    companyId: companyId(),
+    propertyId: uuid("property_id").notNull().references(() => properties.id, { onDelete: "cascade" }),
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    nickname: text("nickname"),
+    /** First and last name together (the nickname when that's all there is), kept for lists and the search box. */
+    name: text("name").notNull(),
+    /** Contact type: "Tenant", "Property manager" … (the company's own list). */
+    relation: text("relation").notNull().default("Tenant"),
+    email: text("email"),
+    homePhone: text("home_phone"),
+    workPhone: text("work_phone"),
+    cellPhone: text("cell_phone"),
+    otherPhone: text("other_phone"),
+    fax: text("fax"),
+    /** The number to show first: cell, then home, work, other. */
+    phone: text("phone"),
+    /** "call", "text" or "email": how they'd rather be reached, and how notifications go to them. */
+    formOfContact: text("form_of_contact"),
+    birthday: date("birthday"),
+    notes: text("notes"),
+    /** Gets this property's service notifications (pre-visit and after a chemical application). */
+    notify: boolean("notify").notNull().default(false),
+    /** They replied STOP to a text: no more texts until they reply START. */
+    textOptOutAt: timestamp("text_opt_out_at", { withTimezone: true }),
+    startDate: date("start_date"),
+    /** The last day; null while current. */
+    endDate: date("end_date"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("property_contacts_property_idx").on(t.propertyId), index("property_contacts_company_idx").on(t.companyId)],
+);
+
+/**
  * Which customers are on a property and as what: one current bill-to (who's invoiced) and any
  * residents. Ended assignments stay as history; a property's past invoices stay with the old customer.
  */
@@ -3102,11 +3146,13 @@ export const chemicalNotices = pgTable(
     recordId: uuid("record_id").notNull().references(() => applicationRecords.id, { onDelete: "cascade" }),
     customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
     propertyId: uuid("property_id").references(() => properties.id, { onDelete: "set null" }),
-    /** "email", "text" or "printed". */
+    /** "email", "text" or "printed"; "call" for a property contact the office phones. */
     channel: text("channel").notNull(),
     /** "sending", "sent", "failed", "skipped", "to_print" or "printed". */
     status: text("status").notNull(),
     to: text("to"),
+    /** Who it went to when that isn't the customer: a contact on the property ("Tina Tenant (tenant)"). */
+    recipient: text("recipient"),
     subject: text("subject"),
     body: text("body").notNull(),
     /** Why it failed or was skipped. */

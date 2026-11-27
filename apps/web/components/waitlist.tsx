@@ -21,7 +21,7 @@ export type WaitRow = {
   estMinutes: number | null; estSource: "set" | "history" | "size" | "none"; estUsed: number; estLeftOut: number; totalCents: number; crewId: string | null; preferredCrewId: string | null;
   service: { id: string | null; name: string }; serviceTypeIds: string[]; tagIds: string[];
   customer: { id: string; name: string; notifyBefore: NotifyBefore; tagIds: string[] };
-  property: { id: string; address: string; street: string; city: string | null; zip: string | null; lat: number | null; lng: number | null; mapCode: string | null; sqFt: number | null; pets: string | null; tagIds: string[] };
+  property: { id: string; address: string; street: string; city: string | null; zip: string | null; lat: number | null; lng: number | null; mapCode: string | null; sqFt: number | null; pets: string | null; tagIds: string[]; notifyContacts?: number };
   needsCard: boolean; badges: WaitBadge[];
 };
 export type Crew = { id: string; name: string; color: string; dailyHours: number };
@@ -742,6 +742,8 @@ export function EditWorkOrders({ rows, crews, today, initial, onClose, onDone, b
   const toText = hear.filter((r) => r.badges.includes("text_ahead")).length;
   const toEmail = hear.filter((r) => r.badges.includes("email_ahead")).length;
   const toCall = hear.filter((r) => r.badges.includes("call_ahead")).length;
+  // Tenants and other property contacts ticked for service notifications hear too.
+  const toContacts = hear.reduce((n, r) => n + (r.property.notifyContacts ?? 0), 0);
   const windows = rows.filter((r) => r.windowStart && windowStart && windowStart < r.windowStart);
   const capacity = fit?.capacityHours ?? lane?.dailyHours ?? null;
   const afterHours = fit ? Math.round((fit.afterMinutes / 60) * 10) / 10 : null;
@@ -838,7 +840,7 @@ export function EditWorkOrders({ rows, crews, today, initial, onClose, onDone, b
         )}
         <div className="stack" style={{ gap: 4 }}>
           {to === "board" && aCrew && <label className="check"><input type="checkbox" checked={makePreferred} onChange={(e) => setMakePreferred(e.target.checked)} /> Make {crewName(aCrew, crews)} the preferred crew for {rows.length === 1 ? "this property" : "these properties"}</label>}
-          <label className="check"><input type="checkbox" checked={notify && (toText + toEmail + toCall > 0)} onChange={(e) => setNotify(e.target.checked)} disabled={!toText && !toEmail && !toCall} /> Notify customers by their preference{toText || toEmail || toCall ? ` (${[toText && `${toText} by text`, toEmail && `${toEmail} by email`, toCall && `${toCall} to call`].filter(Boolean).join(", ")})` : to === "board" && !moving.length ? " (nobody's day changes)" : " (none asked for notice)"}</label>
+          <label className="check"><input type="checkbox" checked={notify && (toText + toEmail + toCall + toContacts > 0)} onChange={(e) => setNotify(e.target.checked)} disabled={!toText && !toEmail && !toCall && !toContacts} /> Notify customers by their preference{toText || toEmail || toCall || toContacts ? ` (${[toText && `${toText} by text`, toEmail && `${toEmail} by email`, toCall && `${toCall} to call`, toContacts && `${toContacts} property contact${toContacts === 1 ? "" : "s"}`].filter(Boolean).join(", ")})` : to === "board" && !moving.length ? " (nobody's day changes)" : " (none asked for notice)"}</label>
         </div>
         <ErrorBox error={act.error} />
         <div className="row">
@@ -879,7 +881,7 @@ export function toldParts(r: Told): string[] {
   const parts: string[] = [];
   if (r.texted) parts.push(`Texted ${r.texted}.`);
   if (r.emailed) parts.push(`Emailed ${r.emailed}.`);
-  if (r.notTexted) parts.push(`${r.notTexted} want a text but it wasn't sent (texting isn't connected or they have no mobile number).`);
+  if (r.notTexted) parts.push(`${r.notTexted} want a text but it wasn't sent (texting isn't connected, they have no mobile number, or they replied STOP).`);
   if (r.notEmailed) parts.push(`${r.notEmailed} want an email but it wasn't sent (no email address on file, or email isn't set up).`);
   if (r.toCall.length) parts.push(`Call ahead: ${r.toCall.join(", ")}.`);
   return parts;

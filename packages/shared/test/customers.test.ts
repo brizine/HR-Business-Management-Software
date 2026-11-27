@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { customerName, customerSchema, dayBefore, formatAddress, lawnTotal, propertySchema } from "../src/customers";
+import { contactChannel, contactName, contactPhone, customerName, customerSchema, dayBefore, formatAddress, lawnTotal, propertyContactSchema, propertySchema } from "../src/customers";
 
 describe("customers", () => {
   it("names commercial and HOA accounts by company, people by name", () => {
@@ -42,5 +42,42 @@ describe("inactive is the word on screen", () => {
     // Asset status: "retired" is still what's stored; a company's own wording (Edit drop-down menus) still wins.
     expect(defaultLabel("retired")).toBe("inactive");
     expect(defaultLabel("out_of_service")).toBe("out of service");
+  });
+});
+
+describe("property contacts (tenants and the like)", () => {
+  it("names them by first and last name, or the nickname when that's all there is", () => {
+    expect(contactName({ firstName: " Tina ", lastName: "Tenant", nickname: "T" })).toBe("Tina Tenant");
+    expect(contactName({ firstName: null, lastName: "Tenant" })).toBe("Tenant");
+    expect(contactName({ nickname: "Bud" })).toBe("Bud");
+  });
+
+  it("shows the cell first, then home, work and other", () => {
+    expect(contactPhone({ homePhone: "(405) 555-0140", cellPhone: "(405) 555-0142" })).toBe("(405) 555-0142");
+    expect(contactPhone({ workPhone: "(405) 555-0141", otherPhone: "(405) 555-0143" })).toBe("(405) 555-0141");
+    expect(contactPhone({ email: "t@example.com" })).toBeNull();
+  });
+
+  it("reaches them by their form of contact when they have what it needs, else email, then a text, then a call", () => {
+    const all = { email: "t@example.com", cellPhone: "(405) 555-0142", homePhone: "(405) 555-0140" };
+    expect(contactChannel(all)).toBe("email");
+    expect(contactChannel({ ...all, formOfContact: "text" })).toBe("text");
+    expect(contactChannel({ ...all, formOfContact: "call" })).toBe("call");
+    // Text is picked but there's no cell phone: the next thing they do have.
+    expect(contactChannel({ email: "t@example.com", homePhone: "(405) 555-0140", formOfContact: "text" })).toBe("email");
+    expect(contactChannel({ cellPhone: "(405) 555-0142" })).toBe("text");
+    // A land line can't get a text: the office calls.
+    expect(contactChannel({ homePhone: "(405) 555-0140" })).toBe("call");
+    expect(contactChannel({})).toBeNull();
+  });
+
+  it("the form needs a name, and anyone ticked for notifications needs a way to be reached", () => {
+    expect(propertyContactSchema.safeParse({ nickname: "Bud" }).success).toBe(false);
+    expect(propertyContactSchema.safeParse({ lastName: "Tenant", notify: true }).success).toBe(false);
+    const ok = propertyContactSchema.parse({ firstName: "Tina", cellPhone: "4055550142", formOfContact: "", birthday: "", notify: true });
+    expect(ok).toMatchObject({ firstName: "Tina", relation: "Tenant", cellPhone: "(405) 555-0142", formOfContact: null, notify: true });
+    expect(ok.birthday).toBeUndefined();
+    // A fax number alone isn't a way to send a notification.
+    expect(propertyContactSchema.safeParse({ firstName: "Tina", fax: "4055550149", notify: true }).success).toBe(false);
   });
 });

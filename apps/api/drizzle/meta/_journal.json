@@ -771,6 +771,13 @@
       "when": 1795799960568,
       "tag": "0109_property_builtin_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1795803368186,
+      "tag": "0110_property_contacts",
+      "breakpoints": true
     }
   ]
 }

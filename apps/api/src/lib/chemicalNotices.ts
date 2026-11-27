@@ -5,11 +5,13 @@ import { applicationRecordProducts, applicationRecords, chemicalNotices, compani
 import { emailTransport, isUndeliverable } from "./channels";
 import { companyInfo, messageVars, renderCustomerEmail } from "./customerMessages";
 import { HttpError } from "./errors";
+import { contactLabel, contactVars, contactsToNotify, reachContact } from "./propertyContacts";
 import { sendCustomerText } from "./texting";
 
 /**
  * After-application notices: when a chemical record is made, the customer hears what was applied
- * and how long to stay off the lawn, the way their property chooses. Off until the company turns
+ * and how long to stay off the lawn, the way their property chooses. The property's contacts who
+ * are ticked for service notifications (a tenant, say) get it too. Off until the company turns
  * notices on (Chemical Tracking → Notices). Never slows the tech down: it runs after completion.
  */
 
@@ -17,8 +19,11 @@ const pending = new Set<Promise<unknown>>();
 /** Tests wait for the notices started by completing a work order. */
 export async function flushNotices() { while (pending.size) await Promise.all([...pending]); }
 
-/** The notice for a record, filled in: email subject and body, the text, and who it's for. */
-export async function buildNotice(recordId: string) {
+/**
+ * The notice for a record, filled in: email subject and body, the text, and who it's for. With
+ * `who` (a contact on the property) their name goes where the customer's would.
+ */
+export async function buildNotice(recordId: string, who?: Parameters<typeof contactVars>[0]) {
   const [r] = await db.select().from(applicationRecords).where(eq(applicationRecords.id, recordId));
   if (!r) throw new HttpError(404, "Record not found");
   const [co] = await db.select({ chemicalNotices: companies.chemicalNotices }).from(companies).where(eq(companies.id, r.companyId));
@@ -29,7 +34,8 @@ export async function buildNotice(recordId: string) {
   // Surfactants and other adjuvants are on the record, not in the customer's notice.
   const shown = items.filter((i) => i.type !== "adjuvant");
   const company = await companyInfo(r.companyId);
-  const vars = r.customerId ? (await messageVars(r.companyId, [r.customerId], company)).get(r.customerId) ?? {} : { company: company.name, company_phone: company.phone ?? "" };
+  const vars = who ? contactVars(who, company)
+    : r.customerId ? (await messageVars(r.companyId, [r.customerId], company)).get(r.customerId) ?? {} : { company: company.name, company_phone: company.phone ?? "" };
   const nv = noticeVars({ date: r.appliedOn, property: r.siteAddress ?? "", products: shown.map((i) => ({ name: i.name, customerNote: i.customerNote ?? null, reiHours: i.reiHours ?? null })) });
   return {
     record: r, settings, company,
@@ -70,6 +76,35 @@ export async function deliverNotice(recordId: string, channel: Exclude<NoticeCha
   }
 }
 
+/**
+ * The same notice for the property's contacts who get its service notifications, each the way
+ * they're reached. One who is reached only by phone is logged as skipped with their number, so the
+ * office sees who to call. Nobody gets it twice: a later call only reaches those it hasn't yet.
+ */
+export async function noticeContacts(recordId: string, by: string | null) {
+  const [r] = await db.select().from(applicationRecords).where(eq(applicationRecords.id, recordId));
+  if (!r?.propertyId) return [];
+  const contacts = await contactsToNotify(r.companyId, [r.propertyId]);
+  if (!contacts.length) return [];
+  const before = await db.select({ who: chemicalNotices.recipient, status: chemicalNotices.status, channel: chemicalNotices.channel }).from(chemicalNotices).where(eq(chemicalNotices.recordId, r.id));
+  const had = new Set(before.filter((x) => x.status === "sent" || x.status === "sending" || x.channel === "call").map((x) => x.who));
+  const out = [];
+  for (const k of contacts) {
+    const recipient = contactLabel(k);
+    if (had.has(recipient)) continue;
+    const n = await buildNotice(r.id, k);
+    const sent = await reachContact(r.companyId, k, n.company, { subject: n.subject, body: n.body, text: n.text }, { by, source: "automation" });
+    const email = sent.channel === "email";
+    const [row] = await db.insert(chemicalNotices).values({
+      companyId: r.companyId, recordId: r.id, customerId: r.customerId, propertyId: r.propertyId, sentById: by, recipient,
+      channel: sent.channel ?? "email", status: sent.status === "call" ? "skipped" : sent.status, to: sent.to,
+      subject: email ? n.subject : null, body: email ? n.body : n.text, detail: sent.detail, sentAt: sent.status === "sent" ? new Date() : null,
+    }).returning();
+    out.push(row);
+  }
+  return out;
+}
+
 /** Called after a work order is completed: its record's notice, if notices are on and the property wants one. */
 export function noticeAfterComplete(visitId: string, companyId: string) {
   const p = (async () => {
@@ -82,8 +117,9 @@ export function noticeAfterComplete(visitId: string, companyId: string) {
     if (already) return;
     const [prop] = r.propertyId ? await db.select({ chemicalNotice: properties.chemicalNotice }).from(properties).where(eq(properties.id, r.propertyId)) : [];
     const channel = (prop?.chemicalNotice ?? "email") as NoticeChannel;
-    if (channel === "none") return;
-    await deliverNotice(r.id, channel, null);
+    if (channel !== "none") await deliverNotice(r.id, channel, null);
+    // A tenant ticked for notifications is told even when the customer (a landlord, say) wants none.
+    await noticeContacts(r.id, null);
   })().catch((e) => console.error("Chemical notice failed", e)).finally(() => pending.delete(p));
   pending.add(p);
 }
@@ -96,7 +132,7 @@ export async function noticeRows(companyId: string, o: { status?: string; record
   if (o.recordId) where.push(eq(chemicalNotices.recordId, o.recordId));
   if (o.id) where.push(eq(chemicalNotices.id, o.id));
   return db.select({
-    id: chemicalNotices.id, recordId: chemicalNotices.recordId, channel: chemicalNotices.channel, status: chemicalNotices.status, to: chemicalNotices.to,
+    id: chemicalNotices.id, recordId: chemicalNotices.recordId, channel: chemicalNotices.channel, status: chemicalNotices.status, to: chemicalNotices.to, recipient: chemicalNotices.recipient,
     subject: chemicalNotices.subject, body: chemicalNotices.body, detail: chemicalNotices.detail, sentAt: chemicalNotices.sentAt, printedAt: chemicalNotices.printedAt, createdAt: chemicalNotices.createdAt,
     customerId: chemicalNotices.customerId, customerName: applicationRecords.customerName, siteAddress: applicationRecords.siteAddress, appliedOn: applicationRecords.appliedOn,
   }).from(chemicalNotices).innerJoin(applicationRecords, eq(applicationRecords.id, chemicalNotices.recordId))

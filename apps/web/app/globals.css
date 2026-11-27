@@ -1666,6 +1666,12 @@ body.drag-sorting, body.drag-sorting * { cursor: grabbing !important; user-selec
 .alert.warn { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn) 35%, var(--border)); }
 .alert.ok { background: var(--ok-bg); border-color: color-mix(in srgb, var(--ok) 35%, var(--border)); }
 .wl-edit .alert { margin: 0; }
+/* Add Contact (a property's tenant or other contact): one line per field, the label at the left. */
+.contact-modal { width: min(560px, 100%); }
+.contact-form { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 8px 12px; align-items: center; }
+.contact-form > label { font-size: 13px; color: var(--text); font-weight: 600; text-align: right; }
+.contact-notify { border-top: 1px solid var(--border); padding-top: 10px; display: grid; gap: 4px; }
+@media (max-width: 520px) { .contact-form { grid-template-columns: 1fr; gap: 2px 0; } .contact-form > label { text-align: left; margin-top: 6px; } }
 .wl-page { gap: 12px; grid-template-columns: minmax(0, 1fr); }
 .wl-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
 .wl-search { width: min(320px, 100%); }

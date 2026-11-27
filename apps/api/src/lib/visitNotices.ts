@@ -3,15 +3,17 @@ import { db } from "../db";
 import { customers } from "../db/schema";
 import { emailTransport, isUndeliverable } from "./channels";
 import { companyInfo, messageVars, renderCustomerEmail } from "./customerMessages";
+import { contactLabel, contactsToNotify, reachContact } from "./propertyContacts";
 import { sendCustomerText, textingConfig } from "./texting";
 
 /**
  * Telling customers about a visit the way each one asked (their Pre Visit Notification): a text,
  * an email, or a call from the office. Used when work is scheduled, moved to another day, or sent
- * back to the waiting list.
+ * back to the waiting list. A property's contacts who are ticked for service notifications (a
+ * tenant, say) are told as well, each by their own form of contact.
  */
 
-/** Who was told, and who couldn't be. `toCall` are the customers the office should phone. */
+/** Who was told, and who couldn't be. `toCall` are the customers (and property contacts) the office should phone. */
 export type Told = { texted: number; notTexted: number; emailed: number; notEmailed: number; toCall: string[] };
 export const nobodyTold = (): Told => ({ texted: 0, notTexted: 0, emailed: 0, notEmailed: 0, toCall: [] });
 
@@ -64,6 +66,24 @@ export function visitTeller(companyId: string, by: string | null, o: { once?: bo
       if (!texting) { told.notTexted++; return; }
       const s = await sendCustomerText(companyId, customer.id, `${(await co()).name}: ${n.sentence} Reply STOP to opt out.`, { by, source: "office" });
       if (s.text && s.text.status !== "failed") told.texted++; else told.notTexted++;
+    },
+    /**
+     * The property's contacts who get its service notifications hear the same news, whatever the
+     * customer's own preference is (a landlord may want nothing while the tenant wants a text).
+     */
+    async tellContacts(propertyId: string | null | undefined, n: VisitNotice) {
+      if (!propertyId) return;
+      for (const k of await contactsToNotify(companyId, [propertyId])) {
+        if (o.once && heard.has(`contact:${k.id}`)) continue;
+        heard.add(`contact:${k.id}`);
+        const c = await co();
+        const r = await reachContact(companyId, k, c, {
+          subject: `${c.name}: ${n.subject}`, body: `Hello {first_name},\n\n${capital(n.sentence)}\n\nThank you,\n${c.name}`, text: `${c.name}: ${n.sentence} Reply STOP to opt out.`,
+        }, { by, source: "office" });
+        if (r.status === "call") { const who = contactLabel(k); if (!told.toCall.includes(who)) told.toCall.push(who); }
+        else if (r.channel === "text") { if (r.status === "sent") told.texted++; else told.notTexted++; }
+        else if (r.channel === "email") { if (r.status === "sent") told.emailed++; else told.notEmailed++; }
+      }
     },
   };
 }

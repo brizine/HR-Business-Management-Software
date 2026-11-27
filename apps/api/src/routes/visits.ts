@@ -14,7 +14,7 @@ import {
 } from "@crewdesk/shared";
 import { db } from "../db";
 import type { Tx } from "../lib/crm";
-import { crews, crmTags, customers, employees, estimates, invoiceLines, invoices, properties, propertyAssignments, serviceTypes, visitAssignees, visitFiles, visitFormEntries, visitLines, visitProducts, visitWeather, visits } from "../db/schema";
+import { crews, crmTags, customers, employees, estimates, invoiceLines, invoices, properties, propertyAssignments, propertyContacts, serviceTypes, visitAssignees, visitFiles, visitFormEntries, visitLines, visitProducts, visitWeather, visits } from "../db/schema";
 import { addFormHistory, applyFlags, autoFormIds, emailCopiesAfter, emailEntry, entryPdf, formHistory, formsByVisit, formsFor, formsLocked, formsStillNeeded, syncVisitForms } from "../lib/visitForms";
 import { authenticate, isManager } from "../lib/auth";
 import { HttpError, notFound, parse } from "../lib/errors";
@@ -59,6 +59,13 @@ export async function presentVisits(req: FastifyRequest, rows: Visit[]) {
     .from(customers).where(inArray(customers.id, custIds));
   const ps = propIds.length ? await db.select({ id: properties.id, name: properties.name, street: properties.street, city: properties.city, state: properties.state, zip: properties.zip, gateCode: properties.gateCode, pets: properties.pets, accessNotes: properties.accessNotes, lawnSqFt: properties.lawnSqFt, frontSqFt: properties.frontSqFt, backSqFt: properties.backSqFt, otherSqFt: properties.otherSqFt, lat: properties.lat, lng: properties.lng, custom: properties.custom })
     .from(properties).where(inArray(properties.id, propIds)) : [];
+  // Tenants and other contacts on the properties who aren't customers (the ones there now).
+  const contacts = propIds.length ? await db.select({
+    propertyId: propertyContacts.propertyId, name: propertyContacts.name, nickname: propertyContacts.nickname, relation: propertyContacts.relation, phone: propertyContacts.phone,
+    cellPhone: propertyContacts.cellPhone, homePhone: propertyContacts.homePhone, workPhone: propertyContacts.workPhone, otherPhone: propertyContacts.otherPhone,
+    email: propertyContacts.email, formOfContact: propertyContacts.formOfContact, notes: propertyContacts.notes,
+  })
+    .from(propertyContacts).where(and(inArray(propertyContacts.propertyId, propIds), isNull(propertyContacts.endDate))).orderBy(asc(propertyContacts.sortOrder), asc(propertyContacts.createdAt)) : [];
   const inv = invIds.length ? await db.select({ id: invoices.id, number: invoices.number, status: invoices.status }).from(invoices).where(inArray(invoices.id, invIds)) : [];
   const es = people.length ? await db.select({ id: employees.id, firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(inArray(employees.id, people)) : [];
   const tagIdsAll = [...new Set(rows.flatMap((v) => v.tagIds ?? []))];
@@ -78,7 +85,7 @@ export async function presentVisits(req: FastifyRequest, rows: Visit[]) {
       lines: lines.filter((l) => l.visitId === v.id).map((l) => ({ ...l, unitPriceCents: showPrices ? l.unitPriceCents : null, amountCents: showPrices ? l.amountCents : null })),
       assignees: crew.filter((x) => x.visitId === v.id).map(({ id, firstName, lastName }) => ({ id, firstName, lastName })),
       customer: { id: c.id, name: customerName(c), phone: c.phone, tagIds: c.tagIds },
-      property: p ? { id: p.id, name: p.name, address: formatAddress(p), gateCode: p.gateCode, pets: p.pets, accessNotes: p.accessNotes, lawnSqFt: p.lawnSqFt, frontSqFt: p.frontSqFt, backSqFt: p.backSqFt, otherSqFt: p.otherSqFt, lat: p.lat, lng: p.lng, custom: p.custom } : null,
+      property: p ? { id: p.id, name: p.name, address: formatAddress(p), gateCode: p.gateCode, pets: p.pets, accessNotes: p.accessNotes, lawnSqFt: p.lawnSqFt, frontSqFt: p.frontSqFt, backSqFt: p.backSqFt, otherSqFt: p.otherSqFt, lat: p.lat, lng: p.lng, custom: p.custom, contacts: contacts.filter((k) => k.propertyId === p.id).map(({ propertyId: _p, ...k }) => k) } : null,
       invoice: i ? { id: i.id, number: i.number, status: i.status } : null,
       crew: cr.find((x) => x.id === v.crewId) ?? null,
       fileCount: fileCounts.find((x) => x.visitId === v.id)?.n ?? 0,
