@@ -13,6 +13,7 @@ import {
   AddFilter, BOARD_FILTER_KINDS, BoardPicker, BulkMenu, Columns, EditWorkOrders, FILTER_KINDS, STATUS_LABELS, SaveView, WL_COLUMNS, WaitMap, WorkloadStrip,
   applyFilters, badgeLegend, dayLabel, describeFilter, plusDays, totalsOf,
   type Crew, type Filter, type MapLine, type SavedView, type WCol, type WaitData, type WaitRow, type WaitView,
+  toldParts,
 } from "@/components/waitlist";
 import { dispatchApi, type DRoute, type Preview } from "./data";
 import { Ico } from "./beta-parts";
@@ -642,15 +643,15 @@ function RainDay({ rows, crews, date, who: first, onClose, onDone }: { rows: Boa
   useEffect(() => { if (next.data && !toDate) setToDate(next.data.date); }, [next.data, toDate]);
   const act = useAction();
   const open = rows.filter((r) => r.date === date && r.status === "open" && (who === "all" || (who === "none" ? !r.crewId : r.crewId === who)));
-  const hear = (b: "text_ahead" | "call_ahead") => new Set(open.filter((r) => r.badges.includes(b)).map((r) => r.customer.id)).size;
-  const texts = hear("text_ahead"), calls = hear("call_ahead");
+  const hear = (b: "text_ahead" | "email_ahead" | "call_ahead") => new Set(open.filter((r) => r.badges.includes(b)).map((r) => r.customer.id)).size;
+  const texts = hear("text_ahead"), emails = hear("email_ahead"), calls = hear("call_ahead");
   return (
     <div className="cal-modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form className="cal-modal card stack wl-edit" role="dialog" aria-modal="true" aria-label="Rain or wind day" onSubmit={(e) => {
         e.preventDefault();
         act.run(async () => {
           const r = await dispatchApi.rain({ date, crewId: who, to, ...(to === "next" ? { toDate } : {}), reason, note, notify });
-          onDone(`${r.moved} work order${r.moved === 1 ? "" : "s"} moved ${r.to ? `to ${dayLabel(r.to)}` : "back to the waiting list"}.${notify ? ` ${r.texted} customer${r.texted === 1 ? "" : "s"} texted.${r.notTexted ? ` ${r.notTexted} couldn't be texted${r.texted === 0 ? " (is texting connected?)" : ""}.` : ""}${r.toCall.length ? ` To call: ${r.toCall.join(", ")}.` : ""}` : ""}`);
+          onDone(`${r.moved} work order${r.moved === 1 ? "" : "s"} moved ${r.to ? `to ${dayLabel(r.to)}` : "back to the waiting list"}.${notify ? ` ${toldParts(r).join(" ") || "Nobody asked to be told."}` : ""}`);
         });
       }}>
         <div className="row" style={{ justifyContent: "space-between" }}><h2 style={{ margin: 0 }}>Rain or wind day</h2><button type="button" className="btn sm" onClick={onClose} aria-label="Close"><Icon name="close" size={14} /></button></div>
@@ -673,7 +674,7 @@ function RainDay({ rows, crews, date, who: first, onClose, onDone }: { rows: Boa
           <label>Why<select value={reason} onChange={(e) => setReason(e.target.value as (typeof BACK_REASONS)[number])}>{BACK_REASONS.map((r) => <option key={r} value={r}>{BACK_REASON_LABELS[r]}</option>)}</select></label>
           <label>Note (optional)<input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="Gusts over 20 mph" /></label>
         </div>
-        <label className="check"><input type="checkbox" checked={notify && texts + calls > 0} disabled={!texts && !calls} onChange={(e) => setNotify(e.target.checked)} /> Notify customers by their preference{texts || calls ? ` (${[texts && `${texts} by text`, calls && `${calls} to call`].filter(Boolean).join(", ")})` : " (none asked for notice)"}</label>
+        <label className="check"><input type="checkbox" checked={notify && texts + emails + calls > 0} disabled={!texts && !emails && !calls} onChange={(e) => setNotify(e.target.checked)} /> Notify customers by their preference{texts || emails || calls ? ` (${[texts && `${texts} by text`, emails && `${emails} by email`, calls && `${calls} to call`].filter(Boolean).join(", ")})` : " (none asked for notice)"}</label>
         <p className="wl-adds" style={{ margin: 0 }}><strong>{open.length}</strong> work order{open.length === 1 ? "" : "s"} will move. Who does them stays the same; they come off their routes.</p>
         <ErrorBox error={act.error} />
         <div className="row">

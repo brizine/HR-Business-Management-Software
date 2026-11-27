@@ -12,7 +12,7 @@ import type { Tx } from "./crm";
 import { HttpError } from "./errors";
 import { geocode } from "./geocode";
 import { driveMatrix, measureLegs, type Step } from "./routing";
-import { sendCustomerText, textingConfig } from "./texting";
+import { nobodyTold, visitTeller, type VisitNotice } from "./visitNotices";
 import { billingSettings } from "./invoices";
 import { companyToday } from "./payRates";
 import { estimateMinutes, waitingList, type WaitRow } from "./waitlist";
@@ -770,35 +770,26 @@ export async function rainDay(companyId: string, by: string, b: { date: string; 
     eq(visits.companyId, companyId), eq(visits.date, b.date), eq(visits.status, "open"),
     b.crewId === "all" ? undefined : b.crewId === "none" ? isNull(visits.crewId) : eq(visits.crewId, b.crewId),
   ));
-  if (!rows.length) return { moved: 0, to: null as string | null, texted: 0, notTexted: 0, toCall: [] as string[] };
+  if (!rows.length) return { moved: 0, to: null as string | null, ...nobodyTold() };
   const keys = rows.map((v) => eventKey("visit", v.id));
   const why = `${BACK_REASON_LABELS[b.reason]}${b.note ? `: ${b.note}` : ""}`;
   const toDate = b.to === "next" ? b.toDate ?? (await nextWorkingDay(companyId, b.date)) : null;
   if (toDate && toDate <= b.date) throw new HttpError(400, "Pick a later day to move them to");
   if (toDate) await rescheduleEvents(companyId, { keys, date: toDate });
   else await toWaitlist(companyId, { keys, dueBy: "keep" }, why);
-  let texted = 0, notTexted = 0;
-  const toCall: string[] = [];
+  // Each customer hears once, the way they asked: a text, an email, or the office calls.
+  const teller = visitTeller(companyId, by, { once: true });
   if (b.notify) {
-    const [co] = await db.select({ name: companies.name }).from(companies).where(eq(companies.id, companyId));
-    const texting = !!(await textingConfig(companyId));
-    const events = await eventsFor(companyId, keys, false);
-    const told = new Set<string>();
-    for (const e of events) {
-      if (!e.customer || told.has(e.customer.id)) continue;
-      if (e.notifyBefore === "call") { toCall.push(e.customer.name); told.add(e.customer.id); continue; }
-      if (e.notifyBefore !== "text") continue;
-      told.add(e.customer.id);
-      if (!texting) { notTexted++; continue; }
+    const reason = BACK_REASON_LABELS[b.reason].toLowerCase();
+    for (const e of await eventsFor(companyId, keys, false)) {
+      if (!e.customer) continue;
       const what = (e.services[0]?.name ?? e.title).toLowerCase();
-      const body = toDate
-        ? `${co.name}: because of ${BACK_REASON_LABELS[b.reason].toLowerCase()}, your ${what} is moving to ${longDay(toDate)}. Reply STOP to opt out.`
-        : `${co.name}: because of ${BACK_REASON_LABELS[b.reason].toLowerCase()}, we couldn't get to your ${what} on ${longDay(b.date)}. We'll be in touch with a new day. Reply STOP to opt out.`;
-      const s = await sendCustomerText(companyId, e.customer.id, body, { by, source: "office" });
-      if (s.text && s.text.status !== "failed") texted++; else notTexted++;
+      await teller.tell(e.notifyBefore, e.customer, toDate
+        ? { subject: `your ${what} is moving to ${longDay(toDate)}`, sentence: `because of ${reason}, your ${what} is moving to ${longDay(toDate)}.` }
+        : { subject: `your ${what} on ${longDay(b.date)}`, sentence: `because of ${reason}, we couldn't get to your ${what} on ${longDay(b.date)}. We'll be in touch with a new day.` });
     }
   }
-  return { moved: rows.length, to: toDate, texted, notTexted, toCall: [...new Set(toCall)] };
+  return { moved: rows.length, to: toDate, ...teller.told };
 }
 
 /* ───────────── The dispatch board's list, and Edit work orders ───────────── */
@@ -892,25 +883,14 @@ export async function editWorkOrders(companyId: string, by: string, b: DispatchE
   const base = await waitingList(companyId, { ids: b.visitIds });
   if (base.rows.length !== new Set(b.visitIds).size) throw new HttpError(404, "Some of those work orders weren't found. Reload the page.");
   const rows = base.rows;
-  const [co] = await db.select({ name: companies.name }).from(companies).where(eq(companies.id, companyId));
-  /** A text to each customer who asked for one (once each); the ones who want a call are listed. */
-  const tell = async (list: WaitRow[], body: (r: WaitRow) => string) => {
-    let texted = 0, notTexted = 0;
-    const toCall: string[] = [];
-    if (!b.notify || !list.length) return { texted, notTexted, toCall };
-    const texting = !!(await textingConfig(companyId));
+  /** Each customer hears the way they asked (a text or an email, once each); the ones who want a call are listed. */
+  const tell = async (list: WaitRow[], notice: (r: WaitRow) => VisitNotice) => {
+    const teller = visitTeller(companyId, by, { once: true });
+    if (!b.notify || !list.length) return teller.told;
+    // The property's own preference, else the customer's.
     const prefs = new Map((await db.select({ id: properties.id, p: properties.notifyBefore }).from(properties).where(inArray(properties.id, list.map((r) => r.property.id)))).map((p) => [p.id, p.p]));
-    const told = new Set<string>();
-    for (const r of list) {
-      const pref = prefs.get(r.property.id) ?? r.customer.notifyBefore;
-      if (pref === "call") toCall.push(r.customer.name);
-      if (pref !== "text" || told.has(r.customer.id)) continue;
-      told.add(r.customer.id);
-      if (!texting) { notTexted++; continue; }
-      const s = await sendCustomerText(companyId, r.customer.id, body(r), { by, source: "office" });
-      if (s.text && s.text.status !== "failed") texted++; else notTexted++;
-    }
-    return { texted, notTexted, toCall: [...new Set(toCall)] };
+    for (const r of list) await teller.tell(prefs.get(r.property.id) ?? r.customer.notifyBefore, r.customer, notice(r));
+    return teller.told;
   };
 
   if (b.to === "waitlist") {
@@ -918,7 +898,10 @@ export async function editWorkOrders(companyId: string, by: string, b: DispatchE
     if (!scheduled.length) throw new HttpError(400, "Those are on the waiting list already");
     const why = `${BACK_REASON_LABELS[b.reason!]}${b.note ? `: ${b.note}` : ""}`;
     const done = await toWaitlist(companyId, { keys: scheduled.map((r) => eventKey("visit", r.id)), dueBy: "keep" }, why);
-    const told = await tell(scheduled, (r) => `${co.name}: because of ${BACK_REASON_LABELS[b.reason!].toLowerCase()}, we couldn't get to your ${r.service.name.toLowerCase()} on ${longDay(r.date!)}. We'll be in touch with a new day. Reply STOP to opt out.`);
+    const told = await tell(scheduled, (r) => ({
+      subject: `your ${r.service.name.toLowerCase()} on ${longDay(r.date!)}`,
+      sentence: `because of ${BACK_REASON_LABELS[b.reason!].toLowerCase()}, we couldn't get to your ${r.service.name.toLowerCase()} on ${longDay(r.date!)}. We'll be in touch with a new day.`,
+    }));
     return { to: "waitlist" as const, moved: done.moved, scheduled: 0, early: 0, ...told };
   }
 
@@ -967,7 +950,10 @@ export async function editWorkOrders(companyId: string, by: string, b: DispatchE
     }
   }
   const window = b.windowStart ? ` ${b.windowEnd ? `between ${time12(b.windowStart)} and ${time12(b.windowEnd)}` : `after ${time12(b.windowStart)}`}` : "";
-  const told = await tell(rows.filter((r) => r.date !== date), (r) => `${co.name}: we're scheduled for ${r.service.name.toLowerCase()} at ${r.property.street} on ${longDay(date)}${window}. Reply STOP to opt out.`);
+  const told = await tell(rows.filter((r) => r.date !== date), (r) => ({
+    subject: `your ${r.service.name.toLowerCase()} is scheduled for ${longDay(date)}`,
+    sentence: `we're scheduled for ${r.service.name.toLowerCase()} at ${r.property.street} on ${longDay(date)}${window}.`,
+  }));
   return { to: "board" as const, moved: moved.length, scheduled: rows.length, early: early.length, ...told };
 }
 

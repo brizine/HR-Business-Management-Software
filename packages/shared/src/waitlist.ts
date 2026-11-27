@@ -10,10 +10,10 @@ export const PRIORITIES = ["low", "normal", "high"] as const;
 export type Priority = (typeof PRIORITIES)[number];
 export const PRIORITY_LABELS: Record<Priority, string> = { low: "Low", normal: "Normal", high: "High" };
 
-/** How a customer wants to hear before a visit (the plan's notify-before preference). */
-export const NOTIFY_BEFORE = ["none", "text", "call"] as const;
+/** How a customer wants to hear before a visit: their Pre Visit Notification. */
+export const NOTIFY_BEFORE = ["none", "text", "email", "call"] as const;
 export type NotifyBefore = (typeof NOTIFY_BEFORE)[number];
-export const NOTIFY_BEFORE_LABELS: Record<NotifyBefore, string> = { none: "No notice", text: "Text ahead", call: "Call ahead" };
+export const NOTIFY_BEFORE_LABELS: Record<NotifyBefore, string> = { none: "No notice", text: "Text ahead", email: "Email ahead", call: "Call ahead" };
 
 /** Why a scheduled service went back to the waiting list. */
 export const BACK_REASONS = ["rain", "wind", "no_access", "customer", "other"] as const;
@@ -59,13 +59,13 @@ export function eligibleFrom(o: { releaseOn: string | null; minDaysAfterLast: nu
   return byGap > o.releaseOn ? byGap : o.releaseOn;
 }
 
-export type WaitBadge = "missed" | "closing" | "early" | "needs_card" | "dog" | "text_ahead" | "call_ahead" | "high";
+export type WaitBadge = "missed" | "closing" | "early" | "needs_card" | "dog" | "text_ahead" | "email_ahead" | "call_ahead" | "high";
 export const BADGE_LABELS: Record<WaitBadge, string> = {
-  missed: "Missed", closing: "Closing", early: "Too early", needs_card: "Needs card", dog: "Dog", text_ahead: "Text ahead", call_ahead: "Call ahead", high: "High priority",
+  missed: "Missed", closing: "Closing", early: "Too early", needs_card: "Needs card", dog: "Dog", text_ahead: "Text ahead", email_ahead: "Email ahead", call_ahead: "Call ahead", high: "High priority",
 };
 export const BADGE_HINTS: Record<WaitBadge, string> = {
   missed: "Its due-by date has passed", closing: `Its window closes within ${CLOSING_DAYS} days`, early: "Before its eligible-from date (minimum days since the last service)",
-  needs_card: "No card or bank account on file, and one is required", dog: "There's a dog at the property", text_ahead: "Text the customer before the visit",
+  needs_card: "No card or bank account on file, and one is required", dog: "There's a dog at the property", text_ahead: "Text the customer before the visit", email_ahead: "Email the customer before the visit",
   call_ahead: "Call the customer before the visit", high: "High priority",
 };
 
@@ -79,6 +79,7 @@ export function waitBadges(o: { today: string; dueBy: string | null; eligible: s
   if (o.priority === "high") b.push("high");
   if (o.pets && /\bdogs?\b/i.test(o.pets)) b.push("dog");
   if (o.notify === "text") b.push("text_ahead");
+  if (o.notify === "email") b.push("email_ahead");
   if (o.notify === "call") b.push("call_ahead");
   return b;
 }

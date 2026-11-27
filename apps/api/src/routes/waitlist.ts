@@ -11,7 +11,7 @@ import { customerInCompany } from "../lib/crm";
 import { HttpError, parse } from "../lib/errors";
 import { billingSettings } from "../lib/invoices";
 import { companyToday } from "../lib/payRates";
-import { sendCustomerText, textingConfig } from "../lib/texting";
+import { visitTeller } from "../lib/visitNotices";
 import { waitingList, workload } from "../lib/waitlist";
 
 const AREA = "customers" as const;
@@ -76,23 +76,19 @@ const routes: FastifyPluginAsync = async (app) => {
         if (b.makePreferred && b.crewId) await tx.update(properties).set({ preferredCrewId: b.crewId }).where(eq(properties.id, r.property.id));
       }
     });
-    // Tell the customers who want a text ahead (when texting is on); list the ones to call.
-    let texted = 0, notTexted = 0;
-    const toCall: string[] = [];
+    // Each customer hears the way they asked: a text or an email for each work order; the ones to call are listed.
+    const teller = visitTeller(companyId, sub);
     if (b.notify) {
-      const [co] = await db.select({ name: companies.name }).from(companies).where(eq(companies.id, companyId));
-      const texting = !!(await textingConfig(companyId));
+      const window = b.windowStart ? ` ${b.windowEnd ? `between ${time12(b.windowStart)} and ${time12(b.windowEnd)}` : `after ${time12(b.windowStart)}`}` : "";
       for (const r of rows) {
         const pref = (await db.select({ p: properties.notifyBefore }).from(properties).where(eq(properties.id, r.property.id)))[0]?.p ?? r.customer.notifyBefore;
-        if (pref === "call") toCall.push(r.customer.name);
-        if (pref !== "text") continue;
-        if (!texting) { notTexted++; continue; }
-        const window = b.windowStart ? ` ${b.windowEnd ? `between ${time12(b.windowStart)} and ${time12(b.windowEnd)}` : `after ${time12(b.windowStart)}`}` : "";
-        const s = await sendCustomerText(companyId, r.customer.id, `${co.name}: we're scheduled for ${r.service.name.toLowerCase()} at ${r.property.street} on ${longDay(b.date)}${window}. Reply STOP to opt out.`, { by: sub, source: "office" });
-        if (s.text && s.text.status !== "failed") texted++; else notTexted++;
+        await teller.tell(pref, r.customer, {
+          subject: `your ${r.service.name.toLowerCase()} is scheduled for ${longDay(b.date)}`,
+          sentence: `we're scheduled for ${r.service.name.toLowerCase()} at ${r.property.street} on ${longDay(b.date)}${window}.`,
+        });
       }
     }
-    return { scheduled: rows.length, early: early.length, texted, notTexted, toCall: [...new Set(toCall)] };
+    return { scheduled: rows.length, early: early.length, ...teller.told };
   });
 
   /** Back to the waiting list (rain, no access…), with the reason. */

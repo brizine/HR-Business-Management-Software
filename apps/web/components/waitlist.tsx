@@ -260,7 +260,7 @@ export const WL_COLUMNS: WCol[] = [
   { key: "city", label: "City", group: "Property", sort: (r) => r.property.city ?? "", text: (r) => r.property.city ?? "" },
   { key: "zip", label: "ZIP", group: "Property", sort: (r) => r.property.zip ?? "", text: (r) => r.property.zip ?? "" },
   { key: "crew", label: "Preferred crew", group: "Property", sort: (r) => r.preferredCrewId ?? "", text: (r, c) => crewName(r.preferredCrewId, c) },
-  { key: "notify", label: "Notice before", group: "Customer", text: (r) => { const b = r.badges.find((x) => x === "text_ahead" || x === "call_ahead"); return b ? BADGE_LABELS[b] : ""; } },
+  { key: "notify", label: "Pre visit notification", group: "Customer", text: (r) => { const b = r.badges.find((x) => x === "text_ahead" || x === "email_ahead" || x === "call_ahead"); return b ? BADGE_LABELS[b] : ""; } },
   { key: "pets", label: "Pets", group: "Property", text: (r) => r.property.pets ?? "" },
   { key: "back", label: "Back on the list because", group: "Window", text: (r) => r.backReason ?? "" },
 ];
@@ -710,7 +710,7 @@ export function EditWorkOrders({ rows, crews, today, initial, onClose, onDone, b
   // Until one is picked: work that's moving is optimized into the crew's route; work that stays where it is keeps its order.
   const [routePick, setRouteOrder] = useState<RouteOrder | null>(null);
   const [makePreferred, setMakePreferred] = useState(false);
-  const [notify, setNotify] = useState(rows.some((r) => r.badges.includes("text_ahead") || r.badges.includes("call_ahead")));
+  const [notify, setNotify] = useState(rows.some((r) => r.badges.includes("text_ahead") || r.badges.includes("email_ahead") || r.badges.includes("call_ahead")));
   const [earlyReason, setEarlyReason] = useState("");
   const [reason, setReason] = useState<(typeof BACK_REASONS)[number]>("rain");
   const [note, setNote] = useState("");
@@ -740,6 +740,7 @@ export function EditWorkOrders({ rows, crews, today, initial, onClose, onDone, b
   const holiday = w.data?.holidays[date];
   const hear = to === "board" ? moving : scheduled;
   const toText = hear.filter((r) => r.badges.includes("text_ahead")).length;
+  const toEmail = hear.filter((r) => r.badges.includes("email_ahead")).length;
   const toCall = hear.filter((r) => r.badges.includes("call_ahead")).length;
   const windows = rows.filter((r) => r.windowStart && windowStart && windowStart < r.windowStart);
   const capacity = fit?.capacityHours ?? lane?.dailyHours ?? null;
@@ -752,14 +753,12 @@ export function EditWorkOrders({ rows, crews, today, initial, onClose, onDone, b
       const body = to === "waitlist"
         ? { visitIds: scheduled.map((x) => x.id), to, reason, note, notify }
         : { visitIds: rows.map((x) => x.id), to, date, ...(crewId === KEEP ? {} : { crewId: crewId || null }), ...(windowStart ? { windowStart, windowEnd: windowEnd || null } : {}), routeOrder, makePreferred: makePreferred && !!aCrew, notify, earlyReason: early.length ? earlyReason : null };
-      const r = await api<{ to: "board" | "waitlist"; moved: number; scheduled: number; early: number; texted: number; notTexted: number; toCall: string[] }>("/dispatch/edit", { method: "POST", body });
+      const r = await api<{ to: "board" | "waitlist"; moved: number; scheduled: number; early: number } & Told>("/dispatch/edit", { method: "POST", body });
       const where = dayLabel(date, { weekday: "long", month: "short", day: "numeric" });
       const parts = [r.to === "waitlist" ? `${r.moved} back on the waiting list (${BACK_REASON_LABELS[reason].toLowerCase()}).`
         : scheduled.length === rows.length ? `Updated ${r.scheduled} for ${where}${aCrew ? ` (${crewName(aCrew, crews)})` : ""}.`
         : `Scheduled ${r.scheduled} for ${where}${aCrew ? ` (${crewName(aCrew, crews)})` : ""}.`];
-      if (r.texted) parts.push(`Texted ${r.texted}.`);
-      if (r.notTexted) parts.push(`${r.notTexted} want a text but it wasn't sent (texting isn't connected or they have no mobile number).`);
-      if (r.toCall.length) parts.push(`Call ahead: ${r.toCall.join(", ")}.`);
+      parts.push(...toldParts(r));
       onDone(parts.join(" "));
     });
   };
@@ -839,7 +838,7 @@ export function EditWorkOrders({ rows, crews, today, initial, onClose, onDone, b
         )}
         <div className="stack" style={{ gap: 4 }}>
           {to === "board" && aCrew && <label className="check"><input type="checkbox" checked={makePreferred} onChange={(e) => setMakePreferred(e.target.checked)} /> Make {crewName(aCrew, crews)} the preferred crew for {rows.length === 1 ? "this property" : "these properties"}</label>}
-          <label className="check"><input type="checkbox" checked={notify && (toText + toCall > 0)} onChange={(e) => setNotify(e.target.checked)} disabled={!toText && !toCall} /> Notify customers by their preference{toText || toCall ? ` (${[toText && `${toText} by text`, toCall && `${toCall} to call`].filter(Boolean).join(", ")})` : to === "board" && !moving.length ? " (nobody's day changes)" : " (none asked for notice)"}</label>
+          <label className="check"><input type="checkbox" checked={notify && (toText + toEmail + toCall > 0)} onChange={(e) => setNotify(e.target.checked)} disabled={!toText && !toEmail && !toCall} /> Notify customers by their preference{toText || toEmail || toCall ? ` (${[toText && `${toText} by text`, toEmail && `${toEmail} by email`, toCall && `${toCall} to call`].filter(Boolean).join(", ")})` : to === "board" && !moving.length ? " (nobody's day changes)" : " (none asked for notice)"}</label>
         </div>
         <ErrorBox error={act.error} />
         <div className="row">
@@ -873,7 +872,48 @@ export function BackToWaitlist({ visitId, onDone }: { visitId: string; onDone: (
   );
 }
 
+/** Who was told about a change of day, as the server reports it. */
+export type Told = { texted: number; notTexted: number; emailed: number; notEmailed: number; toCall: string[] };
+/** That report in sentences: "Texted 3.", "Emailed 2.", who couldn't be reached and who to call. */
+export function toldParts(r: Told): string[] {
+  const parts: string[] = [];
+  if (r.texted) parts.push(`Texted ${r.texted}.`);
+  if (r.emailed) parts.push(`Emailed ${r.emailed}.`);
+  if (r.notTexted) parts.push(`${r.notTexted} want a text but it wasn't sent (texting isn't connected or they have no mobile number).`);
+  if (r.notEmailed) parts.push(`${r.notEmailed} want an email but it wasn't sent (no email address on file, or email isn't set up).`);
+  if (r.toCall.length) parts.push(`Call ahead: ${r.toCall.join(", ")}.`);
+  return parts;
+}
+
 /* ───────────── Preferences (customer and property pages) ───────────── */
+
+/**
+ * "Don't require a card on file" as a switch. Turning it on opens a box for the reason, and it only
+ * takes effect once the reason is saved; turning it off requires a card again straight away.
+ */
+function CardExemptToggle({ what, on, reason, placeholder, busy, exempting, setExempting, draft, setDraft, onSave }: {
+  what: "customer" | "property"; on: boolean; reason: string; placeholder: string; busy: boolean;
+  exempting: boolean; setExempting: (b: boolean) => void; draft: string; setDraft: (s: string) => void; onSave: (on: boolean) => void;
+}) {
+  return (
+    <div className="stack card-exempt" style={{ gap: 6 }} aria-label="Card on file">
+      <label className="switch" title={on ? "Turn off to require a card or bank account on file again" : "Turn on to schedule work here without a card or bank account on file; you'll be asked why"}>
+        <input type="checkbox" role="switch" checked={on || exempting} disabled={busy} onChange={(e) => {
+          if (on) onSave(false);
+          else { setExempting(e.target.checked); if (!e.target.checked) setDraft(""); }
+        }} />
+        <strong style={{ fontWeight: 500 }}>Don&apos;t require a card on file for this {what}</strong>
+      </label>
+      {on && <div className="muted">Reason: {reason || "none given"}</div>}
+      {!on && exempting && (
+        <form className="row" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); if (draft.trim()) onSave(true); }}>
+          <input aria-label="Reason" required autoFocus value={draft} maxLength={300} onChange={(e) => setDraft(e.target.value)} placeholder={placeholder} style={{ flex: 1, minWidth: 160 }} />
+          <button className="btn sm primary" disabled={busy || !draft.trim()}>Save reason</button><button type="button" className="btn sm" onClick={() => { setExempting(false); setDraft(""); }}>Cancel</button>
+        </form>
+      )}
+    </div>
+  );
+}
 
 /** How the customer wants to hear before a visit, and the card-on-file exemption. */
 export function CustomerSchedulingPrefs({ customer, onSaved }: { customer: { id: string; notifyBefore?: NotifyBefore | null; cardExemptReason?: string | null; cardExemptAt?: string | null }; onSaved: () => void }) {
@@ -884,21 +924,13 @@ export function CustomerSchedulingPrefs({ customer, onSaved }: { customer: { id:
   const exempt = (on: boolean) => act.run(async () => { await api("/waitlist/card-exempt", { method: "PUT", body: { customerId: customer.id, exempt: on, reason: on ? reason : undefined } }); setExempting(false); setReason(""); onSaved(); });
   return (
     <div className="stack" style={{ gap: 8 }}>
-      <label>Before a visit
+      <label>Pre Visit Notification
         <select value={customer.notifyBefore ?? "none"} disabled={act.busy} onChange={(e) => notify(e.target.value as NotifyBefore)}>
           {NOTIFY_BEFORE.map((n) => <option key={n} value={n}>{NOTIFY_BEFORE_LABELS[n]}</option>)}
         </select>
       </label>
-      {customer.cardExemptAt ? (
-        <p style={{ margin: 0 }}>Card on file not required: {customer.cardExemptReason} <button type="button" className="linkbtn" disabled={act.busy} onClick={() => exempt(false)}>Require it again</button></p>
-      ) : exempting ? (
-        <form className="row" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); if (reason.trim()) exempt(true); }}>
-          <input aria-label="Why" required autoFocus value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} placeholder="Why (e.g. net 30, pays by check)" style={{ flex: 1, minWidth: 160 }} />
-          <button className="btn sm primary" disabled={act.busy}>Save</button><button type="button" className="btn sm" onClick={() => setExempting(false)}>Cancel</button>
-        </form>
-      ) : (
-        <button type="button" className="linkbtn" style={{ justifySelf: "start" }} onClick={() => setExempting(true)}>Don&apos;t require a card on file for this customer</button>
-      )}
+      <CardExemptToggle what="customer" on={!!customer.cardExemptAt} reason={customer.cardExemptReason ?? ""} placeholder="Why (e.g. net 30, pays by check)" busy={act.busy}
+        exempting={exempting} setExempting={setExempting} draft={reason} setDraft={setReason} onSave={exempt} />
       <ErrorBox error={act.error} />
     </div>
   );
@@ -923,7 +955,7 @@ export function PropertySchedulingPrefs({ property, onSaved }: { property: { id:
             {(crews.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </label>
-        <label>Before a visit
+        <label>Pre Visit Notification
           <select value={property.notifyBefore ?? ""} disabled={act.busy} onChange={(e) => put({ notifyBefore: (e.target.value || null) as NotifyBefore | null })}>
             <option value="">Same as the customer</option>
             {NOTIFY_BEFORE.map((n) => <option key={n} value={n}>{NOTIFY_BEFORE_LABELS[n]}</option>)}
@@ -936,16 +968,8 @@ export function PropertySchedulingPrefs({ property, onSaved }: { property: { id:
           </select>
         </label>
       </div>
-      {property.cardExemptAt ? (
-        <p style={{ margin: 0 }}>Card on file not required here: {property.cardExemptReason} <button type="button" className="linkbtn" disabled={act.busy} onClick={() => exempt(false)}>Require it again</button></p>
-      ) : exempting ? (
-        <form className="row" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); if (reason.trim()) exempt(true); }}>
-          <input aria-label="Why" required autoFocus value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} placeholder="Why (e.g. commercial account, net 30)" style={{ flex: 1, minWidth: 160 }} />
-          <button className="btn sm primary" disabled={act.busy}>Save</button><button type="button" className="btn sm" onClick={() => setExempting(false)}>Cancel</button>
-        </form>
-      ) : (
-        <button type="button" className="linkbtn" style={{ justifySelf: "start" }} onClick={() => setExempting(true)}>Don&apos;t require a card on file for this property</button>
-      )}
+      <CardExemptToggle what="property" on={!!property.cardExemptAt} reason={property.cardExemptReason ?? ""} placeholder="Why (e.g. commercial account, net 30)" busy={act.busy}
+        exempting={exempting} setExempting={setExempting} draft={reason} setDraft={setReason} onSave={exempt} />
       <ErrorBox error={act.error} />
     </div>
   );

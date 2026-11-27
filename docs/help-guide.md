@@ -1191,7 +1191,7 @@ the list, then **Edit work orders** to schedule them.
     Scheduling it sooner asks for a reason, which is kept on the work order (**Scheduled early**).
   - **Priority** (low, normal or high) and an **appointment window** ("after 1 pm", or 9 am to 12 pm).
 - **Badges** (the **Badges** button explains each): **Missed**, **Closing**, **Too early**, **Needs card**,
-  **High priority**, **Dog** (from the property's pets), **Text ahead** and **Call ahead**.
+  **High priority**, **Dog** (from the property's pets), **Text ahead**, **Email ahead** and **Call ahead**.
 - **Filters** show as chips (✕ removes one): service, **tag**, **Map Code**, city, ZIP, priority, badge, preferred
   crew (or none), **within X miles of a property**, due by and eligible by, plus the search box. Several of one kind
   match any of them (Round 3 or Round 4). They apply to the map and the list.
@@ -1236,9 +1236,15 @@ the list, then **Edit work orders** to schedule them.
   a note. It goes back with its date cleared, and the reason shows on the list.
 - **Card on file** (Settings → Customers & billing, off to start): when it's on, work orders for customers with no
   card or bank account on file (expired cards don't count) show **Needs card** and can't be scheduled. Turn it off
-  for one customer or one property, with why (net 30, pays by check), in the **Scheduling** box on their page.
-- **Scheduling preferences:** on a customer's page, **Before a visit**: no notice, text ahead or call ahead. On a
-  property's page, its **preferred crew** and its own notice (or the same as the customer's).
+  for one customer or one property in the **Scheduling** box on their page: switch on **Don't require a card on
+  file for this customer** (or **property**), and a box opens for the reason (net 30, pays by check). It takes
+  effect when you save the reason; switch it off to require a card again.
+- **Scheduling preferences:** on a customer's page, **Pre Visit Notification**: no notice, text ahead, email
+  ahead or call ahead. On a property's page, its **preferred crew** and its own notification (or the same as the
+  customer's). When you schedule work, move it to another day or send it back to the waiting list with **Notify
+  customers by their preference** ticked, Crewdesk texts the ones who chose a text, emails the ones who chose an
+  email (to the address on their account, as a service notice with no unsubscribe link), and lists the ones to
+  call. Anyone it couldn't reach (no mobile number, no email address) is counted so you can call them instead.
 
 ## Crews
 

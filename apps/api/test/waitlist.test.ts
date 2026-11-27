@@ -6,7 +6,7 @@ import { buildApp } from "../src/app";
 import { db, pool } from "../src/db";
 import { customerPaymentMethods, customers, visits } from "../src/db/schema";
 import { setPushTransport } from "../src/lib/notify";
-import { setEmailTransport } from "../src/lib/channels";
+import { setEmailTransport, type EmailMessage } from "../src/lib/channels";
 
 let app: FastifyInstance;
 const suffix = Date.now();
@@ -22,12 +22,13 @@ async function call(method: string, url: string, who: string, payload?: unknown)
   try { body = res.json(); } catch { body = res.rawPayload; }
   return { status: res.statusCode, body };
 }
+const sent: EmailMessage[] = [];
 const list = async (q = "") => (await call("GET", `/waitlist${q}`, "owner")).body;
 const row = async (id: string, q = "") => (await list(q)).rows.find((r: any) => r.id === id);
 
 beforeAll(async () => {
   setPushTransport({ send: async (m) => m.map(() => ({ status: "ok" as const, id: "x" })) });
-  setEmailTransport({ send: async () => {} });
+  setEmailTransport({ send: async (m) => { sent.push(m); } });
   app = await buildApp({ logger: false });
   T.owner = (await app.inject({ method: "POST", url: "/auth/signup", payload: { companyName: "Wait Co", firstName: "Wren", lastName: "Owner", email: email("owner"), password: "password123" } })).json().token;
   await call("PUT", "/auth/policy", "owner", { twoFactorRequiredFor: "none" });
@@ -169,8 +170,43 @@ describe("waiting list", () => {
     expect(await row(ID.bobNext)).toMatchObject({ badges: ["text_ahead"], preferredCrewId: null, customer: { notifyBefore: "call" } });
     const r = await call("POST", "/waitlist/schedule", "owner", { visitIds: [ID.bobNext], date: plus(today, 4), notify: true });
     // Texting isn't connected: counted as not texted.
-    expect(r.body).toMatchObject({ scheduled: 1, texted: 0, notTexted: 1, toCall: [] });
+    expect(r.body).toMatchObject({ scheduled: 1, texted: 0, notTexted: 1, emailed: 0, notEmailed: 0, toCall: [] });
     await call("POST", "/waitlist/back", "owner", { visitIds: [ID.bobNext], reason: "customer" });
+  });
+
+  it("Email ahead: the customer is emailed when the work is scheduled, and told again when its day moves", async () => {
+    await call("PUT", `/waitlist/property/${ID.bobProp}`, "owner", { notifyBefore: "email", preferredCrewId: null });
+    expect((await row(ID.bobNext)).badges).toEqual(["email_ahead"]);
+    sent.length = 0;
+    const day = plus(today, 4);
+    const r = await call("POST", "/waitlist/schedule", "owner", { visitIds: [ID.bobNext], date: day, windowStart: "09:00", windowEnd: "12:00", notify: true });
+    expect(r.body).toMatchObject({ scheduled: 1, texted: 0, notTexted: 0, emailed: 1, notEmailed: 0, toCall: [] });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ to: email("bob"), fromName: "Wait Co", replyTo: "office@waitlist.test" });
+    expect(sent[0].subject).toMatch(/^Wait Co: your fertilizer is scheduled for \w+day, \w+ \d+$/);
+    expect(sent[0].text).toMatch(/Hello Bob,\n\nWe're scheduled for fertilizer at 2 Elm St on \w+day, \w+ \d+ between 9 AM and 12 PM\.\n\nThank you,\nWait Co/);
+    // A service notice, not marketing: no unsubscribe link, and nothing about texting.
+    expect(sent[0].text).not.toMatch(/unsubscribe|STOP/i);
+    // Not asked to notify: nothing goes out.
+    sent.length = 0;
+    await call("POST", "/dispatch/edit", "owner", { visitIds: [ID.bobNext], to: "board", date: plus(today, 5), routeOrder: "keep", notify: false });
+    expect(sent).toHaveLength(0);
+    // Moved to another day from the dispatch board: one email with the new day.
+    const moved = await call("POST", "/dispatch/edit", "owner", { visitIds: [ID.bobNext], to: "board", date: plus(today, 6), routeOrder: "keep", notify: true });
+    expect(moved.body).toMatchObject({ to: "board", emailed: 1, notEmailed: 0, texted: 0 });
+    expect(sent).toHaveLength(1);
+    // Sent back for the weather: told that too.
+    const back = await call("POST", "/dispatch/edit", "owner", { visitIds: [ID.bobNext], to: "waitlist", reason: "rain", notify: true });
+    expect(back.body).toMatchObject({ to: "waitlist", emailed: 1 });
+    expect(sent[1].text).toMatch(/Because of rain, we couldn't get to your fertilizer on .+\. We'll be in touch with a new day\./);
+    // No email address on file: counted as not emailed, so the office knows to call.
+    const bob = (await call("GET", `/customers/${ID.bob}`, "owner")).body;
+    await db.update(customers).set({ email: null }).where(eq(customers.id, ID.bob));
+    const none = await call("POST", "/waitlist/schedule", "owner", { visitIds: [ID.bobNext], date: day, notify: true, earlyReason: "Customer asked" });
+    expect(none.body).toMatchObject({ scheduled: 1, emailed: 0, notEmailed: 1 });
+    await db.update(customers).set({ email: bob.email }).where(eq(customers.id, ID.bob));
+    await call("POST", "/waitlist/back", "owner", { visitIds: [ID.bobNext], reason: "customer" });
+    await call("PUT", `/waitlist/property/${ID.bobProp}`, "owner", { notifyBefore: "text", preferredCrewId: null });
   });
 
   it("does things to many at once: priority, skip, delete", async () => {

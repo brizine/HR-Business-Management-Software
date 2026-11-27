@@ -303,7 +303,7 @@ export const dispatchApi = {
   future: (body: Record<string, unknown>) => post<{ days: { date: string; stops: number; different: number }[]; repeating: number }>("/routes/future", body),
   lock: (key: string, locked: boolean) => post<{ key: string; locked: boolean }>("/lock", { key, locked }),
   lane: (date: string, crewId: string | null, keys: string[], curbside?: boolean) => post<{ stops: number; totalDriveSeconds?: number; totalMeters?: number }>("/lane", { date, crewId, keys, ...(curbside === undefined ? {} : { curbside }) }),
-  rain: (body: Record<string, unknown>) => post<{ moved: number; to: string | null; texted: number; notTexted: number; toCall: string[] }>("/rain", body),
+  rain: (body: Record<string, unknown>) => post<{ moved: number; to: string | null; texted: number; notTexted: number; emailed: number; notEmailed: number; toCall: string[] }>("/rain", body),
   note: (key: string, body: string) => post<{ key: string; dispatchNotes: DEvent["dispatchNotes"] }>("/notes", { key, body }),
   /** Open, Complete or Skipped, one event at a time, through each record's own rules. */
   async setStatus(e: DEvent, status: "open" | "completed" | "skipped", reason?: string) {
