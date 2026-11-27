@@ -63,14 +63,17 @@ describe("price list", () => {
     expect((await call("GET", "/service-types", "office")).body[0].name).toBe("Core aeration");
   });
 
-  it("saves a volume-discount rate card and refuses tiers that cost more as lawns grow", async () => {
+  it("saves a volume-discount rate card, tiers in order of size (a later rate may be higher)", async () => {
     const tiers = [{ fromSqFt: 3000, ratePer1000Cents: 650 }, { fromSqFt: 6000, ratePer1000Cents: 625 }, { fromSqFt: 10000, ratePer1000Cents: 575 }];
     const card = { name: "Early Spring (tiered)", pricing: "tiered", minimumCents: 3800, tiers, bandSizeSqFt: 500, bandPricePoint: 0.5, roundToCents: 50, maxAutoSqFt: 40000, targetCentsPerHour: 18000, setupMinutes: 4, minutesPer1000: 3, active: false };
     const made = await call("POST", "/service-types", "owner", card);
     expect(made.status).toBe(200);
     expect(made.body).toMatchObject({ pricing: "tiered", minimumCents: 3800, tiers, bandSizeSqFt: 500, bandPricePoint: 0.5, roundToCents: 50, maxAutoSqFt: 40000, targetCentsPerHour: 18000 });
     const rising = await call("PUT", `/service-types/${made.body.id}`, "owner", { ...card, tiers: [{ fromSqFt: 3000, ratePer1000Cents: 600 }, { fromSqFt: 6000, ratePer1000Cents: 700 }] });
-    expect(rising.status).toBe(400);
+    expect(rising.status).toBe(200);
+    const backwards = await call("PUT", `/service-types/${made.body.id}`, "owner", { ...card, tiers: [{ fromSqFt: 6000, ratePer1000Cents: 600 }, { fromSqFt: 3000, ratePer1000Cents: 700 }] });
+    expect(backwards.status).toBe(400);
+    expect((await call("PUT", `/service-types/${made.body.id}`, "owner", card)).status).toBe(200);
     const exact = await call("PUT", `/service-types/${made.body.id}`, "owner", { ...card, bandSizeSqFt: null });
     expect(exact.body.bandSizeSqFt).toBeNull();
     expect(exact.body.tiers).toEqual(tiers);

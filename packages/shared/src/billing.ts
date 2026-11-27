@@ -57,7 +57,7 @@ export const serviceTypeSchema = z.object({
   /** Per 1,000 sq ft: never less than this. */
   minimumCents: cents.default(0),
   brackets: z.array(bracketSchema).max(30).default([]),
-  /** Volume discount: tiers after the minimum, in order, each rate no higher than the one before. */
+  /** Volume discount: tiers after the minimum, in order of size. A later rate is usually lower, but may be higher: the price still never drops as lawns get bigger. */
   tiers: z.array(tierSchema).max(20).default([]),
   /** Volume discount: price in steps of this many sq ft (null = exact price for every square foot). */
   bandSizeSqFt: z.number().int().min(10).max(100_000).nullable().default(null),
@@ -94,7 +94,6 @@ export const serviceTypeSchema = z.object({
     s.tiers.forEach((t, i) => {
       const prev = s.tiers[i - 1];
       if (prev && t.fromSqFt <= prev.fromSqFt) ctx.addIssue({ code: "custom", path: ["tiers", i, "fromSqFt"], message: "Each tier must start after the one before" });
-      if (prev && t.ratePer1000Cents > prev.ratePer1000Cents) ctx.addIssue({ code: "custom", path: ["tiers", i, "ratePer1000Cents"], message: "A bigger tier can't cost more per 1,000 than the one before" });
     });
     if (s.maxAutoSqFt != null && s.tiers[0] && s.maxAutoSqFt <= s.tiers[0].fromSqFt) ctx.addIssue({ code: "custom", path: ["maxAutoSqFt"], message: "Must be bigger than the size the minimum covers" });
   }

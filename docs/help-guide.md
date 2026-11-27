@@ -413,16 +413,19 @@ billing; admins change prices).
   - **Setting it up:** enter the **Minimum charge**. On the first row, **Minimum covers up to** is the largest lawn
     that pays just the minimum, and **Then per 1,000 sq ft** is the rate for the square feet above that. Each
     further row is **Next tier from** (the size where a lower rate starts) and its rate. A rate applies from its
-    own row's size up to the next row's size; the last row's rate goes on for ever. A later rate can't be higher
-    than the one before.
+    own row's size up to the next row's size; the last row's rate goes on for ever. A later rate is usually lower
+    (that is the discount), but it can be higher if that is how you price: the form points it out so a typing
+    slip doesn't go unnoticed, and a bigger lawn still never costs less.
   - **An example:** minimum $45 covering up to 3,000 sq ft; then $10 per 1,000; from 6,000 sq ft $8; from 10,000
     sq ft $6. An 8,000 sq ft lawn pays $45, plus 3,000 sq ft at $10 ($30, the part from 3,000 to 6,000), plus 2,000
     sq ft at $8 ($16, the part from 6,000 to 8,000) = **$91**. It is not 8 × $8.
-  - **Price in steps of:** with a step (500 sq ft on a new service), lawns are grouped into steps above the
-    minimum (3,001–3,500, 3,501–4,000 and so on) and every lawn in a step pays the same price. **Price each step
-    at** says which size in the step sets that price: its middle (fairest), its smallest or its largest. At the
+  - **Price in steps of:** a new service leaves this empty, so **every lawn is priced at its exact size** and the
+    table matches a sum done by hand. Enter a step (say 500 sq ft) to group lawns into steps above the minimum
+    (3,001–3,500, 3,501–4,000 and so on), where every lawn in a step pays the same price. **Price each step at**
+    says which size in the step sets that price: its middle (fairest), its smallest or its largest. At the
     middle, a 4,000 sq ft lawn is priced as 3,750 sq ft, so the example above gives $52.50 at 4,000 sq ft, not
-    $55. **Leave it empty to price every lawn at its exact size.**
+    $55. At its **largest size**, every lawn in the step pays what the top of the step would, and round sizes
+    match the hand sum again.
   - **Round prices to** rounds the result (to $0.50 on a new service). **Price by hand above** stops Crewdesk
     pricing very large lawns on its own: above that size the price has to be typed in.
   - **The table under the form** shows the price at a range of lawn sizes as you type, with one lawn worked

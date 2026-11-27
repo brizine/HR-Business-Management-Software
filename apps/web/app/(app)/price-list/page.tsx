@@ -72,7 +72,8 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
   const [tiers, setTiers] = useState<{ from: string; rate: string }[]>(
     service?.tiers?.length ? service.tiers.map((t) => ({ from: String(t.fromSqFt), rate: dollars(t.ratePer1000Cents) })) : [{ from: "3000", rate: "" }, { from: "6000", rate: "" }, { from: "10000", rate: "" }],
   );
-  const [bandSize, setBandSize] = useState(service?.bandSizeSqFt != null ? String(service.bandSizeSqFt) : service?.pricing === "tiered" ? "" : "500");
+  // A new service prices each lawn at its exact size, so the table matches a sum done by hand. Steps are a choice.
+  const [bandSize, setBandSize] = useState(service?.bandSizeSqFt != null ? String(service.bandSizeSqFt) : "");
   const [pricePoint, setPricePoint] = useState(String(service?.bandPricePoint ?? 0.5));
   const [roundTo, setRoundTo] = useState(String(service?.roundToCents ?? 50));
   const [maxAuto, setMaxAuto] = useState(service?.maxAutoSqFt != null ? String(service.maxAutoSqFt) : "");
@@ -164,8 +165,14 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
               </div>
             ))}
             <div><button type="button" className="btn" onClick={() => setTiers([...tiers, { from: "", rate: "" }])}>Add a tier</button></div>
+            {draft.tiers.some((t, i) => i > 0 && t.ratePer1000Cents > draft.tiers[i - 1].ratePer1000Cents) && (
+              <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+                {draft.tiers.map((t, i) => (i > 0 && t.ratePer1000Cents > draft.tiers[i - 1].ratePer1000Cents ? `From ${t.fromSqFt.toLocaleString("en-US")} sq ft the rate goes up (${formatMoney(draft.tiers[i - 1].ratePer1000Cents)} to ${formatMoney(t.ratePer1000Cents)}). ` : "")).join("")}
+                That&apos;s allowed: a bigger lawn still never costs less. Check it&apos;s what you meant.
+              </p>
+            )}
             <div className="formgrid">
-              <label>Price in steps of (sq ft)<input inputMode="numeric" value={bandSize} onChange={(e) => setBandSize(e.target.value)} placeholder="blank = exact price" /></label>
+              <label>Price in steps of (sq ft)<input inputMode="numeric" value={bandSize} onChange={(e) => setBandSize(e.target.value)} placeholder="empty = each lawn's exact size" /></label>
               {bandSize.trim() && <label>Price each step at
                 <select value={pricePoint} onChange={(e) => setPricePoint(e.target.value)}><option value="0">Its smallest size</option><option value="0.5">Its middle (fairest)</option><option value="1">Its largest size</option></select>
               </label>}

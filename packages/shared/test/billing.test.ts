@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describePricing, tieredBreakdown, formatMoney, invoiceSchema, invoiceTotals, isOverdue, priceFor, serviceTypeSchema, invoiceBalance, creditSchema, billingSettingsSchema, prepayTotals, prepaySplit, prepaymentSchema, splitIncome } from "../src/billing";
+import { type PricedService, describePricing, tieredBreakdown, formatMoney, invoiceSchema, invoiceTotals, isOverdue, priceFor, serviceTypeSchema, invoiceBalance, creditSchema, billingSettingsSchema, prepayTotals, prepaySplit, prepaymentSchema, splitIncome } from "../src/billing";
 
 describe("price list", () => {
   it("prices flat, per 1,000 sq ft (with a minimum) and by lawn size", () => {
@@ -148,12 +148,32 @@ describe("volume-discount (tiered) pricing", () => {
     expect(describePricing(card)).toBe("$38.00 up to 3,000 sq ft, then $6.50 per 1,000 to 6,000 · $6.25 per 1,000 to 10,000 · $5.75 per 1,000 to 20,000 · $5.00 per 1,000 after that");
   });
 
-  it("checks tiers go up in size and never up in rate", () => {
+  it("checks tiers go up in size; a later rate may be higher, and a bigger lawn still never costs less", () => {
     const base = { name: "Early Spring", pricing: "tiered", minimumCents: 3800 };
     expect(serviceTypeSchema.safeParse({ ...base, tiers: card.tiers }).success).toBe(true);
     expect(serviceTypeSchema.safeParse({ ...base, tiers: [] }).success).toBe(false);
     expect(serviceTypeSchema.safeParse({ ...base, tiers: [{ fromSqFt: 6000, ratePer1000Cents: 600 }, { fromSqFt: 3000, ratePer1000Cents: 500 }] }).success).toBe(false);
-    expect(serviceTypeSchema.safeParse({ ...base, tiers: [{ fromSqFt: 3000, ratePer1000Cents: 600 }, { fromSqFt: 6000, ratePer1000Cents: 700 }] }).success).toBe(false);
+    expect(serviceTypeSchema.safeParse({ ...base, tiers: [{ fromSqFt: 3000, ratePer1000Cents: 600 }, { fromSqFt: 6000, ratePer1000Cents: 700 }] }).success).toBe(true);
     expect(serviceTypeSchema.safeParse({ ...base, tiers: card.tiers, maxAutoSqFt: 2000 }).success).toBe(false);
+  });
+
+  it("prices a rate card whose rate goes up again at a bigger size: $55 to 4,000, then $5, $3, $5, $4, $3", () => {
+    const rising: PricedService = {
+      pricing: "tiered", priceCents: 0, brackets: [], minimumCents: 5500, roundToCents: 100, maxAutoSqFt: 43500, bandSizeSqFt: null,
+      tiers: [{ fromSqFt: 4000, ratePer1000Cents: 500 }, { fromSqFt: 5000, ratePer1000Cents: 300 }, { fromSqFt: 10000, ratePer1000Cents: 500 }, { fromSqFt: 20000, ratePer1000Cents: 400 }, { fromSqFt: 30500, ratePer1000Cents: 300 }],
+    };
+    expect(serviceTypeSchema.safeParse({ name: "Round", ...rising }).success).toBe(true);
+    // At each lawn's exact size the prices are the hand sums.
+    expect([4000, 5000, 6000, 10000, 20000, 30500, 43500].map((s) => priceFor(rising, s))).toEqual([5500, 6000, 6300, 7500, 12500, 16700, 20600]);
+    expect(priceFor(rising, 44000)).toBeNull();
+    // In steps of 500 priced at the middle, a 5,000 sq ft lawn is priced as 4,750: $58.75, so $59. At the step's largest size it is $60 again.
+    expect(tieredBreakdown({ ...rising, bandSizeSqFt: 500, bandPricePoint: 0.5 }, 5000)).toMatchObject({ pricedAtSqFt: 4750.5, priceCents: 5900 });
+    expect(priceFor({ ...rising, bandSizeSqFt: 500, bandPricePoint: 1 }, 5000)).toBe(6000);
+    expect(priceFor({ ...rising, bandSizeSqFt: 500, bandPricePoint: 1 }, 4501)).toBe(6000);
+    // Whatever the rates do, a bigger lawn never costs less.
+    for (const s of [rising, { ...rising, bandSizeSqFt: 500, bandPricePoint: 0.5 }]) {
+      let last = 0;
+      for (let size = 500; size <= 43500; size += 250) { const p = priceFor(s, size)!; expect(p).toBeGreaterThanOrEqual(last); last = p; }
+    }
   });
 });
