@@ -88,6 +88,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     .map((i) => (i.href === "/payroll" && !can("admin", "payroll") && payApprovals?.isApprover ? { ...i, href: "/pay-periods", min: undefined } : i))
     .filter((i) => !i.min || can(i.min, i.area))
     .filter((i) => i.gate !== "chemical" || !!me?.access?.chemicalTracking)
+    .filter((i) => i.gate !== "noChemical" || !me?.access?.chemicalTracking)
     .filter((i) => i.gate !== "texting" || !!me?.access?.texting)
     // Payroll admins reach Pay & Tax Forms from a button on the Payroll page.
     .filter((i) => !(i.href === "/tax-forms" && can("admin", "payroll")));

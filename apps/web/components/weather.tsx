@@ -119,7 +119,7 @@ export function WorkOrderWeather({ visitId }: { visitId: string }) {
           {r.gps && <><dt>GPS</dt><dd><a href={`https://www.google.com/maps/search/?api=1&query=${r.gps.lat},${r.gps.lng}`} target="_blank" rel="noopener noreferrer">{r.gps.lat.toFixed(5)}, {r.gps.lng.toFixed(5)}</a>{r.gps.accuracy ? <span className="muted"> ±{Math.round(r.gps.accuracy)} m</span> : null} at {timeOf(r.completedAt)}</dd></>}
         </dl>
       ) : (
-        <p className="muted" style={{ margin: 0 }}>{w?.lastError ?? (data.data!.settings.mode === "manual" ? "Waiting for the day's weather (Field → Weather)." : data.data!.settings.mode === "off" ? "Weather is turned off (Field → Weather)." : "Looking it up…")}</p>
+        <p className="muted" style={{ margin: 0 }}>{w?.lastError ?? (data.data!.settings.mode === "manual" ? "Waiting for the day's weather (Chemical Tracking → Weather)." : data.data!.settings.mode === "off" ? "Weather is turned off (Chemical Tracking → Weather)." : "Looking it up…")}</p>
       )}
       <RecordActions r={r} onChange={() => data.reload()} />
     </div>

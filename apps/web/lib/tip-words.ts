@@ -223,7 +223,7 @@ export const TIPS_NAV: Record<string, string> = {
   marketing: "Templates, automations, documents, visit forms and texting",
   billing: "Invoices, estimates and the sales tax report",
   resources: "The price list, chemical tracking, custom fields and tags",
-  field: "Property Measure, the Spray Mix Calculator and weather",
+  field: "Property Measure and the Spray Mix Calculator",
   fleet: "Assets, repair orders and inspections",
   reports: "Operations reports",
   people: "Your team, shifts, crews, time, attendance, training and hiring",
@@ -284,6 +284,7 @@ const CHEMICAL_TABS: Record<string, string> = {
   records: "Every chemical application: what was applied where, by whom, in what weather",
   "load sheet": "What to load on the truck for a day's applications",
   "customer notices": "The notices customers get after an application, and which are still to send",
+  weather: "Wind, temperature and rain on each application, and the ones still waiting for it",
   products: "The products you apply, with EPA numbers and rates",
   mixes: "Tank mixes: the products that go out together",
   "application methods": "How products go down (truck, backpack, spreader), with the rate for each",
@@ -447,7 +448,7 @@ export const TIPS_BY_PAGE: Record<string, Record<string, string>> = {
     "update total": "Work out how much of each product goes in for this many gallons",
     "change history": "See who changed this mix sheet and when",
   },
-  weather: {
+  "chemical-tracking/weather": {
     "enter a day's weather": "Type in one day's wind, temperature and rain for every application that day",
     "enter weather": "Type in the weather for this application",
     "needs weather": chip("applications with no weather recorded"), all: "Show every application",

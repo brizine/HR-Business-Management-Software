@@ -110,7 +110,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   see Invoices, Estimates and Sales tax report, and click it again to fold it away. The section you're in starts
   open, and the menu remembers which ones you opened or closed.
 - **Operations:** **Customers** (Customers, Properties), **Schedule** (Calendar, Work orders, To-dos), **Billing** (Invoices,
-  Estimates, Sales tax report), **Marketing** (Templates, Automations, Documents, Visit Forms, Text), **Resources** (Products & services, Custom fields, Tags; like Homeworks' Resources), **Field**
+  Estimates, Sales tax report), **Marketing** (Templates, Automations, Documents, Visit Forms, Text), **Resources** (Products & services, Chemical Tracking, Custom fields, Tags; like Homeworks' Resources), **Field**
   (Property Measure, Spray Mix Calculator), **Fleet** (Assets, Repair Orders, Inspections) and **Reports**
   (managers).
 - **Team:** **Dashboard** (managers), **People** (Team, Shifts, Crews, Time Clock, Attendance, Time Off, Reviews &
@@ -1431,8 +1431,11 @@ computer or a phone, or focus the handle and use the up and down arrow keys. The
 
 ## Weather
 
-**Field → Weather** (Customers & billing managers) keeps the weather on chemical applications for the records, as
-the Crewdesk plan describes: the office handles it, and techs never see or enter it.
+**Resources → Chemical Tracking → Weather** (Customers & billing managers) keeps the weather on chemical
+applications for the records, as the Crewdesk plan describes: the office handles it, and techs never see or enter
+it. It's a tab along the top of Chemical Tracking, after Customer notices. (It used to be under Field; old links
+to it still work.) A manager who isn't one of the people allowed into Chemical Tracking finds **Weather** by
+itself under **Resources**, and typing "weather" in **Search** finds the page too.
 
 - **Which work orders:** tick **Chemical application** on a service in the price list (Resources → Products &
   services). Work orders with one of those services get the weather when they're completed. They show

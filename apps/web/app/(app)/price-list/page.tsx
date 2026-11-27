@@ -193,7 +193,7 @@ function ServiceForm({ service, onDone }: { service: ServiceType | null; onDone:
         {(setupMin || per1000) && <p className="muted" style={{ margin: 0 }}>A 10,000 sq ft lawn ≈ {Math.round((Number(setupMin) || 0) + (Number(per1000) || 0) * 10)} min.</p>}
       </fieldset>
       <label>Description (optional)<input value={description} onChange={(e) => setDescription(e.target.value)} /></label>
-      <label className="check"><input type="checkbox" checked={chemical} onChange={(e) => setChemical(e.target.checked)} /> Chemical application <span className="muted">(record the weather when it&apos;s completed; see Field → Weather)</span></label>
+      <label className="check"><input type="checkbox" checked={chemical} onChange={(e) => setChemical(e.target.checked)} /> Chemical application <span className="muted">(record the weather when it&apos;s completed; see Chemical Tracking → Weather)</span></label>
       <label className="check"><input type="checkbox" checked={taxable} onChange={(e) => setTaxable(e.target.checked)} /> This is taxable <span className="muted">(gets the sales tax rate on work orders and invoices once sales tax is on)</span></label>
       {service && <label className="check"><input type="checkbox" checked={!active} onChange={(e) => setActive(!e.target.checked)} /> Retired (kept on past invoices, not offered for new ones)</label>}
       <ErrorBox error={error} />

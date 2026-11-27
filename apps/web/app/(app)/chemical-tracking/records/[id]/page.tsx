@@ -58,7 +58,7 @@ export default function ChemicalRecord({ params }: { params: Promise<{ id: strin
           {item("16", "Site", r.site)}
           {item("17", "Area treated", r.areaSqFt != null ? `${n(r.areaSqFt, 0)} sq ft` : null)}
           {item("10", "Tank mix used", r.tankMixGal != null ? `${n(r.tankMixGal, 1)} gal` : "Not mixed (applied dry)")}
-          {item("22", "Weather", r.weather?.source ? <>{windText(r.weather)}{r.weather.tempF != null ? ` · ${r.weather.tempF}°F` : ""}{r.weather.rainIn != null ? ` · ${r.weather.rainIn}" rain (24 h)` : ""}<div className="muted">{WEATHER_SOURCE_LABELS[r.weather.source as WeatherSource] ?? r.weather.source}{r.weather.station ? ` · ${r.weather.station}` : ""}</div></> : <span className="muted">Pending (Field → Weather)</span>)}
+          {item("22", "Weather", r.weather?.source ? <>{windText(r.weather)}{r.weather.tempF != null ? ` · ${r.weather.tempF}°F` : ""}{r.weather.rainIn != null ? ` · ${r.weather.rainIn}" rain (24 h)` : ""}<div className="muted">{WEATHER_SOURCE_LABELS[r.weather.source as WeatherSource] ?? r.weather.source}{r.weather.station ? ` · ${r.weather.station}` : ""}</div></> : <span className="muted">Pending (see the Weather tab)</span>)}
           {r.lat != null && <><dt>Location at completion</dt><dd>{r.lat.toFixed(5)}, {r.lng?.toFixed(5)}</dd></>}
           {r.visitId && <><dt>Work order</dt><dd className="noprint"><Link href={`/visits/${r.visitId}`}>WO-{r.visitNumber}</Link></dd></>}
         </dl>

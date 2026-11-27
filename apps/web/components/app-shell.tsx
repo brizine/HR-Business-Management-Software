@@ -373,6 +373,8 @@ const KIND_LABELS: Record<string, string> = {
  * then pages you can open. Empty, it offers quick links. Grouped by kind, in the order shown.
  */
 function useSearchResults(q: string, visibleItems: (s: Side) => NavItem[]) {
+  const { can } = useAuth();
+  const office = can("manager", "customers");
   const [hits, setHits] = useState<Hit[]>([]);
   const term = q.trim();
   useEffect(() => {
@@ -390,7 +392,9 @@ function useSearchResults(q: string, visibleItems: (s: Side) => NavItem[]) {
       });
       return [...quick, { kind: "account", id: "settings", title: "Account settings", sub: null, href: "/settings/security" }];
     }
-    const all = [...visible, { href: "/notifications", label: "Notifications" }, { href: "/wiki", label: "Company Wiki" }, { href: "/help", label: "Help" }, { href: "/settings/security", label: "Settings" }];
+    // Weather is a tab inside Chemical Tracking, so it has no menu item of its own for most people: still found by name.
+    const weather = office ? [{ href: "/chemical-tracking/weather", label: "Weather" }] : [];
+    const all = [...visible, ...weather, { href: "/notifications", label: "Notifications" }, { href: "/wiki", label: "Company Wiki" }, { href: "/help", label: "Help" }, { href: "/settings/security", label: "Settings" }];
     const lower = term.toLowerCase();
     // Pages match from the start of a word ("pay" finds Payroll, "pra" doesn't find Spray Mix).
     const starts = (label: string) => label.toLowerCase().split(/[\s&/-]+/).some((w) => w.startsWith(lower)) || label.toLowerCase().startsWith(lower);
@@ -406,7 +410,7 @@ function useSearchResults(q: string, visibleItems: (s: Side) => NavItem[]) {
       }
     });
     return [...list, ...pages];
-  }, [term, hits, visibleItems]);
+  }, [term, hits, visibleItems, office]);
 }
 
 /** One result row (shared by the top bar's search and the full-screen search on phones). */
