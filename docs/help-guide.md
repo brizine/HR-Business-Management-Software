@@ -1127,8 +1127,11 @@ the list, then **Edit work orders** to schedule them.
 - **Views:** ready-made ones (Closing or missed, High priority, Needs a card, Back from the schedule, Coming up)
   and your own: **Save view** keeps the filters, columns and sort, just for you or **shared with everyone**.
 - **The map:** a pin per work order, colored by service, with a **red ring** when it's closing or missed. Nearby pins
-  group into numbered circles (click one to zoom in). Click pins to select them, or **Draw a box** and drag around
-  a neighborhood. It zooms to whatever the filters show. Drag its bottom edge to resize it, use **Full screen**
+  group into numbered circles (click one to zoom in). Click pins to select them, or **Group Selection** and drag a
+  box around a neighborhood: every pin inside is ticked. The box stays on the map so you can adjust it: drag a
+  **corner** or an **edge** to resize it, or the box itself to move it, and the ticks follow (pins you ticked by
+  hand outside it are left alone). Around the box the map drags as usual. **Done** (or Esc) takes the box away and
+  leaves the ticks. The map zooms to whatever the filters show. Drag its bottom edge to resize it, use **Full screen**
   (Esc leaves) or **Hide map**; it remembers your choice. Properties without a map location are counted above it.
 - **Workload:** each crew's booked hours for each day of the week (time on site plus the drive on its route)
   against its **hours per day** (set on the crew), with holidays marked. With work orders selected, click a day
@@ -1213,7 +1216,8 @@ list, then **Edit work orders** to move them.
 - **Filters** show as chips (✕ removes one). They're the waiting list's (service, tag, Map Code, city, ZIP,
   priority, badge and so on) plus **Truck / crew** and **Status**. They apply to the map and the list.
 - **The map:** each stop is a **numbered pin in its crew's color** (the number is its place in the route), each
-  crew's route is drawn as a line, and the shop is marked. Click pins to select them, or **Draw a box**. **Full
+  crew's route is drawn as a line, and the shop is marked. Click pins to select them, or use **Group Selection** (a box you drag on the map, then resize or move; see the
+  waiting list's map above). **Full
   screen**, **Hide map** and dragging the bottom edge work as on the waiting list. With **Waiting list pins**
   ticked, waiting-list services that match the filters show as **gray pins**: select them the same way and Edit
   work orders puts them on the day.

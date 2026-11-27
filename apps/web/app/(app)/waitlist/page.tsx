@@ -133,7 +133,7 @@ export default function WaitingListPage() {
 
       {d && (
         <div className="stack wl-page">
-          <WaitMap rows={shown} colors={colors} selected={selected} onToggle={toggle} onSelect={(ids) => setSelected(new Set([...selected, ...ids]))} fitKey={fitKey} unmapped={shown.filter((r) => r.property.lat == null).length} />
+          <WaitMap rows={shown} colors={colors} selected={selected} onToggle={toggle} onSelect={(ids) => setSelected(new Set([...selected, ...ids]))} onSelection={(ids) => setSelected(new Set(ids))} fitKey={fitKey} unmapped={shown.filter((r) => r.property.lat == null).length} />
           <WorkloadStrip today={d.today} reloadKey={workKey} selectedMinutes={pickedTotals.minutes} onPick={(date, crewId) => { if (picked.length) setEdit({ date, crewId }); else setNotice("Select work orders on the map or the list first, then click a day to schedule them into it."); }} />
           <div className="card cl-table-card">
             <div className="cl-bulk wl-bulk">
@@ -150,7 +150,7 @@ export default function WaitingListPage() {
                   <button type="button" className="linkbtn" onClick={() => setSelected(new Set())}>Clear selection</button>
                 </>
               ) : (
-                <span className="muted">Select work orders here or on the map (click pins, or Draw a box), then Edit work orders to schedule them.</span>
+                <span className="muted">Select work orders here or on the map (click pins, or Group Selection), then Edit work orders to schedule them.</span>
               )}
               <span style={{ marginLeft: "auto" }} />
               <Columns shown={view.columns.length ? view.columns : DEFAULT_WL_COLUMNS} onChange={(columns) => setView({ ...view, columns })} />

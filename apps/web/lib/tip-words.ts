@@ -377,7 +377,7 @@ export const TIPS_BY_PAGE: Record<string, Record<string, string>> = {
     "not done yet": chip("work that still has to be done"), "no crew yet": chip("work nobody is assigned to"), "done or skipped": chip("work that's finished or was skipped"),
     "edit work orders": "Change the day, crew or window for the ones you ticked, all at once",
     optimize: "Put this crew's stops in the shortest order, keeping locked stops where they are",
-    "draw a box": "Drag a box on the map to tick every pin inside it",
+    "group selection": "Drag a box on the map to tick every pin inside it; then drag its corners or edges to resize it",
   },
   "dispatch-beta": {
     "pick a date to jump to": "Choose the day to show", table: "Show the day as a table", split: "Show the table and the map side by side", waitlist: "Show services waiting to be scheduled", board: "Show the day as lanes, one per crew",
@@ -402,7 +402,7 @@ export const TIPS_BY_PAGE: Record<string, Record<string, string>> = {
     "coming up (not released yet)": "Show services that aren't due yet",
     badges: "What each colored badge on a service means", "full screen": "Make the map fill the window", "hide map": "Fold the map away to give the list the room", "show map": "Bring the map back",
     "edit work orders": "Give the ones you ticked a day, a crew and a window, all at once",
-    "draw a box": "Drag a box on the map to tick every pin inside it",
+    "group selection": "Drag a box on the map to tick every pin inside it; then drag its corners or edges to resize it",
   },
   invoices: {
     "price list": "Open your products and services, to change what they cost",

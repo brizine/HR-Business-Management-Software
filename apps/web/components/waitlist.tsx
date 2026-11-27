@@ -315,18 +315,23 @@ export type NumberedPin = { label: string; color: string; dim?: boolean };
 export type MapLine = { color: string; points: [number, number][]; dashed?: boolean };
 /**
  * A pin per service (colored by service, red ring when its window is closing or missed), grouped
- * into numbered circles when close together. Click pins to select; "Draw a box" selects an area.
+ * into numbered circles when close together. Click pins to select; "Group Selection" draws a box
+ * that ticks every pin inside it, and the box stays to be resized or moved.
  *
  * The dispatch board uses the same map with `pinOf`: those rows become numbered pins in their crew's
  * color, `lines` draw each route, `flag` marks the shop, and `ghosts` (waiting-list services) show gray.
  */
-export function WaitMap({ rows, colors, selected, onToggle, onSelect, fitKey, unmapped, pinOf, lines, flag, ghosts, legend, prefsKey = "wl-map", children }: {
-  rows: WaitRow[]; colors: Map<string, string>; selected: Set<string>; onToggle: (ids: string[]) => void; onSelect: (ids: string[]) => void; fitKey: string; unmapped: number;
+export function WaitMap({ rows, colors, selected, onToggle, onSelect, onSelection, fitKey, unmapped, pinOf, lines, flag, ghosts, legend, prefsKey = "wl-map", children }: {
+  rows: WaitRow[]; colors: Map<string, string>; selected: Set<string>; onToggle: (ids: string[]) => void; onSelect: (ids: string[]) => void;
+  /** The whole selection, replaced: lets the selection box untick what it no longer holds. Without it the box only adds. */
+  onSelection?: (ids: string[]) => void; fitKey: string; unmapped: number;
   pinOf?: (r: WaitRow) => NumberedPin | null; lines?: MapLine[]; flag?: { lat: number; lng: number; label: string } | null; ghosts?: WaitRow[]; legend?: ReactNode; prefsKey?: string; children?: ReactNode;
 }) {
   const [prefs, setPrefs] = useState<MapPrefs>(() => readLocal(prefsKey, { height: 0, collapsed: false }));
   const [full, setFull] = useState(false);
   const [boxMode, setBoxMode] = useState(false);
+  // A box is on the map, to be adjusted.
+  const [boxed, setBoxed] = useState(false);
   const [zoom, setZoom] = useState(0);
   const el = useRef<HTMLDivElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
@@ -436,37 +441,125 @@ export function WaitMap({ rows, colors, selected, onToggle, onSelect, fitKey, un
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, rows, ghosts, lines, flag, selected, zoom, colors]);
 
-  // Draw a box: drag on the map to select every pin inside.
+  // What the selection box works from, kept fresh without the box being drawn again.
+  const live = useRef({ pins: [] as WaitRow[], selected, onSelect, onSelection });
+  live.current = { pins: [...mapped, ...ghostRows], selected, onSelect, onSelection };
+
+  // Group Selection: drag a box on the map to tick every pin inside. The box then stays: drag a
+  // corner or an edge to resize it, or the box itself to move it, and the ticks follow. Around the
+  // box the map drags as usual. Done (or Esc) takes the box away and leaves the ticks.
   useEffect(() => {
     const m = map.current, Lf = L.current, box = el.current;
     if (!ready || !m || !Lf || !box || !boxMode) return;
+    type LL = import("leaflet").LatLng;
+    type Bounds = import("leaflet").LatLngBounds;
+    const SPOTS = ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const;
+    let rect: import("leaflet").Rectangle | null = null;
+    let handles: import("leaflet").Marker[] = [];
+    let owned = new Set<string>();                       // the pins the box itself ticked
+    let frame = 0;
+    let drawing: { from: LL; x: number; y: number } | null = null;
+    let moving: { from: LL; bounds: Bounds } | null = null;
     m.dragging.disable();
     box.style.cursor = "crosshair";
-    let start: import("leaflet").LatLng | null = null;
-    let rect: import("leaflet").Rectangle | null = null;
     const at = (e: PointerEvent) => m.mouseEventToLatLng(e as unknown as MouseEvent);
+
+    /** Tick what the box holds now; untick what it had ticked and no longer holds. Ticks made by hand are left alone. */
+    const apply = () => {
+      frame = 0;
+      if (!rect) return;
+      const b = rect.getBounds();
+      const inside = live.current.pins.filter((r) => b.contains([r.property.lat!, r.property.lng!])).map((r) => r.id);
+      const now = live.current.selected;
+      const next = new Set([...now].filter((id) => !owned.has(id)));
+      const mine = new Set<string>();
+      for (const id of inside) { if (owned.has(id) || !now.has(id)) mine.add(id); next.add(id); }
+      owned = mine;
+      if (next.size === now.size && [...next].every((id) => now.has(id))) return;
+      live.current.selected = next;
+      if (live.current.onSelection) live.current.onSelection([...next]); else live.current.onSelect(inside);
+    };
+    const soon = () => { if (!frame) frame = requestAnimationFrame(apply); };
+
+    const spot = (b: Bounds, k: (typeof SPOTS)[number]): [number, number] => {
+      const n = b.getNorth(), so = b.getSouth(), e = b.getEast(), w = b.getWest();
+      return [k.includes("n") ? n : k.includes("s") ? so : (n + so) / 2, k.includes("e") ? e : k.includes("w") ? w : (e + w) / 2];
+    };
+    const place = (skip?: import("leaflet").Marker) => { const b = rect!.getBounds(); handles.forEach((h, i) => { if (h !== skip) h.setLatLng(spot(b, SPOTS[i])); }); };
+    /** Eight handles: the corners resize both ways, the edges one way. */
+    const addHandles = () => {
+      handles = SPOTS.map((k) => {
+        const h = Lf.marker(spot(rect!.getBounds(), k), {
+          draggable: true, keyboard: false, zIndexOffset: 2000, title: "Drag to resize the box",
+          icon: Lf.divIcon({ className: `wl-sel-grab ${k}`, iconSize: [26, 26], iconAnchor: [13, 13], html: `<span class="wl-sel-handle"></span>` }),
+        }).addTo(m);
+        let held: Bounds = rect!.getBounds();
+        h.on("dragstart", () => { held = rect!.getBounds(); });
+        h.on("drag", () => {
+          const p = h.getLatLng();
+          const n = k.includes("n") ? p.lat : held.getNorth(), so = k.includes("s") ? p.lat : held.getSouth();
+          const e = k.includes("e") ? p.lng : held.getEast(), w = k.includes("w") ? p.lng : held.getWest();
+          rect!.setBounds(Lf.latLngBounds([n, w], [so, e]));
+          place(h); soon();
+        });
+        h.on("dragend", () => { place(); soon(); });
+        return h;
+      });
+    };
+
+    // Pins, the box's own handles and the map's buttons keep their own clicks and drags.
+    const theirs = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.(".leaflet-control, .leaflet-marker-icon");
     const down = (e: PointerEvent) => {
-      if ((e.target as HTMLElement).closest(".leaflet-control")) return;
-      start = at(e); box.setPointerCapture(e.pointerId);
-      rect = Lf.rectangle(Lf.latLngBounds(start, start), { color: "#111827", weight: 1, dashArray: "4 4", fillOpacity: 0.08 }).addTo(m);
+      if (e.button > 0 || theirs(e.target)) return;
+      const p = at(e);
+      if (rect && !drawing) {
+        // Inside the box: move it. Outside: the map drags as usual.
+        if (!rect.getBounds().contains(p)) return;
+        m.dragging.disable();
+        moving = { from: p, bounds: rect.getBounds() };
+      } else {
+        drawing = { from: p, x: e.clientX, y: e.clientY };
+        rect = Lf.rectangle(Lf.latLngBounds(p, p), { color: "#111827", weight: 1.5, dashArray: "5 4", fillOpacity: 0.08, className: "wl-sel-box" }).addTo(m);
+      }
+      box.setPointerCapture(e.pointerId);
     };
-    const move = (e: PointerEvent) => { if (start && rect) rect.setBounds(Lf.latLngBounds(start, at(e))); };
+    const move = (e: PointerEvent) => {
+      if (drawing && rect) { rect.setBounds(Lf.latLngBounds(drawing.from, at(e))); soon(); return; }
+      if (!moving || !rect) return;
+      const p = at(e), dLat = p.lat - moving.from.lat, dLng = p.lng - moving.from.lng, b = moving.bounds;
+      rect.setBounds(Lf.latLngBounds([b.getSouth() + dLat, b.getWest() + dLng], [b.getNorth() + dLat, b.getEast() + dLng]));
+      place(); soon();
+    };
     const up = (e: PointerEvent) => {
-      if (!start || !rect) return;
-      const b = Lf.latLngBounds(start, at(e));
-      rect.remove(); rect = null; start = null;
-      onSelect([...mapped, ...ghostRows].filter((r) => b.contains([r.property.lat!, r.property.lng!])).map((r) => r.id));
-      setBoxMode(false);
+      if (moving) { moving = null; m.dragging.enable(); soon(); return; }
+      if (!drawing || !rect) return;
+      const click = Math.hypot(e.clientX - drawing.x, e.clientY - drawing.y) < 6;
+      drawing = null;
+      // A click isn't a box: wait for a drag.
+      if (click) { rect.remove(); rect = null; return; }
+      // The box stays to be adjusted, and the map drags again around it.
+      m.dragging.enable();
+      box.style.cursor = "";
+      addHandles();
+      setBoxed(true);
+      soon();
     };
-    box.addEventListener("pointerdown", down);
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setBoxMode(false); };
+    box.addEventListener("pointerdown", down, true);
     box.addEventListener("pointermove", move);
     box.addEventListener("pointerup", up);
+    box.addEventListener("pointercancel", up);
+    document.addEventListener("keydown", esc);
     return () => {
-      box.removeEventListener("pointerdown", down); box.removeEventListener("pointermove", move); box.removeEventListener("pointerup", up);
-      rect?.remove(); m.dragging.enable(); box.style.cursor = "";
+      box.removeEventListener("pointerdown", down, true); box.removeEventListener("pointermove", move); box.removeEventListener("pointerup", up); box.removeEventListener("pointercancel", up);
+      document.removeEventListener("keydown", esc);
+      if (frame) cancelAnimationFrame(frame);
+      rect?.remove(); handles.forEach((h) => h.remove());
+      m.dragging.enable(); box.style.cursor = "";
+      setBoxed(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, boxMode, rows, ghosts]);
+  }, [ready, boxMode]);
 
   // Full screen: Esc leaves; the map re-measures after any size change.
   useEffect(() => {
@@ -491,12 +584,19 @@ export function WaitMap({ rows, colors, selected, onToggle, onSelect, fitKey, un
     <div className={`card wl-map-card${full ? " wl-map-full" : ""}`} ref={wrap}>
       <div className="wl-map-bar">
         <strong>Map</strong>
-        <span className="muted">{mapped.length} on the map{unmapped ? ` · ${unmapped} without a map location` : ""}</span>
+        {boxMode
+          ? <span className="muted" role="status">{boxed ? "Drag a corner or an edge to resize the box, or the box itself to move it. The ticks follow." : "Drag a box around the pins you want."}</span>
+          : <span className="muted">{mapped.length} on the map{unmapped ? ` · ${unmapped} without a map location` : ""}</span>}
         <span className="row" style={{ gap: 6, marginLeft: "auto" }}>
           {children}
-          {!prefs.collapsed && <button type="button" className={`btn sm${boxMode ? " primary" : ""}`} aria-pressed={boxMode} onClick={() => setBoxMode(!boxMode)} title="Drag a box on the map to select every pin inside">{boxMode ? "Drag on the map…" : "Draw a box"}</button>}
+          {!prefs.collapsed && (
+            <button type="button" className={`btn sm${boxMode ? " primary" : ""}`} aria-pressed={boxMode} onClick={() => setBoxMode(!boxMode)}
+              title={boxMode && boxed ? "Take the box off the map. What it ticked stays ticked." : "Drag a box on the map to tick every pin inside it. The box stays so you can drag its corners or edges to resize it, or the box itself to move it."}>
+              {!boxMode ? "Group Selection" : boxed ? "Done" : "Drag on the map…"}
+            </button>
+          )}
           {!prefs.collapsed && <button type="button" className="btn sm" onClick={() => setFull(!full)} aria-pressed={full}>{full ? "Exit full screen" : "Full screen"}</button>}
-          {!full && <button type="button" className="btn sm" onClick={() => save({ ...prefs, collapsed: !prefs.collapsed })} aria-expanded={!prefs.collapsed}>{prefs.collapsed ? "Show map" : "Hide map"}</button>}
+          {!full && <button type="button" className="btn sm" onClick={() => { setBoxMode(false); save({ ...prefs, collapsed: !prefs.collapsed }); }} aria-expanded={!prefs.collapsed}>{prefs.collapsed ? "Show map" : "Hide map"}</button>}
         </span>
       </div>
       {!prefs.collapsed && (

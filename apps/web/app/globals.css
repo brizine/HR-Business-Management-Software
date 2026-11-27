@@ -2670,3 +2670,13 @@ button.hp-card:hover { border-color: var(--primary); }
 .rs-lock { flex: none; color: var(--muted); display: inline-flex; }
 .rs-total { font-size: 14px; min-height: 20px; }
 @media (max-width: 640px) { .rs-stop { flex-wrap: wrap; } .rs-when { width: 100%; text-align: left; padding-left: 72px; } }
+
+/* ───────────── Group Selection: the box on the map and its handles (components/waitlist.tsx) ───────────── */
+.wl-map path.wl-sel-box { cursor: move; }
+.wl-map .wl-sel-grab { display: flex; align-items: center; justify-content: center; background: transparent; border: 0; touch-action: none; }
+.wl-sel-handle { width: 12px; height: 12px; border-radius: 3px; background: #fff; border: 2px solid #111827; box-shadow: 0 1px 3px rgba(0, 0, 0, .4); }
+.wl-map .wl-sel-grab:hover .wl-sel-handle { background: #111827; }
+.wl-map .wl-sel-grab.nw, .wl-map .wl-sel-grab.se { cursor: nwse-resize; }
+.wl-map .wl-sel-grab.ne, .wl-map .wl-sel-grab.sw { cursor: nesw-resize; }
+.wl-map .wl-sel-grab.n, .wl-map .wl-sel-grab.s { cursor: ns-resize; }
+.wl-map .wl-sel-grab.e, .wl-map .wl-sel-grab.w { cursor: ew-resize; }

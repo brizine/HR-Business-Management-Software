@@ -525,7 +525,7 @@ export function DispatchBoard() {
 
       {d && (
         <div className="stack wl-page">
-          <WaitMap rows={shown} colors={new Map()} selected={selected} onToggle={toggle} onSelect={(ids) => setSelected(new Set([...selected, ...ids]))} fitKey={fitKey} unmapped={shown.filter((r) => r.property.lat == null).length} prefsKey="db-map"
+          <WaitMap rows={shown} colors={new Map()} selected={selected} onToggle={toggle} onSelect={(ids) => setSelected(new Set([...selected, ...ids]))} onSelection={(ids) => setSelected(new Set(ids))} fitKey={fitKey} unmapped={shown.filter((r) => r.property.lat == null).length} prefsKey="db-map"
             pinOf={(r) => ({ label: (r as BoardRow).route && r.crewId ? String((r as BoardRow).route!.order) : "", color: crewColor(r), dim: r.status === "completed" || r.status === "skipped" })}
             lines={mapLines} flag={d.start ? { lat: d.start.lat, lng: d.start.lng, label: `The shop: ${d.start.address}` } : null} ghosts={pins ? waitShown : []}
             legend={<>
@@ -560,7 +560,7 @@ export function DispatchBoard() {
                   <button type="button" className="linkbtn" onClick={() => setSelected(new Set())}>Clear selection</button>
                 </>
               ) : (
-                <span className="muted">Select work orders here or on the map (click pins, or Draw a box), then Edit work orders to move them.{grouped ? " Drag a row to reorder it or to give it to another crew." : ""}</span>
+                <span className="muted">Select work orders here or on the map (click pins, or Group Selection), then Edit work orders to move them.{grouped ? " Drag a row to reorder it or to give it to another crew." : ""}</span>
               )}
               <span style={{ marginLeft: "auto" }} />
               {!grouped && <button type="button" className="btn" onClick={() => setView({ ...view, sort: BY_ROUTE })} title="Back to each crew's stops in route order">Group by crew</button>}
