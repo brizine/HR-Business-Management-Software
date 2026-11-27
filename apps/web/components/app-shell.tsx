@@ -373,8 +373,8 @@ const KIND_LABELS: Record<string, string> = {
  * then pages you can open. Empty, it offers quick links. Grouped by kind, in the order shown.
  */
 function useSearchResults(q: string, visibleItems: (s: Side) => NavItem[]) {
-  const { can } = useAuth();
-  const office = can("manager", "customers");
+  const { me } = useAuth();
+  const chemical = !!me?.access?.chemicalTracking;
   const [hits, setHits] = useState<Hit[]>([]);
   const term = q.trim();
   useEffect(() => {
@@ -392,8 +392,8 @@ function useSearchResults(q: string, visibleItems: (s: Side) => NavItem[]) {
       });
       return [...quick, { kind: "account", id: "settings", title: "Account settings", sub: null, href: "/settings/security" }];
     }
-    // Weather is a tab inside Chemical Tracking, so it has no menu item of its own for most people: still found by name.
-    const weather = office ? [{ href: "/chemical-tracking/weather", label: "Weather" }] : [];
+    // Weather is a tab inside Chemical Tracking, so it has no menu item of its own: still found by name by those who can open it.
+    const weather = chemical ? [{ href: "/chemical-tracking/weather", label: "Weather" }] : [];
     const all = [...visible, ...weather, { href: "/notifications", label: "Notifications" }, { href: "/wiki", label: "Company Wiki" }, { href: "/help", label: "Help" }, { href: "/settings/security", label: "Settings" }];
     const lower = term.toLowerCase();
     // Pages match from the start of a word ("pay" finds Payroll, "pra" doesn't find Spray Mix).
@@ -410,7 +410,7 @@ function useSearchResults(q: string, visibleItems: (s: Side) => NavItem[]) {
       }
     });
     return [...list, ...pages];
-  }, [term, hits, visibleItems, office]);
+  }, [term, hits, visibleItems, chemical]);
 }
 
 /** One result row (shared by the top bar's search and the full-screen search on phones). */

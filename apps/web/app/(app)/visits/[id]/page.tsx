@@ -114,7 +114,7 @@ export default function WorkOrder({ params }: { params: Promise<{ id: string }> 
         </div>
       )}
       {!editing && !!v.forms?.length && <div style={{ marginTop: 16 }}><WorkOrderForms visitId={v.id} forms={v.forms} onChanged={data.reload} /></div>}
-      {!editing && v.canManage && v.status === "completed" && <div style={{ marginTop: 16 }}><WorkOrderWeather visitId={v.id} /></div>}
+      {!editing && me?.access?.chemicalTracking && v.status === "completed" && <div style={{ marginTop: 16 }}><WorkOrderWeather visitId={v.id} /></div>}
       {!editing && v.status === "completed" && <VisitProducts visitId={v.id} completedAt={v.completedAt} />}
       {!editing && me?.access?.chemicalTracking && v.status === "completed" && <ChemicalRecordLink visitId={v.id} completedAt={v.completedAt} />}
       {!editing && <div style={{ marginTop: 16 }}><CustomFieldsCard target="workorder" id={v.id} canEdit={v.canManage || v.isCrew} values={v.custom ?? {}} onSaved={(custom) => update({ ...v, custom })} /></div>}

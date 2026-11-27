@@ -97,7 +97,7 @@ export function RecordActions({ r, onChange, compact }: { r: WeatherRecord; onCh
   );
 }
 
-/** On a completed work order (office only): its weather, if it's a chemical application. */
+/** On a completed work order (for the people who can open Chemical Tracking): its weather, if it's a chemical application. */
 export function WorkOrderWeather({ visitId }: { visitId: string }) {
   const data = useApi<{ settings: WeatherSettings; record: WeatherRecord | null }>(`/weather/records/${visitId}`);
   const r = data.data?.record;

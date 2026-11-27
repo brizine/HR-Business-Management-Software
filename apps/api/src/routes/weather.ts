@@ -4,6 +4,7 @@ import { weatherReadingSchema, weatherSettingsSchema } from "@crewdesk/shared";
 import { db } from "../db";
 import { companies, visits, weatherDays } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
+import { requireChemicalAccess } from "../lib/chemicalAccess";
 import { HttpError, parse } from "../lib/errors";
 import { companyToday } from "../lib/payRates";
 import { addDaysYmd } from "../lib/tz";
@@ -12,10 +13,13 @@ import { applyDayWeather, fetchAutoWeather, setOfficeWeather, weatherDayList, we
 const AREA = "customers" as const;
 const isoDate = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Weather on chemical applications, for the office (Customers & billing managers). */
+/**
+ * Weather on chemical applications. It is part of Chemical Tracking, so the same people can use
+ * it: admins, and the people they add to Chemical Tracking's access list. Nobody else, managers included.
+ */
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);
-  app.addHook("preHandler", requireRole("manager", AREA));
+  app.addHook("preHandler", requireChemicalAccess);
 
   app.get("/settings", async (req) => weatherSettings(req.user.companyId));
   app.put("/settings", { preHandler: requireRole("admin", AREA) }, async (req) => {

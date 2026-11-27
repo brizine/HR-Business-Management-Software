@@ -77,6 +77,25 @@ const complete = async (id: string, gps?: { lat: number; lng: number; accuracy?:
 };
 
 describe("weather", () => {
+  it("follows Chemical Tracking's access: admins, and the people they add", async () => {
+    const people = (await call("GET", "/chemical-tracking/access", "owner")).body.people as { id: string; name: string }[];
+    const mgr = people.find((p) => p.name === "Mo Manager")!.id, tech = people.find((p) => p.name === "Tia Tech")!.id;
+    // Not on the list: refused, a Customers & billing manager included. The owner (an admin) is always in.
+    expect((await call("GET", "/weather/records", "mgr")).status).toBe(403);
+    expect((await call("GET", "/weather/settings", "mgr")).status).toBe(403);
+    expect((await call("PUT", `/weather/days/${today}`, "mgr", { windMph: 5 })).status).toBe(403);
+    expect((await call("GET", "/weather/records", "tech")).status).toBe(403);
+    expect((await call("GET", "/weather/records", "owner")).status).toBe(200);
+    // On the list: in, whatever their role. Taken off: out again.
+    expect((await call("PUT", `/chemical-tracking/access/${tech}`, "owner")).status).toBe(200);
+    expect((await call("GET", "/weather/records", "tech")).status).toBe(200);
+    expect((await call("DELETE", `/chemical-tracking/access/${tech}`, "owner")).status).toBe(200);
+    expect((await call("GET", "/weather/records", "tech")).status).toBe(403);
+    // The manager is on the list for the rest of these tests.
+    expect((await call("PUT", `/chemical-tracking/access/${mgr}`, "owner")).status).toBe(200);
+    expect((await call("GET", "/weather/records", "mgr")).status).toBe(200);
+  });
+
   it("settings: automatic to start; admins change it", async () => {
     expect((await call("GET", "/weather/settings", "mgr")).body).toEqual({ mode: "auto" });
     expect((await call("PUT", "/weather/settings", "mgr", { mode: "manual" })).status).toBe(403);

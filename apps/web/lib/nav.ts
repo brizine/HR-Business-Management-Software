@@ -8,9 +8,9 @@ import type { PermissionArea, Role } from "@crewdesk/shared";
 export type Side = "operations" | "team";
 export const SIDES: { key: Side; label: string }[] = [{ key: "operations", label: "Operations" }, { key: "team", label: "Team" }];
 
-/** `gate: "chemical"`: only admins and the people they add to Chemical Tracking see it; "noChemical": only those who can't open it. */
+/** `gate: "chemical"`: only admins and the people they add to Chemical Tracking see it. */
 /** `badge`: a small tag after the label (the second dispatch board is marked Beta, as in Homeworks). */
-export type NavItem = { href: string; label: string; min?: Role; area?: PermissionArea; gate?: "chemical" | "noChemical" | "texting"; badge?: string };
+export type NavItem = { href: string; label: string; min?: Role; area?: PermissionArea; gate?: "chemical" | "texting"; badge?: string };
 export type NavGroup = { key: string; label: string; icon: string; items: NavItem[] };
 
 export const NAV: Record<Side, NavGroup[]> = {
@@ -49,8 +49,6 @@ export const NAV: Record<Side, NavGroup[]> = {
       items: [
         { href: "/price-list", label: "Products & services", min: "manager", area: "customers" },
         { href: "/chemical-tracking", label: "Chemical Tracking", gate: "chemical" },
-        // Weather is a tab in Chemical Tracking. An office manager who can't open Chemical Tracking gets it here instead.
-        { href: "/chemical-tracking/weather", label: "Weather", min: "manager", area: "customers", gate: "noChemical" },
         { href: "/custom-fields", label: "Custom fields", min: "admin" },
         { href: "/settings/customers", label: "Tags", min: "admin", area: "customers" },
         // What Crewdesk says to customers, and when. These were the Marketing group (as in Homeworks).

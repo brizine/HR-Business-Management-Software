@@ -1435,11 +1435,14 @@ computer or a phone, or focus the handle and use the up and down arrow keys. The
 
 ## Weather
 
-**Resources → Chemical Tracking → Weather** (Customers & billing managers) keeps the weather on chemical
-applications for the records, as the Crewdesk plan describes: the office handles it, and techs never see or enter
-it. It's a tab along the top of Chemical Tracking, after Customer notices. (It used to be under Field; old links
-to it still work.) A manager who isn't one of the people allowed into Chemical Tracking finds **Weather** by
-itself under **Resources**, and typing "weather" in **Search** finds the page too.
+**Resources → Chemical Tracking → Weather** keeps the weather on chemical applications for the records. It's a tab
+along the top of Chemical Tracking, after Customer notices. (It used to be under Field; old links to it still
+work, and typing "weather" in **Search** finds it.)
+
+**Who can use it:** the same people as the rest of Chemical Tracking: admins, and the people an admin adds on
+Chemical Tracking's **Access** tab. Nobody else sees the Weather tab or the Weather box on a work order, managers
+included; add a manager on the Access tab if they should handle it. Techs who aren't on that list never see or
+enter weather: the phone only stamps the location when a work order is completed.
 
 - **Which work orders:** tick **Chemical application** on a service in the price list (Resources → Products &
   services). Work orders with one of those services get the weather when they're completed. They show
@@ -1460,7 +1463,7 @@ itself under **Resources**, and typing "weather" in **Search** finds the page to
 - **The day's weather** (any mode): pick a day and enter it once. In automatic mode it fills in only that day's
   applications still waiting for weather; automatic and office readings are kept. **Delete this day's entry** takes
   it back off.
-- **On the work order:** a completed chemical work order's page has a **Weather** box with the reading, where it
+- **On the work order** (for the same people): a completed chemical work order's page has a **Weather** box with the reading, where it
   came from (the station and time, the day's entry, or who typed it), and the **GPS** stamp. The phone
   app adds the GPS stamp when **Completed** is tapped, if location is already allowed (it never asks just for this).
 - **Undo** on a completed work order clears its weather; it's looked up again when it's completed again.

@@ -197,7 +197,6 @@ export const TIPS_NAV: Record<string, string> = {
   tags: "Labels for customers and properties, and reasons for cancelling",
   "property measure": "Measure a lawn on the map to get its square feet",
   "spray mix calculator": "How much of each product to put in the tank",
-  weather: "Wind, temperature and rain on chemical applications",
   assets: "Trucks, trailers and equipment, with fuel, repairs and costs",
   "repair orders": "Repairs and maintenance on your trucks and equipment",
   inspections: "Vehicle and equipment checks filled in by the crew",
