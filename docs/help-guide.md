@@ -402,10 +402,33 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
 Operations → **Billing** has **Invoices**, and **Resources → Products & services** is the price list (managers in Customers &
 billing; admins change prices).
 
-- **Price list:** each service is priced one of three ways: a **flat price**, **per 1,000 sq ft** (with an optional
-  minimum charge), or **by lawn size** (brackets such as "up to 8,000 sq ft $75, larger $95"). Each service posts to
+- **Price list:** each service is priced one of four ways: a **flat price**, **per 1,000 sq ft** (with an optional
+  minimum charge), **by lawn size** (brackets such as "up to 8,000 sq ft $75, larger $95"), or **per 1,000 sq ft
+  with volume discount** (see below). Each service posts to
   an income account (4000 Lawn Treatment Programs, 4100 Pest Control, 4200 One-Time Lawn Services, 4950 Other
   Income). Drag a service by its handle (the six dots at the left) to set the order; **Retired** services stay on past invoices but aren't offered for new ones.
+- **Per 1,000 sq ft with volume discount:** a minimum charge for small lawns, then a rate per 1,000 sq ft that
+  steps down as lawns get bigger. It works like tax brackets: **each rate is charged only on the square feet inside
+  its own tier**, never on the whole lawn. That is why a bigger lawn can never cost less than a smaller one.
+  - **Setting it up:** enter the **Minimum charge**. On the first row, **Minimum covers up to** is the largest lawn
+    that pays just the minimum, and **Then per 1,000 sq ft** is the rate for the square feet above that. Each
+    further row is **Next tier from** (the size where a lower rate starts) and its rate. A rate applies from its
+    own row's size up to the next row's size; the last row's rate goes on for ever. A later rate can't be higher
+    than the one before.
+  - **An example:** minimum $45 covering up to 3,000 sq ft; then $10 per 1,000; from 6,000 sq ft $8; from 10,000
+    sq ft $6. An 8,000 sq ft lawn pays $45, plus 3,000 sq ft at $10 ($30, the part from 3,000 to 6,000), plus 2,000
+    sq ft at $8 ($16, the part from 6,000 to 8,000) = **$91**. It is not 8 × $8.
+  - **Price in steps of:** with a step (500 sq ft on a new service), lawns are grouped into steps above the
+    minimum (3,001–3,500, 3,501–4,000 and so on) and every lawn in a step pays the same price. **Price each step
+    at** says which size in the step sets that price: its middle (fairest), its smallest or its largest. At the
+    middle, a 4,000 sq ft lawn is priced as 3,750 sq ft, so the example above gives $52.50 at 4,000 sq ft, not
+    $55. **Leave it empty to price every lawn at its exact size.**
+  - **Round prices to** rounds the result (to $0.50 on a new service). **Price by hand above** stops Crewdesk
+    pricing very large lawns on its own: above that size the price has to be typed in.
+  - **The table under the form** shows the price at a range of lawn sizes as you type, with one lawn worked
+    through step by step above it. **Priced as** is the size each price was worked out at (it differs from the
+    lawn's size only when steps are on). **Average per 1,000** is the price divided by the lawn's size; it is
+    higher than the tier's own rate because the minimum is spread across the lawn.
 - **Packages** (under the price list): saved bundles of line items, like Homeworks' packages: "Spring round" =
   fertilizer + edging + blow-off. Admins add them with **Add package**: pick services from the price list or type
   custom items, with quantity, budgeted hours and price. Leave a service's price blank to price it for each

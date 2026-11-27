@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
-import { INCOME_ACCOUNTS, PRICING_KINDS, PRICING_LABELS, describePricing, formatMoney, formatRateAmount, priceFor, sizeMinutes, type PricedService, type PricingKind } from "@crewdesk/shared";
+import { INCOME_ACCOUNTS, PRICING_KINDS, PRICING_LABELS, describePricing, formatMoney, formatRateAmount, priceFor, sizeMinutes, tieredBreakdown, type PricedService, type PricingKind } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi, useNewForm } from "@/lib/hooks";
@@ -208,10 +208,30 @@ const PREVIEW_SIZES = [2000, 3000, 4000, 5000, 6000, 7500, 10000, 12500, 15000, 
 function RatePreview({ service, setupMinutes, minutesPer1000, targetCents, materialPer1000Cents }: { service: PricedService; setupMinutes: number | null; minutesPer1000: number | null; targetCents: number | null; materialPer1000Cents: number | null }) {
   if (!service.tiers?.length) return null;
   const timed = setupMinutes != null || minutesPer1000 != null;
+  const step = service.bandSizeSqFt ?? null;
+  const covers = service.tiers[0].fromSqFt;
+  // A step's middle can fall on a half foot (3,750.5): shown as 3,750.
+  const n = (v: number) => Math.floor(v + 1e-9).toLocaleString("en-US");
+  // One lawn worked through, so the table's numbers can be checked by hand.
+  const sampleSize = covers + (service.tiers[1] ? service.tiers[1].fromSqFt - covers : 2000) + 2000;
+  const sample = tieredBreakdown(service, sampleSize);
+  const where = service.bandPricePoint === 0 ? "its smallest size" : service.bandPricePoint === 1 ? "its largest size" : "its middle";
   return (
     <div className="tablewrap">
+      <div className="muted" style={{ fontSize: 13, margin: "4px 0 8px" }}>
+        <p style={{ margin: "0 0 4px" }}>
+          <strong>How a price is worked out:</strong> lawns up to {n(covers)} sq ft pay the minimum. A bigger lawn pays the minimum, plus each tier&apos;s rate for only the square feet that fall inside that tier (a tier runs from its own size up to the next tier&apos;s).
+          {sample && sample.parts.length > 0 && <> For example, a lawn of {n(sampleSize)} sq ft{Math.floor(sample.pricedAtSqFt) !== sampleSize ? ` (priced as ${n(sample.pricedAtSqFt)} sq ft, see below)` : ""}: {formatMoney(sample.minimumCents)} minimum{sample.parts.map((p, i) => <span key={i}> + {n(p.sqFt)} sq ft at {formatMoney(p.ratePer1000Cents)} per 1,000 ({formatMoney(Math.round(p.cents))})</span>)} = {formatMoney(Math.round(sample.exactCents))}{sample.priceCents !== Math.round(sample.exactCents) ? `, rounded to ${formatMoney(sample.priceCents)}` : ""}.</>}
+        </p>
+        {step ? (
+          <p style={{ margin: 0 }}>
+            <strong>Steps of {n(step)} sq ft, each priced at {where}:</strong> every lawn in a step pays the same. {service.bandPricePoint === 1 ? "" : <>So a lawn at the top of a step pays a little less than its exact size would: the <strong>Priced as</strong> column shows the size each price was worked out at. </>}
+            To price every lawn at its exact size, leave <strong>Price in steps of</strong> empty.
+          </p>
+        ) : <p style={{ margin: 0 }}>Each lawn is priced at its exact size.</p>}
+      </div>
       <table>
-        <thead><tr><th>Lawn (sq ft)</th><th>Price</th><th>Per 1,000</th>{materialPer1000Cents != null && <th>Material</th>}{materialPer1000Cents != null && <th>After material</th>}{timed && <th>Minutes</th>}{timed && <th>Per man-hour</th>}</tr></thead>
+        <thead><tr><th>Lawn (sq ft)</th>{step ? <th>Priced as</th> : null}<th>Price</th><th title="The price divided by the lawn's size. It is higher than the tier's rate because the minimum is spread across the lawn.">Average per 1,000</th>{materialPer1000Cents != null && <th>Material</th>}{materialPer1000Cents != null && <th>After material</th>}{timed && <th>Minutes</th>}{timed && <th>Per man-hour</th>}</tr></thead>
         <tbody>{PREVIEW_SIZES.map((sqFt) => {
           const price = priceFor(service, sqFt);
           const min = timed ? sizeMinutes({ setupMinutes, minutesPer1000 }, sqFt) : null;
@@ -220,6 +240,7 @@ function RatePreview({ service, setupMinutes, minutesPer1000, targetCents, mater
           return (
             <tr key={sqFt}>
               <td>{sqFt.toLocaleString("en-US")}</td>
+              {step ? <td className="muted">{(() => { const b = price == null ? null : tieredBreakdown(service, sqFt); return b ? `${n(b.pricedAtSqFt)}${b.band && b.band.fromSqFt > 0 ? ` (${n(b.band.fromSqFt)}–${n(b.band.toSqFt)})` : ""}` : ""; })()}</td> : null}
               <td>{price == null ? <span className="muted">priced by hand</span> : formatMoney(price)}</td>
               <td>{price == null ? "" : formatMoney(Math.round((price * 1000) / sqFt))}</td>
               {materialPer1000Cents != null && <td>{formatMoney(Math.round((materialPer1000Cents * sqFt) / 1000))}</td>}
