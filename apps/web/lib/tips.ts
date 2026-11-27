@@ -1,12 +1,13 @@
-import { TIPS_BY_CLASS, TIPS_BY_LABEL, TIPS_BY_PAGE, TIPS_BY_PATTERN, TIPS_NAV } from "./tip-words";
+import { TIPS_BY_CLASS, TIPS_BY_LABEL, TIPS_BY_PAGE, TIPS_BY_PATTERN, TIPS_NAV, TIPS_TABS } from "./tip-words";
 
 /**
  * Hover descriptions: point at a button anywhere in Crewdesk and a short line says what it does.
  * A button's description comes from the first of these that has one:
  *   1. the button itself (`title` or `data-tip` in the code): the most specific;
- *   2. the kind of control it is: a page in the menu (TIPS_NAV), a column heading that sorts, a
- *      label that fits a pattern (TIPS_BY_PATTERN: "…: on or off"), a known class (TIPS_BY_CLASS:
- *      a to-do's row, a tag, a column to add);
+ *   2. the kind of control it is: a page in the menu (TIPS_NAV), a tab that is a link to another
+ *      page or view (TIPS_TABS, by where it goes), a column heading that sorts, a label that fits
+ *      a pattern (TIPS_BY_PATTERN: "…: on or off"), a known class (TIPS_BY_CLASS: a to-do's row,
+ *      a tag, a column to add);
  *   3. the page's own list (TIPS_BY_PAGE, by the first part of the address: "dispatch", "customers"…);
  *   4. the list for a label wherever it appears (TIPS_BY_LABEL: "Save", "Export"…);
  *   5. for plain action buttons only, the rules below, which read the label ("Add customer",
@@ -23,6 +24,8 @@ export type TipFacts = {
   classes: string[]; path: string;
   /** A page in the left menu or the Operations | Team switch; a column heading that sorts; a plain action button. */
   nav: boolean; sort: boolean; action: boolean;
+  /** A tab in a strip of links (Customers | Properties | Bulk emails), and where a link goes. */
+  tab?: boolean; href?: string;
 };
 
 /** A button's label as the lists spell it: lower case, numbers as "#", no arrows, dots or counts on the ends. */
@@ -68,6 +71,13 @@ const pageKeys = (path: string) => {
   const parts = path.split("?")[0].split("/").filter(Boolean).filter((p) => !/^[0-9a-f-]{20,}$/i.test(p) && !/^\d+$/.test(p));
   return [parts.slice(0, 2).join("/"), parts[0] ?? ""].filter((k, i, all) => k && all.indexOf(k) === i);
 };
+/** Where a link goes, as TIPS_TABS spells it: the page, and which of its tabs ("/automations?tab=review"). */
+export function tabKey(href: string): string {
+  const [path, query = ""] = href.replace(/^https?:\/\/[^/]+/, "").split("#")[0].split("?");
+  const tab = new URLSearchParams(query).get("tab");
+  const page = path.split("/").map((p) => (/^[0-9a-f-]{20,}$/i.test(p) || /^\d+$/.test(p) ? ":id" : p)).join("/").replace(/\/$/, "") || "/";
+  return tab ? `${page}?tab=${tab}` : page;
+}
 const same = (a: string, b: string) => a.toLowerCase().replace(/[^a-z0-9]+/g, "") === b.toLowerCase().replace(/[^a-z0-9]+/g, "");
 
 /** The description for a button from the lists alone (no rules, no fall-backs): its page's list, a pattern, then the label list. */
@@ -99,6 +109,9 @@ export function describe(f: TipFacts): string | null {
   const names = [...new Set([f.aria, f.text].filter(Boolean))];
   // The menu's pages have their own list, so a tab that shares a page's name isn't described as that page.
   if (f.nav) return useful(names.map((n) => TIPS_NAV[tipLabel(n)]).find(Boolean));
+  // A tab that is a link is described by where it goes: its name is often on something else on the
+  // page too (the Customers tab, and the Customers chip that filters the list).
+  if (f.tab) return useful(TIPS_TABS[tabKey(f.href ?? "")] ?? names.map((n) => TIPS_NAV[tipLabel(n)]).find(Boolean));
   // What kind of control it is comes before what it says: a column heading called "Customer"
   // sorts by customer, whatever a button called "Customer" does on the same page.
   if (f.sort && f.text) return `Sort by ${lower(tidy(f.text)) || "this column"}; click again to turn the order around`;

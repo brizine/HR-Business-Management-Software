@@ -12,7 +12,11 @@ import { describe, type TipFacts } from "@/lib/tips";
  */
 
 /** What can have a description. */
-const TARGETS = "[data-tip], [title], [data-tip-title], button, [role='button'], a.btn, a.topbar-icon, a.rail-btn, a.rail-link, a.menu-link, label.btn, summary";
+const TARGETS = "[data-tip], [title], [data-tip-title], button, [role='button'], a.btn, a.topbar-icon, a.rail-btn, a.rail-link, a.menu-link, label.btn, summary, "
+  // Tabs and tiles that are links: they look and work like buttons.
+  + ".cal-seg > a, .hw-pills > a, .hwd-tabs > a, .tabs > a, [role='tablist'] > a, a[role='tab'], a.myday-tile";
+/** Tabs made of links to another page or view (Customers | Properties | Bulk emails). */
+const TABS = ".cal-seg > a, .hw-pills > a, .hwd-tabs > a, .tabs > a, [role='tablist'] > a, a[role='tab']";
 /** The left menu's pages and the Operations | Team switch. */
 const NAV = ".rail a, .rail .rail-btn, .side-switch button";
 /** Column headings that sort the list. */
@@ -32,6 +36,8 @@ export function tipFacts(el: Element, path: string): TipFacts {
     classes, path,
     nav: el.matches(NAV),
     sort: el.matches(SORT),
+    tab: el.matches(TABS),
+    href: el.getAttribute("href") ?? "",
     // The app's own buttons are called btn (or something-btn): those are the ones that do something.
     action: el.matches("button, a, label, summary, [role='button']") && classes.some((c) => /^(btn|linkbtn|linkish|linklike)$|-btn$|^btn-/.test(c)),
   };

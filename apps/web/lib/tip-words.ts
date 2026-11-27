@@ -136,6 +136,38 @@ export const TIPS_BY_LABEL: Record<string, string> = {
 };
 
 /** The left menu and the Operations | Team switch: what each page or group is for. */
+/**
+ * Tabs that are links, by where they go (the page, and "?tab=" when it has one). A tab's name is
+ * often on something else on the same page, so these are not looked up by label.
+ */
+export const TIPS_TABS: Record<string, string> = {
+  // Customers | Properties | Bulk emails
+  "/customers": "Everyone you work for: find, filter, add, email or text them",
+  "/properties": "The addresses you service, with lawn sizes, gate codes and notes",
+  "/customers/messages": "Every email sent to a list of customers at once: how many went, who was skipped, and the email itself",
+  // Marketing → Automations
+  "/automations": "Emails, texts and to-dos that send themselves when something happens",
+  "/automations?tab=automations": "One trigger, one action: an email, text or to-do that sends itself when something happens",
+  "/automations?tab=sequences": "A chain of steps after a trigger, with waits between them",
+  "/automations?tab=sequence-history": "Every step a sequence has queued: when it was added, scheduled and sent",
+  "/automations?tab=review": "Sequence steps waiting for your OK before they go out",
+  "/automations?tab=history": "What automations did: each email, text or to-do, and anything skipped",
+  "/templates?tab=text": "The wording of your text messages (opens Marketing → Templates)",
+  "/templates?tab=email": "The designs of your emails (opens Marketing → Templates)",
+  "/templates?tab=history": "Every email and text Crewdesk has sent",
+  // Marketing → Documents
+  "/docs": "Letters and forms made for customers: open, email or print them",
+  "/docs?tab=documents": "Letters and forms made for customers: open, email or print them",
+  "/docs?tab=templates": "The starting points for letters and forms: write or change them here",
+  // Marketing → Visit Forms
+  "/visit-forms": "The checklists and questions crews fill in: build and change them here",
+  "/visit-forms?tab=submitted": "Everything the crews have filled in, to read, search and export",
+  // Marketing → Text
+  "/texts": "Conversations by text with customers and your team",
+  "/texts?tab=send": "Write a text to one person or to many at once",
+  "/texts?tab=errors": "Texts that didn't go through, and the reason for each",
+};
+
 export const TIPS_NAV: Record<string, string> = {
   // The Operations | Team switch
   operations: "The customer side: customers, schedule, billing, field and fleet",

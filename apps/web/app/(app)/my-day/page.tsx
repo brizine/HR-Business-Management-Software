@@ -82,6 +82,7 @@ export default function MyDay() {
   const [from, to] = range ?? [d?.from ?? "", d?.to ?? ""];
   const oneDay = from === to;
   const jobLink = (view: string) => (oneDay ? `/calendar?v=day&d=${from}` : `/visits?view=${view}`);
+  const jobTip = oneDay ? "Open this day's work orders on the calendar" : "Open these work orders in the list";
 
   return (
     <div className="myday">
@@ -91,10 +92,10 @@ export default function MyDay() {
         <>
           <h2 className="myday-h">Account standing</h2>
           <div className="myday-tiles">
-            <Tile href="/invoices?status=overdue" label="Past due" value={formatMoney(d.standing.pastDueCents)} tone="bad" hint="Past their due date" />
-            <Tile href="/invoices?status=open" label="Outstanding" value={formatMoney(d.standing.outstandingCents)} tone="info" hint="Owed, not yet due" />
-            <Tile href="/customers" label="Credit" value={formatMoney(d.standing.creditCents)} tone="warn" hint="On customers' accounts" />
-            <Tile href="/invoices?status=paid" label="Paid" value={formatMoney(d.standing.paidCents)} tone="ok" hint={oneDay ? (from === d.today ? "Today" : fmtDate(from)) : `${fmtDate(from)} – ${fmtDate(to)}`} />
+            <Tile href="/invoices?status=overdue" label="Past due" value={formatMoney(d.standing.pastDueCents)} tone="bad" hint="Past their due date" tip="Open the invoices that are past their due date" />
+            <Tile href="/invoices?status=open" label="Outstanding" value={formatMoney(d.standing.outstandingCents)} tone="info" hint="Owed, not yet due" tip="Open the invoices that are owed but not yet due" />
+            <Tile href="/customers" label="Credit" value={formatMoney(d.standing.creditCents)} tone="warn" hint="On customers' accounts" tip="Open Customers: credit sits on each customer's account" />
+            <Tile href="/invoices?status=paid" label="Paid" value={formatMoney(d.standing.paidCents)} tone="ok" hint={oneDay ? (from === d.today ? "Today" : fmtDate(from)) : `${fmtDate(from)} – ${fmtDate(to)}`} tip="Open the paid invoices" />
           </div>
 
           <div className="row myday-hrow">
@@ -114,10 +115,10 @@ export default function MyDay() {
             </div>
           </div>
           <div className="myday-tiles">
-            <Tile href={jobLink("all")} label="Total jobs" value={String(d.jobs.total)} tone="bad" hint={d.jobs.skipped ? `${d.jobs.skipped} skipped not counted` : undefined} />
-            <Tile href={jobLink("upcoming")} label="Yet to start" value={String(d.jobs.notStarted)} tone="info" />
-            <Tile href={jobLink("upcoming")} label="In progress" value={String(d.jobs.inProgress)} tone="warn" />
-            <Tile href={jobLink("completed")} label="Completed" value={String(d.jobs.completed)} tone="ok" />
+            <Tile href={jobLink("all")} label="Total jobs" value={String(d.jobs.total)} tone="bad" hint={d.jobs.skipped ? `${d.jobs.skipped} skipped not counted` : undefined} tip={jobTip} />
+            <Tile href={jobLink("upcoming")} label="Yet to start" value={String(d.jobs.notStarted)} tone="info" tip={jobTip} />
+            <Tile href={jobLink("upcoming")} label="In progress" value={String(d.jobs.inProgress)} tone="warn" tip={jobTip} />
+            <Tile href={jobLink("completed")} label="Completed" value={String(d.jobs.completed)} tone="ok" tip={jobTip} />
           </div>
 
           <div className="myday-cols">
@@ -193,9 +194,9 @@ export default function MyDay() {
   );
 }
 
-function Tile({ href, label, value, tone, hint }: { href: string; label: string; value: string; tone: "bad" | "info" | "warn" | "ok"; hint?: string }) {
+function Tile({ href, label, value, tone, hint, tip }: { href: string; label: string; value: string; tone: "bad" | "info" | "warn" | "ok"; hint?: string; tip?: string }) {
   return (
-    <Link href={href} className={`card myday-tile ${tone}`}>
+    <Link href={href} className={`card myday-tile ${tone}`} data-tip={tip}>
       <span className="l">{label}</span>
       <span className="v">{value}</span>
       {hint && <span className="h">{hint}</span>}
