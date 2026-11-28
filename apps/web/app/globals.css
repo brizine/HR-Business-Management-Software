@@ -1067,6 +1067,10 @@ a.pt-row:hover { background: var(--bg); }
 .pt-account .pt-row { flex-wrap: wrap; }
 .pt-row-end { display: inline-flex; align-items: center; gap: 12px; margin-left: auto; }
 .pt-pick { display: inline-flex; align-items: center; gap: 10px; font-size: inherit; color: inherit; font-weight: inherit; cursor: pointer; }
+/* The signed-in portal's list: a tick box beside each invoice's row (the row itself opens the invoice). */
+.pt-list li.pt-picked { display: flex; align-items: center; }
+.pt-list li.pt-picked > .pt-row { flex: 1 1 auto; min-width: 0; padding-left: 8px; }
+.pt-tick { width: 18px; height: 18px; flex: none; margin: 0 0 0 14px; }
 .pt-pick input { width: 18px; height: 18px; flex: none; margin: 0; }
 .pt-account .pt-pay { border: 0; padding: 0; margin: 12px 0 0; }
 .pt-right { text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }

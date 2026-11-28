@@ -382,9 +382,11 @@ export const REFUND_REASONS = ["requested_by_customer", "duplicate", "fraudulent
  * about each new refund. Safe to call more than once.
  */
 export async function syncRefunds(companyId: string, paymentIntentId: string) {
-  // One payment, or one for each invoice a combined charge paid.
-  const pays = await db.select().from(invoicePayments).where(and(eq(invoicePayments.companyId, companyId), eq(invoicePayments.stripePaymentId, paymentIntentId)))
-    .orderBy(asc(invoicePayments.createdAt), asc(invoicePayments.id));
+  // One payment, or one for each invoice a combined charge paid, in the invoices' own order (oldest first:
+  // a combined payment's rows are all made at the same moment, so their own dates can't order them).
+  const pays = (await db.select({ p: invoicePayments }).from(invoicePayments).innerJoin(invoices, eq(invoices.id, invoicePayments.invoiceId))
+    .where(and(eq(invoicePayments.companyId, companyId), eq(invoicePayments.stripePaymentId, paymentIntentId)))
+    .orderBy(asc(invoices.issueDate), asc(invoices.number), asc(invoicePayments.createdAt), asc(invoicePayments.id))).map((r) => r.p);
   if (!pays.length) return syncPrepaymentRefunds(companyId, paymentIntentId);
   const { stripe } = await stripeFor(companyId);
   const [co] = await db.select({ tz: companies.timezone }).from(companies).where(eq(companies.id, companyId));

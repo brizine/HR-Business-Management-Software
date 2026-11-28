@@ -412,7 +412,8 @@ describe("Pay links and payments", () => {
     expect(b.payments[0].refundedCents).toBe(0);
 
     // The office refunds $120 of the charge in Stripe's own dashboard, which knows nothing of invoices:
-    // it's put on the invoices in order, each up to what's left on it ($45 on the first, $75 on the second).
+    // it's put on the invoices in order (oldest first; the same day, the lower number), each up to what's left
+    // on it: $45 on the first, $75 on the second.
     const outside = addRefund(ID.unaPi, 12000);
     expect(await webhook("refund.created", ID.unaPi, WEBHOOK_SECRET, outside)).toBe(200);
     a = await inv(ID.unaA); b = await inv(ID.unaB);
@@ -569,6 +570,40 @@ describe("Customer portal", () => {
     const c = await call("GET", `/portal/company?c=${companyId}`, null);
     expect(c.body).toMatchObject({ company: { name: "Portal Co" }, payments: { enabled: true, testMode: true } });
     expect((await call("GET", "/portal/company?c=00000000-0000-0000-0000-000000000000", null)).status).toBe(404);
+  });
+});
+
+describe("Paying several invoices at once in the portal", () => {
+  it("a signed-in customer ticks their invoices and pays them in one payment; nobody else's, and not staff looking in", async () => {
+    ID.gail = (await call("POST", "/customers", "owner", { firstName: "Gail", lastName: "Group", email: email("gail"), property: { street: "6 Elm Ct", city: "Norman", zip: "73069" } })).body.id;
+    const a = await sentInvoice(ID.gail, 4000, ["paper"]), b = await sentInvoice(ID.gail, 6000, ["paper"]);
+    const theirs = await sentInvoice(ID.other, 3300, ["paper"]);
+    const cookie = await signInPortal(email("gail"));
+    // Someone else's invoice can't be put in the payment, and there has to be at least one.
+    expect((await portal("POST", "/portal/pay", cookie, { invoiceIds: [a, theirs] })).status).toBe(404);
+    expect((await portal("POST", "/portal/pay", cookie, { invoiceIds: [] })).status).toBe(400);
+    // Without the portal's own header (a form on another site), nothing starts.
+    expect((await call("POST", "/portal/pay", null, { invoiceIds: [a, b] }, { cookie })).status).toBe(403);
+    // The office looking at the portal as the customer can't pay for them.
+    const asStaff = (await call("POST", "/portal/view-as", "office", { customerId: ID.gail })).cookies.find((c) => c.name === "crewdesk_portal")!.value;
+    expect((await portal("POST", "/portal/pay", asStaff, { invoiceIds: [a, b] })).status).toBe(403);
+
+    const start = await portal("POST", "/portal/pay", cookie, { invoiceIds: [a, b], save: true });
+    expect(start.status).toBe(200);
+    expect(start.body.amountCents).toBe(10000);
+    const pi = intents.get(start.body.paymentIntentId)!;
+    expect(pi.metadata.crewdeskSplit).toBe(`${a}:4000,${b}:6000`);
+    pi.status = "succeeded";
+    sent.length = 0;
+    expect((await portal("POST", "/portal/pay/confirm", cookie, { paymentIntentId: pi.id })).body.status).toBe("completed");
+    // Both are paid, the account owes nothing, and one receipt went out.
+    const me = (await portal("GET", "/portal/me", cookie)).body;
+    expect(me.customers[0]).toMatchObject({ balanceCents: 0 });
+    expect(me.invoices.filter((i: any) => [a, b].includes(i.id)).map((i: any) => i.status)).toEqual(["paid", "paid"]);
+    expect(me.paymentHistory.filter((p: any) => [a, b].includes(p.invoiceId)).map((p: any) => p.amountCents).sort()).toEqual([4000, 6000]);
+    expect(sent.filter((m) => m.to === email("gail") && /^Payment received/.test(m.subject))).toHaveLength(1);
+    // Paid invoices can't go in another payment.
+    expect((await portal("POST", "/portal/pay", cookie, { invoiceIds: [a, b] })).status).toBe(400);
   });
 });
 

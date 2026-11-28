@@ -92,25 +92,7 @@ function Home({ me, reload }: { me: Me; reload: () => void }) {
               </div>
             </div>
             <h2 className="pt-h2">{open.length ? "Invoices to pay" : "No open invoices"}</h2>
-            {open.length > 0 && (
-              <ul className="pt-list">
-                {open.map((i) => (
-                  <li key={i.id}>
-                    <Link href={`/portal/invoices/${i.id}`} className="pt-row">
-                      <span>
-                        <strong>Invoice {i.number}</strong> <StatusPill inv={i} />
-                        <span className="pt-muted block">{longDate(i.issueDate)}{i.serviceAddress ? ` · ${i.serviceAddress}` : ""}</span>
-                      </span>
-                      <span className="pt-right">
-                        <strong>{formatMoney(i.balanceCents)}</strong>
-                        <span className={`block ${i.overdue ? "pt-bad" : "pt-muted"}`}>due {longDate(i.dueDate)}</span>
-                        {me.payments.enabled && !staff && i.pendingCents < i.balanceCents && <span className="pt-btn primary small">Pay</span>}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <OpenInvoices open={open} payments={me.payments as PortalPayments} canPay={me.payments.enabled && !staff} onPaid={reload} />
             {paid.length > 0 && (
               <>
                 <button className="pt-link" onClick={() => setShowPaid(!showPaid)}>{showPaid ? "Hide" : "Show"} paid invoices ({paid.length})</button>
@@ -159,6 +141,55 @@ function Home({ me, reload }: { me: Me; reload: () => void }) {
         </section>
       )}
     </PortalFrame>
+  );
+}
+
+/**
+ * The invoices a customer still owes on. With more than one that can be paid, each has a tick box
+ * (all ticked to start) and one Pay button pays the ticked ones together, in one payment; a single
+ * invoice keeps its own Pay button, which opens it.
+ */
+function OpenInvoices({ open, payments, canPay, onPaid }: { open: Me["invoices"]; payments: PortalPayments; canPay: boolean; onPaid: () => void }) {
+  /** The invoices left unticked. */
+  const [skipped, setSkipped] = useState<string[]>([]);
+  const payable = open.filter((i) => i.pendingCents < i.balanceCents);
+  const together = canPay && payable.length > 1;
+  // Once the combined Pay box has been on the page it stays, so its thank-you isn't lost when everything is paid.
+  const [shown, setShown] = useState(false);
+  useEffect(() => { if (together) setShown(true); }, [together]);
+  const picked = payable.filter((i) => !skipped.includes(i.id));
+  const pickedCents = picked.reduce((s, i) => s + i.balanceCents - i.pendingCents, 0);
+  return (
+    <>
+      {together && <p className="pt-muted" style={{ margin: "0 0 8px" }}>Tick the invoices you want to pay. They&apos;re paid together, in one payment.</p>}
+      {open.length > 0 && (
+        <ul className="pt-list">
+          {open.map((i) => (
+            <li key={i.id} className={together ? "pt-picked" : undefined}>
+              {together && <input type="checkbox" className="pt-tick" checked={picked.some((x) => x.id === i.id)} disabled={i.pendingCents >= i.balanceCents}
+                onChange={(e) => setSkipped(e.target.checked ? skipped.filter((x) => x !== i.id) : [...skipped, i.id])} aria-label={`Pay invoice ${i.number}`} />}
+              <Link href={`/portal/invoices/${i.id}`} className="pt-row">
+                <span>
+                  <strong>Invoice {i.number}</strong> <StatusPill inv={i} />
+                  <span className="pt-muted block">{longDate(i.issueDate)}{i.serviceAddress ? ` · ${i.serviceAddress}` : ""}</span>
+                </span>
+                <span className="pt-right">
+                  <strong>{formatMoney(i.balanceCents)}</strong>
+                  <span className={`block ${i.overdue ? "pt-bad" : "pt-muted"}`}>due {longDate(i.dueDate)}</span>
+                  {canPay && !together && i.pendingCents < i.balanceCents && <span className="pt-btn primary small">Pay</span>}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      {(together || shown) && (
+        <StripePay key={picked.map((i) => i.id).join(",")} payable={together && pickedCents > 0} dueCents={pickedCents} payments={payments} canSave
+          start={(o) => api("/portal/pay", { body: { invoiceIds: picked.map((i) => i.id), save: o.save } })}
+          confirm={(paymentIntentId) => api("/portal/pay/confirm", { body: { paymentIntentId } })}
+          onConfirmed={() => onPaid()} />
+      )}
+    </>
   );
 }
 

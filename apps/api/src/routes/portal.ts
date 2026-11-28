@@ -321,6 +321,20 @@ const portalRoutes: FastifyPluginAsync = async (app) => {
     return { ...result, invoice: await invoiceDetail(v.companyId, (await viewerInvoice(v, inv.id))) };
   });
 
+  /** One payment for the invoices the customer ticked: theirs, all on one account, each with a balance. */
+  app.post("/pay", async (req) => {
+    const v = await viewer(app, req);
+    noStaff(v, "pay");
+    const { invoiceIds, save } = parse(z.object({ invoiceIds: z.array(z.string().uuid()).min(1, "Pick at least one invoice to pay").max(MAX_INVOICES_PER_PAYMENT, `Up to ${MAX_INVOICES_PER_PAYMENT} invoices can be paid at once`), save: z.boolean().optional() }), req.body);
+    for (const id of invoiceIds) await viewerInvoice(v, id);
+    return startAccountPayment(v.companyId, invoiceIds, { save: !!save });
+  });
+  app.post("/pay/confirm", async (req) => {
+    const v = await viewer(app, req);
+    const { paymentIntentId } = parse(z.object({ paymentIntentId: z.string().regex(/^pi_[A-Za-z0-9]+$/) }), req.body);
+    return recordPaymentIntent(v.companyId, paymentIntentId);
+  });
+
   /** Pays a prepayment the office asked for (a prepay offer). */
   app.post<{ Params: { id: string } }>("/prepayments/:id/pay", async (req) => {
     const v = await viewer(app, req);

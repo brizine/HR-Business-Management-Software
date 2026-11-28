@@ -1198,6 +1198,8 @@ form and go straight to Stripe; Crewdesk never sees or keeps them.
   together in **one payment** (up to 10 at a time; one ticked invoice is an ordinary payment for it). **View**
   shows any of the invoices underneath.
   On the invoice page, **Copy pay link** gives you the link to text or read to a customer.
+  - **In the portal too:** a signed-in customer with more than one invoice to pay sees the same tick boxes on
+    their **Invoices to pay** list, with one **Pay** button for the ticked ones.
   - **What you see for a combined payment:** the customer's card or bank account is charged once. Each invoice it
     paid gets its own payment for its share, saying "Paid online with invoices 1003 and 1004, in one payment of
     $175.00", so every invoice still shows as paid on its own page, in reports and in the books. Stripe's one fee
