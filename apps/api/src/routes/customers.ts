@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { and, arrayContains, arrayOverlaps, asc, desc, eq, ilike, inArray, isNull, not, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { BULK_MAX, cancelSchema, customerName, customerSchema, customerIdsSchema, customerMatchSchema, customerUpdateSchema, lawnTotal, parseCustomerFilters, splitPropertyValues, type CustomerFilter, type CustomerSelection } from "@crewdesk/shared";
+import { placeProperty } from "../lib/mapCodes";
 import { db } from "../db";
 import { fieldsFor, newRecordCustom, updatedCustom } from "../lib/customFields";
 import { filterSql, listColumns, sortSql } from "../lib/customerList";
@@ -208,6 +209,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const propFields = property ? await fieldsFor(companyId, "property") : [];
     const propSent = raw?.property?.custom && typeof raw.property.custom === "object" ? (raw.property.custom as Record<string, unknown>) : null;
     const propOwn = splitPropertyValues(propFields, propSent, property ? await newRecordCustom(companyId, "property", raw?.property?.custom, [{ target: "customer", values: custom }]) : {});
+    let firstProperty: string | null = null;
     const created = await db.transaction(async (tx) => {
       const tagIds = await checkTags(tx, companyId, body.tagIds);
       const number = await nextCustomerNumber(tx, companyId);
@@ -218,12 +220,15 @@ const routes: FastifyPluginAsync = async (app) => {
         const { tagIds: propTags, ...typed } = property;
         const p = { ...typed, ...propOwn.columns };
         const ptags = await checkTags(tx, companyId, propTags);
-        const [prop] = await tx.insert(properties).values({ ...p, custom: propOwn.custom, tagIds: ptags, lawnSqFt: lawnTotal(p), companyId, createdById: sub }).returning();
+        const [prop] = await tx.insert(properties).values({ ...p, mapCodeManual: !!p.mapCode, custom: propOwn.custom, tagIds: ptags, lawnSqFt: lawnTotal(p), companyId, createdById: sub }).returning();
         await recordTagChanges(tx, { companyId, before: [], after: ptags, propertyId: prop.id, source: "hand", byId: sub });
         await assignCustomer(tx, { companyId, propertyId: prop.id, customerId: c.id, role: "bill_to", startDate: today });
+        firstProperty = prop.id;
       }
       return c;
     });
+    // The property's pin (its address found on the map) and, from the pin, its map code.
+    if (firstProperty) await placeProperty(companyId, firstProperty);
     return { ...created, name: customerName(created) };
   });
 

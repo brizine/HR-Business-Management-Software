@@ -87,6 +87,11 @@ export const companies = pgTable("companies", {
   textingOptions: jsonb("texting_options").$type<import("@crewdesk/shared").TextingOptions>(),
   /** Dispatch: how drive times are measured, where routes start and end, and the business address located (lib/dispatch). */
   dispatchSettings: jsonb("dispatch_settings").$type<Partial<import("@crewdesk/shared").DispatchSettings>>(),
+  /**
+   * Automatic map codes: on, a property's Map Code comes from the outline its pin is in (map_codes). Off
+   * (while the outlines are still being drawn), properties keep the codes typed on them.
+   */
+  mapCodesAuto: boolean("map_codes_auto").notNull().default(false),
   /** Grace periods, alerts and points for attendance (see attendance.ts in @crewdesk/shared). */
   attendanceRules: jsonb("attendance_rules").$type<AttendanceRules>(),
   /** The company's own edited copy of the user manual (Markdown); null = the standard docs/help-guide.md. */
@@ -1436,8 +1441,11 @@ export const properties = pgTable(
     zip: text("zip"),
     lat: doublePrecision("lat"),
     lng: doublePrecision("lng"),
-    /** Map Code (MC); set from the pin once MC outlines exist, or by hand. */
+    /** When the address was last looked up for a pin and not found (so the catch-up doesn't keep asking, and the property can say so). */
+    pinLookupAt: timestamp("pin_lookup_at", { withTimezone: true }),
+    /** Map Code (MC): the code of the outline (map_codes) the pin is inside, once automatic map codes are on; or typed by hand. */
     mapCode: text("map_code"),
+    /** Typed by hand: automatic map codes leave it alone. */
     mapCodeManual: boolean("map_code_manual").notNull().default(false),
     lawnSqFt: doublePrecision("lawn_sq_ft"),
     frontSqFt: doublePrecision("front_sq_ft"),
@@ -1477,6 +1485,29 @@ export const properties = pgTable(
     index("properties_company_map_code_idx").on(t.companyId, t.mapCode),
     index("properties_tags_idx").using("gin", t.tagIds),
   ],
+);
+
+/**
+ * Map Codes (MC): the service area, drawn as outlines on the map by owners and admins. Each has a code
+ * ("801"), a name ("Central Norman") and a colour. Outlines never overlap: one saved over a neighbour is
+ * trimmed to the neighbour's edge. With automatic map codes on (companies.map_codes_auto), a property's
+ * Map Code is the code of the outline its pin is inside.
+ */
+export const mapCodes = pgTable(
+  "map_codes",
+  {
+    id: id(),
+    companyId: companyId(),
+    code: text("code").notNull(),
+    name: text("name"),
+    color: text("color").notNull(),
+    /** Pieces → rings (the edge, then holes) → [lat, lng] corners. */
+    outline: jsonb("outline").$type<import("@crewdesk/shared").MapOutline>().notNull(),
+    createdById: uuid("created_by_id").references((): AnyPgColumn => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("map_codes_company_code_idx").on(t.companyId, sql`upper(${t.code})`)],
 );
 
 /**

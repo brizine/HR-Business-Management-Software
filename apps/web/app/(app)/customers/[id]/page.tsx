@@ -41,6 +41,9 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
   const [editing, setEditing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [addingProperty, setAddingProperty] = useState(false);
+  const [propNote, setPropNote] = useState<string | null>(null);
+  // Whether Map Codes come from the outlines on the map (Settings → Map Codes): then a property without one is flagged.
+  const autoCodes = !!useApi<{ auto: boolean }>("/map-codes").data?.auto;
   const [showPast, setShowPast] = useState(false);
   const [creditVersion, setCreditVersion] = useState(0);
   const [tab, setTab] = useState<"details" | "communication" | "files" | "automations">("details");
@@ -181,8 +184,17 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
                 <h2 className="cp-h">Properties</h2>
                 {c.status !== "cancelled" && <button className="btn no-print" onClick={() => setAddingProperty(!addingProperty)}>Add a property</button>}
               </div>
-              {addingProperty && <AddProperty customerId={id} tags={tags} onDone={() => { setAddingProperty(false); reload(); }} />}
-              {current.length ? <PropertyTable rows={current} tags={tags} /> : <Empty>Not on any property yet.</Empty>}
+              {addingProperty && <AddProperty customerId={id} tags={tags} onDone={(made) => {
+                setAddingProperty(false); reload();
+                // Added where no map code reaches (or where the map can't find it): say so now, not when it's being routed.
+                setPropNote(made && autoCodes && !made.mapCode
+                  ? made.lat != null
+                    ? `${made.street} is outside every map code, so it has no Map Code (No MC). Open it to set one by hand, or stretch an outline over it under Settings → Map Codes.`
+                    : `${made.street} couldn't be found on the map yet, so it has no pin and no Map Code. Open it and set its pin under Property Pin Location.`
+                  : null);
+              }} />}
+              {propNote && <p className="notice warn" role="status">{propNote}</p>}
+              {current.length ? <PropertyTable rows={current} tags={tags} autoCodes={autoCodes} /> : <Empty>Not on any property yet.</Empty>}
               {past.length > 0 && (
                 <>
                   <button className="btn" onClick={() => setShowPast(!showPast)}>{showPast ? "Hide" : "Show"} past properties ({past.length})</button>
@@ -244,7 +256,7 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
   );
 }
 
-function PropertyTable({ rows, tags, past }: { rows: any[]; tags: any[]; past?: boolean }) {
+function PropertyTable({ rows, tags, past, autoCodes }: { rows: any[]; tags: any[]; past?: boolean; /** Map Codes come from the outlines: a property without one is flagged. */ autoCodes?: boolean }) {
   return (
     <div className="tablewrap">
       <table>
@@ -253,7 +265,7 @@ function PropertyTable({ rows, tags, past }: { rows: any[]; tags: any[]; past?: 
           <tr key={p.assignmentId}>
             <td><Link href={`/properties/${p.id}`}><strong>{p.street}</strong></Link>{p.name && <div className="muted">{p.name}</div>}<div className="muted">{[p.city, p.zip].filter(Boolean).join(" ")}</div></td>
             <td>{PROPERTY_ROLE_LABELS[p.role as PropertyRole]}</td>
-            <td className="nowrap">{p.lawnSqFt ? `${Math.round(p.lawnSqFt).toLocaleString()} sq ft` : "—"}{p.mapCode && <div className="muted">MC {p.mapCode}</div>}</td>
+            <td className="nowrap">{p.lawnSqFt ? `${Math.round(p.lawnSqFt).toLocaleString()} sq ft` : "—"}{p.mapCode ? <div className="muted">MC {p.mapCode}</div> : autoCodes && !past && p.status !== "cancelled" ? <div><span className="badge warn" title="Outside every map code's outline, or not on the map yet. Open the property to see which.">No MC</span></div> : null}</td>
             <td className="nowrap">{p.lastService ? fmtDate(p.lastService) : "—"}</td>
             <td className="nowrap">{p.nextService ? fmtDate(p.nextService) : "—"}</td>
             <td><TagChips ids={p.tagIds} tags={tags} /></td>
@@ -277,7 +289,7 @@ function EditCustomer({ customer, tags, onDone }: { customer: any; tags: any[]; 
   );
 }
 
-function AddProperty({ customerId, tags, onDone }: { customerId: string; tags: any[]; onDone: () => void }) {
+function AddProperty({ customerId, tags, onDone }: { customerId: string; tags: any[]; onDone: (made?: { street: string; lat: number | null; mapCode: string | null }) => void }) {
   const [value, setValue] = useState(propertyFormValue());
   const [role, setRole] = useState<"bill_to" | "resident">("bill_to");
   const { busy, error, run } = useAction();
@@ -285,7 +297,7 @@ function AddProperty({ customerId, tags, onDone }: { customerId: string; tags: a
     <form className="card inset stack" style={{ marginTop: 12 }} onSubmit={(e) => {
       e.preventDefault();
       const body = { ...propertyBody(value), ...(role === "bill_to" ? { billToCustomerId: customerId } : { residentIds: [customerId] }) };
-      run(async () => { await api("/properties", { body }); onDone(); });
+      run(async () => { onDone(await api("/properties", { body })); });
     }}>
       <p className="muted" style={{ margin: 0 }}>A new service address. To put this customer on an address that&apos;s already in Crewdesk, open that property and use &quot;Add a person&quot;.</p>
       <PropertyFields value={value} onChange={setValue} tags={tags} />
@@ -296,7 +308,7 @@ function AddProperty({ customerId, tags, onDone }: { customerId: string; tags: a
         </select>
       </label>
       <ErrorBox error={error} />
-      <div className="row"><button className="btn primary" disabled={busy}>Add property</button><button type="button" className="btn" onClick={onDone}>Cancel</button></div>
+      <div className="row"><button className="btn primary" disabled={busy}>Add property</button><button type="button" className="btn" onClick={() => onDone()}>Cancel</button></div>
     </form>
   );
 }

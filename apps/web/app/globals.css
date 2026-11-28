@@ -1420,6 +1420,26 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .package-list > li:first-child { border-top: 0; }
 .package-lines { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
 .package-lines a { white-space: nowrap; }
+/* Map Codes: the map beside its panel (the list of codes, the form, what needs attention). */
+.mc-layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+.mc-map { height: calc(100vh - 250px); min-height: 460px; }
+.mc-map.drawing, .mc-map.drawing .leaflet-interactive { cursor: crosshair; }
+.leaflet-tooltip.mc-label { font-size: 13px; padding: 2px 8px; }
+.mc-side { gap: 12px; min-width: 0; }
+.mc-list { display: grid; gap: 2px; }
+.mc-row { all: unset; box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; width: 100%; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+.mc-row:hover { background: color-mix(in srgb, var(--muted) 12%, transparent); }
+.mc-row:focus-visible { outline: 2px solid var(--primary); }
+.mc-row .muted { font-size: 13px; margin-left: auto; }
+.mc-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.mc-typed { display: flex; flex-wrap: wrap; gap: 6px; }
+.mc-typed .btn { display: inline-flex; align-items: center; gap: 6px; }
+.mc-parts { display: grid; gap: 4px; font-size: 14px; }
+.mc-parts > li, .mc-hole { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; }
+.mc-hole { flex-basis: 100%; padding-left: 16px; }
+.mc-plan-list { max-height: 220px; overflow-y: auto; display: grid; gap: 3px; font-size: 14px; margin-top: 6px; }
+.mc-plan-list .muted { font-size: 13px; }
+@media (max-width: 980px) { .mc-layout { grid-template-columns: 1fr; } .mc-map { height: 60vh; } }
 /* A property's packages inside its Work orders box: each one's rounds fold to a line. */
 .wo-packages { margin-top: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 .package-fold { margin-top: 4px; font-size: 13px; }

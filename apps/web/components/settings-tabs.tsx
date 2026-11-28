@@ -19,6 +19,7 @@ export function SettingsTabs() {
       {(me?.user.role === "owner" || me?.access?.managesPermissions) && tab("/settings/permissions", "Permissions")}
       {can("admin", "customers") && tab("/settings/customers", "Customers & billing")}
       {can("admin", "customers") && tab("/invoice-layout", "Invoice layout")}
+      {can("manager", "customers") && tab("/map-codes", "Map Codes")}
       {can("admin") && tab("/custom-fields", "Custom fields")}
       {can("admin", "payroll") && tab("/settings/integrations", "Integrations")}
     </div>

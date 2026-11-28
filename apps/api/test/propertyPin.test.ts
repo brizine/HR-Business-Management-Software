@@ -63,14 +63,14 @@ describe("the property's pin on the map", () => {
     const r = await call("PUT", `/properties/${ID.prop}/pin`, "office", { lat: 35.22263412345, lng: -97.43951298765 });
     expect(r.status).toBe(200);
     // Kept to about four inches (six decimal places).
-    expect(r.body).toEqual({ lat: 35.222634, lng: -97.439513 });
+    expect(r.body).toEqual({ lat: 35.222634, lng: -97.439513, mapCode: null });
     const p = (await call("GET", `/properties/${ID.prop}`, "office")).body;
     expect(p).toMatchObject({ lat: 35.222634, lng: -97.439513 });
     const edited = await call("PUT", `/properties/${ID.prop}`, "office", { street: "1 Oak St", city: "Norman", state: "OK", zip: "73069", gateCode: "1234", tagIds: [] });
     expect(edited.status).toBe(200);
     expect((await call("GET", `/properties/${ID.prop}`, "office")).body).toMatchObject({ gateCode: "1234", lat: 35.222634, lng: -97.439513 });
     // Moved again.
-    expect((await call("PUT", `/properties/${ID.prop}/pin`, "office", { lat: 35.2227, lng: -97.4396 })).body).toEqual({ lat: 35.2227, lng: -97.4396 });
+    expect((await call("PUT", `/properties/${ID.prop}/pin`, "office", { lat: 35.2227, lng: -97.4396 })).body).toEqual({ lat: 35.2227, lng: -97.4396, mapCode: null });
   });
 
   it("has to be a real place, set by the office, on the company's own property", async () => {

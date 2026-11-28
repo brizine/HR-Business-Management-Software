@@ -31,6 +31,7 @@ import notificationRoutes from "./routes/notifications";
 import shiftRoutes from "./routes/shifts";
 import unsubscribeRoutes from "./routes/unsubscribe";
 import availabilityRoutes from "./routes/availability";
+import mapCodeRoutes from "./routes/mapCodes";
 import jobRoutes from "./routes/jobs";
 import taxFormRoutes from "./routes/taxForms";
 import wikiRoutes from "./routes/wiki";
@@ -153,6 +154,7 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(unsubscribeRoutes, { prefix: "/public/unsubscribe" });
   await app.register(availabilityRoutes, { prefix: "/availability" });
   await app.register(jobRoutes, { prefix: "/jobs" });
+  await app.register(mapCodeRoutes, { prefix: "/map-codes" });
   await app.register(taxFormRoutes, { prefix: "/tax-forms" });
   await app.register(wikiRoutes, { prefix: "/wiki" });
   await app.register(jobSiteRoutes, { prefix: "/job-sites" });

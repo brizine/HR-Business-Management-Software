@@ -420,6 +420,9 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
     any of them, change their order or add more in **Resources → Custom fields** (admins can also click **Add
     custom field** in the box). Crewdesk's own can't be deleted, because it uses them: the gate code, pets and
     access notes reach the crew's phone, the Map Code groups routes, and the sizes price services.
+  - **Map Code:** typed by hand, or, once **automatic map codes** are on (see **Map Codes**), the code of the
+    outline the property's pin is in. A code you type is kept and marked **(set by hand)**, with **Back to
+    automatic** beside it. **No MC** means the pin is outside every outline, or there's no pin yet.
   - **Edit details** turns every field into a box to type in; **Save details** saves them all.
   - **The sizes:** **Total ft** follows Front + Back + Other while you type them. Type your own total and it
     stays as you typed it (that is how you override it). Leave the total blank and it is added up for you.
@@ -480,6 +483,51 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
   Their emails use example.com, so nothing reaches a real person. **Remove sample customers** deletes them all.
 - **Deleting:** admins can delete leads, sample customers and customers or properties with no history; anyone
   else is made inactive instead, so the history is kept.
+
+### Map Codes
+
+**Resources → Map Codes** (also a tab in Settings) is where your service area is drawn. Each area is an
+**outline** on the map with a **code** (801), an optional **name** (Central Norman) and a **colour**. A
+property's **Map Code** is the code of the outline its map pin is inside. Customers & billing managers can look;
+only **admins and owners** draw, turn automatic map codes on, or run the pin catch-up.
+
+- **The map** shows every outline shaded in its colour with its code on it, and every property with a pin as a
+  **dot** in the colour of the Map Code on it (grey: no code). Point at a dot for its address and code.
+  **Aerial photo / Street map** switches what's underneath; **Show everything** zooms out to all of it.
+- **Drawing one:** **New map code**, type the code (and a name, and pick a colour), then click the map to place
+  each corner. Finish by clicking the first corner again, double-clicking, or pressing **Enter**
+  (**Backspace** takes off the last corner, **Esc** stops). **Save** keeps it.
+  - Under the list, **Codes typed on properties with no outline yet** lists the codes your properties already
+    carry. Click one and Crewdesk starts that map code and goes to its properties, so you can draw around them.
+- **Outlines never overlap.** Draw right over a neighbour's edge: when you save, the new outline is **trimmed to
+  the neighbour's edge**, with no gap and no overlap, and Crewdesk says which neighbour it was trimmed against.
+  The neighbour keeps its ground, so to move a border, shrink one outline first, then stretch the other over
+  the space. An outline drawn wholly inside another is refused.
+- **Changing one:** click it (on the map or in the list). Every corner has a **square** to drag; the **round
+  dot** between two corners drags out a new corner; **double-click** a corner to remove it. **Draw another
+  piece** adds a separate area under the same code. **Cut a hole** takes a pocket you don't serve out of the
+  outline (draw it inside). Each piece and hole has **Remove**. **Delete** removes the map code.
+- **Automatic map codes** is **off** to start, so nothing on your properties changes while you draw: they keep
+  the codes typed on them. When the outlines are ready, **Turn on…** shows exactly what will change (how many
+  properties move from which code to which, which would have **no code** because they're outside every outline,
+  and the full list, which you can **download**), and only then applies it. Turning it on **replaces the codes
+  typed on properties** with the outline's code. From then on:
+  - **A new property** gets its code as it's added: Crewdesk looks its address up, sets its pin, and gives it
+    the code of the outline the pin is in.
+  - **Moving a property's pin** (Property Pin Location on its page), or changing its address to somewhere
+    else, re-checks its code. Correcting an address's spelling leaves a hand-placed pin where it is.
+  - **Redrawing or deleting an outline** shows the properties whose code would change before it's saved.
+  - **A code typed by hand** is left alone and marked **(set by hand)**. **Back to automatic**, next to it on
+    the property, hands it back to the outlines; so does emptying the field.
+  - **Turn off** stops all of that; the codes on properties stay as they are.
+- **Needs attention** lists what the outlines can't place:
+  - **Outside every outline:** properties whose pin is in no outline. With automatic map codes on they show
+    **No MC** on their page and on the customer's list of properties, and adding one says so straight away.
+    Stretch an outline over them, type a code by hand, or leave them out on purpose.
+  - **No pin on the map:** a property with no pin can't be placed, so it keeps the code it has. **Find pins**
+    looks every such address up (quick in the counties you work in, a few seconds each elsewhere; **Stop**
+    pauses it). One that can't be found says **address not found**: open the property and set its pin under
+    **Property Pin Location**.
 
 ### Billing: price list and invoices
 

@@ -10,6 +10,7 @@ import { assets, customFields, customers, invoices, properties, todoAssignees, t
 import { authenticate, isManager, requireRole } from "../lib/auth";
 import { asDef, enteredCustom, ensurePropertyFields, fieldsFor, propertyColumnChanges } from "../lib/customFields";
 import { HttpError, notFound, parse } from "../lib/errors";
+import { assignMapCode } from "../lib/mapCodes";
 import { todoVisibility } from "./todos";
 import { canManageVisits, visitVisibility } from "./visits";
 
@@ -38,7 +39,9 @@ async function recordValues(req: FastifyRequest, target: CustomFieldTarget, id: 
         save: async (v, sent) => {
           const { columns, custom } = splitPropertyValues(fields, sent, v);
           const [u] = await db.update(properties).set({ custom, ...propertyColumnChanges(row, columns), updatedAt: new Date() }).where(eq(properties.id, id)).returning();
-          return propertyFieldValues(fields, u);
+          // A Map Code typed here is set by hand; emptied, it goes back to the code of the outline the pin is in.
+          const mapCode = await assignMapCode(companyId, id);
+          return propertyFieldValues(fields, { ...u, mapCode });
         },
       };
     }

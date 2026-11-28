@@ -277,6 +277,7 @@ const SETTINGS_TABS: Record<string, string> = {
   permissions: "Who can see and change what, area by area",
   "customers & billing": "Tags, reasons for going inactive, invoice numbering, late fees and automatic sending",
   "invoice layout": "What your invoices show, what each part is called and how they look",
+  "map codes": "Your service area drawn as outlines; a property takes the code of the outline its pin is in",
   "custom fields": "Your own boxes on customers, properties, work orders and more",
   integrations: "Connect Stripe, Talkroute texting, Bigcapital and other services",
 };

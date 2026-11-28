@@ -6,6 +6,7 @@ import { db } from "../db";
 import { fieldsFor, newRecordCustom, propertyColumnChanges, updatedCustom } from "../lib/customFields";
 import { contactColumns } from "../lib/propertyContacts";
 import { locateAddress } from "../lib/dispatch";
+import { assignMapCode, placeProperty } from "../lib/mapCodes";
 import { cancellationReasons, cancellations, customers, measurements, properties, propertyAssignments, propertyContacts } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
@@ -102,14 +103,15 @@ const routes: FastifyPluginAsync = async (app) => {
     const [payer] = billToCustomerId ? await db.select({ custom: customers.custom }).from(customers).where(and(eq(customers.id, billToCustomerId), eq(customers.companyId, companyId))) : [];
     const sentCustom = (req.body as { custom?: unknown })?.custom;
     const own = await ownColumns(companyId, sentCustom, await newRecordCustom(companyId, "property", sentCustom, [{ target: "customer", values: payer?.custom }]));
-    return db.transaction(async (tx) => {
+    const made = await db.transaction(async (tx) => {
       const tagIds = await checkTags(tx, companyId, tags);
       const sizes = body.measurementId ? await measurementSizes(tx, companyId, body.measurementId) : null;
       // Sizes typed on the form win; otherwise the linked image's are taken.
       const typed = [body.frontSqFt, body.backSqFt, body.otherSqFt, body.lawnSqFt, own.columns.frontSqFt, own.columns.backSqFt, own.columns.otherSqFt, own.columns.lawnSqFt].some((v) => v != null);
       const values = { ...body, ...own.columns, ...(sizes && !typed ? { frontSqFt: sizes.frontSqFt, backSqFt: sizes.backSqFt, otherSqFt: sizes.otherSqFt, lawnSqFt: sizes.lawnSqFt } : {}) };
       if (sizes && values.lat == null) Object.assign(values, { lat: sizes.lat, lng: sizes.lng });
-      const [p] = await tx.insert(properties).values({ ...values, custom: own.custom, lawnSqFt: lawnTotal(values), tagIds, companyId, createdById: sub }).returning();
+      // A code typed while adding it is a code set by hand.
+      const [p] = await tx.insert(properties).values({ ...values, mapCodeManual: !!values.mapCode, custom: own.custom, lawnSqFt: lawnTotal(values), tagIds, companyId, createdById: sub }).returning();
       await recordTagChanges(tx, { companyId, before: [], after: tagIds, propertyId: p.id, source: "hand", byId: sub });
       if (billToCustomerId) {
         await customerInCompany(tx, companyId, billToCustomerId);
@@ -121,6 +123,9 @@ const routes: FastifyPluginAsync = async (app) => {
       }
       return p;
     });
+    // Its pin (the address found on the map) and, from the pin, its map code.
+    await placeProperty(companyId, made.id);
+    return propertyInCompany(db, companyId, made.id);
   });
 
   app.get<{ Params: { id: string } }>("/:id", async (req) => {
@@ -155,8 +160,10 @@ const routes: FastifyPluginAsync = async (app) => {
   app.put<{ Params: { id: string } }>("/:id", async (req) => {
     const body = parse(propertySchema, req.body);
     const { companyId, sub } = req.user;
-    return db.transaction(async (tx) => {
+    let moved = false;
+    const saved = await db.transaction(async (tx) => {
       const p = await propertyInCompany(tx, companyId, req.params.id);
+      moved = formatAddress(p).toLowerCase() !== formatAddress({ street: body.street, city: body.city, state: body.state, zip: body.zip }).toLowerCase();
       const tagIds = await checkTags(tx, companyId, body.tagIds, p.tagIds);
       if (body.measurementId && body.measurementId !== p.measurementId) await measurementSizes(tx, companyId, body.measurementId);
       const mapCodeManual = body.mapCode !== (p.mapCode ?? undefined) ? !!body.mapCode : p.mapCodeManual;
@@ -177,6 +184,17 @@ const routes: FastifyPluginAsync = async (app) => {
       await recordTagChanges(tx, { companyId, before: p.tagIds, after: tagIds, propertyId: p.id, source: "hand", byId: sub });
       return u;
     });
+    // A new address is looked up for a new pin; either way the map code follows the pin (unless it's set by hand).
+    await placeProperty(companyId, saved.id, { moved });
+    return propertyInCompany(db, companyId, saved.id);
+  });
+
+  /** Map Code back to automatic: the code typed by hand gives way to the outline the pin is in. */
+  app.post<{ Params: { id: string } }>("/:id/map-code/auto", async (req) => {
+    const { companyId } = req.user;
+    const p = await propertyInCompany(db, companyId, req.params.id);
+    await db.update(properties).set({ mapCodeManual: false, updatedAt: new Date() }).where(eq(properties.id, p.id));
+    return { mapCode: await assignMapCode(companyId, p.id), mapCodeManual: false };
   });
 
   /**
@@ -187,8 +205,9 @@ const routes: FastifyPluginAsync = async (app) => {
     const at = parse(z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }), req.body);
     const p = await propertyInCompany(db, req.user.companyId, req.params.id);
     const round = (n: number) => Math.round(n * 1e6) / 1e6;
-    const [u] = await db.update(properties).set({ lat: round(at.lat), lng: round(at.lng), updatedAt: new Date() }).where(eq(properties.id, p.id)).returning({ lat: properties.lat, lng: properties.lng });
-    return u;
+    const [u] = await db.update(properties).set({ lat: round(at.lat), lng: round(at.lng), pinLookupAt: null, updatedAt: new Date() }).where(eq(properties.id, p.id)).returning({ lat: properties.lat, lng: properties.lng });
+    // A moved pin may be in another map code now.
+    return { ...u, mapCode: await assignMapCode(req.user.companyId, p.id) };
   });
   /** Where the map services find the property's address, to start the pin from. Nothing is saved. */
   app.post<{ Params: { id: string } }>("/:id/pin/find", async (req) => {
@@ -221,7 +240,9 @@ const routes: FastifyPluginAsync = async (app) => {
         measurementId, frontSqFt: s.frontSqFt, backSqFt: s.backSqFt, otherSqFt: s.otherSqFt, lawnSqFt: s.lawnSqFt,
         lat: p.lat ?? s.lat, lng: p.lng ?? s.lng, updatedAt: new Date(),
       }).where(eq(properties.id, p.id)).returning();
-      return u;
+      // The drawing can give a property its first pin, and with it a map code.
+      await assignMapCode(companyId, p.id, tx);
+      return propertyInCompany(tx, companyId, u.id);
     });
   });
   /** Takes the image off the property; the sizes stay as they are. */

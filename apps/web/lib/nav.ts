@@ -52,6 +52,7 @@ export const NAV: Record<Side, NavGroup[]> = {
         { href: "/chemical-tracking", label: "Chemical Tracking", gate: "chemical" },
         { href: "/custom-fields", label: "Custom fields", min: "admin" },
         { href: "/settings/customers", label: "Tags", min: "admin", area: "customers" },
+        { href: "/map-codes", label: "Map Codes", min: "manager", area: "customers" },
         // What Crewdesk says to customers, and when. These were the Marketing group (as in Homeworks).
         { href: "/templates", label: "Templates", min: "manager", area: "customers" },
         { href: "/automations", label: "Automations", min: "manager", area: "customers" },

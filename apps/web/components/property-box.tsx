@@ -72,6 +72,10 @@ export function PropertyBox({ property: p, tags, onSaved }: { property: Property
   const save = useAction();
   const act = useAction();
   const crews = useApi<{ id: string; name: string; active: boolean }[]>("/crews");
+  // Whether Map Codes come from the outlines on the map (Settings → Map Codes).
+  const mapCodes = useApi<{ auto: boolean }>("/map-codes");
+  const autoCodes = !!mapCodes.data?.auto;
+  const hasPin = p.lat != null && p.lng != null;
   const [reason, setReason] = useState("");
   const [exempting, setExempting] = useState(false);
   // Another property opened in the same box: drop any half-made edit.
@@ -100,8 +104,16 @@ export function PropertyBox({ property: p, tags, onSaved }: { property: Property
               <label className="prop-label" htmlFor={editing ? `cf-${f.id}` : undefined}>{f.name}</label>
               {editing ? <FieldInput f={f} value={v} onChange={(x) => set(f.id, x)} /> : (
                 <div className="prop-value">
-                  {formatCustomValue(f, v) || <span className="muted">—</span>}
+                  {/* With automatic map codes on, no code means the pin is outside every outline (or there's no pin to go by). */}
+                  {f.builtin === "mapCode" && autoCodes && !p.mapCode
+                    ? <span className="badge warn" title={hasPin ? "Its pin is outside every map code's outline. Type a code to set one by hand, or stretch an outline over it (Settings → Map Codes)." : "It has no pin on the map, so no outline can place it. Set its pin under Property Pin Location."}>No MC</span>
+                    : formatCustomValue(f, v) || <span className="muted">—</span>}
+                  {f.builtin === "mapCode" && autoCodes && !p.mapCode && <div className="muted" style={{ fontSize: 12.5 }}>{hasPin ? "Outside every map code" : "Not on the map yet"}</div>}
                   {f.builtin === "mapCode" && p.mapCode && p.mapCodeManual && <span className="muted"> (set by hand)</span>}
+                  {f.builtin === "mapCode" && p.mapCode && p.mapCodeManual && autoCodes && active && (
+                    <div><button type="button" className="linkbtn" style={{ fontSize: 12.5 }} disabled={act.busy} title="Drop the code typed by hand and take the code of the outline its pin is in"
+                      onClick={() => act.run(async () => { await api(`/properties/${p.id}/map-code/auto`, { method: "POST" }); onSaved(); })}>Back to automatic</button></div>
+                  )}
                 </div>
               )}
             </div>
