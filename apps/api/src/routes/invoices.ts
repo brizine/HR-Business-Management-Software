@@ -54,7 +54,7 @@ export async function pdfInvoice(companyId: string, invoiceId: string, opts: { c
   const termsDays = Math.max(0, Math.round((Date.parse(inv.dueDate) - Date.parse(inv.issueDate)) / 86_400_000));
   const layout = opts.layout ?? (await invoiceLayoutFor(companyId));
   return {
-    layout, ...(await layoutExtras(companyId, layout, { invoiceId, invoiceCustom: inv.custom, customerCustom: cust.custom, property: prop })),
+    layout, ...(await layoutExtras(companyId, layout, { invoiceId, customerId: inv.customerId, issueDate: inv.issueDate, createdAt: inv.createdAt, invoiceCustom: inv.custom, customerCustom: cust.custom, property: prop })),
     number: inv.number, status: inv.status, issueDate: inv.issueDate, dueDate: inv.dueDate, poNumber: inv.poNumber, notes: inv.notes,
     subtotalCents: inv.subtotalCents, discountCents: inv.discountCents, taxCents: inv.taxCents, taxName: settings.taxName, totalCents: inv.totalCents, paidCents: inv.paidCents, termsDays,
     creditedCents: inv.creditedCents, credits: credits.map((c) => ({ number: c.number, amountCents: c.amountCents })),

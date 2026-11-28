@@ -57,6 +57,11 @@ export const TOTAL_LABELS: Record<TotalKey, string> = { subtotal: "Subtotal", di
 export const TOTAL_NAMES: Record<TotalKey, string> = { subtotal: "Subtotal", discount: "Discount", tax: "Sales tax", total: "Total", credit: "Credit used", paid: "Paid", due: "Amount due" };
 /** Rows that can be left off. The others show whenever they apply. */
 export const TOTAL_HIDEABLE: readonly TotalKey[] = ["subtotal", "credit", "paid"];
+/**
+ * Whether a totals row can be left off in this layout. The invoice's own Total can go once the
+ * previous balance lines are on, since "Today's Amount" under it says what the invoice comes to.
+ */
+export const totalHideable = (l: { totals: { balance: { show: boolean } } }, key: TotalKey) => TOTAL_HIDEABLE.includes(key) || (key === "total" && l.totals.balance.show);
 
 export const TABLE_HEADS = ["line", "bar"] as const;
 export const TABLE_HEAD_LABELS: Record<(typeof TABLE_HEADS)[number], string> = { line: "A line under the headings", bar: "A colored bar" };
@@ -118,7 +123,21 @@ const layoutSchema = z.object({
     /** Every other line lightly shaded. */
     stripes: flag(false),
   }).default({}),
-  totals: z.object({ rows: listOf(totalSchema) }).default({}),
+  totals: z.object({
+    rows: listOf(totalSchema),
+    /**
+     * Three lines under the invoice's own totals: what the customer still owes on earlier invoices,
+     * what this one comes to, and the two together. Off until turned on.
+     */
+    balance: z.object({
+      show: flag(false),
+      previousLabel: word(40, "Previous Balance"),
+      todayLabel: word(40, "Today's Amount"),
+      totalLabel: word(40, "Total Amount Due"),
+      /** The amount due at the top and on the stub is the two together (else this invoice alone). */
+      payTotal: flag(true),
+    }).default({}),
+  }).default({}),
   notes: z.object({ show: flag(true), label: word(40, ""), place: pick(NOTE_PLACES, "beside") }).default({}),
   footer: z.object({ show: flag(true), text: para(1000), align: pick(TEXT_ALIGNS, "left") }).default({}),
   blocks: listOf(textBlockSchema),
@@ -166,7 +185,7 @@ function tidy(l: InvoiceLayout): InvoiceLayout {
   // Totals keep their own order: a total before its subtotal would be wrong on any invoice.
   const rows = TOTAL_KEYS.map((k) => {
     const mine = l.totals.rows.find((r) => r.key === k);
-    return { key: k, label: mine?.label || TOTAL_LABELS[k], show: TOTAL_HIDEABLE.includes(k) ? mine?.show ?? true : true };
+    return { key: k, label: mine?.label || TOTAL_LABELS[k], show: totalHideable(l, k) ? mine?.show ?? true : true };
   });
 
   seen.clear();
@@ -176,7 +195,9 @@ function tidy(l: InvoiceLayout): InvoiceLayout {
   const order = l.order.filter((s) => sections.has(s) && !seen.has(s) && !!seen.add(s));
   for (const s of sections) if (!seen.has(s)) order.push(s);
 
-  return { ...l, header: { ...l.header, details, title: l.header.title || "INVOICE" }, table: { ...l.table, columns }, totals: { rows }, blocks, order };
+  const bal = l.totals.balance;
+  const balance = { ...bal, previousLabel: bal.previousLabel || "Previous Balance", todayLabel: bal.todayLabel || "Today's Amount", totalLabel: bal.totalLabel || "Total Amount Due" };
+  return { ...l, header: { ...l.header, details, title: l.header.title || "INVOICE" }, table: { ...l.table, columns }, totals: { rows, balance }, blocks, order };
 }
 
 /** Anything saved or sent as a layout, made safe and whole. Something that isn't a layout at all comes back as the default. */

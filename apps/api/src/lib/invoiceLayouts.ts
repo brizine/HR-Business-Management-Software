@@ -1,10 +1,10 @@
-import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, notInArray, sql } from "drizzle-orm";
 import {
   SAMPLE_TEMPLATE_VARS, cleanInvoiceLayout, formatCustomValue, isFieldKey, layoutFieldIds, layoutTags, propertyFieldValues, resolveInvoiceLayout, sameLayout,
   type CustomFieldDef, type CustomValues, type InvoiceLayout, type TemplateVars,
 } from "@crewdesk/shared";
 import { db } from "../db";
-import { customFields, employees, invoiceLayoutVersions, invoiceLayouts, visits } from "../db/schema";
+import { customFields, employees, invoiceLayoutVersions, invoiceLayouts, invoices, visits } from "../db/schema";
 import { asDef, ensurePropertyFields } from "./customFields";
 import { HttpError } from "./errors";
 import { billingSettings } from "./invoices";
@@ -110,14 +110,33 @@ export async function layoutVersion(companyId: string, versionId: string): Promi
 
 /* ───────────── What a layout needs from an invoice ───────────── */
 
-type Records = { invoiceId: string; invoiceCustom?: CustomValues | null; customerCustom?: CustomValues | null; property?: Parameters<typeof propertyFieldValues>[1] };
+type Records = {
+  invoiceId: string; customerId: string; issueDate: string; createdAt: Date;
+  invoiceCustom?: CustomValues | null; customerCustom?: CustomValues | null; property?: Parameters<typeof propertyFieldValues>[1];
+};
 
 /**
- * The extras a layout asks for, looked up only when it shows them: the service dates, the custom
- * fields used as details, and the values for fill-ins in the footer and text blocks.
+ * What a customer still owes on the invoices before this one: sent invoices (not drafts or void
+ * ones) dated earlier, or the same day and made earlier. Worked out when the invoice is printed,
+ * so it goes down as those invoices are paid.
  */
-export async function layoutExtras(companyId: string, layout: InvoiceLayout, r: Records): Promise<Pick<PdfInvoice, "serviceDates" | "fields" | "vars">> {
-  const out: Pick<PdfInvoice, "serviceDates" | "fields" | "vars"> = {};
+export async function previousBalance(companyId: string, r: Pick<Records, "invoiceId" | "customerId" | "issueDate" | "createdAt">): Promise<number> {
+  const [row] = await db.select({ cents: sql<number>`coalesce(sum(${invoices.totalCents} - ${invoices.paidCents} - ${invoices.creditedCents}), 0)::int` }).from(invoices)
+    .where(and(
+      eq(invoices.companyId, companyId), eq(invoices.customerId, r.customerId), ne(invoices.id, r.invoiceId), notInArray(invoices.status, ["draft", "void"]),
+      sql`(${invoices.issueDate} < ${r.issueDate} or (${invoices.issueDate} = ${r.issueDate} and ${invoices.createdAt} < ${r.createdAt.toISOString()}::timestamptz))`,
+    ));
+  return Math.max(0, row?.cents ?? 0);
+}
+
+/**
+ * The extras a layout asks for, looked up only when it shows them: the previous balance, the
+ * service dates, the custom fields used as details, and the values for fill-ins in the footer and
+ * text blocks.
+ */
+export async function layoutExtras(companyId: string, layout: InvoiceLayout, r: Records): Promise<Pick<PdfInvoice, "previousBalanceCents" | "serviceDates" | "fields" | "vars">> {
+  const out: Pick<PdfInvoice, "previousBalanceCents" | "serviceDates" | "fields" | "vars"> = {};
+  if (layout.totals.balance.show) out.previousBalanceCents = await previousBalance(companyId, r);
   if (layout.header.details.some((d) => d.key === "serviceDate" && d.show)) {
     const rows = await db.select({ on: sql<string | null>`coalesce(${visits.date}, (${visits.completedAt} at time zone 'UTC')::date)::text` }).from(visits)
       .where(and(eq(visits.companyId, companyId), eq(visits.invoiceId, r.invoiceId)));
@@ -164,6 +183,6 @@ export async function sampleInvoice(companyId: string, layout: InvoiceLayout): P
     subtotalCents, discountCents, taxCents, taxName: settings.taxName, totalCents: subtotalCents - discountCents + taxCents, paidCents: 5000, termsDays: 30,
     creditedCents: 2000, credits: [{ number: 12, amountCents: 2000 }],
     customerName: "Jane Sample", customerNumber: 1007, billTo: ["12 Sample St", "Norman, OK 73069"], serviceAddress: "12 Sample St, Norman, OK 73069",
-    lines, payOnline: "your-portal.example/pay", serviceDates: ["2026-11-18", "2026-11-19"], fields, vars, layout,
+    lines, payOnline: "your-portal.example/pay", serviceDates: ["2026-11-18", "2026-11-19"], previousBalanceCents: 4000, fields, vars, layout,
   };
 }

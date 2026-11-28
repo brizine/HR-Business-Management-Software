@@ -1687,6 +1687,7 @@ body.drag-sorting, body.drag-sorting * { cursor: grabbing !important; user-selec
 .inv-row > input:not([type="checkbox"]) { flex: 1 1 auto; min-width: 0; }
 .inv-row .inv-name { flex: 0 0 96px; font-size: 13px; color: var(--muted); }
 .inv-row .inv-name.wide { flex: 1 1 auto; color: var(--text); font-size: 14px; }
+.inv-row .inv-name.wider { flex-basis: 128px; }
 .inv-row .inv-pad { flex: 0 0 28px; }
 .inv-fixed { margin-bottom: 6px; }
 .inv-line { flex-wrap: wrap; }

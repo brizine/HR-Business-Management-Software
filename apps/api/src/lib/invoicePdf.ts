@@ -31,6 +31,8 @@ export interface PdfInvoice {
   creditedCents?: number; credits?: { number: number; amountCents: number }[];
   /** "Pay online at …" on the stub, when the company takes online payments. */
   payOnline?: string | null;
+  /** What the customer still owes on their earlier invoices (the "Previous Balance" line, when the layout shows it). */
+  previousBalanceCents?: number;
   /** The dates of the work orders on the invoice (the "Service date" detail). */
   serviceDates?: string[];
   /** The custom fields the layout shows as details: "cf:<field id>" to its value, in words. */
@@ -122,6 +124,10 @@ export async function addInvoicePages(doc: PDFDocument, c: PdfCompany, inv: PdfI
   let pen = new Pen(page, reg, bold);
   const firstPage = page;
   const due = inv.totalCents - inv.paidCents - (inv.creditedCents ?? 0);
+  // With the previous balance lines on: what's owed from before, and (if the layout says so) the two together as the amount to pay.
+  const bal = lay.totals.balance;
+  const previous = bal.show ? Math.max(0, inv.previousBalanceCents ?? 0) : 0;
+  const toPay = bal.show && bal.payTotal ? previous + due : due;
   const L = 0.5 * IN, R = W - 0.5 * IN;
   const box = LOGO_BOX[lay.header.logo.size];
   const ls = logo ? Math.min(box.w / logo.width, box.h / logo.height) : 0;
@@ -169,7 +175,7 @@ export async function addInvoicePages(doc: PDFDocument, c: PdfCompany, inv: PdfI
   }
   if (lay.header.amountDue.show) {
     pen.text(lay.header.amountDue.label, R - 120, fy + z(4), { size: z(10), bold: true, right: true });
-    pen.text(formatMoney(due), R, fy + z(2), { size: z(13), bold: true, right: true, color: accent });
+    pen.text(formatMoney(toPay), R, fy + z(2), { size: z(13), bold: true, right: true, color: accent });
     fy += z(20);
   }
 
@@ -240,17 +246,27 @@ export async function addInvoicePages(doc: PDFDocument, c: PdfCompany, inv: PdfI
         const rates = [...new Set(inv.lines.map((l) => l.taxRate ?? 0).filter((r) => r > 0))];
         totals.push([`${cfg.tax.label || inv.taxName || "Sales tax"}${rates.length === 1 ? ` (${formatTaxRate(rates[0])})` : ""}`, formatMoney(inv.taxCents), false]);
       }
-      totals.push([cfg.total.label, formatMoney(inv.totalCents), true]);
+      if (cfg.total.show || !bal.show) totals.push([cfg.total.label, formatMoney(inv.totalCents), true]);
       if (cfg.credit.show) for (const cr of inv.credits ?? []) totals.push([`${cfg.credit.label} CR-${cr.number}`, `-${formatMoney(cr.amountCents)}`, false]);
       if (cfg.paid.show && inv.paidCents) totals.push([cfg.paid.label, `-${formatMoney(inv.paidCents)}`, false]);
-      if (inv.paidCents || inv.credits?.length) totals.push([cfg.due.label, formatMoney(due), true]);
+      // The balance lines say what this invoice still comes to ("Today's Amount"), so they take the place of its own "Amount due".
+      if (!bal.show && (inv.paidCents || inv.credits?.length)) totals.push([cfg.due.label, formatMoney(due), true]);
+      const balance: [string, string, boolean][] = bal.show
+        ? [[bal.previousLabel, formatMoney(previous), false], [bal.todayLabel, formatMoney(due), false], [bal.totalLabel, formatMoney(previous + due), true]]
+        : [];
       const beside = lay.notes.place === "beside";
       const noteWidth = beside ? priceEdge - 115 - L : R - L;
       const notes = lay.notes.show && inv.notes ? wrap(inv.notes, reg, z(9), noteWidth) : [];
-      if (ty + totals.length * z(13) + 10 > limit) nextPage();
+      if (ty + (totals.length + balance.length) * z(13) + 10 + (balance.length ? 9 : 0) > limit) nextPage();
       pen.line(priceEdge - 60, ty, R); ty += 6;
       const totalsTop = ty;
-      for (const [label, v, strong] of totals) { pen.text(label, priceEdge, ty, { size: z(9.5), bold: strong, right: true }); pen.text(v, R, ty, { size: z(9.5), bold: strong, right: true }); ty += z(13); }
+      const row = ([label, v, strong]: [string, string, boolean]) => { pen.text(label, priceEdge, ty, { size: z(9.5), bold: strong, right: true }); pen.text(v, R, ty, { size: z(9.5), bold: strong, right: true }); ty += z(13); };
+      totals.forEach(row);
+      if (balance.length) {
+        // A rule sets the account's lines apart from the invoice's own (none needed when nothing is above them).
+        if (totals.length) { ty += 3; pen.line(priceEdge - 60, ty, R); ty += 6; }
+        balance.forEach(row);
+      }
       if (!notes.length) return;
       // Beside the totals the notes start level with them; under them, they follow on.
       const end = ty;
@@ -326,7 +342,7 @@ export async function addInvoicePages(doc: PDFDocument, c: PdfCompany, inv: PdfI
   row("Customer #", String(inv.customerNumber));
   row("Invoice #", inv.number != null ? String(inv.number) : "Draft");
   row("Due date", usDate(inv.dueDate));
-  row("Amount due", formatMoney(due), true);
+  row("Amount due", formatMoney(toPay), true);
   if (lay.stub.enclosed) {
     sp.text(lay.stub.enclosedLabel, sx, ry + 6, { size: 9, color: MUTED });
     sp.line(sx + 85, ry + 18, R);

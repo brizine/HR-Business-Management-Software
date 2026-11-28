@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   COLUMN_LOCKED, CUSTOM_FIELD_TARGET_LABELS, DETAIL_HELP, INVOICE_LAYOUT_TAGS, LAYOUT_FONTS, LAYOUT_FONT_LABELS, LAYOUT_INK, LAYOUT_SIZES, LAYOUT_SIZE_LABELS,
   LOGO_PLACES, LOGO_PLACE_LABELS, MAX_DETAILS, MAX_TEXT_BLOCKS, NOTE_PLACES, NOTE_PLACE_LABELS, SECTION_NAMES, TABLE_HEADS, TABLE_HEAD_LABELS, TEXT_ALIGNS,
-  TOTAL_HIDEABLE, TOTAL_NAMES, cleanInvoiceLayout, formatMoney, isFieldKey, newTextBlock, sameLayout, unknownLayoutTags,
+  TOTAL_NAMES, cleanInvoiceLayout, formatMoney, isFieldKey, newTextBlock, sameLayout, totalHideable, unknownLayoutTags,
   type CustomFieldTarget, type InvoiceLayout, type LayoutTextBlock,
 } from "@crewdesk/shared";
 import { api, apiBlob, fmtDateTime } from "@/lib/api";
@@ -311,20 +311,40 @@ export function InvoiceLayoutEditor() {
         </Section>
 
         <Section title="Totals">
-          <p className="muted" style={{ margin: 0, fontSize: 13 }}>The discount, tax, credit and paid rows only show on invoices that have them. The total and the amount due always show.</p>
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>The discount, tax, credit and paid rows only show on invoices that have them. {l.totals.balance.show ? "With the previous balance lines on, Today's Amount takes the place of the Amount due row, and the Total row can be left off." : "The total and the amount due always show."}</p>
           <ul className="plain-list inv-rows">
             {l.totals.rows.map((r) => {
-              const change = (patch: Partial<typeof r>) => setLayoutState({ ...l, totals: { rows: l.totals.rows.map((x) => (x.key === r.key ? { ...x, ...patch } : x)) } });
-              const hideable = TOTAL_HIDEABLE.includes(r.key);
+              const change = (patch: Partial<typeof r>) => setLayoutState({ ...l, totals: { ...l.totals, rows: l.totals.rows.map((x) => (x.key === r.key ? { ...x, ...patch } : x)) } });
+              const hideable = totalHideable(l, r.key);
               return (
                 <li key={r.key} className="inv-row">
-                  <input type="checkbox" checked={r.show} disabled={!hideable} onChange={(e) => change({ show: e.target.checked })} aria-label={`Show ${TOTAL_NAMES[r.key]}`} title={hideable ? undefined : "Always shows when the invoice has it"} />
+                  <input type="checkbox" checked={r.show} disabled={!hideable} onChange={(e) => change({ show: e.target.checked })} aria-label={`Show ${TOTAL_NAMES[r.key]}`}
+                    title={r.key === "total" ? (hideable ? "Today's Amount below says what the invoice comes to, so this row can go" : "Always shows, unless the previous balance lines are on") : r.key === "due" && l.totals.balance.show ? "Today's Amount takes its place while the previous balance lines are on" : hideable ? undefined : "Always shows when the invoice has it"} />
                   <span className="inv-name">{TOTAL_NAMES[r.key]}</span>
                   <input value={r.label} maxLength={40} onChange={(e) => change({ label: e.target.value })} onBlur={() => set(l)} aria-label={`Label for ${TOTAL_NAMES[r.key]}`} placeholder={r.key === "tax" ? "The tax's name in billing settings" : undefined} />
                 </li>
               );
             })}
           </ul>
+          <fieldset className="cf-box">
+            <legend>Previous balance</legend>
+            <Check label="Show the customer's previous balance, this invoice's amount and the total due" checked={l.totals.balance.show} onChange={(show) => set({ ...l, totals: { ...l.totals, balance: { ...l.totals.balance, show } } })} />
+            {l.totals.balance.show ? (
+              <>
+                <ul className="plain-list inv-rows">
+                  {([["previousLabel", "Owed from before"], ["todayLabel", "This invoice"], ["totalLabel", "The two together"]] as const).map(([k, name]) => (
+                    <li key={k} className="inv-row">
+                      <span className="inv-name wider">{name}</span>
+                      <input value={l.totals.balance[k]} maxLength={40} aria-label={`Label for ${name.toLowerCase()}`} onChange={(e) => setLayoutState({ ...l, totals: { ...l.totals, balance: { ...l.totals.balance, [k]: e.target.value } } })} onBlur={() => set(l)} />
+                    </li>
+                  ))}
+                </ul>
+                <Check label="The amount due at the top and on the payment stub is the total due" checked={l.totals.balance.payTotal} onChange={(payTotal) => set({ ...l, totals: { ...l.totals, balance: { ...l.totals.balance, payTotal } } })}
+                  title="Unticked, those two show this invoice's amount alone" />
+                <p className="muted" style={{ margin: 0, fontSize: 13 }}>The previous balance is what the customer still owes on their earlier sent invoices when this one is printed, so it goes down as they pay. These three lines take the place of the Amount due row above.</p>
+              </>
+            ) : <p className="muted" style={{ margin: 0, fontSize: 13 }}>Adds three lines under the totals: what&apos;s still owed on earlier invoices, what this invoice comes to, and the two together.</p>}
+          </fieldset>
         </Section>
 
         <Section title="Notes and footer">

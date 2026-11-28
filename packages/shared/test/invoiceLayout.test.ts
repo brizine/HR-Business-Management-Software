@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   COLUMN_KEYS, DEFAULT_INVOICE_LAYOUT, DETAIL_KEYS, INVOICE_LAYOUT_TAGS, LAYOUT_INK, MAX_TEXT_BLOCKS, TOTAL_KEYS,
-  cleanInvoiceLayout, invoiceLayoutSchema, layoutFieldIds, layoutTags, newTextBlock, resolveInvoiceLayout, sameLayout, unknownLayoutTags,
+  cleanInvoiceLayout, invoiceLayoutSchema, layoutFieldIds, layoutTags, newTextBlock, resolveInvoiceLayout, sameLayout, totalHideable, unknownLayoutTags,
 } from "../src/invoiceLayout";
 
 const FIELD = "cf:11111111-2222-3333-4444-555555555555";
@@ -101,6 +101,22 @@ describe("invoice layout", () => {
     const tags = INVOICE_LAYOUT_TAGS.map((t) => t.tag);
     expect(tags).toEqual(expect.arrayContaining(["CUSTOMER_NAME", "INVOICE_NUMBER", "INVOICE_DUE_DATE", "COMPANY_PHONE", "TODAY"]));
     for (const no of ["UNSUBSCRIBE", "ESTIMATE_TOTAL", "EVENT_DATE", "PAYMENT_AMOUNT", "MESSAGE"]) expect(tags).not.toContain(no);
+  });
+
+  it("the previous balance lines are off until turned on, named as asked; with them on, the invoice's own Total can go", () => {
+    expect(DEFAULT_INVOICE_LAYOUT.totals.balance).toEqual({ show: false, previousLabel: "Previous Balance", todayLabel: "Today's Amount", totalLabel: "Total Amount Due", payTotal: true });
+    const total = (l: ReturnType<typeof cleanInvoiceLayout>) => l.totals.rows.find((r) => r.key === "total")!;
+    const hidden = [{ key: "total", label: "Total", show: false }];
+    // Off: the Total always shows, whatever was saved.
+    expect(total(cleanInvoiceLayout({ totals: { rows: hidden } })).show).toBe(true);
+    expect(totalHideable(DEFAULT_INVOICE_LAYOUT, "total")).toBe(false);
+    // On: it can be left off, since Today's Amount says what the invoice comes to.
+    const on = cleanInvoiceLayout({ totals: { rows: hidden, balance: { show: true, previousLabel: "  Balance forward ", todayLabel: "", payTotal: false } } });
+    expect(total(on).show).toBe(false);
+    expect(totalHideable(on, "total")).toBe(true);
+    expect(totalHideable(on, "due")).toBe(false);
+    // A blank label takes its usual name.
+    expect(on.totals.balance).toEqual({ show: true, previousLabel: "Balance forward", todayLabel: "Today's Amount", totalLabel: "Total Amount Due", payTotal: false });
   });
 
   it("tells whether two layouts print the same", () => {

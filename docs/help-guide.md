@@ -678,6 +678,19 @@ the real invoice is on the right, redrawn a moment after each change.
 - **Totals:** rename any row. The subtotal, credit and paid rows can be left off; the discount and tax rows show
   only on invoices that have them, and the total and amount due always show. Leave the tax row's label empty to use
   the name sales tax has in billing settings.
+- **Previous balance:** in the Totals section, tick **Show the customer's previous balance, this invoice's amount
+  and the total due** to add three lines under the invoice's own totals:
+  - **Previous Balance:** what the customer still owes on their earlier invoices: ones already sent, dated before
+    this one (or the same day and made before it). Drafts and void invoices don't count.
+  - **Today's Amount:** what this invoice comes to, after any credit or payment already on it.
+  - **Total Amount Due:** the two together.
+
+  All three can be renamed. They show on every invoice, with $0.00 when nothing is owed from before, and they take
+  the place of the invoice's own "Amount due" row; with them on, the invoice's **Total** row can be left off too.
+  The previous balance is worked out when the invoice is printed or sent, so it goes down as earlier invoices are
+  paid. **The amount due at the top and on the payment stub is the total due** is ticked to start, so the customer
+  is asked for everything they owe; untick it to keep those two as this invoice's amount alone. The pay link in an
+  invoice's email still pays that one invoice; the customer's portal lists every open invoice.
 - **Notes and footer:** show or hide the notes typed on an invoice, give them a heading, and put them beside the
   totals or under them. The **footer** prints on every invoice, left, centered or right.
 - **Your own text:** up to six blocks of your own wording (a guarantee, a seasonal offer, how to reach you), each

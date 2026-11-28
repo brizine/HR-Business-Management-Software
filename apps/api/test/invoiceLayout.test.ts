@@ -176,17 +176,55 @@ describe("invoice layout", () => {
     expect(await printed(made.body.invoices[0].id)).toEqual(expect.arrayContaining(["Service date", `${us(earlier)} - ${us(today)}`]));
   });
 
+  it("the previous balance is what the customer still owes on earlier sent invoices, worked out when the invoice is printed", async () => {
+    const day = (n: number) => new Date(Date.parse(`${today}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+    const make = async (issueDate: string, cents: number, customerId = ID.ann) =>
+      (await call("POST", "/invoices", "office", { customerId, issueDate, lines: [{ description: "Round", quantity: 1, unitPriceCents: cents }] })).body.id as string;
+    const send = async (id: string) => expect((await call("POST", `/invoices/${id}/send`, "office", { via: ["paper"] })).status).toBe(200);
+    // Bea: two earlier invoices sent ($50 and $30), an earlier draft, a void one, this one, and a later one.
+    ID.bea = (await call("POST", "/customers", "office", { firstName: "Bea", lastName: "Balance", email: email("bea"), property: { street: "9 Elm St", city: "Norman", zip: "73069" } })).body.id;
+    const first = await make(day(-20), 5000, ID.bea), second = await make(day(-10), 3000, ID.bea);
+    const draft = await make(day(-9), 7700, ID.bea), voided = await make(day(-8), 9900, ID.bea);
+    const mine = await make(day(-2), 6500, ID.bea), later = await make(day(-1), 1200, ID.bea);
+    for (const id of [first, second, voided, mine, later]) await send(id);
+    expect((await call("POST", `/invoices/${voided}/void`, "office", { reason: "Entered twice" })).status).toBe(200);
+    // Off (the layout published so far): no balance is looked up, and none prints.
+    expect((await pdfInvoice(companyId, mine)).previousBalanceCents).toBeUndefined();
+    expect(await printed(mine)).not.toContain("Previous Balance");
+
+    const base = (await state()).published as InvoiceLayout;
+    const on = await call("POST", "/invoice-layout/publish", "owner", { layout: { ...base, totals: { ...base.totals, balance: { ...base.totals.balance, show: true } } } });
+    expect(on.body.published.totals.balance).toMatchObject({ show: true, previousLabel: "Previous Balance", todayLabel: "Today's Amount", totalLabel: "Total Amount Due", payTotal: true });
+    // $50 + $30 from before. The draft, the void one and the later invoice don't count.
+    expect((await pdfInvoice(companyId, mine)).previousBalanceCents).toBe(8000);
+    const lines = async (id: string) => { const w = await printed(id); return w.slice(w.indexOf("Previous Balance"), w.indexOf("Total Amount Due") + 2); };
+    expect(await lines(mine)).toEqual(["Previous Balance", "$80.00", "Today's Amount", "$65.00", "Total Amount Due", "$145.00"]);
+    // The first invoice has nothing before it; the latest has everything.
+    expect(await lines(first)).toEqual(["Previous Balance", "$0.00", "Today's Amount", "$50.00", "Total Amount Due", "$50.00"]);
+    expect(await lines(later)).toEqual(["Previous Balance", "$145.00", "Today's Amount", "$12.00", "Total Amount Due", "$157.00"]);
+    // A payment on an earlier invoice brings the previous balance down the next time this one is printed.
+    expect((await call("POST", `/invoices/${first}/payments`, "office", { amountCents: 2000, method: "check", reference: "101" })).status).toBe(200);
+    expect(await lines(mine)).toEqual(["Previous Balance", "$60.00", "Today's Amount", "$65.00", "Total Amount Due", "$125.00"]);
+    // Another customer's invoices never count, and a draft of this customer's sees what was sent before it.
+    expect((await pdfInvoice(companyId, ID.inv)).previousBalanceCents).toBe(0);
+    expect((await pdfInvoice(companyId, draft)).previousBalanceCents).toBe(6000);
+    // Back to the layout as it was, for the tests that follow.
+    await call("POST", "/invoice-layout/publish", "owner", { layout: base });
+  });
+
   it("an earlier layout can be opened again from the history; another company never sees any of it", async () => {
     const s = await state();
-    const original = await call("GET", `/invoice-layout/versions/${s.versions[1].id}`, "owner");
+    // The oldest entry is what invoices were in before the first publish.
+    const oldest = s.versions[s.versions.length - 1].id;
+    const original = await call("GET", `/invoice-layout/versions/${oldest}`, "owner");
     expect(original.body.layout.header.title).toBe("INVOICE");
     expect(original.body.layout.footer.text).toBe("Thank you for your business!");
-    expect((await call("GET", `/invoice-layout/versions/${s.versions[1].id}`, "other")).status).toBe(404);
+    expect((await call("GET", `/invoice-layout/versions/${oldest}`, "other")).status).toBe(404);
     expect((await call("GET", "/invoice-layout/versions/nope", "owner")).status).toBe(404);
     // Opening it changes nothing until it's published again.
     expect((await state()).published.header.title).toBe("STATEMENT");
     const back = await call("POST", "/invoice-layout/publish", "owner", { layout: { ...original.body.layout, blocks: [{ ...newTextBlock(), id: "aaaa1111", text: "Winter round is booking now." }] } });
-    expect(back.body.versions).toHaveLength(3);
+    expect(back.body.versions).toHaveLength(s.versions.length + 1);
     expect(await printed(ID.inv)).toEqual(expect.arrayContaining(["INVOICE", "Thank you for your business!", "Winter round is booking now."]));
     // The other company is still on Crewdesk's own, with nothing of this one's.
     const theirs = await state("other");
