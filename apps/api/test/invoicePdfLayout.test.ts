@@ -11,10 +11,15 @@ import { SAMPLES, recordOps, type SampleName } from "./pdfOps";
 
 const before: Record<SampleName, string[]> = JSON.parse(readFileSync(new URL("./fixtures-invoice-pdf.json", import.meta.url), "utf8"));
 
-/** What's drawn for a sample invoice in a layout (the default with the sample's own footer when none is given). */
+/** The recording was made when the stub was the bottom third of the page (3.67 inches); it starts 3½ inches up now. */
+const THIRDS = { stub: { fromBottom: 3.67 } };
+/**
+ * What's drawn for a sample invoice in a layout: Crewdesk's own (with the sample's footer, and the
+ * stub where it was when the recording was made) with `layout`'s changes on top.
+ */
 const draw = (name: SampleName, layout?: unknown, extra: Partial<PdfInvoice> = {}) => {
   const s = SAMPLES[name];
-  const base = resolveInvoiceLayout(null, { footer: s.footer, payableTo: s.payableTo });
+  const base = cleanInvoiceLayout(deepMerge(resolveInvoiceLayout(null, { footer: s.footer, payableTo: s.payableTo }), THIRDS));
   const merged = layout ? cleanInvoiceLayout(deepMerge(base, layout)) : base;
   return recordOps((doc) => addInvoicePages(doc, s.company, { ...(s.inv as PdfInvoice), ...extra, layout: merged }));
 };
@@ -37,9 +42,25 @@ describe("the invoice PDF and its layout", () => {
     expect(await draw(name)).toEqual(before[name]);
   });
 
-  it("an invoice with no layout at all prints in Crewdesk's own", async () => {
+  it("an invoice with no layout at all prints in Crewdesk's own, with the stub 3½ inches up", async () => {
     const s = SAMPLES.plain;
-    expect(await recordOps((doc) => addInvoicePages(doc, s.company, s.inv as PdfInvoice))).toEqual(before.plain);
+    const ops = await recordOps((doc) => addInvoicePages(doc, s.company, s.inv as PdfInvoice));
+    expect(ops).toEqual(await draw("plain", { stub: { fromBottom: 3.5 } }));
+    // The tear-off line is 3.5 x 72 points from the bottom; it was 3.67 inches up. Nothing above it moved.
+    const tear = (list: string[]) => num(list.find((o) => / line /.test(o) && /dash=4\/3/.test(o))!.replace(/.* line [-0-9.]+,/, "y="), "y");
+    expect(tear(ops)).toBe(252);
+    expect(tear(before.plain)).toBeCloseTo(264.24, 2);
+    expect(op(ops, "Grub preventer")).toBe(op(before.plain, "Grub preventer"));
+    expect(num(op(ops, "Make checks payable to"), "y")).toBeCloseTo(num(op(before.plain, "Make checks payable to"), "y") - 12.24, 2);
+  });
+
+  it("a shorter stub leaves more of the first page for the lines", async () => {
+    const onFirst = (ops: string[]) => ops.filter((o) => o.startsWith('p1 text "Visit ')).length;
+    const tall = await draw("long", { stub: { fromBottom: 4.5 } }), short = await draw("long", { stub: { fromBottom: 2.75 } });
+    expect(onFirst(short)).toBeGreaterThan(onFirst(before.long));
+    expect(onFirst(tall)).toBeLessThan(onFirst(before.long));
+    // Every line still prints, whichever page it lands on.
+    for (const ops of [tall, short]) expect(words(ops).filter((x) => /^Visit \d+: mowing$/.test(x)).length).toBe(words(before.long).filter((x) => /^Visit \d+: mowing$/.test(x)).length);
   });
 
   it("the title, the details and their labels follow the layout", async () => {
@@ -162,8 +183,39 @@ describe("the invoice PDF and its layout", () => {
     expect(less).toEqual(expect.arrayContaining(["Discount", "Total", "Amount due"]));
   });
 
-  it("the previous balance lines: Previous Balance, Today's Amount and Total Amount Due under the invoice's own totals", async () => {
-    const on = { totals: { balance: { show: true } } };
+  it("the previous balance lines print at the top right, where the amount due was", async () => {
+    // An unpaid invoice for $110.00 with $40.00 still owed from before.
+    const ops = await draw("plain", { totals: { balance: { show: true } } }, { previousBalanceCents: 4000 });
+    const w = words(ops);
+    expect(w.slice(w.indexOf("Previous Balance"), w.indexOf("Total Amount Due") + 2)).toEqual(["Previous Balance", "$40.00", "Today's Amount", "$110.00", "Total Amount Due", "$150.00"]);
+    // They follow the details and take the amount due's place: the same column, the last line as large as it was.
+    expect(w.indexOf("Customer #")).toBeLessThan(w.indexOf("Previous Balance"));
+    expect(w.indexOf("Total Amount Due")).toBeLessThan(w.indexOf("Jane Example"));
+    const was = op(before.plain, "Amount due")!, label = op(ops, "Total Amount Due")!;
+    expect(label).toMatch(/size=10 font=Helvetica-Bold/);
+    expect(num(label, "y")).toBeLessThan(num(was, "y"));
+    expect(num(label, "y")).toBeGreaterThan(num(op(ops, "Jane Example"), "y"));
+    expect(ops.find((o) => o.includes('text "$150.00"'))).toMatch(/size=13 font=Helvetica-Bold/);
+    expect(ops.find((o) => o.includes('text "$40.00"'))).toMatch(/size=9\.5 font=Helvetica /);
+    // The heading "Amount due" is gone from the top (it's still on the stub), and the stub asks for the total due.
+    expect(w.filter((x) => x === "Amount due")).toHaveLength(1);
+    expect(w.filter((x) => x === "$150.00")).toHaveLength(2);
+    // Under the lines, the totals are the invoice's own, as they always were, in the same place.
+    for (const t of ["Description", "Subtotal", "Total"]) expect(op(ops, t)).toBe(op(before.plain, t));
+    // Unticked, the stub keeps this invoice's amount.
+    const own = words(await draw("plain", { totals: { balance: { show: true, payTotal: false } } }, { previousBalanceCents: 4000 }));
+    expect(own.filter((x) => x === "$150.00")).toHaveLength(1);
+    // A part-paid invoice keeps its own "Amount due" row in the totals; Today's Amount at the top is the same figure.
+    const part = words(await draw("full", { totals: { balance: { show: true } } }, { previousBalanceCents: 2550 }));
+    expect(part.slice(part.indexOf("Previous Balance"), part.indexOf("Total Amount Due") + 2)).toEqual(["Previous Balance", "$25.50", "Today's Amount", "$147.50", "Total Amount Due", "$173.00"]);
+    expect(part.filter((x) => x === "Amount due")).toHaveLength(2);
+    // With many details above them, the lines push the table down rather than run into it.
+    const many = await draw("plain", { header: { details: base.header.details.map((d) => ({ ...d, show: true })) }, totals: { balance: { show: true } } }, { poNumber: "PO-1", serviceDates: ["2026-11-01"] });
+    expect(num(op(many, "Total Amount Due"), "y")).toBeGreaterThan(num(op(many, "Description"), "y"));
+  });
+
+  it("or under the invoice's own totals: Previous Balance, Today's Amount and Total Amount Due", async () => {
+    const on = { totals: { balance: { show: true, place: "totals" } } };
     // An unpaid invoice for $110.00 with $40.00 still owed from before.
     const ops = await draw("plain", on, { previousBalanceCents: 4000 });
     const w = words(ops);
@@ -179,9 +231,9 @@ describe("the invoice PDF and its layout", () => {
     // The amount to pay, at the top and on the stub, is the total due: $150.00 three times with the line itself.
     expect(w.filter((x) => x === "$150.00")).toHaveLength(3);
     // Unticked, the top and the stub keep this invoice's amount; the three lines stay.
-    const own = words(await draw("plain", { totals: { balance: { show: true, payTotal: false } } }, { previousBalanceCents: 4000 }));
-    expect(own.filter((x) => x === "$150.00")).toHaveLength(1);
-    expect(own).toContain("Total Amount Due");
+    const mine = words(await draw("plain", { totals: { balance: { show: true, place: "totals", payTotal: false } } }, { previousBalanceCents: 4000 }));
+    expect(mine.filter((x) => x === "$150.00")).toHaveLength(1);
+    expect(mine).toContain("Total Amount Due");
 
     // Nothing owed from before: the lines still show, with $0.00.
     const none = words(await draw("plain", on));
@@ -196,7 +248,7 @@ describe("the invoice PDF and its layout", () => {
     expect(words(before.full).filter((x) => x === "Amount due")).toHaveLength(3);
 
     // Renamed, and without the invoice's own Total row.
-    const named = words(await draw("plain", { totals: { rows: base.totals.rows.map((r) => (r.key === "total" ? { ...r, show: false } : r)), balance: { show: true, previousLabel: "Balance forward", todayLabel: "This invoice", totalLabel: "Please pay" } } }, { previousBalanceCents: 4000 }));
+    const named = words(await draw("plain", { totals: { rows: base.totals.rows.map((r) => (r.key === "total" ? { ...r, show: false } : r)), balance: { show: true, place: "totals", previousLabel: "Balance forward", todayLabel: "This invoice", totalLabel: "Please pay" } } }, { previousBalanceCents: 4000 }));
     expect(named).toEqual(expect.arrayContaining(["Balance forward", "This invoice", "Please pay"]));
     expect(named).not.toContain("Total");
     // With the lines off, the layout draws exactly what it always did, whatever balance comes with the invoice.

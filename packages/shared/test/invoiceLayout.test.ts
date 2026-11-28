@@ -19,7 +19,10 @@ describe("invoice layout", () => {
     expect(l.table.columns.map((c) => [c.key, c.label, c.show])).toEqual([["description", "Description", true], ["qty", "Qty", true], ["price", "Price", true], ["tax", "Tax", true], ["amount", "Amount", true]]);
     expect(l.totals.rows.map((r) => r.key)).toEqual([...TOTAL_KEYS]);
     expect(l.order).toEqual(["lines", "totals", "footer"]);
-    expect(l.stub).toMatchObject({ show: true, payableLabel: "Make checks payable to", payableTo: "", payOnline: true });
+    // The tear-off line is 3½ inches up, where the paper is perforated.
+    expect(l.stub).toMatchObject({ show: true, fromBottom: 3.5, payableLabel: "Make checks payable to", payableTo: "", payOnline: true });
+    expect(cleanInvoiceLayout({ stub: { fromBottom: 3.666 } }).stub.fromBottom).toBe(3.67);
+    for (const bad of [1, 9, "3.5", null]) expect(cleanInvoiceLayout({ stub: { fromBottom: bad } }).stub.fromBottom).toBe(3.5);
     expect(l.blocks).toEqual([]);
   });
 
@@ -104,19 +107,22 @@ describe("invoice layout", () => {
   });
 
   it("the previous balance lines are off until turned on, named as asked; with them on, the invoice's own Total can go", () => {
-    expect(DEFAULT_INVOICE_LAYOUT.totals.balance).toEqual({ show: false, previousLabel: "Previous Balance", todayLabel: "Today's Amount", totalLabel: "Total Amount Due", payTotal: true });
+    expect(DEFAULT_INVOICE_LAYOUT.totals.balance).toEqual({ show: false, place: "top", previousLabel: "Previous Balance", todayLabel: "Today's Amount", totalLabel: "Total Amount Due", payTotal: true });
     const total = (l: ReturnType<typeof cleanInvoiceLayout>) => l.totals.rows.find((r) => r.key === "total")!;
     const hidden = [{ key: "total", label: "Total", show: false }];
     // Off: the Total always shows, whatever was saved.
     expect(total(cleanInvoiceLayout({ totals: { rows: hidden } })).show).toBe(true);
     expect(totalHideable(DEFAULT_INVOICE_LAYOUT, "total")).toBe(false);
-    // On: it can be left off, since Today's Amount says what the invoice comes to.
-    const on = cleanInvoiceLayout({ totals: { rows: hidden, balance: { show: true, previousLabel: "  Balance forward ", todayLabel: "", payTotal: false } } });
+    // On, at the top right: the totals underneath are the invoice's own, so its Total stays.
+    expect(total(cleanInvoiceLayout({ totals: { rows: hidden, balance: { show: true } } })).show).toBe(true);
+    expect(cleanInvoiceLayout({ totals: { balance: { show: true, place: "sideways" } } }).totals.balance.place).toBe("top");
+    // On, under the totals: it can be left off, since Today's Amount says what the invoice comes to.
+    const on = cleanInvoiceLayout({ totals: { rows: hidden, balance: { show: true, place: "totals", previousLabel: "  Balance forward ", todayLabel: "", payTotal: false } } });
     expect(total(on).show).toBe(false);
     expect(totalHideable(on, "total")).toBe(true);
     expect(totalHideable(on, "due")).toBe(false);
     // A blank label takes its usual name.
-    expect(on.totals.balance).toEqual({ show: true, previousLabel: "Balance forward", todayLabel: "Today's Amount", totalLabel: "Total Amount Due", payTotal: false });
+    expect(on.totals.balance).toEqual({ show: true, place: "totals", previousLabel: "Balance forward", todayLabel: "Today's Amount", totalLabel: "Total Amount Due", payTotal: false });
   });
 
   it("tells whether two layouts print the same", () => {

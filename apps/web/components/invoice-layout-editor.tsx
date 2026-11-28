@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  COLUMN_LOCKED, CUSTOM_FIELD_TARGET_LABELS, DETAIL_HELP, INVOICE_LAYOUT_TAGS, LAYOUT_FONTS, LAYOUT_FONT_LABELS, LAYOUT_INK, LAYOUT_SIZES, LAYOUT_SIZE_LABELS,
-  LOGO_PLACES, LOGO_PLACE_LABELS, MAX_DETAILS, MAX_TEXT_BLOCKS, NOTE_PLACES, NOTE_PLACE_LABELS, SECTION_NAMES, TABLE_HEADS, TABLE_HEAD_LABELS, TEXT_ALIGNS,
+  BALANCE_PLACES, BALANCE_PLACE_LABELS, COLUMN_LOCKED, CUSTOM_FIELD_TARGET_LABELS, DETAIL_HELP, INVOICE_LAYOUT_TAGS, LAYOUT_FONTS, LAYOUT_FONT_LABELS, LAYOUT_INK, LAYOUT_SIZES, LAYOUT_SIZE_LABELS,
+  LOGO_PLACES, LOGO_PLACE_LABELS, MAX_DETAILS, MAX_TEXT_BLOCKS, NOTE_PLACES, NOTE_PLACE_LABELS, SECTION_NAMES, STUB_INCHES, TABLE_HEADS, TABLE_HEAD_LABELS, TEXT_ALIGNS,
   TOTAL_NAMES, cleanInvoiceLayout, formatMoney, isFieldKey, newTextBlock, sameLayout, totalHideable, unknownLayoutTags,
   type CustomFieldTarget, type InvoiceLayout, type LayoutTextBlock,
 } from "@crewdesk/shared";
@@ -311,7 +311,7 @@ export function InvoiceLayoutEditor() {
         </Section>
 
         <Section title="Totals">
-          <p className="muted" style={{ margin: 0, fontSize: 13 }}>The discount, tax, credit and paid rows only show on invoices that have them. {l.totals.balance.show ? "With the previous balance lines on, Today's Amount takes the place of the Amount due row, and the Total row can be left off." : "The total and the amount due always show."}</p>
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>The discount, tax, credit and paid rows only show on invoices that have them. {l.totals.balance.show && l.totals.balance.place === "totals" ? "With the previous balance lines under the totals, Today's Amount takes the place of the Amount due row, and the Total row can be left off." : "The total and the amount due always show."}</p>
           <ul className="plain-list inv-rows">
             {l.totals.rows.map((r) => {
               const change = (patch: Partial<typeof r>) => setLayoutState({ ...l, totals: { ...l.totals, rows: l.totals.rows.map((x) => (x.key === r.key ? { ...x, ...patch } : x)) } });
@@ -319,7 +319,7 @@ export function InvoiceLayoutEditor() {
               return (
                 <li key={r.key} className="inv-row">
                   <input type="checkbox" checked={r.show} disabled={!hideable} onChange={(e) => change({ show: e.target.checked })} aria-label={`Show ${TOTAL_NAMES[r.key]}`}
-                    title={r.key === "total" ? (hideable ? "Today's Amount below says what the invoice comes to, so this row can go" : "Always shows, unless the previous balance lines are on") : r.key === "due" && l.totals.balance.show ? "Today's Amount takes its place while the previous balance lines are on" : hideable ? undefined : "Always shows when the invoice has it"} />
+                    title={r.key === "total" ? (hideable ? "Today's Amount below says what the invoice comes to, so this row can go" : "Always shows, unless the previous balance lines are under the totals") : r.key === "due" && l.totals.balance.show && l.totals.balance.place === "totals" ? "Today's Amount takes its place while the previous balance lines are under the totals" : hideable ? undefined : "Always shows when the invoice has it"} />
                   <span className="inv-name">{TOTAL_NAMES[r.key]}</span>
                   <input value={r.label} maxLength={40} onChange={(e) => change({ label: e.target.value })} onBlur={() => set(l)} aria-label={`Label for ${TOTAL_NAMES[r.key]}`} placeholder={r.key === "tax" ? "The tax's name in billing settings" : undefined} />
                 </li>
@@ -339,9 +339,13 @@ export function InvoiceLayoutEditor() {
                     </li>
                   ))}
                 </ul>
-                <Check label="The amount due at the top and on the payment stub is the total due" checked={l.totals.balance.payTotal} onChange={(payTotal) => set({ ...l, totals: { ...l.totals, balance: { ...l.totals.balance, payTotal } } })}
-                  title="Unticked, those two show this invoice's amount alone" />
-                <p className="muted" style={{ margin: 0, fontSize: 13 }}>The previous balance is what the customer still owes on their earlier sent invoices when this one is printed, so it goes down as they pay. These three lines take the place of the Amount due row above.</p>
+                <div className="formgrid"><Pick label="These lines print" value={l.totals.balance.place} options={BALANCE_PLACES} labels={BALANCE_PLACE_LABELS} onChange={(place) => set({ ...l, totals: { ...l.totals, balance: { ...l.totals.balance, place } } })} /></div>
+                <Check label={l.totals.balance.place === "top" ? "The payment stub asks for the total due" : "The amount due at the top and on the payment stub is the total due"} checked={l.totals.balance.payTotal}
+                  onChange={(payTotal) => set({ ...l, totals: { ...l.totals, balance: { ...l.totals.balance, payTotal } } })} title="Unticked, it's this invoice's amount alone" />
+                <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+                  The previous balance is what the customer still owes on their earlier sent invoices when this one is printed, so it goes down as they pay.{" "}
+                  {l.totals.balance.place === "top" ? "At the top right the three lines take the place of the amount due there; the totals under the lines stay the invoice's own." : "Under the totals they take the place of the Amount due row above."}
+                </p>
               </>
             ) : <p className="muted" style={{ margin: 0, fontSize: 13 }}>Adds three lines under the totals: what&apos;s still owed on earlier invoices, what this invoice comes to, and the two together.</p>}
           </fieldset>
@@ -395,9 +399,14 @@ export function InvoiceLayoutEditor() {
         </Section>
 
         <Section title="Payment stub" hint="the tear-off part at the bottom">
-          <Check label="Print the tear-off stub on the bottom third of the first page" checked={l.stub.show} onChange={(show) => set({ ...l, stub: { ...l.stub, show } })} />
+          <Check label="Print the tear-off stub at the bottom of the first page" checked={l.stub.show} onChange={(show) => set({ ...l, stub: { ...l.stub, show } })} />
           {l.stub.show ? (
             <>
+              <label>Tear-off line, in inches from the bottom of the page
+                <input type="number" inputMode="decimal" min={STUB_INCHES.min} max={STUB_INCHES.max} step={0.01} value={l.stub.fromBottom} style={{ maxWidth: 140 }}
+                  onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v) && v >= STUB_INCHES.min && v <= STUB_INCHES.max) set({ ...l, stub: { ...l.stub, fromBottom: v } }); }} />
+                <span className="muted" style={{ fontSize: 12 }}>Where your paper is perforated: {STUB_INCHES.usual} for a 3½ inch stub, {STUB_INCHES.thirds} for a page folded in thirds. A shorter stub leaves more room for the lines.</span>
+              </label>
               <div className="formgrid">
                 <label>Line above the stub<input value={l.stub.detach} maxLength={90} onChange={(e) => setLayoutState({ ...l, stub: { ...l.stub, detach: e.target.value } })} onBlur={() => set(l)} /></label>
                 <label>&quot;Payable to&quot; wording<input value={l.stub.payableLabel} maxLength={40} onChange={(e) => setLayoutState({ ...l, stub: { ...l.stub, payableLabel: e.target.value } })} onBlur={() => set(l)} /></label>

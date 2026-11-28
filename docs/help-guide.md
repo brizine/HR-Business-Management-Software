@@ -650,8 +650,8 @@ the real invoice is on the right, redrawn a moment after each change.
   the portal, and the invoice attached to a receipt all use it. An old invoice opened or sent again prints in the
   layout you have now.
 - **What can't move:** your address at the top left and the customer's address under it stay where a **#10
-  double-window envelope** shows them, and the tear-off stub stays on the bottom third of the first page, where the
-  fold is. Everything else is yours to change.
+  double-window envelope** shows them, and the tear-off stub stays at the bottom of the first page (you set how
+  tall it is, to match your paper's perforation). Everything else is yours to change.
 - **Draft, then Publish:** nothing reaches an invoice until you click **Publish**. Until then your work is kept as a
   draft (it's saved as you go, so you can leave and come back). **Discard changes** goes back to what invoices print
   in now. **History** lists every layout you've published; **Open** brings one back into the editor, and it only
@@ -685,12 +685,14 @@ the real invoice is on the right, redrawn a moment after each change.
   - **Today's Amount:** what this invoice comes to, after any credit or payment already on it.
   - **Total Amount Due:** the two together.
 
-  All three can be renamed. They show on every invoice, with $0.00 when nothing is owed from before, and they take
-  the place of the invoice's own "Amount due" row; with them on, the invoice's **Total** row can be left off too.
-  The previous balance is worked out when the invoice is printed or sent, so it goes down as earlier invoices are
-  paid. **The amount due at the top and on the payment stub is the total due** is ticked to start, so the customer
-  is asked for everything they owe; untick it to keep those two as this invoice's amount alone. The pay link in an
-  invoice's email still pays that one invoice; the customer's portal lists every open invoice.
+  All three can be renamed, and they show on every invoice, with $0.00 when nothing is owed from before. The
+  previous balance is worked out when the invoice is printed or sent, so it goes down as earlier invoices are paid.
+  - **These lines print** at the **top right, where the amount due is** (to start with: they take the place of the
+    single amount due there, and the totals under the lines stay the invoice's own), or **under the totals** (there
+    they take the place of the invoice's own "Amount due" row, and its **Total** row can be left off too).
+  - **The payment stub asks for the total due** is ticked to start, so a customer mailing a check is asked for
+    everything they owe; untick it to keep the stub (and, with the lines under the totals, the amount due at the
+    top) as this invoice's amount alone.
 - **Notes and footer:** show or hide the notes typed on an invoice, give them a heading, and put them beside the
   totals or under them. The **footer** prints on every invoice, left, centered or right.
 - **Your own text:** up to six blocks of your own wording (a guarantee, a seasonal offer, how to reach you), each
@@ -700,8 +702,10 @@ the real invoice is on the right, redrawn a moment after each change.
   filled in for the invoice it prints on. The editor warns about a fill-in an invoice can't fill.
 - **Order of the page:** drag the lines, the totals, the footer and each of your text blocks into the order you
   want. They sit between the addresses and the stub, and run onto more pages when they need to.
-- **Payment stub:** keep or drop the tear-off stub (without it the lines use the whole first page), and change its
-  wording: the line above it, "Make checks payable to" and the name, "Mail to", the pay-online line (shown when
+- **Payment stub:** keep or drop the tear-off stub (without it the lines use the whole first page). **Tear-off
+  line, in inches from the bottom of the page** is where your paper is perforated: 3.5 to start with, for paper
+  with a 3½ inch stub; 3.67 is a page folded in thirds. A shorter stub leaves more room for the lines. Change its
+  wording too: the line above it, "Make checks payable to" and the name, "Mail to", the pay-online line (shown when
   online payments are connected) and the line to write the amount on.
 
 ### Late fees
@@ -1187,9 +1191,12 @@ form and go straight to Stripe; Crewdesk never sees or keeps them.
   report payments. The test company only takes **test keys** (pk_test_ / sk_test_), so no real money moves there; use
   your **live keys** in the real company. **Disconnect** turns online payments off.
 - **Pay link:** once Stripe is connected, every emailed invoice has a **Pay online** button, and paper invoices say
-  "Or pay online" with the portal address on the stub. The link opens that one invoice with no sign-in and works for
-  **30 days** after the invoice was last sent (sending it again restarts the 30 days). On the invoice page,
-  **Copy pay link** gives you the link to text or read to a customer.
+  "Or pay online" with the portal address on the stub. The link opens that invoice with no sign-in and works for
+  **30 days** after the invoice was last sent (sending it again restarts the 30 days). When the customer owes on
+  other invoices too, the page starts with the **Total amount due** on their account and lists each invoice with a
+  balance; **View and pay** opens any of them from the same link. Each invoice is paid with its own payment, so
+  your records and the books still show one payment per invoice. On the invoice page, **Copy pay link** gives you
+  the link to text or read to a customer.
 - **Customer portal** (management.prospray.net/portal): customers type the email address on their account (or the
   email of a contact marked "copy on invoices"), get a 6-digit code or a sign-in link by email, and see their balance,
   invoices to pay, paid invoices and PDFs, and past payments. They can pay any open invoice and fix their phone number

@@ -398,7 +398,11 @@ const portalRoutes: FastifyPluginAsync = async (app) => {
   });
 };
 
-/** The pay link from an invoice email: /pay/<token>. Works for 30 days after the invoice was last sent. */
+/**
+ * The pay link from an invoice email: /pay/<token>. Works for 30 days after the invoice was last
+ * sent. It opens that invoice, shows everything the customer still owes, and lets each of their
+ * other unpaid invoices be seen and paid from the same link.
+ */
 const payLinkRoutes: FastifyPluginAsync = async (app) => {
   async function byToken(token: string) {
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) throw new HttpError(404, "This link isn't right. Check the link in your email");
@@ -409,9 +413,56 @@ const payLinkRoutes: FastifyPluginAsync = async (app) => {
     return inv;
   }
 
+  /**
+   * The customer's account, as far as the link shows it: their sent invoices that still have a
+   * balance (oldest first, with the link's own invoice whatever its balance) and the total due.
+   */
+  async function accountOf(inv: typeof invoices.$inferSelect) {
+    const rows = await db.select().from(invoices)
+      .where(and(eq(invoices.companyId, inv.companyId), eq(invoices.customerId, inv.customerId), inArray(invoices.status, ["sent", "partial", "paid"])))
+      .orderBy(asc(invoices.issueDate), asc(invoices.number));
+    const today = await companyToday(inv.companyId);
+    const open = rows.filter((i) => i.id === inv.id || (i.status !== "paid" && invoiceBalance(i) > 0));
+    return {
+      totalDueCents: open.reduce((s, i) => s + Math.max(0, invoiceBalance(i)), 0),
+      invoices: open.map((i) => ({ id: i.id, number: i.number, issueDate: i.issueDate, dueDate: i.dueDate, balanceCents: Math.max(0, invoiceBalance(i)), overdue: isOverdue(i, today), linked: i.id === inv.id })),
+    };
+  }
+  /** The link's own invoice, or another sent invoice of the same customer opened from it. */
+  async function ofLink(token: string, id: string) {
+    const inv = await byToken(token);
+    if (id === inv.id) return { inv, linked: inv };
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new HttpError(404, "That invoice wasn't found");
+    const [other] = await db.select().from(invoices).where(and(eq(invoices.id, id), eq(invoices.companyId, inv.companyId), eq(invoices.customerId, inv.customerId)));
+    if (!other || other.status === "draft" || other.status === "void") throw new HttpError(404, "That invoice wasn't found");
+    return { inv: other, linked: inv };
+  }
+
   app.get<{ Params: { token: string } }>("/:token", limited, async (req) => {
     const inv = await byToken(req.params.token);
-    return { ...(await companyInfo(inv.companyId)), invoice: await invoiceDetail(inv.companyId, inv) };
+    return { ...(await companyInfo(inv.companyId)), invoice: await invoiceDetail(inv.companyId, inv), account: await accountOf(inv) };
+  });
+
+  // Another of the customer's invoices, opened from the link.
+  app.get<{ Params: { token: string; id: string } }>("/:token/invoices/:id", limited, async (req) => {
+    const { inv, linked } = await ofLink(req.params.token, req.params.id);
+    return { invoice: await invoiceDetail(inv.companyId, inv), account: await accountOf(linked) };
+  });
+  app.get<{ Params: { token: string; id: string } }>("/:token/invoices/:id/pdf", limited, async (req, reply) => {
+    const { inv } = await ofLink(req.params.token, req.params.id);
+    const data = await pdfInvoice(inv.companyId, inv.id);
+    return sendPdf(reply, await invoicePdf(await companyForPdf(inv.companyId), data), `Invoice-${data.number}.pdf`);
+  });
+  app.post<{ Params: { token: string; id: string } }>("/:token/invoices/:id/pay", limited, async (req) => {
+    const { inv } = await ofLink(req.params.token, req.params.id);
+    return startInvoicePayment(inv.companyId, inv.id, { save: !!(req.body as { save?: unknown } | null)?.save });
+  });
+  app.post<{ Params: { token: string; id: string } }>("/:token/invoices/:id/confirm", limited, async (req) => {
+    const { inv, linked } = await ofLink(req.params.token, req.params.id);
+    const { paymentIntentId } = parse(z.object({ paymentIntentId: z.string().regex(/^pi_[A-Za-z0-9]+$/) }), req.body);
+    const result = await recordPaymentIntent(inv.companyId, paymentIntentId);
+    const [fresh] = await db.select().from(invoices).where(eq(invoices.id, inv.id));
+    return { ...result, invoice: await invoiceDetail(inv.companyId, fresh), account: await accountOf(linked) };
   });
 
   app.get<{ Params: { token: string } }>("/:token/pdf", limited, async (req, reply) => {
@@ -430,7 +481,7 @@ const payLinkRoutes: FastifyPluginAsync = async (app) => {
     const { paymentIntentId } = parse(z.object({ paymentIntentId: z.string().regex(/^pi_[A-Za-z0-9]+$/) }), req.body);
     const result = await recordPaymentIntent(inv.companyId, paymentIntentId);
     const [fresh] = await db.select().from(invoices).where(eq(invoices.id, inv.id));
-    return { ...result, invoice: await invoiceDetail(inv.companyId, fresh) };
+    return { ...result, invoice: await invoiceDetail(inv.companyId, fresh), account: await accountOf(inv) };
   });
 };
 

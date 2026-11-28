@@ -128,6 +128,8 @@ export async function addInvoicePages(doc: PDFDocument, c: PdfCompany, inv: PdfI
   const bal = lay.totals.balance;
   const previous = bal.show ? Math.max(0, inv.previousBalanceCents ?? 0) : 0;
   const toPay = bal.show && bal.payTotal ? previous + due : due;
+  /** The three balance lines print at the top right (in place of the amount due) or under the totals. */
+  const balTop = bal.show && bal.place === "top", balTotals = bal.show && bal.place === "totals";
   const L = 0.5 * IN, R = W - 0.5 * IN;
   const box = LOGO_BOX[lay.header.logo.size];
   const ls = logo ? Math.min(box.w / logo.width, box.h / logo.height) : 0;
@@ -173,7 +175,16 @@ export async function addInvoicePages(doc: PDFDocument, c: PdfCompany, inv: PdfI
     pen.text(fit(v, reg, z(9), 114), R, fy, { size: z(9), right: true });
     fy += z(12);
   }
-  if (lay.header.amountDue.show) {
+  if (balTop) {
+    // Owed from before, this invoice, and the two together, the last one as large as the amount due it stands in for.
+    let ry = fy + z(4);
+    for (const [label, cents] of [[bal.previousLabel, previous], [bal.todayLabel, due]] as const) {
+      pen.text(label, R - 120, ry, { size: z(9.5), right: true }); pen.text(formatMoney(cents), R, ry, { size: z(9.5), right: true }); ry += z(13);
+    }
+    pen.text(bal.totalLabel, R - 120, ry + z(3), { size: z(10), bold: true, right: true });
+    pen.text(formatMoney(previous + due), R, ry + z(1), { size: z(13), bold: true, right: true, color: accent });
+    fy = ry + z(19);
+  } else if (lay.header.amountDue.show) {
     pen.text(lay.header.amountDue.label, R - 120, fy + z(4), { size: z(10), bold: true, right: true });
     pen.text(formatMoney(toPay), R, fy + z(2), { size: z(13), bold: true, right: true, color: accent });
     fy += z(20);
@@ -187,7 +198,9 @@ export async function addInvoicePages(doc: PDFDocument, c: PdfCompany, inv: PdfI
   // The middle of the page flows down from under the windows, onto more pages when it has to.
   // Page 1 keeps its bottom third for the stub; later pages use the full height.
   let ty = Math.max(3.45 * IN, fy + 10);
-  let limit = lay.stub.show ? 7.05 * IN : H - 0.8 * IN;
+  // The stub starts where the paper is perforated; the lines stop a little above it.
+  const st = H - lay.stub.fromBottom * IN;
+  let limit = lay.stub.show ? st - 0.28 * IN : H - 0.8 * IN;
   const nextPage = () => { page = doc.addPage([W, H]); pen = new Pen(page, reg, bold); ty = 0.6 * IN; limit = H - 0.8 * IN; };
 
   // The numbers sit in columns from the right edge in; a Tax column only when a line is taxed.
@@ -246,12 +259,12 @@ export async function addInvoicePages(doc: PDFDocument, c: PdfCompany, inv: PdfI
         const rates = [...new Set(inv.lines.map((l) => l.taxRate ?? 0).filter((r) => r > 0))];
         totals.push([`${cfg.tax.label || inv.taxName || "Sales tax"}${rates.length === 1 ? ` (${formatTaxRate(rates[0])})` : ""}`, formatMoney(inv.taxCents), false]);
       }
-      if (cfg.total.show || !bal.show) totals.push([cfg.total.label, formatMoney(inv.totalCents), true]);
+      if (cfg.total.show || !balTotals) totals.push([cfg.total.label, formatMoney(inv.totalCents), true]);
       if (cfg.credit.show) for (const cr of inv.credits ?? []) totals.push([`${cfg.credit.label} CR-${cr.number}`, `-${formatMoney(cr.amountCents)}`, false]);
       if (cfg.paid.show && inv.paidCents) totals.push([cfg.paid.label, `-${formatMoney(inv.paidCents)}`, false]);
-      // The balance lines say what this invoice still comes to ("Today's Amount"), so they take the place of its own "Amount due".
-      if (!bal.show && (inv.paidCents || inv.credits?.length)) totals.push([cfg.due.label, formatMoney(due), true]);
-      const balance: [string, string, boolean][] = bal.show
+      // Under the totals, the balance lines say what this invoice still comes to ("Today's Amount"), so they take the place of its own "Amount due".
+      if (!balTotals && (inv.paidCents || inv.credits?.length)) totals.push([cfg.due.label, formatMoney(due), true]);
+      const balance: [string, string, boolean][] = balTotals
         ? [[bal.previousLabel, formatMoney(previous), false], [bal.todayLabel, formatMoney(due), false], [bal.totalLabel, formatMoney(previous + due), true]]
         : [];
       const beside = lay.notes.place === "beside";
@@ -321,7 +334,6 @@ export async function addInvoicePages(doc: PDFDocument, c: PdfCompany, inv: PdfI
   // The tear-off stub (bottom third of page 1).
   if (!lay.stub.show) return;
   const sp = new Pen(firstPage, reg, bold);
-  const st = 7.33 * IN;
   sp.line(L - 10, st, R + 10, { dashed: true, color: MUTED });
   if (lay.stub.detach) sp.text(lay.stub.detach, W / 2, st + 4, { size: 7.5, color: MUTED, center: true });
   let sy = st + 26;

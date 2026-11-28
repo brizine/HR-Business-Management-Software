@@ -288,6 +288,50 @@ describe("Pay links and payments", () => {
     expect((await call("GET", `/invoices/${id}`, "office")).body.status).toBe("paid");
   });
 
+  it("the pay link shows everything the customer owes, and their other invoices can be paid from it", async () => {
+    // Opal owes on two invoices; a third is still a draft, and one of somebody else's is unpaid too.
+    ID.opal = (await call("POST", "/customers", "owner", { firstName: "Opal", lastName: "Owing", email: email("opal"), property: { street: "4 Pine St", city: "Norman", zip: "73069" } })).body.id;
+    const first = await sentInvoice(ID.opal, 6500, ["paper"]), second = await sentInvoice(ID.opal, 11000, ["paper"]);
+    const draft = (await call("POST", "/invoices", "office", { customerId: ID.opal, lines: [{ description: "Not sent yet", quantity: 1, unitPriceCents: 9900 }] })).body.id;
+    const theirs = await sentInvoice(ID.other, 4200, ["paper"]);
+    const token = await tokenOf(second);
+    const view = await call("GET", `/pay/${token}`, null);
+    expect(view.body.invoice).toMatchObject({ id: second, balanceCents: 11000 });
+    // The total due is both invoices; the list is oldest first and says which one the link is for.
+    expect(view.body.account.totalDueCents).toBe(17500);
+    expect(view.body.account.invoices.map((i: any) => [i.id, i.balanceCents, i.linked])).toEqual([[first, 6500, false], [second, 11000, true]]);
+
+    // The older invoice opens from the same link: its details, its PDF and its own payment.
+    const older = await call("GET", `/pay/${token}/invoices/${first}`, null);
+    expect(older.body.invoice).toMatchObject({ id: first, balanceCents: 6500, customer: { name: "Opal Owing" } });
+    expect(older.body.account.totalDueCents).toBe(17500);
+    expect((await call("GET", `/pay/${token}/invoices/${first}/pdf`, null)).headers["content-type"]).toBe("application/pdf");
+    const start = await call("POST", `/pay/${token}/invoices/${first}/pay`, null);
+    expect(start.body.amountCents).toBe(6500);
+    const pi = intents.get(start.body.paymentIntentId)!;
+    expect(pi.metadata).toMatchObject({ crewdeskInvoiceId: first });
+    pi.status = "succeeded";
+    const done = await call("POST", `/pay/${token}/invoices/${first}/confirm`, null, { paymentIntentId: pi.id });
+    expect(done.body).toMatchObject({ status: "completed", invoice: { id: first, status: "paid", balanceCents: 0 } });
+    // What's left is the link's own invoice; the paid one drops off the list.
+    expect(done.body.account).toMatchObject({ totalDueCents: 11000 });
+    expect(done.body.account.invoices.map((i: any) => i.id)).toEqual([second]);
+    expect((await call("GET", `/invoices/${first}`, "office")).body.payments).toHaveLength(1);
+    // The link's own invoice works through the same addresses.
+    expect((await call("GET", `/pay/${token}/invoices/${second}`, null)).body.invoice.id).toBe(second);
+
+    // A draft, another customer's invoice, and anything that isn't an invoice can't be reached from the link.
+    for (const id of [draft, theirs, "not-an-id", "00000000-0000-4000-8000-000000000000"]) {
+      expect((await call("GET", `/pay/${token}/invoices/${id}`, null)).status).toBe(404);
+      expect((await call("POST", `/pay/${token}/invoices/${id}/pay`, null)).status).toBe(404);
+      expect((await call("GET", `/pay/${token}/invoices/${id}/pdf`, null)).status).toBe(404);
+    }
+    // And once the link expires, neither can the customer's own.
+    await db.update(invoices).set({ payTokenExpiresAt: new Date(Date.now() - 1000) }).where(eq(invoices.id, second));
+    expect((await call("GET", `/pay/${token}/invoices/${first}`, null)).status).toBe(410);
+    expect((await call("POST", `/pay/${token}/invoices/${second}/pay`, null)).status).toBe(410);
+  });
+
   it("pay links stop working when expired or the invoice is void", async () => {
     const id = await sentInvoice(ID.pat, 3000, ["paper"]);
     const token = await tokenOf(id);

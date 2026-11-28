@@ -61,7 +61,18 @@ export const TOTAL_HIDEABLE: readonly TotalKey[] = ["subtotal", "credit", "paid"
  * Whether a totals row can be left off in this layout. The invoice's own Total can go once the
  * previous balance lines are on, since "Today's Amount" under it says what the invoice comes to.
  */
-export const totalHideable = (l: { totals: { balance: { show: boolean } } }, key: TotalKey) => TOTAL_HIDEABLE.includes(key) || (key === "total" && l.totals.balance.show);
+export const totalHideable = (l: { totals: { balance: { show: boolean; place: string } } }, key: TotalKey) =>
+  TOTAL_HIDEABLE.includes(key) || (key === "total" && l.totals.balance.show && l.totals.balance.place === "totals");
+
+/** Where the previous balance lines print. */
+export const BALANCE_PLACES = ["top", "totals"] as const;
+export const BALANCE_PLACE_LABELS: Record<(typeof BALANCE_PLACES)[number], string> = { top: "At the top right, where the amount due is", totals: "Under the totals" };
+
+/**
+ * The stub's height: how far the tear-off line is from the bottom of the page, in inches. 3.5 for
+ * paper perforated at 3½ inches; 3.67 is a letter page folded in thirds.
+ */
+export const STUB_INCHES = { min: 2.75, max: 4.5, usual: 3.5, thirds: 3.67 } as const;
 
 export const TABLE_HEADS = ["line", "bar"] as const;
 export const TABLE_HEAD_LABELS: Record<(typeof TABLE_HEADS)[number], string> = { line: "A line under the headings", bar: "A colored bar" };
@@ -131,6 +142,7 @@ const layoutSchema = z.object({
      */
     balance: z.object({
       show: flag(false),
+      place: pick(BALANCE_PLACES, "top"),
       previousLabel: word(40, "Previous Balance"),
       todayLabel: word(40, "Today's Amount"),
       totalLabel: word(40, "Total Amount Due"),
@@ -145,6 +157,8 @@ const layoutSchema = z.object({
   order: listOf(z.string().max(30)),
   stub: z.object({
     show: flag(true),
+    /** How far up from the bottom of the page the tear-off line is, in inches (where the paper is perforated). */
+    fromBottom: z.number().min(STUB_INCHES.min).max(STUB_INCHES.max).transform((v) => Math.round(v * 100) / 100).catch(STUB_INCHES.usual).default(STUB_INCHES.usual),
     detach: word(90, "Please detach and return this part with your payment"),
     payableLabel: word(40, "Make checks payable to"),
     /** Blank: the company's legal name, else its name. */
