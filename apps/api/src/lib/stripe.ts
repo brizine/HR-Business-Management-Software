@@ -1,5 +1,6 @@
 import Stripe from "stripe";
-import { and, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { and, asc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { customerName, formatMoney, systemTemplate } from "@crewdesk/shared";
 import { db } from "../db";
 import { recordAutomationEvent } from "./automationEvents";
@@ -137,6 +138,110 @@ export async function startInvoicePayment(companyId: string, invoiceId: string, 
   return { clientSecret: pi.client_secret, publishableKey: cfg.publishableKey, amountCents: due, paymentIntentId: pi.id };
 }
 
+/** The most invoices one payment can cover (their ids and amounts have to fit in what Stripe keeps with a payment). */
+export const MAX_INVOICES_PER_PAYMENT = 10;
+const and2 = (list: (string | number)[]) => (list.length <= 2 ? list.join(" and ") : `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`);
+
+/**
+ * Starts one payment for several of a customer's invoices: a single charge for the sum of their
+ * balances. When it's paid it is recorded as a payment on each invoice (that invoice's share), so
+ * every invoice still has its own payment to see, refund and post to the books.
+ */
+export async function startAccountPayment(companyId: string, invoiceIds: string[], o: { save?: boolean } = {}) {
+  const ids = [...new Set(invoiceIds)];
+  if (!ids.length) throw new HttpError(400, "Pick at least one invoice to pay");
+  if (ids.length === 1) return startInvoicePayment(companyId, ids[0], o);
+  if (ids.length > MAX_INVOICES_PER_PAYMENT) throw new HttpError(400, `Up to ${MAX_INVOICES_PER_PAYMENT} invoices can be paid at once. Untick some and pay the rest after`);
+  const { cfg, stripe } = await stripeFor(companyId);
+  const rows = await db.select().from(invoices).where(and(eq(invoices.companyId, companyId), inArray(invoices.id, ids))).orderBy(asc(invoices.issueDate), asc(invoices.number));
+  if (rows.length !== ids.length) throw new HttpError(404, "One of those invoices wasn't found");
+  if (new Set(rows.map((r) => r.customerId)).size !== 1) throw new HttpError(400, "Those invoices aren't all for the same customer");
+  const pending = await db.select().from(invoicePayments).where(and(inArray(invoicePayments.invoiceId, ids), eq(invoicePayments.status, "pending")));
+  const parts = rows.map((inv) => {
+    if (inv.status === "void" || inv.status === "draft") throw new HttpError(400, `Invoice ${inv.number ?? ""} can't be paid`.replace("  ", " "));
+    const due = inv.totalCents - inv.paidCents - inv.creditedCents - pending.filter((p) => p.invoiceId === inv.id).reduce((s, p) => s + p.amountCents, 0);
+    if (due <= 0) throw new HttpError(400, `Invoice ${inv.number} is already paid or has a bank payment on its way. Untick it and try again`);
+    return { inv, due };
+  });
+  const total = parts.reduce((s, p) => s + p.due, 0);
+  if (total < 50) throw new HttpError(400, "The amount left is too small to pay online; please call the office");
+  const [cust] = await db.select().from(customers).where(eq(customers.id, rows[0].customerId));
+  const split = parts.map((p) => `${p.inv.id}:${p.due}`).join(",");
+  const stamp = createHash("sha256").update(`${split}|${rows.map((r) => r.updatedAt.getTime()).join(",")}|${pending.length}`).digest("hex").slice(0, 40);
+  const pi = await stripe.paymentIntents.create({
+    amount: total, currency: "usd", customer: await stripeCustomerId(stripe, cust),
+    allowed_payment_method_types: ["card", "us_bank_account"],
+    description: `Invoices ${and2(parts.map((p) => p.inv.number ?? "?"))} from ${cfg.companyName}`.slice(0, 500),
+    // `crewdeskSplit` is how the charge divides: each invoice and the cents of it that are its.
+    metadata: { crewdeskCompanyId: companyId, crewdeskInvoiceId: parts[0].inv.id, crewdeskSplit: split, invoiceNumber: parts.map((p) => p.inv.number).join(",") },
+    ...(o.save ? { setup_future_usage: "off_session" as const } : {}),
+  }, { idempotencyKey: `acct-${stamp}${o.save ? "-save" : ""}` });
+  return { clientSecret: pi.client_secret, publishableKey: cfg.publishableKey, amountCents: total, paymentIntentId: pi.id };
+}
+
+/** "id:cents,id:cents" as kept with a payment for several invoices; nothing when it isn't one. */
+function parseSplit(s: string | undefined): { invoiceId: string; cents: number }[] {
+  const out = (s ?? "").split(",").map((x) => { const [invoiceId, cents] = x.split(":"); return { invoiceId, cents: Number(cents) }; });
+  return out.length > 1 && out.every((x) => /^[0-9a-f-]{36}$/i.test(x.invoiceId ?? "") && Number.isInteger(x.cents) && x.cents > 0) ? out : [];
+}
+
+/**
+ * Records a payment made for several invoices at once: a payment on each invoice for its share,
+ * all carrying the one charge's id, Stripe's fee divided between them in proportion. One receipt
+ * goes out for the lot.
+ */
+async function applySplitIntent(companyId: string, pi: Stripe.PaymentIntent, split: { invoiceId: string; cents: number }[]) {
+  if (pi.metadata?.crewdeskCompanyId !== companyId) return { ignored: true };
+  const invs = await db.select().from(invoices).where(and(eq(invoices.companyId, companyId), inArray(invoices.id, split.map((s) => s.invoiceId))));
+  if (invs.length !== split.length || new Set(invs.map((i) => i.customerId)).size !== 1) return { ignored: true };
+  const total = split.reduce((s, x) => s + x.cents, 0);
+  // The shares have to add up to what was charged, or something isn't what it says it is.
+  if (total !== pi.amount) { console.error(`Stripe payment ${pi.id}: its invoices add up to ${total}, not the ${pi.amount} charged. Not recorded.`); return { ignored: true }; }
+  const status = pi.status === "succeeded" ? "completed" : pi.status === "processing" ? "pending" : ["requires_payment_method", "canceled"].includes(pi.status) ? "failed" : null;
+  if (!status) return { ignored: true };
+  const { method, detail } = describeMethod(pi.payment_method as Stripe.PaymentMethod);
+  const charge = typeof pi.latest_charge === "object" ? pi.latest_charge : null;
+  const bt = charge && typeof charge.balance_transaction === "object" ? charge.balance_transaction : null;
+  const numbers = and2(split.map((s) => invs.find((i) => i.id === s.invoiceId)!.number ?? "?"));
+  const receivedOn = await companyToday(companyId);
+  let feeLeft = bt?.fee ?? null;
+  const written = await db.transaction(async (tx) => {
+    // The webhook and the customer coming back from paying can arrive together: one at a time per charge.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`stripe:${pi.id}`}))`);
+    const existing = await tx.select().from(invoicePayments).where(eq(invoicePayments.stripePaymentId, pi.id));
+    if (existing.length === split.length && existing.every((e) => e.status === "completed" || e.status === "void")) return { done: true as const, ids: existing.map((e) => e.id) };
+    if (status === "failed" && !existing.length) return { failed: true as const, ids: [] as string[] };
+    const ids: string[] = [];
+    for (const [i, part] of split.entries()) {
+      // The fee follows the money: each invoice carries its share, and the last one takes what rounding left.
+      const fee = feeLeft == null ? null : i === split.length - 1 ? feeLeft : Math.floor((bt!.fee * part.cents) / total);
+      if (feeLeft != null && fee != null) feeLeft -= fee;
+      const values = { status, method, methodDetail: detail, amountCents: part.cents, feeCents: fee, receivedOn, stripePaymentId: pi.id, note: `Paid online with invoices ${numbers}, in one payment of ${formatMoney(total)}` };
+      const had = existing.find((e) => e.invoiceId === part.invoiceId);
+      if (had) { if (had.status !== "completed" && had.status !== "void") await tx.update(invoicePayments).set(values).where(eq(invoicePayments.id, had.id)); ids.push(had.id); }
+      else ids.push((await tx.insert(invoicePayments).values({ ...values, companyId, invoiceId: part.invoiceId, customerId: invs[0].customerId }).returning({ id: invoicePayments.id }))[0].id);
+    }
+    return { ids };
+  });
+  if ("failed" in written) return { status: "failed" };
+  if ("done" in written) return { status: "completed", paymentId: written.ids[0] };
+  for (const part of split) await refreshInvoice(db, part.invoiceId);
+  const customerId = invs[0].customerId;
+  if (status === "failed") await recordAutomationEvent(companyId, customerId, "payment_declined", { type: "invoice", id: split[0].invoiceId });
+  if (pi.setup_future_usage === "off_session" && pi.payment_method && typeof pi.payment_method === "object" && status !== "failed") {
+    const { saveMethod } = await import("./paymentMethods");
+    await saveMethod(companyId, customerId, pi.payment_method as Stripe.PaymentMethod, "customer").catch((e) => console.error("Saving the payment method failed:", (e as Error).message));
+  }
+  if (status === "completed") {
+    for (const id of written.ids) queueBillingSync(() => syncPayment(companyId, id));
+    const left = (await db.select().from(invoices).where(inArray(invoices.id, split.map((s) => s.invoiceId)))).reduce((s, i) => s + Math.max(0, i.totalCents - i.paidCents - i.creditedCents), 0);
+    // One receipt for the whole payment, naming every invoice it paid.
+    await sendReceipt(companyId, split[0].invoiceId, written.ids[0], { invoiceIds: split.map((s) => s.invoiceId), vars: { INVOICE_NUMBER: numbers, PAYMENT_AMOUNT: formatMoney(total), INVOICE_BALANCE: formatMoney(left) } })
+      .catch((e) => console.error("Receipt email failed:", (e as Error).message));
+  }
+  return { status, paymentId: written.ids[0] };
+}
+
 function describeMethod(pm: Stripe.PaymentMethod | string | null | undefined): { method: "card" | "ach"; detail: string | null } {
   if (!pm || typeof pm === "string") return { method: "card", detail: null };
   if (pm.type === "us_bank_account" && pm.us_bank_account) return { method: "ach", detail: `${pm.us_bank_account.bank_name ?? "Bank"} ${pm.us_bank_account.account_type ?? "account"} ·· ${pm.us_bank_account.last4}` };
@@ -156,6 +261,8 @@ export async function recordPaymentIntent(companyId: string, paymentIntentId: st
 
 export async function applyPaymentIntent(companyId: string, pi: Stripe.PaymentIntent) {
   if (pi.metadata?.crewdeskPrepaymentId) return applyPrepaymentIntent(companyId, pi);
+  const split = parseSplit(pi.metadata?.crewdeskSplit);
+  if (split.length) return applySplitIntent(companyId, pi, split);
   const invoiceId = pi.metadata?.crewdeskInvoiceId;
   if (!invoiceId || pi.metadata?.crewdeskCompanyId !== companyId) return { ignored: true };
   const [inv] = await db.select().from(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)));
@@ -179,7 +286,7 @@ export async function applyPaymentIntent(companyId: string, pi: Stripe.PaymentIn
     paymentId = existing.id;
   } else {
     const [p] = await db.insert(invoicePayments).values({ ...values, companyId, invoiceId: inv.id, customerId: inv.customerId, note: "Paid online" })
-      .onConflictDoNothing({ target: invoicePayments.stripePaymentId }).returning();
+      .onConflictDoNothing({ target: [invoicePayments.stripePaymentId, invoicePayments.invoiceId] }).returning();
     if (!p) return recordAgain(companyId, pi.id);
     paymentId = p.id;
   }
@@ -203,7 +310,7 @@ async function recordAgain(companyId: string, piId: string) {
 }
 
 /** The "payment received" email (and text, for customers who get texts), from the receipt template in Resources → Templates. */
-async function sendReceipt(companyId: string, invoiceId: string, paymentId: string | undefined) {
+async function sendReceipt(companyId: string, invoiceId: string, paymentId: string | undefined, o: { invoiceIds?: string[]; vars?: Record<string, string> } = {}) {
   if (!paymentId) return;
   const [row] = await db.select({ inv: invoices, cust: customers }).from(invoices).innerJoin(customers, eq(customers.id, invoices.customerId)).where(eq(invoices.id, invoiceId));
   if (!row) return;
@@ -215,10 +322,16 @@ async function sendReceipt(companyId: string, invoiceId: string, paymentId: stri
     if (chosen.attachPdf) {
       const { companyForPdf, pdfInvoice } = await import("../routes/invoices");
       const { invoicePdf } = await import("./invoicePdf");
-      attachments = [{ filename: `Invoice-${row.inv.number}.pdf`, content: Buffer.from(await invoicePdf(await companyForPdf(companyId), await pdfInvoice(companyId, invoiceId))), contentType: "application/pdf" }];
+      // A payment for several invoices attaches each of them.
+      const company = await companyForPdf(companyId);
+      for (const id of o.invoiceIds ?? [invoiceId]) {
+        const data = await pdfInvoice(companyId, id);
+        attachments.push({ filename: `Invoice-${data.number}.pdf`, content: Buffer.from(await invoicePdf(company, data)), contentType: "application/pdf" });
+      }
     }
-    await sendTemplateEmail({ companyId, template: tpl, to: row.cust.email, ctx: { invoiceId, paymentId }, transactional: true, attachments });
+    await sendTemplateEmail({ companyId, template: tpl, to: row.cust.email, ctx: { invoiceId, paymentId }, transactional: true, attachments, vars: o.vars });
   }
+  // The text keeps to the first invoice's own wording (a text has no room for a list).
   if ((row.cust.delivery ?? []).includes("text") && chosen.text) await sendTemplateText({ companyId, template: chosen.text, ctx: { invoiceId, paymentId }, by: null });
   await recordAutomationEvent(companyId, row.cust.id, "receipt_sent", { type: "payment", id: paymentId });
 }
@@ -247,7 +360,11 @@ export async function checkPendingStripePayments(now = new Date()) {
     ...(await db.select({ companyId: prepayments.companyId, pi: prepayments.stripePaymentId }).from(prepayments)
       .where(and(eq(prepayments.status, "pending"), isNotNull(prepayments.stripePaymentId))).limit(500)),
   ];
+  // A payment for several invoices has a row for each: ask Stripe about it once.
+  const seen = new Set<string>();
   for (const r of rows) {
+    if (seen.has(r.pi!)) continue;
+    seen.add(r.pi!);
     try { await recordPaymentIntent(r.companyId, r.pi!); } catch (e) { console.error(`Stripe check for ${r.pi} failed:`, (e as Error).message); }
   }
   return rows.length;
@@ -265,33 +382,72 @@ export const REFUND_REASONS = ["requested_by_customer", "duplicate", "fraudulent
  * about each new refund. Safe to call more than once.
  */
 export async function syncRefunds(companyId: string, paymentIntentId: string) {
-  const [p] = await db.select().from(invoicePayments).where(and(eq(invoicePayments.companyId, companyId), eq(invoicePayments.stripePaymentId, paymentIntentId)));
-  if (!p) return syncPrepaymentRefunds(companyId, paymentIntentId);
+  // One payment, or one for each invoice a combined charge paid.
+  const pays = await db.select().from(invoicePayments).where(and(eq(invoicePayments.companyId, companyId), eq(invoicePayments.stripePaymentId, paymentIntentId)))
+    .orderBy(asc(invoicePayments.createdAt), asc(invoicePayments.id));
+  if (!pays.length) return syncPrepaymentRefunds(companyId, paymentIntentId);
   const { stripe } = await stripeFor(companyId);
   const [co] = await db.select({ tz: companies.timezone }).from(companies).where(eq(companies.id, companyId));
+  const payIds = pays.map((p) => p.id);
+  const refundRows = () => db.select().from(paymentRefunds).where(inArray(paymentRefunds.paymentId, payIds));
   for await (const r of stripe.refunds.list({ payment_intent: paymentIntentId, limit: 100 })) {
     const status = r.status ?? "pending";
-    await db.insert(paymentRefunds).values({
-      companyId, paymentId: p.id, invoiceId: p.invoiceId, stripeRefundId: r.id, amountCents: r.amount, status, reason: r.reason ?? null,
-      note: r.metadata?.crewdeskNote ?? null, refundedOn: localDate(new Date(r.created * 1000), co?.tz ?? "America/Chicago"),
-    }).onConflictDoUpdate({ target: paymentRefunds.stripeRefundId, set: { amountCents: r.amount, status, reason: r.reason ?? null } });
+    const known = await db.select().from(paymentRefunds).where(eq(paymentRefunds.stripeRefundId, r.id));
+    if (known.length) {
+      // Already put against a payment: only how it's going can change (and, when it's all on one payment, the amount).
+      await db.update(paymentRefunds).set({ status, reason: r.reason ?? null, ...(known.length === 1 ? { amountCents: r.amount } : {}) }).where(eq(paymentRefunds.stripeRefundId, r.id));
+      continue;
+    }
+    // Whose refund it is: the payment Crewdesk made it for. One made in Stripe's own dashboard goes on the
+    // only payment, or, for a charge that paid several invoices, is shared out across them (oldest first,
+    // each up to what's left on it).
+    const named = pays.find((p) => p.id === r.metadata?.crewdeskPaymentId);
+    let shares: { p: (typeof pays)[number]; cents: number }[];
+    if (named) shares = [{ p: named, cents: r.amount }];
+    else if (pays.length === 1) shares = [{ p: pays[0], cents: r.amount }];
+    else {
+      const have = await refundRows();
+      let left = r.amount;
+      shares = [];
+      for (const [i, p] of pays.entries()) {
+        const room = p.amountCents - have.filter((x) => x.paymentId === p.id && REFUNDING.includes(x.status)).reduce((s, x) => s + x.amountCents, 0);
+        const cents = i === pays.length - 1 ? left : Math.min(left, Math.max(0, room));
+        if (cents > 0) shares.push({ p, cents });
+        left -= cents;
+      }
+    }
+    for (const { p, cents } of shares) {
+      await db.insert(paymentRefunds).values({
+        companyId, paymentId: p.id, invoiceId: p.invoiceId, stripeRefundId: r.id, amountCents: cents, status, reason: r.reason ?? null,
+        note: r.metadata?.crewdeskNote ?? null, refundedOn: localDate(new Date(r.created * 1000), co?.tz ?? "America/Chicago"),
+      }).onConflictDoUpdate({ target: [paymentRefunds.stripeRefundId, paymentRefunds.paymentId], set: { status, reason: r.reason ?? null } });
+    }
   }
-  const rows = await db.select().from(paymentRefunds).where(eq(paymentRefunds.paymentId, p.id));
-  const refunded = Math.min(p.amountCents, rows.filter((r) => REFUNDING.includes(r.status)).reduce((s, r) => s + r.amountCents, 0));
-  if (refunded !== p.refundedCents) {
-    await db.update(invoicePayments).set({ refundedCents: refunded }).where(eq(invoicePayments.id, p.id));
-    await refreshInvoice(db, p.invoiceId);
-    queueBillingSync(() => syncPayment(companyId, p.id));
+  const all = await refundRows();
+  let total = 0;
+  for (const p of pays) {
+    const rows = all.filter((x) => x.paymentId === p.id);
+    const refunded = Math.min(p.amountCents, rows.filter((r) => REFUNDING.includes(r.status)).reduce((s, r) => s + r.amountCents, 0));
+    total += refunded;
+    if (refunded !== p.refundedCents) {
+      await db.update(invoicePayments).set({ refundedCents: refunded }).where(eq(invoicePayments.id, p.id));
+      await refreshInvoice(db, p.invoiceId);
+      queueBillingSync(() => syncPayment(companyId, p.id));
+    }
+    for (const r of rows.filter((x) => !x.notifiedAt && (x.status === "succeeded" || x.status === "pending"))) {
+      // Claim it first, so two updates arriving together send one email.
+      const [claimed] = await db.update(paymentRefunds).set({ notifiedAt: new Date() }).where(and(eq(paymentRefunds.id, r.id), isNull(paymentRefunds.notifiedAt))).returning();
+      if (claimed) await sendRefundEmail(companyId, p, r.amountCents).catch((e) => console.error("Refund email failed:", (e as Error).message));
+    }
   }
-  for (const r of rows.filter((x) => !x.notifiedAt && (x.status === "succeeded" || x.status === "pending"))) {
-    // Claim it first, so two updates arriving together send one email.
-    const [claimed] = await db.update(paymentRefunds).set({ notifiedAt: new Date() }).where(and(eq(paymentRefunds.id, r.id), isNull(paymentRefunds.notifiedAt))).returning();
-    if (claimed) await sendRefundEmail(companyId, p, r.amountCents).catch((e) => console.error("Refund email failed:", (e as Error).message));
-  }
-  return { refundedCents: refunded };
+  return { refundedCents: total };
 }
 
-/** Refunds part or all of a card or bank payment through Stripe (staff, from the invoice page). */
+/**
+ * Refunds part or all of a card or bank payment through Stripe (staff, from the invoice page). For
+ * an invoice paid together with others in one charge, this refunds that invoice's share of the
+ * charge (a partial refund of it); the other invoices' payments aren't touched.
+ */
 export async function refundPayment(companyId: string, paymentId: string, o: { amountCents?: number; reason: (typeof REFUND_REASONS)[number]; note?: string | null; by: string }) {
   const [p] = await db.select().from(invoicePayments).where(and(eq(invoicePayments.id, paymentId), eq(invoicePayments.companyId, companyId)));
   if (!p) throw new HttpError(404, "Payment not found");
@@ -317,7 +473,7 @@ export async function refundPayment(companyId: string, paymentId: string, o: { a
   await db.insert(paymentRefunds).values({
     companyId, paymentId: p.id, invoiceId: p.invoiceId, stripeRefundId: refund.id, amountCents: refund.amount, status: refund.status ?? "pending",
     reason: refund.reason ?? o.reason, note: o.note ?? null, createdById: o.by, refundedOn: localDate(new Date(refund.created * 1000), co?.tz ?? "America/Chicago"),
-  }).onConflictDoUpdate({ target: paymentRefunds.stripeRefundId, set: { createdById: o.by, note: o.note ?? null } });
+  }).onConflictDoUpdate({ target: [paymentRefunds.stripeRefundId, paymentRefunds.paymentId], set: { createdById: o.by, note: o.note ?? null } });
   await syncRefunds(companyId, p.stripePaymentId);
   return { refundId: refund.id, status: refund.status, amountCents: refund.amount };
 }

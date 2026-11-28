@@ -332,6 +332,133 @@ describe("Pay links and payments", () => {
     expect((await call("POST", `/pay/${token}/invoices/${second}/pay`, null)).status).toBe(410);
   });
 
+  it("several invoices are paid in one payment from the link: one charge, a payment on each invoice, one receipt", async () => {
+    ID.una = (await call("POST", "/customers", "owner", { firstName: "Una", lastName: "United", email: email("una"), property: { street: "8 Fir St", city: "Norman", zip: "73069" } })).body.id;
+    const a = await sentInvoice(ID.una, 6500, ["paper"]), b = await sentInvoice(ID.una, 11000, ["paper"]), c = await sentInvoice(ID.una, 2000, ["paper"]);
+    const theirs = await sentInvoice(ID.other, 4200, ["paper"]);
+    const token = await tokenOf(b);
+    const number = async (id: string) => (await call("GET", `/invoices/${id}`, "office")).body.number as number;
+    const [na, nb] = [await number(a), await number(b)];
+    const view = await call("GET", `/pay/${token}`, null);
+    expect(view.body.account.invoices.map((i: any) => [i.id, i.payableCents])).toEqual([[a, 6500], [b, 11000], [c, 2000]]);
+
+    // Only this customer's own unpaid invoices, and at least one of them.
+    const pay = (invoiceIds: unknown) => call("POST", `/pay/${token}/account/pay`, null, { invoiceIds });
+    expect((await pay([])).status).toBe(400);
+    expect((await pay([a, theirs])).body.error).toMatch(/can't be paid from this link/);
+    expect((await pay([a, "00000000-0000-4000-8000-000000000000"])).status).toBe(400);
+    // One invoice alone is an ordinary payment for that invoice.
+    expect((await pay([c])).body.amountCents).toBe(2000);
+
+    // Two of the three, ticked together: one charge for both.
+    const start = await pay([b, a]);
+    expect(start.status).toBe(200);
+    expect(start.body.amountCents).toBe(17500);
+    const pi = intents.get(start.body.paymentIntentId)!;
+    expect(pi.amount).toBe(17500);
+    expect(pi.metadata.crewdeskSplit).toBe(`${a}:6500,${b}:11000`);
+    expect(pi.description).toBe(`Invoices ${na} and ${nb} from Portal Co`);
+    // Not paid yet: nothing is recorded.
+    expect((await call("POST", `/pay/${token}/account/confirm`, null, { paymentIntentId: pi.id })).body.status).toBe("failed");
+    expect((await call("GET", `/invoices/${a}`, "office")).body.payments).toHaveLength(0);
+
+    pi.status = "succeeded";
+    sent.length = 0;
+    const done = await call("POST", `/pay/${token}/account/confirm`, null, { paymentIntentId: pi.id });
+    expect(done.body).toMatchObject({ status: "completed", invoice: { id: b, status: "paid", balanceCents: 0 } });
+    // The third invoice is what's left on the account.
+    expect(done.body.account.totalDueCents).toBe(2000);
+    expect(done.body.account.invoices.filter((i: any) => i.balanceCents > 0).map((i: any) => i.id)).toEqual([c]);
+    // Each invoice has its own payment for its share, with the card, and the one fee ($5.38 on $175.00) divided in proportion.
+    const pa = (await call("GET", `/invoices/${a}`, "office")).body, pb = (await call("GET", `/invoices/${b}`, "office")).body;
+    expect(pa).toMatchObject({ status: "paid", paidCents: 6500 });
+    expect(pb).toMatchObject({ status: "paid", paidCents: 11000 });
+    expect(pa.payments).toHaveLength(1);
+    expect(pa.payments[0]).toMatchObject({ method: "card", methodDetail: "Visa ·· 4242", status: "completed", amountCents: 6500 });
+    expect(pb.payments[0]).toMatchObject({ method: "card", status: "completed", amountCents: 11000 });
+    expect(pa.payments[0].feeCents + pb.payments[0].feeCents).toBe(Math.round(17500 * 0.029 + 30));
+    expect(pa.payments[0].feeCents).toBe(Math.floor((Math.round(17500 * 0.029 + 30) * 6500) / 17500));
+    expect(pa.payments[0].note).toBe(`Paid online with invoices ${na} and ${nb}, in one payment of $175.00`);
+    // One receipt for the whole payment, naming both invoices.
+    const receipts = sent.filter((m) => m.to === email("una"));
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0].subject).toBe(`Payment received: invoice ${na} and ${nb} from Portal Co`);
+    expect(receipts[0].text).toContain("$175.00");
+    // The webhook, and asking again, record nothing more.
+    expect(await webhook("payment_intent.succeeded", pi.id)).toBe(200);
+    await call("POST", `/pay/${token}/account/confirm`, null, { paymentIntentId: pi.id });
+    expect((await call("GET", `/invoices/${a}`, "office")).body.payments).toHaveLength(1);
+    expect(sent.filter((m) => m.to === email("una"))).toHaveLength(1);
+    // Paid invoices can't be paid again.
+    expect((await pay([a, c])).body.error).toMatch(/can't be paid from this link/);
+    ID.unaA = a; ID.unaB = b; ID.unaPi = pi.id;
+  });
+
+  it("refunding one invoice of a combined payment is a partial refund of the charge; a refund made in Stripe is shared out", async () => {
+    const refund = (id: string, paymentId: string, body: unknown) => call("POST", `/invoices/${id}/payments/${paymentId}/refund`, "owner", body);
+    const inv = async (id: string) => (await call("GET", `/invoices/${id}`, "office")).body;
+    let a = await inv(ID.unaA), b = await inv(ID.unaB);
+    // More than that invoice's share can't be refunded from it, however large the charge was.
+    expect((await refund(ID.unaA, a.payments[0].id, { amountCents: 7000, reason: "requested_by_customer" })).body.error).toMatch(/more than the \$65\.00 left/);
+    // $20 back on the first invoice: Stripe refunds $20 of the $175 charge, and only that invoice owes again.
+    const r = await refund(ID.unaA, a.payments[0].id, { amountCents: 2000, reason: "requested_by_customer", note: "Missed the back yard" });
+    expect(r.status).toBe(200);
+    const made = [...refunds.values()].filter((x) => x.payment_intent === ID.unaPi);
+    expect(made.map((x) => [x.amount, x.metadata.crewdeskPaymentId])).toEqual([[2000, a.payments[0].id]]);
+    a = await inv(ID.unaA); b = await inv(ID.unaB);
+    expect(a).toMatchObject({ status: "partial", balanceCents: 2000 });
+    expect(a.payments[0]).toMatchObject({ amountCents: 6500, refundedCents: 2000 });
+    expect(b).toMatchObject({ status: "paid", balanceCents: 0 });
+    expect(b.payments[0].refundedCents).toBe(0);
+
+    // The office refunds $120 of the charge in Stripe's own dashboard, which knows nothing of invoices:
+    // it's put on the invoices in order, each up to what's left on it ($45 on the first, $75 on the second).
+    const outside = addRefund(ID.unaPi, 12000);
+    expect(await webhook("refund.created", ID.unaPi, WEBHOOK_SECRET, outside)).toBe(200);
+    a = await inv(ID.unaA); b = await inv(ID.unaB);
+    expect(a.payments[0].refundedCents).toBe(6500);
+    expect(b.payments[0].refundedCents).toBe(7500);
+    expect(a).toMatchObject({ status: "sent", balanceCents: 6500 });
+    expect(b).toMatchObject({ status: "partial", balanceCents: 7500 });
+    // The same news again changes nothing.
+    expect(await webhook("charge.refunded", ID.unaPi, WEBHOOK_SECRET, { id: "ch_2", object: "charge", payment_intent: ID.unaPi })).toBe(200);
+    expect((await inv(ID.unaB)).payments[0].refundedCents).toBe(7500);
+    // What's left on the second invoice's payment can still be refunded from Crewdesk, and no more than that.
+    expect((await refund(ID.unaB, b.payments[0].id, { amountCents: 4000, reason: "requested_by_customer" })).body.error).toMatch(/more than the \$35\.00 left/);
+    expect((await refund(ID.unaB, b.payments[0].id, { reason: "requested_by_customer" })).status).toBe(200);
+    expect((await inv(ID.unaB)).payments[0].refundedCents).toBe(11000);
+    expect([...refunds.values()].filter((x) => x.payment_intent === ID.unaPi).reduce((s, x) => s + x.amount, 0)).toBe(17500);
+  });
+
+  it("a combined bank payment waits on every invoice until it clears, and a failed one leaves them all unpaid", async () => {
+    ID.bev = (await call("POST", "/customers", "owner", { firstName: "Bev", lastName: "Bank", email: email("bev"), property: { street: "2 Yew St", city: "Norman", zip: "73069" } })).body.id;
+    const a = await sentInvoice(ID.bev, 5000, ["paper"]), b = await sentInvoice(ID.bev, 7000, ["paper"]);
+    const token = await tokenOf(a);
+    const inv = async (id: string) => (await call("GET", `/invoices/${id}`, "office")).body;
+    const start = await call("POST", `/pay/${token}/account/pay`, null, { invoiceIds: [a, b] });
+    const pi = intents.get(start.body.paymentIntentId)!;
+    pi.pmType = "us_bank_account"; pi.status = "processing";
+    expect((await call("POST", `/pay/${token}/account/confirm`, null, { paymentIntentId: pi.id })).body.status).toBe("pending");
+    // On its way: both invoices show it, neither is paid, and neither can be paid again meanwhile.
+    for (const id of [a, b]) expect((await inv(id)).payments.map((p: any) => p.status)).toEqual(["pending"]);
+    expect((await inv(a)).status).toBe("sent");
+    const acct = (await call("GET", `/pay/${token}`, null)).body.account;
+    expect(acct.invoices.map((i: any) => i.payableCents)).toEqual([0, 0]);
+    expect((await call("POST", `/pay/${token}/account/pay`, null, { invoiceIds: [a, b] })).status).toBe(400);
+    // The bank says no: both go back to unpaid, with nothing counted.
+    pi.status = "requires_payment_method";
+    expect(await webhook("payment_intent.payment_failed", pi.id)).toBe(200);
+    for (const id of [a, b]) expect(await inv(id)).toMatchObject({ status: "sent", paidCents: 0 });
+    expect((await call("GET", `/pay/${token}`, null)).body.account.invoices.map((i: any) => i.payableCents)).toEqual([5000, 7000]);
+    // A second try that clears pays both.
+    const again = await call("POST", `/pay/${token}/account/pay`, null, { invoiceIds: [a, b] });
+    const pi2 = intents.get(again.body.paymentIntentId)!;
+    expect(pi2.id).not.toBe(pi.id);
+    pi2.status = "succeeded";
+    expect(await webhook("payment_intent.succeeded", pi2.id)).toBe(200);
+    for (const id of [a, b]) expect((await inv(id)).status).toBe("paid");
+  });
+
   it("pay links stop working when expired or the invoice is void", async () => {
     const id = await sentInvoice(ID.pat, 3000, ["paper"]);
     const token = await tokenOf(id);

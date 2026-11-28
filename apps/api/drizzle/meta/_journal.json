@@ -792,6 +792,13 @@
       "when": 1795828485488,
       "tag": "0112_invoice_layouts",
       "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1795834000361,
+      "tag": "0113_payments_for_several_invoices",
+      "breakpoints": true
     }
   ]
 }

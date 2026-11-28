@@ -2003,7 +2003,10 @@ export const invoicePayments = pgTable(
     note: text("note"),
     /** "completed", "pending" (a bank payment clearing), "failed" or "void". */
     status: text("status").notNull().default("completed"),
-    /** Stripe PaymentIntent id (pi_…) for card and bank payments. */
+    /**
+     * Stripe PaymentIntent id (pi_…) for card and bank payments. A payment for several invoices at
+     * once is one charge with a row here for each invoice (its share), all with the same id.
+     */
     stripePaymentId: text("stripe_payment_id"),
     /** "Visa ·· 4242" or "Arvest checking ·· 6789". */
     methodDetail: text("method_detail"),
@@ -2025,7 +2028,7 @@ export const invoicePayments = pgTable(
   (t) => [
     index("invoice_payments_invoice_idx").on(t.invoiceId),
     index("invoice_payments_company_idx").on(t.companyId, t.receivedOn),
-    uniqueIndex("invoice_payments_stripe_idx").on(t.stripePaymentId),
+    uniqueIndex("invoice_payments_stripe_idx").on(t.stripePaymentId, t.invoiceId),
   ],
 );
 
@@ -2192,7 +2195,7 @@ export const paymentRefunds = pgTable(
     notifiedAt: timestamp("notified_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
-  (t) => [index("payment_refunds_payment_idx").on(t.paymentId), uniqueIndex("payment_refunds_stripe_idx").on(t.stripeRefundId)],
+  (t) => [index("payment_refunds_payment_idx").on(t.paymentId), uniqueIndex("payment_refunds_stripe_idx").on(t.stripeRefundId, t.paymentId)],
 );
 
 export const portalCodes = pgTable(

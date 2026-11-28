@@ -1194,9 +1194,20 @@ form and go straight to Stripe; Crewdesk never sees or keeps them.
   "Or pay online" with the portal address on the stub. The link opens that invoice with no sign-in and works for
   **30 days** after the invoice was last sent (sending it again restarts the 30 days). When the customer owes on
   other invoices too, the page starts with the **Total amount due** on their account and lists each invoice with a
-  balance; **View and pay** opens any of them from the same link. Each invoice is paid with its own payment, so
-  your records and the books still show one payment per invoice. On the invoice page, **Copy pay link** gives you
-  the link to text or read to a customer.
+  balance, all ticked. They untick any they don't want to pay now and click **Pay**: the ticked invoices are paid
+  together in **one payment** (up to 10 at a time; one ticked invoice is an ordinary payment for it). **View**
+  shows any of the invoices underneath.
+  On the invoice page, **Copy pay link** gives you the link to text or read to a customer.
+  - **What you see for a combined payment:** the customer's card or bank account is charged once. Each invoice it
+    paid gets its own payment for its share, saying "Paid online with invoices 1003 and 1004, in one payment of
+    $175.00", so every invoice still shows as paid on its own page, in reports and in the books. Stripe's one fee
+    is divided between the invoices in proportion. The customer gets **one receipt** naming every invoice.
+  - **Bank payments** take about 4 business days: until then every invoice in the payment shows it as on its way,
+    and if the bank turns it down they all go back to unpaid.
+  - **Refunds:** refund from the invoice's page as usual. On a combined payment that refunds **that invoice's
+    share** (a partial refund of the one charge) and leaves the other invoices alone; you can't refund more than
+    the invoice's share from it. A refund made in Stripe's own dashboard on a combined charge is put on its
+    invoices in order, oldest first, each up to what's left on it.
 - **Customer portal** (management.prospray.net/portal): customers type the email address on their account (or the
   email of a contact marked "copy on invoices"), get a 6-digit code or a sign-in link by email, and see their balance,
   invoices to pay, paid invoices and PDFs, and past payments. They can pay any open invoice and fix their phone number

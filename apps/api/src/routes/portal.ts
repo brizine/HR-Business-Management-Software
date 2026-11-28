@@ -14,7 +14,7 @@ import { randomToken, sha256 } from "../lib/crypto";
 import { companyToday } from "../lib/payRates";
 import { invoicePdf } from "../lib/invoicePdf";
 import { queueBillingSync, syncCustomer } from "../lib/billingSync";
-import { recordPaymentIntent, startInvoicePayment, startPrepaymentPayment, stripeConfig } from "../lib/stripe";
+import { MAX_INVOICES_PER_PAYMENT, recordPaymentIntent, startAccountPayment, startInvoicePayment, startPrepaymentPayment, stripeConfig } from "../lib/stripe";
 import { cashLeft, nextPrepaymentNumber } from "../lib/prepayments";
 import { prepaymentView } from "./prepayments";
 import { companyForPdf, pdfInvoice, sendPdf } from "./invoices";
@@ -423,9 +423,17 @@ const payLinkRoutes: FastifyPluginAsync = async (app) => {
       .orderBy(asc(invoices.issueDate), asc(invoices.number));
     const today = await companyToday(inv.companyId);
     const open = rows.filter((i) => i.id === inv.id || (i.status !== "paid" && invoiceBalance(i) > 0));
+    // A bank payment still clearing has that much of an invoice spoken for.
+    const pending = open.length ? await db.select({ invoiceId: invoicePayments.invoiceId, cents: invoicePayments.amountCents }).from(invoicePayments)
+      .where(and(inArray(invoicePayments.invoiceId, open.map((i) => i.id)), eq(invoicePayments.status, "pending"))) : [];
+    const onItsWay = (id: string) => pending.filter((p) => p.invoiceId === id).reduce((s, p) => s + p.cents, 0);
     return {
       totalDueCents: open.reduce((s, i) => s + Math.max(0, invoiceBalance(i)), 0),
-      invoices: open.map((i) => ({ id: i.id, number: i.number, issueDate: i.issueDate, dueDate: i.dueDate, balanceCents: Math.max(0, invoiceBalance(i)), overdue: isOverdue(i, today), linked: i.id === inv.id })),
+      invoices: open.map((i) => ({
+        id: i.id, number: i.number, issueDate: i.issueDate, dueDate: i.dueDate, balanceCents: Math.max(0, invoiceBalance(i)),
+        /** What can be paid now: the balance, less any bank payment on its way. */
+        payableCents: Math.max(0, invoiceBalance(i) - onItsWay(i.id)), overdue: isOverdue(i, today), linked: i.id === inv.id,
+      })),
     };
   }
   /** The link's own invoice, or another sent invoice of the same customer opened from it. */
@@ -441,6 +449,22 @@ const payLinkRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { token: string } }>("/:token", limited, async (req) => {
     const inv = await byToken(req.params.token);
     return { ...(await companyInfo(inv.companyId)), invoice: await invoiceDetail(inv.companyId, inv), account: await accountOf(inv) };
+  });
+
+  /** One payment for the invoices the customer ticked (any of theirs with a balance). */
+  app.post<{ Params: { token: string } }>("/:token/account/pay", limited, async (req) => {
+    const linked = await byToken(req.params.token);
+    const { invoiceIds, save } = parse(z.object({ invoiceIds: z.array(z.string().uuid()).min(1, "Pick at least one invoice to pay").max(MAX_INVOICES_PER_PAYMENT, `Up to ${MAX_INVOICES_PER_PAYMENT} invoices can be paid at once`), save: z.boolean().optional() }), req.body);
+    const open = new Set((await accountOf(linked)).invoices.filter((i) => i.payableCents > 0).map((i) => i.id));
+    if (invoiceIds.some((id) => !open.has(id))) throw new HttpError(400, "One of those invoices can't be paid from this link any more. Reload the page and try again");
+    return startAccountPayment(linked.companyId, invoiceIds, { save: !!save });
+  });
+  app.post<{ Params: { token: string } }>("/:token/account/confirm", limited, async (req) => {
+    const linked = await byToken(req.params.token);
+    const { paymentIntentId } = parse(z.object({ paymentIntentId: z.string().regex(/^pi_[A-Za-z0-9]+$/) }), req.body);
+    const result = await recordPaymentIntent(linked.companyId, paymentIntentId);
+    const [fresh] = await db.select().from(invoices).where(eq(invoices.id, linked.id));
+    return { ...result, invoice: await invoiceDetail(linked.companyId, fresh), account: await accountOf(linked) };
   });
 
   // Another of the customer's invoices, opened from the link.
