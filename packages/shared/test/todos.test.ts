@@ -33,7 +33,7 @@ describe("to-do form", () => {
     expect(errors({ ...base, rule: { freq: "weekly", end: "date", until: "2026-11-01" } })).toEqual(["rule.until: Pick a last date after the first one"]);
     expect(errors({ ...base, rule: { freq: "daily", end: "count" } })).toEqual(["rule.count: How many to-dos?"]);
     expect(errors({ ...base, rule: { freq: "daily", end: "never" } })).toEqual([]);
-    expect(errors({ ...base, rule: { freq: "weekly", end: "never" }, endDate: "2026-11-25" })).toEqual(["endDate: Repeating to-dos are one day each"]);
+    expect(errors({ ...base, rule: { freq: "weekly", end: "never" }, endDate: "2026-11-25" })).toEqual(["endDate: Recurring to-dos are one day each"]);
     // Edits don't take a repeat.
     expect(todoUpdateSchema.parse({ ...base, rule: { freq: "daily", end: "never" } })).not.toHaveProperty("rule");
   });

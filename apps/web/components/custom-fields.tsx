@@ -241,7 +241,7 @@ export function CustomFacts({ target, values }: { target: CustomFieldTarget; val
   return <>{(list.data ?? []).filter((f) => !blank(values?.[f.id])).map((f) => <Fragment key={f.id}><dt>{f.name}</dt><dd>{formatCustomValue(f, values?.[f.id])}</dd></Fragment>)}</>;
 }
 
-/** A record's filled-in custom values as table rows (the to-do job sheet). */
+/** A record's filled-in custom values as table rows (the to-do sheet). */
 export function CustomRows({ target, values }: { target: CustomFieldTarget; values: CustomValues | null | undefined }) {
   const list = useCustomFields(values && Object.keys(values).length ? target : null);
   return <>{(list.data ?? []).filter((f) => !blank(values?.[f.id])).map((f) => <tr key={f.id}><th scope="row">{f.name}</th><td>{formatCustomValue(f, values?.[f.id])}</td></tr>)}</>;

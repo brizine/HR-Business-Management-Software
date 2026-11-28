@@ -1161,7 +1161,7 @@ a.pt-row:hover { background: var(--bg); }
 .todo-pop-list li .todo-check { margin-top: 9px; }
 .todo-pop-list li button { flex: 1; min-width: 0; }
 @media (max-width: 600px) { .todo-details { padding-left: 12px; } }
-/* To-dos like Homeworks': the scheduling panel, repeat options, weekly hours chart, job sheet. */
+/* To-dos like Homeworks': the scheduling panel, repeat options, weekly hours chart, to-do sheet. */
 .todo-sched { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 28px; background: color-mix(in srgb, var(--muted) 8%, var(--surface)); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
 .todo-sched > .stack { align-content: start; }
 @media (max-width: 760px) { .todo-sched { grid-template-columns: 1fr; } }

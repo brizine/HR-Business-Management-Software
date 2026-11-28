@@ -14,7 +14,7 @@ import { CustomFieldsCard, CustomRows } from "@/components/custom-fields";
 type Detail = Todo & { seriesLeft: number; seriesEnd: string | null; today: string };
 
 /**
- * A to-do's job sheet (Homeworks' "Work Order" view of a to-do): what, where, who and the notes in
+ * A to-do's sheet, the "to-do sheet" (Homeworks' "Work Order" view of a to-do): what, where, who and the notes in
  * one printable table; work tracking (Start work / Stop / Done); notes for the dispatcher; photos
  * and documents. Edit opens the form with Delete and Complete, as in Homeworks.
  */

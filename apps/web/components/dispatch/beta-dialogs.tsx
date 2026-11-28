@@ -126,7 +126,7 @@ export function RescheduleDialog({ events, today, onClose, onDone }: { events: D
       <MiniCal value={date} onPick={setDate} today={today} />
       {date && <p className="dx-note">Moving to <strong>{dateLabel(date, { weekday: "long", month: "long", day: "numeric" })}</strong>. Who does {events.length === 1 ? "it" : "them"} stays the same.</p>}
       {skipped > 0 && <p className="dx-note">{skipped} skipped event{skipped === 1 ? "" : "s"} will be re-opened.</p>}
-      {recurring > 0 && <p className="dx-note">{recurring === 1 && events.length === 1 ? "This one is part of a repeating series: only this visit moves." : `${recurring} of these repeat: only these visits move, not the rest of each series.`}</p>}
+      {recurring > 0 && <p className="dx-note">{recurring === 1 && events.length === 1 ? "This one is part of a recurring series: only this visit moves." : `${recurring} of these repeat: only these visits move, not the rest of each series.`}</p>}
       {events.some((e) => e.route) && <p className="dx-note">Stops on a route come off it; route them again on their new day.</p>}
       {error && <p className="dx-error">{error}</p>}
     </Dialog>

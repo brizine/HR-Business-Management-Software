@@ -125,7 +125,7 @@ function checkVisit(v: Partial<VisitFields>, ctx: z.RefinementCtx) {
     ctx.addIssue({ code: "custom", path: ["endTime"], message: "The end time must be after the start time" });
   }
   if (v.scheduling === "repeat") {
-    if (v.endDate && v.endDate !== v.date) ctx.addIssue({ code: "custom", path: ["endDate"], message: "Repeating work orders are one day each" });
+    if (v.endDate && v.endDate !== v.date) ctx.addIssue({ code: "custom", path: ["endDate"], message: "Recurring work orders are one day each" });
     if (!v.repeatUntil) ctx.addIssue({ code: "custom", path: ["repeatUntil"], message: "Pick the last date it repeats" });
     else if (v.date && v.repeatUntil <= v.date) ctx.addIssue({ code: "custom", path: ["repeatUntil"], message: "Pick a date after the first one" });
     else if (v.date && daysBetween(v.date, v.repeatUntil) > VISIT_REPEAT_MAX_DAYS) ctx.addIssue({ code: "custom", path: ["repeatUntil"], message: "A series can run up to three years" });

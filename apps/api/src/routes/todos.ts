@@ -455,7 +455,7 @@ const routes: FastifyPluginAsync = async (app) => {
     return show(t.id);
   });
 
-  /** Work tracking (Homeworks' "Start Work" on the job sheet): start the timer. */
+  /** Work tracking (Homeworks' "Start Work" on the to-do's sheet): start the timer. */
   app.post<{ Params: { id: string } }>("/:id/start", async (req) => {
     const t = await workOn(req, req.params.id);
     if (t.doneAt) throw new HttpError(400, "This to-do is done; undo that to track more time");

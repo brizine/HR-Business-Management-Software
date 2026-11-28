@@ -477,8 +477,8 @@ export function ReviewTab({ onChanged }: { onChanged?: () => void }) {
         </div>
       </div>
       {asking && (
-        <ConfirmDialog title="Review Automation Job" busy={busy} onNo={() => setAsking(null)}
-          message={asking.decision === "send" ? "Do you really want to approve this automation job?" : "Do you really want to reject this automation job?"}
+        <ConfirmDialog title="Review Automation Action" busy={busy} onNo={() => setAsking(null)}
+          message={asking.decision === "send" ? "Do you really want to approve this automation action?" : "Do you really want to reject this automation action?"}
           onYes={() => run(async () => { try { await api(`/automations/steps/${asking.item.id}/review`, { body: { decision: asking.decision } }); } finally { setAsking(null); } list.reload(); onChanged?.(); })} />
       )}
     </>

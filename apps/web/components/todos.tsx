@@ -101,7 +101,7 @@ export function TodoItem({ t, today, onChange, onOpen, open, showDate, extra, ch
   );
 }
 
-/** The details under an opened to-do: notes, gate code, who made it, and Job sheet / Edit / Delete. */
+/** The details under an opened to-do: notes, gate code, who made it, and To-do sheet / Edit / Delete. */
 export function TodoDetails({ t, onEdit, onDeleted }: { t: Todo; onEdit: () => void; onDeleted: () => void }) {
   const { me, can } = useAuth();
   const del = useAction();
@@ -130,7 +130,7 @@ export function TodoDetails({ t, onEdit, onDeleted }: { t: Todo; onEdit: () => v
         {t.doneAt && <><dt>Done</dt><dd>{new Date(t.doneAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}{t.doneBy ? ` by ${t.doneBy}` : ""}</dd></>}
       </dl>
       <div className="row">
-        <Link className="btn primary" href={`/todos/${t.id}`}>Open job sheet</Link>
+        <Link className="btn primary" href={`/todos/${t.id}`}>Open to-do sheet</Link>
         {canEdit && <button type="button" className="btn" onClick={onEdit}>Edit</button>}
         {canEdit && (t.seriesId ? (
           <>
@@ -591,7 +591,7 @@ export function TodoForm({ todo, preset, today, onSaved, onCancel }: {
 }
 
 /**
- * Work tracking (Homeworks' "Start Work" on the job sheet): start a timer, stop it (the time is
+ * Work tracking (Homeworks' "Start Work" on the to-do's sheet): start a timer, stop it (the time is
  * kept), and mark the to-do done, which stops it too.
  */
 export function WorkTracking({ t, onChange, canWork }: { t: Todo; onChange: (t: Todo) => void; canWork: boolean }) {

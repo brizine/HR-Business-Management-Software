@@ -79,7 +79,7 @@ async function recordValues(req: FastifyRequest, target: CustomFieldTarget, id: 
 
 /**
  * Custom fields (Homeworks' Custom Fields page): everyone signed in can read the fields (so forms
- * and job sheets can show them); owners and admins add, change, order and delete them.
+ * and to-do sheets can show them); owners and admins add, change, order and delete them.
  */
 const routes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticate);

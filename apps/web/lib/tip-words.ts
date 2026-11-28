@@ -187,7 +187,7 @@ export const TIPS_NAV: Record<string, string> = {
   "new dispatch": "The beta dispatch board, laid out like Homeworks'",
   "work orders": "Every work order: scheduled, in progress and done",
   "waiting list": "Services due but not yet on the schedule, to pick from and schedule",
-  "to-dos": "Tasks for you and your team, one-off or repeating",
+  "to-dos": "Tasks for you and your team, one time or recurring",
   invoices: "Bills to customers: write, send, take payment, see what's owed",
   estimates: "Quotes for customers to accept, with an optional deposit",
   "sales tax report": "Sales and the tax collected, by period, for filing",

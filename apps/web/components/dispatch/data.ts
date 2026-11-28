@@ -251,7 +251,7 @@ export function filterValues(e: DEvent, key: string): string[] {
 }
 const FIXED_OPTIONS: Record<string, [string, string][]> = {
   status: [["open", "Open"], ["skipped", "Skipped"], ["completed", "Complete"]],
-  recurring: [["recurring", "Recurring"], ["once", "One-time"]],
+  recurring: [["recurring", "Recurring"], ["once", "One time"]],
   invoice: [["invoiced", "Invoiced"], ["not", "Not invoiced"]],
   tracked: [["has", "Has time tracked"], ["none", "No time tracked"]],
   visitNotes: [["has", "Has visit notes"], ["none", "Does not have visit notes"]],

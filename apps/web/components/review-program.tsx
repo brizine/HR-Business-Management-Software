@@ -154,7 +154,7 @@ function ProgramEditor({ program, onSaved, onCancel }: { program: ReviewProgram;
             <label>When
               <select value={r.schedule} onChange={(e) => update(i, e.target.value === "after_hire" ? { schedule: "after_hire", days: r.days ?? 90 } : { schedule: "every", months: r.months ?? 12, anchor: r.anchor ?? "hire" })}>
                 <option value="after_hire">Once, X days after hire</option>
-                <option value="every">Repeating, every X months</option>
+                <option value="every">Recurring, every X months</option>
               </select>
             </label>
             {r.schedule === "after_hire" ? (

@@ -284,7 +284,7 @@ function checkTodo(v: Partial<TodoFields>, ctx: z.RefinementCtx) {
   }
   const r = v.rule;
   if (!r || !v.date) return;
-  if (v.endDate && v.endDate !== v.date) ctx.addIssue({ code: "custom", path: ["endDate"], message: "Repeating to-dos are one day each" });
+  if (v.endDate && v.endDate !== v.date) ctx.addIssue({ code: "custom", path: ["endDate"], message: "Recurring to-dos are one day each" });
   if (r.end === "date") {
     if (!r.until) return ctx.addIssue({ code: "custom", path: ["rule", "until"], message: "Pick the last date you'll make a to-do" });
     if (r.until < v.date) return ctx.addIssue({ code: "custom", path: ["rule", "until"], message: "Pick a last date after the first one" });

@@ -44,7 +44,7 @@ export default function PayPeriodApproval() {
           {unapproved > 0 && (
             <div className="row"><Badge value="pending" /> <span>{unapproved} time entr{unapproved === 1 ? "y hasn't" : "ies haven't"} been approved by a manager yet.</span> <Link className="btn sm" href="/time">Review timesheets</Link></div>
           )}
-          <label>Note (optional)<textarea rows={2} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Checked against the job sheets" /></label>
+          <label>Note (optional)<textarea rows={2} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Checked against the work orders" /></label>
           <div><button className="btn primary" disabled={busy}>Approve pay period</button></div>
         </form>
       ) : (

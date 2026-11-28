@@ -82,7 +82,7 @@ Every page has a **top bar**, and a **left menu** for the side you're on.
   - **Price list** services by name.
   - **People** by name, **Fleet** assets by name, make, model, plate or VIN, and **Repair orders** by number
     (**RO 12**) or title. Opening a repair order shows it on the Repair Orders page, even if it's completed.
-  - **To-dos** you can see, by title or location (a repeating one shows once).
+  - **To-dos** you can see, by title or location (a recurring one shows once).
   - **Pages** you can open, by name.
 
   Customers, properties, invoices, payments and the price list only show for people with Customers & billing
@@ -1067,7 +1067,7 @@ Customers & billing set them up; managers can see them and work Review Sequence.
     asks for the password (the owner is never asked, and can take the password off).
 - **Texts** only go out **9 AM to 6 PM**; one due at night waits until 9 AM.
 - **Once each, from when it's on:** each runs once per thing that happened (an estimate, an invoice, a work
-  order, a tag change…), and only for things that happen after it's turned on. A repeating work order counts once.
+  order, a tag change…), and only for things that happen after it's turned on. A recurring work order counts once.
   Turning one off stops what's still waiting.
 - **Review Sequence:** with Review Before Execution on, each action waits here. **View message** shows it filled
   in for that customer; **Approve** sends it and **Reject** skips it (each asks "Do you really want to…?"). The tab
@@ -1186,7 +1186,7 @@ sign-off.
   - On a form you've saved, **Duplicate Form** makes "Copy - (name)" to start a similar one from.
 - **Putting forms on a work order:** the work order form has a **Visit Forms** box. Click it, search, and pick as
   many as you want (the list stays open). Forms set to attach automatically are already picked on a new work
-  order. A repeating series gets the forms on every work order in it.
+  order. A recurring series gets the forms on every work order in it.
 - **Filling one in:** on the work order, **Visit forms** lists each form with a dotted circle (not submitted) or a
   green check (submitted). Click one, answer it, sign in the box with a mouse or a finger (**Clear** starts the
   signature over) and press **Submit**. Afterwards it shows who submitted it and when, and the button becomes
@@ -1311,8 +1311,8 @@ A separate company, named after yours with "(Test)", for trying things out witho
 
 ## Work orders
 
-A **work order** is a scheduled job at a customer's property, like Homeworks' visits: "Round 3: fertilizer & weed
-control", "Core aeration". (Jobs on your own trucks and equipment are **repair orders**, under Fleet.) Work orders
+A **work order** is scheduled work at a customer's property, like Homeworks' visits: "Round 3: fertilizer & weed
+control", "Core aeration". (Work on your own trucks and equipment is a **repair order**, under Fleet.) Work orders
 are numbered **WO-1001**, **WO-1002** and so on. Open them from **Schedule → Work orders**, the **Calendar**,
 **+ New → Work order**, or the **Work orders** box on a customer's or property's page.
 
@@ -1366,7 +1366,7 @@ are numbered **WO-1001**, **WO-1002** and so on. Open them from **Schedule → W
   **Show → Ready to invoice**, pick several and **Create invoices**: one draft per customer and property, each line
   dated. Review and send them from Invoices as usual. Deleting a draft (or voiding an invoice) puts the work
   orders back in Ready to invoice.
-- **Changing one:** **Edit** on the work order (a repeating one asks: just this one, or this and the later ones
+- **Changing one:** **Edit** on the work order (a recurring one asks: just this one, or this and the later ones
   that aren't done; moving the date moves them all by as many days). Put it **On the waitlist** to take its date
   off. **Delete** (one, or this and later); work orders on an invoice stay.
 - **On the calendar** they show first, with their price (managers), the day's **$ total** and the range's total.
@@ -1601,8 +1601,8 @@ calendar: **Work orders**, **To-dos**, **Repair orders** (by due date), **Time o
   **+**); **High contrast** fills the cards with the color. **Color by event type** (brush) colors cards by type;
   turn it off to see each to-do in its own color. **Group by event type** (layers) puts each day's events under
   their type. Hide the panel with the button at its bottom (the toolbar's panel button brings it back).
-- **Filter:** **+ Filter** adds a filter you can remove: **Status** (open or done), **Repeats** (repeating or
-  one-time), **Person**, **Customer** or **Tag** (the customer's tags, and a work order's own tags). **Search events** finds a title, customer,
+- **Filter:** **+ Filter** adds a filter you can remove: **Status** (open or done), **Repeats** (recurring or
+  one time), **Person**, **Customer** or **Tag** (the customer's tags, and a work order's own tags). **Search events** finds a title, customer,
   address, note or person.
 - **Toolbar buttons:** the hourglass opens the **Waitlist** (work orders with no date and repair orders with no due date); the sliders choose
   what each card shows (time, address, customer, people, price, hours, photos, type, status, notes); the clock shows **budgeted
@@ -1664,12 +1664,12 @@ Your own fields, like Homeworks' Custom Fields: "Gallons used" on work orders, "
   - Work orders: managers, or the crew on the work order.
   - To-dos: managers, whoever made it, or the people it's for.
   - Equipment: Fleet managers.
-- **For the crew:** a work order's page and a to-do's job sheet list the property's custom fields (yard sizes and
+- **For the crew:** a work order's page and a to-do's sheet list the property's custom fields (yard sizes and
   so on) beside the gate code and access notes. The phone shows them on each work order and to-do in the Tasks tab.
 
 ## To-dos
 
-To-dos are jobs for the office or the crew, like Homeworks' to-dos: "call the HOA about the gate code", "fix
+To-dos are tasks for the office or the crew, like Homeworks' to-dos: "call the HOA about the gate code", "fix
 the sprinkler head at Jane's", "clean the sprayers every other Monday". Open them from **Schedule → To-dos** in the
 Operations menu, the to-do button in the top bar, **+ New → To-do**, or the **To-dos** box on a customer's or property's page.
 
@@ -1717,7 +1717,7 @@ Operations menu, the to-do button in the top bar, **+ New → To-do**, or the **
   off-seasons** at the bottom. Removing a category keeps its to-dos.
 - **Ticking off:** tick the box by a to-do (here, in the top bar's list, or on the phone). Untick it to undo.
   Done ones move to **Show: Done**, with who did it and when.
-- **The job sheet** (Homeworks' "Work Order" view of a to-do): **Open job sheet** on a to-do, or click one in
+- **The to-do sheet** (Homeworks' "Work Order" view of a to-do): **Open to-do sheet** on a to-do, or click one in
   search, the calendar, a notification or the top bar.
   - A printable table: **Status**, when, **Type** (Single, or Recurring and how), category, customer, property,
     location, crew, employees, **Property notes** (gate code and access notes), **Visit notes**, **Notes for
@@ -1730,11 +1730,11 @@ Operations menu, the to-do button in the top bar, **+ New → To-do**, or the **
     parts to order. Whoever made the to-do and the people it's for get a notification. Whoever wrote a note, or
     a manager, can remove it.
   - **Photos & documents:** add more, open one to view, caption, download or remove it.
-- **Editing:** **Edit to-do** on the job sheet (whoever made it, or a manager). Like Homeworks, **Delete** and
-  **Complete** sit at the top while you edit. For a repeating to-do you choose **just this one** or **this one and
+- **Editing:** **Edit to-do** on the to-do sheet (whoever made it, or a manager). Like Homeworks, **Delete** and
+  **Complete** sit at the top while you edit. For a recurring to-do you choose **just this one** or **this one and
   the later ones** that aren't done. Moving the date moves the later ones by the same number of days.
   **Delete this and later** stops the series.
-- **Repeating to-dos** are made one per date (↻ marks them). A customer's or property's page and search show
+- **Recurring to-dos** are made one per date (↻ marks them). A customer's or property's page and search show
   each series once, with how many more are coming.
 - **Your page:** the **My Tasks** box lists your to-dos for the next week, along with repair orders and
   onboarding steps.
@@ -1981,7 +1981,7 @@ employees acknowledge each one. Filters and search at the top.
   **Start review** opens a new review with the person and review type filled in.
 - **Set up review program** / **Edit program** (owners and admins): turn it on, then add, change or
   remove reviews. For each one: a name, the review type, **When** (once, X days after hire, like a
-  90-day review; or repeating every X months, counted from the hire date, from their last review of
+  90-day review; or recurring every X months, counted from the hire date, from their last review of
   that type, or from a set date for everyone), **Remind X days before**, which employment types it
   applies to (none ticked = everyone) and **Active**. **While overdue, remind again every X days**
   (blank = once). **Use the standard program** restores the 90-day and annual reviews.
