@@ -17,6 +17,7 @@ import { CustomFieldsCard } from "@/components/custom-fields";
 import { CopyPhones, CustomerEmails, EmailComposer } from "@/components/customer-messages";
 import { PaymentMethodsCard } from "@/components/payment-methods";
 import { LinkedEstimates } from "@/components/estimates";
+import { PropertyPackages } from "@/components/packages";
 import { Popover } from "@/components/customer-list";
 import { VisitFiles } from "@/components/visit-files";
 import { CustomerCalls, CustomerTexts } from "@/components/texting";
@@ -175,6 +176,8 @@ export default function CustomerDetail({ params }: { params: Promise<{ id: strin
             </div>
             <CustomerNotesBox key={`notes-${c.updatedAt}`} customer={c} onSaved={reload} />
             <JobsBox customerId={id} />
+            <PropertyPackages customerId={id} active={c.status !== "cancelled"}
+              properties={propOptions.filter((p: any) => p.role === "bill_to").map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", "), lawnSqFt: p.lawnSqFt, frontSqFt: p.frontSqFt, backSqFt: p.backSqFt, otherSqFt: p.otherSqFt, custom: p.custom }))} />
             <CustomerForms customerId={id} />
             <div className="card">
               <div className="row" style={{ justifyContent: "space-between" }}>

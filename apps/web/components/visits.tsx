@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   DEFAULT_TODO_COLOR, MONTH_SHORT, PRIORITIES, PRIORITY_LABELS, REPEAT_UNITS, TODO_COLORS, VISIT_BILLING, VISIT_BILLING_LABELS, VISIT_SCHEDULING, VISIT_SCHEDULING_LABELS,
-  describePricing, formatMoney, formatTodoTime, isInactive, lineAmount, lineTaxRate, packageToLines, priceFor, rewordForArea, taxFor as taxForLines, taxRateFor, visitDates, visitLineHours, visitNumber, withAreaNote,
+  describePricing, formatMoney, formatTodoTime, isInactive, lineAmount, lineTaxRate, priceFor, rewordForArea, taxFor as taxForLines, taxRateFor, visitDates, visitLineHours, visitNumber, withAreaNote,
   type CustomValues, type Priority, type RepeatUnit, type VisitBilling, type VisitScheduling,
 } from "@crewdesk/shared";
 import { api } from "@/lib/api";
@@ -159,7 +159,6 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
   const detail = useApi<any>(customer ? `/customers/${customer.id}` : null);
   const staff = useApi<any[]>("/employees");
   const crews = useApi<{ id: string; name: string; color: string; memberIds: string[]; active: boolean }[]>("/crews?all=1");
-  const pkgs = useApi<{ id: string; name: string; active: boolean; lines: any[] }[]>("/packages");
   const properties: any[] = (detail.data?.properties ?? []).filter((p: any) => !p.endDate);
   const property = properties.find((p) => p.id === propertyId);
   useEffect(() => { if (detail.data && !propertyId && properties.length === 1) setPropertyId(properties[0].id); }, [detail.data]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -298,21 +297,6 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
           <tfoot><tr><td colSpan={2}>
             <div className="row" style={{ gap: 6 }}>
               <button type="button" className="btn" onClick={() => setLines((ls) => [...ls, draftLine()])}><Icon name="plus" size={14} /> Add line</button>
-              {!!pkgs.data?.length && (
-                <select aria-label="Add a package" value="" className="pkg-select" onChange={(e) => {
-                  const pkg = pkgs.data?.find((p) => p.id === e.target.value);
-                  if (!pkg) return;
-                  // Each line is priced from the part of the lawn its service covers, and says so.
-                  const added = packageToLines(pkg.lines, services.data ?? [], property ?? null).map((l) => ({
-                    serviceTypeId: l.serviceTypeId, description: withAreaNote(l.description, l, sizes.names), quantity: String(l.quantity), hours: l.budgetedHours != null ? String(l.budgetedHours) : "", price: dollars(l.unitPriceCents), tax: taxFor(l.serviceTypeId), area: areaDraft(l),
-                  }));
-                  // An untouched empty first line is replaced.
-                  setLines((ls) => [...ls.filter((l) => l.description.trim() || l.price.trim()), ...added]);
-                }}>
-                  <option value="">Add package…</option>
-                  {pkgs.data.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              )}
             </div>
           </td>
             <td className="muted">{lineHours ? `${lineHours} h` : ""}</td><td style={{ textAlign: "right" }}><strong>Total</strong></td>

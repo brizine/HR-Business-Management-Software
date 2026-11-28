@@ -36,7 +36,7 @@ export function visitVisibility(req: FastifyRequest): SQL | undefined {
   return exists(db.select({ x: sql`1` }).from(visitAssignees).where(and(eq(visitAssignees.visitId, visits.id), eq(visitAssignees.employeeId, req.user.sub))));
 }
 
-async function nextVisitNumber(tx: Tx, companyId: string) {
+export async function nextVisitNumber(tx: Tx, companyId: string) {
   const [{ n }] = await tx.select({ n: max(visits.number) }).from(visits).where(eq(visits.companyId, companyId));
   return (n ?? 1000) + 1;
 }

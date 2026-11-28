@@ -1408,7 +1408,15 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .package-list > li { padding: 10px 0; border-top: 1px solid var(--border); }
 .package-list > li:first-child { border-top: 0; }
 .package-lines { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
-.pkg-select { width: auto; min-width: 170px; }
+.package-lines a { white-space: nowrap; }
+/* Package rounds: the editor on Products & services, and Add package on a property */
+.package-rounds td { vertical-align: top; }
+.package-rounds input[type="date"] { min-width: 132px; }
+.row.nowrap { flex-wrap: nowrap; gap: 4px; }
+.btn.fill-down { padding: 4px 7px; line-height: 1; }
+.missed-round { display: flex; align-items: center; gap: 8px; margin-top: 2px; font-size: 12px; }
+.missed-round label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; margin: 0; }
+.missed-round input { width: auto; margin: 0; }
 
 /* Work order photos and documents */
 .file-drop { border: 2px dashed var(--border); border-radius: 10px; padding: 18px; text-align: center; color: var(--muted); cursor: pointer; }
