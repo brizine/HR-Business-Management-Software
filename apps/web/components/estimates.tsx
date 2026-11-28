@@ -64,7 +64,7 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
   const [depositValue, setDepositValue] = useState<string>(estimate?.depositValue != null ? (estimate.depositKind === "amount" ? (estimate.depositValue / 100).toFixed(2) : String(estimate.depositValue)) : "");
   const save = useAction();
   const services = useApi<ServiceType[]>("/service-types");
-  const pkgs = useApi<{ id: string; name: string; active: boolean; lines: any[] }[]>("/packages");
+  const pkgs = useApi<{ id: string; name: string; active: boolean; rounds: any[] }[]>("/packages");
   const detail = useApi<any>(customer ? `/customers/${customer.id}` : null);
   const properties: any[] = (detail.data?.properties ?? []).filter((p: any) => !p.endDate);
   const property = properties.find((p) => p.id === propertyId);
@@ -120,7 +120,8 @@ export function EstimateForm({ estimate, preset, onSaved, onCancel }: { estimate
   const addPackage = (id: string) => {
     const p = pkgs.data?.find((x) => x.id === id);
     if (!p) return;
-    const added = p.lines.map((l: any) => {
+    // A line for each of the package's rounds, named for the round.
+    const added = p.rounds.map((l: any) => {
       const s = services.data?.find((x) => x.id === l.serviceTypeId);
       // Each line is priced from the part of the lawn its service covers, and says so.
       const area = serviceArea(s);

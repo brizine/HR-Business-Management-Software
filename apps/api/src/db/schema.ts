@@ -2403,6 +2403,9 @@ export const visits = pgTable(
     waitingSince: timestamp("waiting_since", { withTimezone: true }),
     backReason: text("back_reason"),
     crewId: uuid("crew_id").references((): AnyPgColumn => crews.id, { onDelete: "set null" }),
+    /** Made from a property's package: which one, and which of the package's rounds. */
+    propertyPackageId: uuid("property_package_id").references((): AnyPgColumn => propertyPackages.id, { onDelete: "set null" }),
+    packageRoundId: uuid("package_round_id").references((): AnyPgColumn => packageLines.id, { onDelete: "set null" }),
     /** "Every 6 weeks (not Dec, Jan, Feb)" for a series. */
     repeatLabel: text("repeat_label"),
     invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
@@ -2419,6 +2422,7 @@ export const visits = pgTable(
     index("visits_property_idx").on(t.propertyId),
     index("visits_series_idx").on(t.seriesId),
     index("visits_invoice_idx").on(t.invoiceId),
+    index("visits_property_package_idx").on(t.propertyPackageId),
   ],
 );
 
@@ -2480,7 +2484,11 @@ export const crewMembers = pgTable(
   (t) => [primaryKey({ columns: [t.crewId, t.employeeId] }), index("crew_members_employee_idx").on(t.employeeId)],
 );
 
-/** Packages: a saved bundle of line items added to a work order in one go. */
+/**
+ * Packages: a season program (like Service Autopilot's master packages). Its rounds (package_lines)
+ * are price-list services, each with the window it's done in. A property is put on a package
+ * (property_packages), which makes one waiting-list work order per round.
+ */
 export const packages = pgTable(
   "packages",
   {
@@ -2488,6 +2496,8 @@ export const packages = pgTable(
     companyId: companyId(),
     name: text("name").notNull(),
     description: text("description"),
+    /** When the season ends and the package is renewed for the next one. */
+    renewalDate: date("renewal_date"),
     active: boolean("active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: createdAt(),
@@ -2495,6 +2505,7 @@ export const packages = pgTable(
   (t) => [index("packages_company_idx").on(t.companyId)],
 );
 
+/** A package's rounds. (The table keeps its first name; `description` is the round's name.) */
 export const packageLines = pgTable(
   "package_lines",
   {
@@ -2503,12 +2514,65 @@ export const packageLines = pgTable(
     serviceTypeId: uuid("service_type_id").references(() => serviceTypes.id, { onDelete: "set null" }),
     description: text("description").notNull(),
     quantity: doublePrecision("quantity").notNull().default(1),
+    /** The window: on the waiting list from the start, due by the end. (Null only on packages from before rounds had windows.) */
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    /** At least this many days after the property's last service. */
+    minDays: integer("min_days"),
     budgetedHours: doublePrecision("budgeted_hours"),
     /** Null: the service's price for the property's lawn. */
     unitPriceCents: integer("unit_price_cents"),
+    /** For the crew: goes on the round's work order. */
+    notes: text("notes"),
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (t) => [index("package_lines_package_idx").on(t.packageId)],
+);
+
+/** A package on a property: who's billed, how it renews, who does it, and whether it's running. */
+export const propertyPackages = pgTable(
+  "property_packages",
+  {
+    id: id(),
+    companyId: companyId(),
+    propertyId: uuid("property_id").notNull().references(() => properties.id, { onDelete: "cascade" }),
+    /** The property's bill-to when it was added. */
+    customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+    packageId: uuid("package_id").references(() => packages.id, { onDelete: "set null" }),
+    /** The package's name at the time, in case it's renamed or deleted. */
+    packageName: text("package_name").notNull(),
+    /** "auto", "call" or "none": what happens when the season ends. */
+    renewal: text("renewal").notNull().default("auto"),
+    crewId: uuid("crew_id").references(() => crews.id, { onDelete: "set null" }),
+    /** "active", "paused" or "cancelled". */
+    status: text("status").notNull().default("active"),
+    notes: text("notes"),
+    startedOn: date("started_on").notNull(),
+    pausedAt: timestamp("paused_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("property_packages_property_idx").on(t.propertyId),
+    index("property_packages_package_idx").on(t.packageId),
+    index("property_packages_company_idx").on(t.companyId, t.status),
+  ],
+);
+
+/** What a property gets of each round: included or not, and its own quantity, rate and hours. */
+export const propertyPackageRounds = pgTable(
+  "property_package_rounds",
+  {
+    propertyPackageId: uuid("property_package_id").notNull().references(() => propertyPackages.id, { onDelete: "cascade" }),
+    roundId: uuid("round_id").notNull().references(() => packageLines.id, { onDelete: "cascade" }),
+    included: boolean("included").notNull().default(true),
+    quantity: doublePrecision("quantity").notNull().default(1),
+    unitPriceCents: integer("unit_price_cents"),
+    budgetedHours: doublePrecision("budgeted_hours"),
+  },
+  (t) => [primaryKey({ columns: [t.propertyPackageId, t.roundId] })],
 );
 
 /** Photos and documents on a work order; the bytes are in encrypted file storage (lib/storage). */

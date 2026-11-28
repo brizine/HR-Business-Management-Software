@@ -33,6 +33,7 @@ export * from "./todos";
 export * from "./calendar";
 export * from "./visits";
 export * from "./crews";
+export * from "./packages";
 export * from "./customFields";
 export * from "./tax";
 export * from "./customerList";

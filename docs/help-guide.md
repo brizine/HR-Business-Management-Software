@@ -529,12 +529,30 @@ billing; admins change prices).
     through step by step above it. **Priced as** (shown when steps are on) is the size each price was worked out
     at. **Average per 1,000** is the price divided by the lawn's size; it is
     higher than the tier's own rate because the minimum is spread across the lawn.
-- **Packages** (under the price list): saved bundles of line items, like Homeworks' packages: "Spring round" =
-  fertilizer + edging + blow-off. Admins add them with **Add package**: pick services from the price list or type
-  custom items, with quantity, budgeted hours and price. Leave a service's price blank to price it for each
-  property's lawn when the package is added (custom items need a price). On a work order, **Add package…** next to
-  **Add line** adds all its items at once; change any of them after. Inactive packages aren't offered; work orders
-  already made from a package keep their items.
+- **Packages** (under the price list): season programs, like Service Autopilot's master packages. A package is a
+  list of **rounds** (Early Spring, Spring, …). Each round is a service from the price list with the **window** it's
+  done in (start and end dates), the **minimum days** since the property's last service, and optionally budgeted
+  hours, a rate and notes for the crew. Leave a round's rate blank to price it for each property's lawn from the
+  price list. The **↓** next to a value copies it to every round below; **Add round** starts from the round above.
+  - The list shows each package's rounds, the season it covers, its **renewal date** and how many properties are on
+    it, under **Active**, **Inactive** and **All**. **Copy** starts a new package with the same rounds. Admins add
+    and change packages; everyone in Customers & billing sees them.
+  - **Putting a package on a property:** **Add package** in the **Packages** card on the property's page (or the
+    customer's). Pick the package, what happens **when the season ends** (Auto renew, Call to renew, Do not renew)
+    and the crew. Every round is listed with its window and a rate already filled in for that lawn: untick a round
+    the property doesn't get, change a quantity, rate or hours, and **use** puts the price-list rate back. A round
+    whose window is already over shows **Missed** and is left out unless you tick **Schedule anyway** (it then goes
+    out with no window, due now). Saving makes one **waiting-list work order per round**, eligible from the round's
+    start date and due by its end, for the property's bill-to customer.
+  - The card then shows each round and its work order (on the waiting list, scheduled, done). **Pause** takes the
+    rounds still on the waiting list off it until you **Resume**; **Cancel** takes them off for good. Work orders
+    that already have a date are left alone and the card says how many, so you can decide about each. **Edit**
+    changes the renewal choice, crew (also on its waiting work orders) and notes.
+  - **Changing a package later:** a round's new dates or minimum days also move its work orders still on the
+    waiting list; prices already on properties stay as they are. A package with properties on it can't be deleted:
+    make it **inactive** (it can't be added to more properties; the ones on it keep running).
+  - Packages from before rounds had dates are inactive and marked **needs dates**: give each round a service and a
+    window, or delete them.
 - **New invoice** (Billing → Invoices, the top bar's **+ New**, or **New invoice** on a customer's page): choose the
   customer and service address, then add lines. Picking a service fills in its price from the property's lawn size;
   you can change any description, quantity or price, or add a custom line. Add a discount (amount or percent) and
@@ -707,7 +725,7 @@ Billing → **Estimates** (or **New → Estimate**, or **New estimate** on a cus
   fertilizer rounds) and **Tax %**. **More** on a line:
   - **Optional (the customer chooses)**, and whether it **Starts ticked**; **Recommended** shows a badge.
   - A different service address for that line, **Our cost** (each) and **Hours per visit**: these stay in the office.
-  - **Add package** adds a package's lines.
+  - **Add package** adds a line for each of a package's rounds, priced for the lawn.
   - The totals show the subtotal, discount, tax and total, and (for the office only) the amount per visit, budgeted
     hours, our cost and the estimated profit and margin. Add **Terms**, **Notes for the customer** and **Internal
     notes**.
@@ -1189,7 +1207,8 @@ are numbered **WO-1001**, **WO-1002** and so on. Open them from **Schedule → W
     date, up to three years), or **Add to the waitlist** (no date yet). A series can skip an **off-season** (tap
     the months with no work, such as Dec, Jan, Feb). The form shows how many work orders it will make and their
     total. Also **More than one day**, **Set a time** and **Budgeted hours** (blank: the line items' hours).
-  - **Line items** can also come from a **package** (**Add package…** next to **Add line**).
+  - A season of rounds comes from a **package** instead: **Add package** on the property's page makes a waiting-list
+    work order for each round (see Packages under the price list).
   - **Crew:** pick a **crew** to fill in its people, then tick or untick anyone (or skip the crew and just tick
     people). They get a notification, and a reminder the morning it's scheduled.
   - **Tags:** from the company's tag list (the same tags as customers and properties, kept in Settings →

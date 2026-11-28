@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { crewPeople, crewSchema, packageSchema, packageToLines, packageTotal } from "../src";
+import { crewPeople, crewSchema, packageSchema, packageToLines, packageTotal, propertyPackageSchema, roundMissed } from "../src";
 
 const sid = "7f9d1c0e-5b6a-4e8f-9a1b-2c3d4e5f6a7b";
 describe("crews", () => {
@@ -12,13 +12,27 @@ describe("crews", () => {
 });
 
 describe("packages", () => {
-  it("custom items need a price; services can be priced per lawn", () => {
-    const bad = packageSchema.safeParse({ name: "Spring round", lines: [{ description: "Edging", quantity: 1 }] });
-    expect(bad.success ? [] : bad.error.issues.map((i) => i.message)).toEqual(["Give a custom item a price"]);
-    expect(packageSchema.safeParse({ name: "Spring round", lines: [] }).success).toBe(false);
-    const ok = packageSchema.parse({ name: "Spring round", lines: [{ serviceTypeId: sid, description: "Fertilizer", quantity: "1", unitPriceCents: "" }, { description: "Edging", quantity: 1, unitPriceCents: 1500, budgetedHours: "0.25" }] });
-    expect(ok.lines[0].unitPriceCents).toBeNull();
-    expect(ok.lines[1]).toMatchObject({ unitPriceCents: 1500, budgetedHours: 0.25 });
+  it("a round is a service with a window; the rate can be left to the lawn", () => {
+    const round = { name: "Early Spring", serviceTypeId: sid, startDate: "2026-01-01", endDate: "2026-03-01", minDays: "35", unitPriceCents: "", budgetedHours: "" };
+    const ok = packageSchema.parse({ name: "Eco Lawn Service", renewalDate: "2026-12-25", rounds: [round] });
+    expect(ok.rounds[0]).toMatchObject({ minDays: 35, unitPriceCents: null, budgetedHours: null });
+    expect(ok).toMatchObject({ active: true, renewalDate: "2026-12-25" });
+    expect(packageSchema.safeParse({ name: "Eco Lawn Service", rounds: [] }).success).toBe(false);
+    const issues = (rounds: unknown[]) => { const r = packageSchema.safeParse({ name: "X", rounds }); return r.success ? [] : r.error.issues.map((i) => i.message); };
+    expect(issues([{ ...round, serviceTypeId: "" }])).toEqual(["Pick the round's service"]);
+    expect(issues([{ ...round, startDate: "" }])).toEqual(["Give the round a start date"]);
+    expect(issues([{ ...round, endDate: "2025-12-01" }])).toEqual(["Early Spring ends before it starts"]);
+  });
+
+  it("putting it on a property: every included round needs a rate; a missed round is one whose window ended", () => {
+    const base = { propertyId: sid, packageId: sid };
+    const none = propertyPackageSchema.safeParse({ ...base, rounds: [{ roundId: sid, include: false }] });
+    expect(none.success ? [] : none.error.issues.map((i) => i.message)).toEqual(["Include at least one round"]);
+    const unpriced = propertyPackageSchema.safeParse({ ...base, rounds: [{ roundId: sid, include: true, unitPriceCents: "" }] });
+    expect(unpriced.success ? [] : unpriced.error.issues.map((i) => i.message)).toEqual(["Give every included round a rate"]);
+    expect(propertyPackageSchema.parse({ ...base, crewId: "", rounds: [{ roundId: sid, unitPriceCents: 14500 }] })).toMatchObject({ renewal: "auto", crewId: null, rounds: [{ include: true, quantity: 1, scheduleMissed: false }] });
+    expect(roundMissed({ endDate: "2026-03-01" }, "2026-03-01")).toBe(false);
+    expect(roundMissed({ endDate: "2026-03-01" }, "2026-03-02")).toBe(true);
   });
 
   it("turns into line items priced for the lawn", () => {
