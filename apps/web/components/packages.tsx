@@ -2,12 +2,13 @@
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
-  PACKAGE_RENEWALS, PACKAGE_RENEWAL_LABELS, PROPERTY_PACKAGE_STATUS_LABELS, describePricing, formatMoney, lineAmount, packageToLines, roundMissed, visitNumber,
+  PACKAGE_RENEWALS, PACKAGE_RENEWAL_LABELS, PROPERTY_PACKAGE_STATUS_LABELS, describePricing, formatAddress, formatMoney, lineAmount, packageToLines, roundMissed, visitNumber,
   type PackageRenewal, type PropertyPackageStatus,
 } from "@crewdesk/shared";
 import { api, fmtDate } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
+import { CustomerPicker } from "./customers";
 import { Icon } from "./icons";
 import { dollars, toCents, useServices } from "./invoices";
 import { Empty, ErrorBox } from "./ui";
@@ -21,7 +22,7 @@ const STATUS_TONE: Record<PropertyPackageStatus, string> = { active: "ok", pause
 /**
  * Packages: season programs (like Service Autopilot's master packages). Each is a list of rounds,
  * a price-list service with the window it's done in. On the Products & services page; they're put
- * on a property from the property's or the customer's page.
+ * on a property with Add work order → Package Work Order (or Add package on the customer's page).
  */
 export function PackagesCard() {
   const { can } = useAuth();
@@ -38,7 +39,7 @@ export function PackagesCard() {
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div>
           <h2 style={{ margin: 0 }}>Packages</h2>
-          <p className="muted" style={{ margin: "2px 0 0" }}>Season programs: a list of rounds, each a service with the dates it&apos;s done between. Put one on a property (<strong>Add package</strong> on the property&apos;s page) and every round goes on the waiting list in its window.</p>
+          <p className="muted" style={{ margin: "2px 0 0" }}>Season programs: a list of rounds, each a service with the dates it&apos;s done between. Put one on a property (<strong>Add work order</strong> on the property&apos;s page, then <strong>Package Work Order</strong>) and every round goes on the waiting list in its window.</p>
         </div>
         {admin && !editing && <button className="btn" onClick={() => setEditing("new")}><Icon name="plus" size={14} /> Add package</button>}
       </div>
@@ -254,9 +255,103 @@ function roundStatus(e: Enrollment, r: RoundOnProperty, today: string) {
   return e.status === "paused" ? "Paused" : "No work order";
 }
 
+/** A package's rounds on a property in a few words, for the line that unfolds into them. */
+function roundsSummary(e: Enrollment) {
+  const inc = e.rounds.filter((r) => r.included);
+  const done = inc.filter((r) => r.visit?.status === "completed").length;
+  const open = inc.filter((r) => r.visit && (r.visit.status === "open" || r.visit.status === "on_site"));
+  const scheduled = open.filter((r) => r.visit!.date).length;
+  const waiting = open.length - scheduled;
+  return [`${inc.length} round${inc.length === 1 ? "" : "s"}`, done ? `${done} done` : null, scheduled ? `${scheduled} scheduled` : null, waiting ? `${waiting} on the waiting list` : null].filter(Boolean).join(" · ");
+}
+
 /**
- * The Packages card on a property's page (one property) or a customer's page (their properties):
- * the packages they're on, round by round, and Add package.
+ * The packages a property is on, as rows inside its Work orders box: no card or heading of its own, and
+ * nothing at all for a property that has never had one. Each row's rounds unfold; Edit, Pause and Cancel
+ * are on the row. Adding one is Add work order → Package Work Order.
+ */
+export function PropertyPackageRows({ propertyId, onChanged }: { propertyId: string; onChanged?: () => void }) {
+  const { can } = useAuth();
+  const manager = can("manager", "customers");
+  const list = useApi<{ today: string; items: Enrollment[] }>(manager ? `/packages/enrollments?propertyId=${propertyId}` : null);
+  const [showPast, setShowPast] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const items = list.data?.items ?? [];
+  if (!manager || !items.length) return null;
+  const current = items.filter((e) => e.status !== "cancelled");
+  const past = items.filter((e) => e.status === "cancelled");
+  const today = list.data?.today ?? "";
+  // Pausing or cancelling takes rounds off the waiting list, so the work orders listed below change too.
+  const changed = (msg?: string) => { list.reload(); setNote(msg ?? null); onChanged?.(); };
+  return (
+    <div className="wo-packages" aria-label="Packages on this property">
+      <div className="menu-heading" style={{ padding: 0 }}>Packages{current.length ? ` · ${current.length}` : ""}</div>
+      {note && <p className="notice" role="status" style={{ margin: "6px 0 0" }}>{note}</p>}
+      {current.length > 0 && <ul className="plain-list package-list">{current.map((e) => <EnrollmentRow key={e.id} e={e} today={today} showProperty={false} fold onChanged={changed} />)}</ul>}
+      {past.length > 0 && (
+        <>
+          <button className="btn" style={{ marginTop: 8 }} onClick={() => setShowPast(!showPast)}>{showPast ? "Hide" : "Show"} cancelled packages ({past.length})</button>
+          {showPast && <ul className="plain-list package-list">{past.map((e) => <EnrollmentRow key={e.id} e={e} today={today} showProperty={false} fold onChanged={changed} />)}</ul>}
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Add work order → Package Work Order: the property (known from its page, or picked from the customer's),
+ * then the package and its rounds. Each round becomes a work order on the waiting list.
+ */
+export function PackageWorkOrder({ customer: given, propertyId, onCancel, onDone }: {
+  customer?: { id: string; name: string } | null; propertyId?: string;
+  onCancel: () => void; onDone: (added: { packageName: string; property: { id: string; address: string } }, created: number) => void;
+}) {
+  const [customer, setCustomer] = useState<{ id: string; name: string } | null>(given ?? null);
+  // From a property's page: that property, whoever its bill-to is. Otherwise the customer's own properties.
+  const one = useApi<any>(propertyId ? `/properties/${propertyId}` : null);
+  const detail = useApi<any>(!propertyId && customer ? `/customers/${customer.id}` : null);
+  const on = useApi<{ today: string; items: Enrollment[] }>(propertyId ? `/packages/enrollments?propertyId=${propertyId}` : customer ? `/packages/enrollments?customerId=${customer.id}` : null);
+  const sizes = (p: any) => ({ lawnSqFt: p.lawnSqFt, frontSqFt: p.frontSqFt, backSqFt: p.backSqFt, otherSqFt: p.otherSqFt, custom: p.custom });
+  const properties: PropertyOption[] = propertyId
+    ? (one.data ? [{ id: one.data.id, address: formatAddress(one.data), ...sizes(one.data) }] : [])
+    // A package's work orders are for the bill-to, so only the properties this customer pays for.
+    : (detail.data?.properties ?? []).filter((p: any) => !p.endDate && p.status !== "cancelled" && p.role === "bill_to").map((p: any) => ({ id: p.id, address: [p.street, p.city].filter(Boolean).join(", "), ...sizes(p) }));
+  const loading = propertyId ? !one.data && !one.error : !!customer && !detail.data && !detail.error;
+  return (
+    <div className="card stack">
+      <h2 style={{ margin: 0 }}>New Package Work Order</h2>
+      <p className="muted" style={{ margin: 0 }}>A package is a season of rounds. Each round you include becomes a work order on the waiting list, eligible from the round&apos;s start date and due by its end.</p>
+      {propertyId ? (
+        one.data && <div><span className="todo-label">Property</span><div><strong>{formatAddress(one.data)}</strong></div></div>
+      ) : customer ? (
+        <div className="stack" style={{ gap: 4 }}>
+          <span className="todo-label">Customer *</span>
+          <div className="row"><strong>{customer.name}</strong><button type="button" className="linkbtn" onClick={() => setCustomer(null)}>Change</button></div>
+        </div>
+      ) : (
+        <>
+          <CustomerPicker label="Customer *" onPick={(c) => setCustomer({ id: c.id, name: c.name })} />
+          <div className="row"><button type="button" className="btn" onClick={onCancel}>Cancel</button></div>
+        </>
+      )}
+      <ErrorBox error={one.error ?? detail.error ?? on.error} />
+      {loading && <p className="muted" style={{ margin: 0 }}>Loading…</p>}
+      {!loading && (propertyId || customer) && !properties.length && !(one.error ?? detail.error) && (
+        <>
+          <p className="warn-text" style={{ margin: 0 }}>{customer?.name ?? "This customer"} isn&apos;t the bill-to on an active property, so there&apos;s nowhere to put a package. Add a property on their page first.</p>
+          <div className="row"><button type="button" className="btn" onClick={onCancel}>Cancel</button></div>
+        </>
+      )}
+      {properties.length > 0 && on.data && (
+        <AddPackage key={propertyId ?? customer?.id} properties={properties} taken={on.data.items.filter((e) => e.status !== "cancelled")} today={on.data.today} onClose={onCancel} onDone={onDone} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The Packages card on a customer's page (their properties): the packages they're on, round by round,
+ * and Add package. A property's own page lists its packages inside the Work orders box instead.
  */
 export function PropertyPackages({ properties, customerId, active = true, style }: { properties: PropertyOption[]; customerId?: string; active?: boolean; style?: React.CSSProperties }) {
   const { can } = useAuth();
@@ -297,7 +392,7 @@ export function PropertyPackages({ properties, customerId, active = true, style 
   );
 }
 
-function EnrollmentRow({ e, today, showProperty, onChanged }: { e: Enrollment; today: string; showProperty: boolean; onChanged: (msg?: string) => void }) {
+function EnrollmentRow({ e, today, showProperty, fold, onChanged }: { e: Enrollment; today: string; showProperty: boolean; /** The rounds stay folded to one line until it's clicked. */ fold?: boolean; onChanged: (msg?: string) => void }) {
   const [editing, setEditing] = useState(false);
   const action = useAction();
   /** Pause or cancel: says what came off the waiting list, and what's left for the office to look at. */
@@ -305,6 +400,17 @@ function EnrollmentRow({ e, today, showProperty, onChanged }: { e: Enrollment; t
     const r = await api<{ removed: number; stillScheduled: number }>(`/packages/enrollments/${e.id}/${what}`, { method: "POST" });
     onChanged(`${e.packageName} ${what === "pause" ? "paused" : "cancelled"}: ${r.removed} round${r.removed === 1 ? "" : "s"} taken off the waiting list.${r.stillScheduled ? ` ${r.stillScheduled} work order${r.stillScheduled === 1 ? " already has" : "s already have"} a date and ${r.stillScheduled === 1 ? "was" : "were"} left alone: open ${r.stillScheduled === 1 ? "it" : "them"} below to decide.` : ""}`);
   });
+  const rounds = (
+    <ul className="package-lines">
+      {e.rounds.map((r) => (
+        <li key={r.roundId} className={r.included ? "" : "muted"}>
+          <strong style={{ fontWeight: 600 }}>{r.name}</strong>
+          <span className="muted"> · {fmtDate(r.startDate)} – {fmtDate(r.endDate)}{r.included && r.amountCents ? ` · ${formatMoney(r.amountCents)}` : ""} · </span>
+          {r.visit ? <Link href={`/visits/${r.visit.id}`}>{visitNumber(r.visit.number)} {roundStatus(e, r, today)}</Link> : <span className="muted">{roundStatus(e, r, today)}</span>}
+        </li>
+      ))}
+    </ul>
+  );
   return (
     <li style={{ opacity: e.status === "cancelled" ? 0.7 : 1 }}>
       <div className="row" style={{ justifyContent: "space-between" }}>
@@ -327,15 +433,7 @@ function EnrollmentRow({ e, today, showProperty, onChanged }: { e: Enrollment; t
       </div>
       <ErrorBox error={action.error} />
       {editing && <EditEnrollment e={e} onDone={(saved) => { setEditing(false); if (saved) onChanged(); }} />}
-      <ul className="package-lines">
-        {e.rounds.map((r) => (
-          <li key={r.roundId} className={r.included ? "" : "muted"}>
-            <strong style={{ fontWeight: 600 }}>{r.name}</strong>
-            <span className="muted"> · {fmtDate(r.startDate)} – {fmtDate(r.endDate)}{r.included && r.amountCents ? ` · ${formatMoney(r.amountCents)}` : ""} · </span>
-            {r.visit ? <Link href={`/visits/${r.visit.id}`}>{visitNumber(r.visit.number)} {roundStatus(e, r, today)}</Link> : <span className="muted">{roundStatus(e, r, today)}</span>}
-          </li>
-        ))}
-      </ul>
+      {fold ? <details className="package-fold"><summary>{roundsSummary(e)}</summary>{rounds}</details> : rounds}
     </li>
   );
 }

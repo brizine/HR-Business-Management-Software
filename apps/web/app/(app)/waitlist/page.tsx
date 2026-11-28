@@ -160,7 +160,7 @@ export default function WaitingListPage() {
               <WaitTable rows={shown} crews={crews} columns={view.columns.length ? view.columns : DEFAULT_WL_COLUMNS} sort={view.sort} onSort={onSort}
                 selected={selected} setSelected={setSelected} limit={limit} onMore={() => setLimit(limit + 300)} />
             ) : (
-              <Empty>{all.length ? "Nothing matches these filters." : <>Nothing is waiting. Work orders with no date land here: make one <Link href="/visits/new">On the waitlist</Link>, or take the date off one.</>}</Empty>
+              <Empty>{all.length ? "Nothing matches these filters." : <>Nothing is waiting. Work orders with no date land here: make a <Link href="/visits/new?type=waitlist">Waiting List Work Order</Link>, or take the date off one.</>}</Empty>
             )}
           </div>
         </div>

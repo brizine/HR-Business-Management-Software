@@ -8,7 +8,6 @@ import { useAuth } from "@/lib/auth";
 import { useAction, useApi } from "@/lib/hooks";
 import { LinkedTodos } from "@/components/todos";
 import { LinkedVisits } from "@/components/visits";
-import { PropertyPackages } from "@/components/packages";
 import { Badge, ErrorBox, PageHead } from "@/components/ui";
 import { CancelForm, CustomerPicker, PropertyFields, propertyBody, propertyFormValue, useTags } from "@/components/customers";
 import { CreditForm } from "@/components/credits";
@@ -115,7 +114,6 @@ export default function PropertyDetail({ params }: { params: Promise<{ id: strin
         </div>
       )}
       <div style={{ marginTop: 16 }}>
-        <PropertyPackages active={active} style={{ marginBottom: 16 }} properties={[{ id, address: formatAddress(p), lawnSqFt: p.lawnSqFt, frontSqFt: p.frontSqFt, backSqFt: p.backSqFt, otherSqFt: p.otherSqFt, custom: p.custom }]} />
         <LinkedVisits propertyId={id} />
         <LinkedTodos propertyId={id} customer={(billTo ?? current[0]) ? { id: (billTo ?? current[0]).customerId, name: (billTo ?? current[0]).name } : null} />
       </div>

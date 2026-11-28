@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
-  DEFAULT_TODO_COLOR, MONTH_SHORT, PRIORITIES, PRIORITY_LABELS, REPEAT_UNITS, TODO_COLORS, VISIT_BILLING, VISIT_BILLING_LABELS, VISIT_SCHEDULING, VISIT_SCHEDULING_LABELS,
+  DEFAULT_TODO_COLOR, MONTH_SHORT, PRIORITIES, PRIORITY_LABELS, REPEAT_UNITS, TODO_COLORS, VISIT_BILLING, VISIT_BILLING_LABELS, VISIT_SCHEDULING, VISIT_SCHEDULING_LABELS, WORK_ORDER_TYPE_LABELS,
   describePricing, formatMoney, formatTodoTime, isInactive, lineAmount, lineTaxRate, priceFor, rewordForArea, taxFor as taxForLines, taxRateFor, visitDates, visitLineHours, visitNumber, withAreaNote,
   type CustomValues, type Priority, type RepeatUnit, type VisitBilling, type VisitScheduling,
 } from "@crewdesk/shared";
@@ -16,6 +16,7 @@ import { Icon } from "./icons";
 import { useBillingSettings } from "./invoices";
 import { CustomFieldInputs } from "./custom-fields";
 import { ChemicalsStep, loadChemicalOptions, type ChemicalOptions } from "@/components/chemicals-step";
+import { PropertyPackageRows } from "./packages";
 import { ErrorBox } from "./ui";
 
 export interface VisitLine { id?: string; serviceTypeId: string | null; description: string; quantity: number; budgetedHours: number | null; unitPriceCents: number | null; amountCents: number | null; taxRate?: number; lawnArea?: string | null; lawnAreaSqFt?: number | null }
@@ -111,11 +112,13 @@ const draftLine = (l?: VisitLine): LineDraft => ({ serviceTypeId: l?.serviceType
 
 /**
  * New or changed work order, laid out like Homeworks' visit form: title; customer, property, color and
- * location; billing; line items from the price list (priced for the lawn); scheduling (single,
- * repeating with an off-season, or the waitlist); crew; notes.
+ * location; billing; line items from the price list (priced for the lawn); scheduling (one time,
+ * recurring with an off-season, or the waiting list); crew; notes. `type` is the scheduling when it was
+ * chosen before the form (Add work order asks first); the form then doesn't ask again.
  */
-export function VisitForm({ visit, preset, onSaved, onCancel }: {
+export function VisitForm({ visit, preset, type, onSaved, onCancel }: {
   visit?: Visit;
+  type?: VisitScheduling;
   /** Starts filled in (from a customer or property page, a calendar day, or an accepted estimate). */
   preset?: { customer?: { id: string; name: string }; propertyId?: string; date?: string; title?: string; lines?: Partial<VisitLine>[]; estimateId?: string; notes?: string };
   onSaved: (v: Visit, created: number) => void; onCancel: () => void;
@@ -127,7 +130,8 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
   const [location, setLocation] = useState(visit?.location ?? "");
   const [billing, setBilling] = useState<VisitBilling>(visit?.billing ?? "invoice");
   const [lines, setLines] = useState<LineDraft[]>(visit?.lines.length ? visit.lines.map(draftLine) : preset?.lines?.length ? preset.lines.map((l) => draftLine(l as VisitLine)) : [draftLine()]);
-  const [scheduling, setScheduling] = useState<VisitScheduling>(visit && !visit.date ? "waitlist" : "single");
+  const [picked, setScheduling] = useState<VisitScheduling>(visit && !visit.date ? "waitlist" : "single");
+  const scheduling = type ?? picked;
   const [date, setDate] = useState(visit?.date ?? preset?.date ?? localToday());
   const [multi, setMulti] = useState(!!visit?.endDate);
   const [endDate, setEndDate] = useState(visit?.endDate ?? plusDays(visit?.date ?? preset?.date ?? localToday(), 1));
@@ -233,7 +237,7 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
 
   return (
     <form className="card stack todo-form visit-form" onSubmit={submit}>
-      <h2>{visit ? `Edit ${visitNumber(visit.number)}` : "New work order"}</h2>
+      <h2>{visit ? `Edit ${visitNumber(visit.number)}` : type ? `New ${WORK_ORDER_TYPE_LABELS[type]}` : "New work order"}</h2>
       <label>Work order title or description *<input required autoFocus={!visit} maxLength={300} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Round 3: fertilizer & weed control" /></label>
 
       <h3 className="todo-section">Customer</h3>
@@ -307,8 +311,8 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
 
       <h3 className="todo-section">Scheduling</h3>
       <div className="formgrid">
-        {!visit ? (
-          <label>Scheduling
+        {!visit ? !type && (
+          <label>Type of work order
             <select value={scheduling} onChange={(e) => setScheduling(e.target.value as VisitScheduling)}>
               {VISIT_SCHEDULING.map((s) => <option key={s} value={s}>{VISIT_SCHEDULING_LABELS[s]}</option>)}
             </select>
@@ -336,7 +340,8 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
           <label>End time (optional)<input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} /></label>
         </div>
       )}
-      <details className="visit-window" open={!!(releaseOn || dueBy || minDays || windowStart || priority !== "normal") || undefined}>
+      {/* A Waiting List Work Order asked for by type opens on its window: when it's eligible and when it's due. */}
+      <details className="visit-window" open={!!(releaseOn || dueBy || minDays || windowStart || priority !== "normal" || (!visit && type === "waitlist")) || undefined}>
         <summary>Window, priority and appointment time{scheduling === "waitlist" ? " (for the waiting list)" : ""}</summary>
         <div className="formgrid">
           {scheduling === "waitlist" && <label>Eligible from<input type="date" value={releaseOn} onChange={(e) => setReleaseOn(e.target.value)} /><span className="muted field-hint">Its release date; empty means now</span></label>}
@@ -411,7 +416,10 @@ export function VisitForm({ visit, preset, onSaved, onCancel }: {
   );
 }
 
-/** Customer and property pages: their work orders coming up and done lately, with Add work order. */
+/**
+ * Customer and property pages: their work orders coming up and done lately, with Add work order (which asks
+ * the type: waiting list, package, one time or recurring). A property's packages are listed here too.
+ */
 export function LinkedVisits({ customerId, propertyId }: { customerId?: string; propertyId?: string }) {
   const { can } = useAuth();
   const q = customerId ? `customerId=${customerId}` : `propertyId=${propertyId}`;
@@ -433,8 +441,9 @@ export function LinkedVisits({ customerId, propertyId }: { customerId?: string; 
     <div className="card">
       <div className="row" style={{ justifyContent: "space-between" }}>
         <h2 style={{ margin: 0 }}>Work orders{upcoming.length ? <span className="muted" style={{ fontWeight: 400, fontSize: 14 }}> · {upcoming.length} open</span> : null}</h2>
-        <Link className="btn" href={`/visits/new?${customerId ? `customerId=${customerId}` : ""}${propertyId ? `&propertyId=${propertyId}` : ""}`}><Icon name="plus" size={14} /> Add work order</Link>
+        <Link className="btn" href={`/visits/new?${customerId ? `customerId=${customerId}` : ""}${propertyId ? `&propertyId=${propertyId}` : ""}`} title="Asks what type to add: Waiting List, Package, One Time or Recurring"><Icon name="plus" size={14} /> Add work order</Link>
       </div>
+      {propertyId && <PropertyPackageRows propertyId={propertyId} onChanged={() => { coming.reload(); recent.reload(); }} />}
       {upcoming.length || done.length ? (
         <ul className="visit-list">
           {upcoming.slice(0, 8).map(row)}

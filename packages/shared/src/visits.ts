@@ -25,10 +25,30 @@ export const VISIT_BILLING_LABELS: Record<VisitBilling, string> = { invoice: "In
 export const VISIT_SCHEDULING = ["single", "repeat", "waitlist"] as const;
 export type VisitScheduling = (typeof VISIT_SCHEDULING)[number];
 export const VISIT_SCHEDULING_LABELS: Record<VisitScheduling, string> = {
-  single: "Single work order",
-  repeat: "Repeating series of work orders",
-  waitlist: "Add to the waitlist (no date yet)",
+  single: "One Time Work Order",
+  repeat: "Recurring Work Order",
+  waitlist: "Waiting List Work Order (no date yet)",
 };
+
+/**
+ * What "Add work order" asks first, in the order it's asked. Three are a work order's scheduling; a
+ * package isn't one work order but a season of rounds, each a work order on the waiting list.
+ */
+export const WORK_ORDER_TYPES = ["waitlist", "package", "single", "repeat"] as const;
+export type WorkOrderType = (typeof WORK_ORDER_TYPES)[number];
+export const WORK_ORDER_TYPE_LABELS: Record<WorkOrderType, string> = {
+  waitlist: "Waiting List Work Order",
+  package: "Package Work Order",
+  single: "One Time Work Order",
+  repeat: "Recurring Work Order",
+};
+export const WORK_ORDER_TYPE_HINTS: Record<WorkOrderType, string> = {
+  waitlist: "No date yet. It waits on the waiting list until it's scheduled.",
+  package: "A season of rounds from a package. Each round goes on the waiting list in its own window.",
+  single: "One job on a date you pick.",
+  repeat: "The same job every so many days, weeks, months or years, until a date.",
+};
+export const isWorkOrderType = (v: unknown): v is WorkOrderType => (WORK_ORDER_TYPES as readonly unknown[]).includes(v);
 
 export const REPEAT_UNITS = ["day", "week", "month", "year"] as const;
 export type RepeatUnit = (typeof REPEAT_UNITS)[number];

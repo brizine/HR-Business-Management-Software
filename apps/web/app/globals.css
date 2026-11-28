@@ -1420,6 +1420,23 @@ label.check.switch input:focus-visible { outline: 2px solid var(--primary); outl
 .package-list > li:first-child { border-top: 0; }
 .package-lines { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
 .package-lines a { white-space: nowrap; }
+/* A property's packages inside its Work orders box: each one's rounds fold to a line. */
+.wo-packages { margin-top: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.package-fold { margin-top: 4px; font-size: 13px; }
+.package-fold > summary { cursor: pointer; color: var(--muted); }
+.package-fold > summary:hover, .package-fold[open] > summary { color: var(--text); }
+/* Add work order: the four types, asked first. Once one is picked they shrink to a row above the form. */
+.wo-types { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.wo-type { display: grid; gap: 4px; align-content: start; text-align: left; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.wo-type:hover { border-color: var(--primary); }
+.wo-type:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.wo-type[aria-checked="true"] { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); background: color-mix(in srgb, var(--primary) 7%, var(--surface)); }
+.wo-type strong { font-size: 15px; }
+.wo-type span { font-size: 13px; color: var(--muted); }
+.wo-types.chosen .wo-type { padding: 8px 12px; }
+.wo-types.chosen .wo-type strong { font-size: 14px; font-weight: 500; }
+.wo-types.chosen .wo-type[aria-checked="true"] strong { font-weight: 600; }
+.wo-types.chosen .wo-type span { display: none; }
 /* Package rounds: the editor on Products & services, and Add package on a property */
 .package-rounds td { vertical-align: top; }
 .package-rounds input[type="date"] { min-width: 132px; }

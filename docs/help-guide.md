@@ -373,7 +373,9 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
 - **Properties** (Operations → Properties): search by address, ZIP, label or customer; filter by **Map Code
   starts with** (e.g. 80 for 800–809; type **none** for properties without one), status, property tags, and the
   bill-to customer's tags (e.g. properties whose customer is tagged Commercial).
-- **Property page:** the **Property** box and the **People** on it. **Map** opens the address in Google Maps.
+- **Property page:** the **Property** box and the **People** on it, then the **Work orders** box (the property's
+  work orders coming up and done lately, with any **packages** it's on listed at the top) and its to-dos. **Map**
+  opens the address in Google Maps. **Add work order** asks what type to add: see **Work orders → Making one**.
 - **People on a property:**
   - **Add contact:** someone to reach about the address who is **not a customer**: a tenant, an on-site
     manager, a neighbor with the gate key. The **Add Contact** window opens with **First Name**, **Last Name**,
@@ -562,17 +564,21 @@ billing; admins change prices).
   - The list shows each package's rounds, the season it covers, its **renewal date** and how many properties are on
     it, under **Active**, **Inactive** and **All**. **Copy** starts a new package with the same rounds. Admins add
     and change packages; everyone in Customers & billing sees them.
-  - **Putting a package on a property:** **Add package** in the **Packages** card on the property's page (or the
-    customer's). Pick the package, what happens **when the season ends** (Auto renew, Call to renew, Do not renew)
-    and the crew. Every round is listed with its window and a rate already filled in for that lawn: untick a round
+  - **Putting a package on a property:** on the property's page, **Add work order** in the **Work orders** box,
+    then **Package Work Order** (from anywhere else, **New work order → Package Work Order** and pick the customer
+    and property; the customer's page also has **Add package** in its **Packages** card). Pick the package, what
+    happens **when the season ends** (Auto renew, Call to renew, Do not renew) and the crew. Every round is listed with its window and a rate already filled in for that lawn: untick a round
     the property doesn't get, change a quantity, rate or hours, and **use** puts the price-list rate back. A round
     whose window is already over shows **Missed** and is left out unless you tick **Schedule anyway** (it then goes
     out with no window, due now). Saving makes one **waiting-list work order per round**, eligible from the round's
     start date and due by its end, for the property's bill-to customer.
-  - The card then shows each round and its work order (on the waiting list, scheduled, done). **Pause** takes the
-    rounds still on the waiting list off it until you **Resume**; **Cancel** takes them off for good. Work orders
-    that already have a date are left alone and the card says how many, so you can decide about each. **Edit**
-    changes the renewal choice, crew (also on its waiting work orders) and notes.
+  - The property's **Work orders** box then lists the package under **Packages**, with a line such as
+    *7 rounds · 2 done · 1 scheduled · 4 on the waiting list*: click it to see each round and its work order.
+    (A property with no packages shows no Packages line at all. The customer's page shows the same in its
+    **Packages** card.) **Pause** takes the rounds still on the waiting list off it until you **Resume**;
+    **Cancel** takes them off for good. Work orders that already have a date are left alone and a note says how
+    many, so you can decide about each. **Edit** changes the renewal choice, crew (also on its waiting work
+    orders) and notes.
   - **Changing a package later:** a round's new dates or minimum days also move its work orders still on the
     waiting list; prices already on properties stay as they are. A package with properties on it can't be deleted:
     make it **inactive** (it can't be added to more properties; the ones on it keep running).
@@ -1306,18 +1312,29 @@ control", "Core aeration". (Jobs on your own trucks and equipment are **repair o
 are numbered **WO-1001**, **WO-1002** and so on. Open them from **Schedule → Work orders**, the **Calendar**,
 **+ New → Work order**, or the **Work orders** box on a customer's or property's page.
 
-- **Making one** (Customers & billing managers), laid out like Homeworks' visit form:
+- **Making one** (Customers & billing managers). **Add work order** / **New work order** first asks **what type
+  of work order**:
+  1. **Waiting List Work Order:** no date yet. It waits on the waiting list until it's scheduled.
+  2. **Package Work Order:** a season of rounds from a package. Each round becomes a work order on the waiting
+     list in its own window (see Packages under the price list).
+  3. **One Time Work Order:** one job on a date you pick.
+  4. **Recurring Work Order:** the same job every so many days, weeks, months or years, until a date.
+
+  Click one and its form opens underneath; the four types stay in a row above the form, so you can switch
+  (switching to or from Package starts that form fresh). A work order made from an accepted estimate doesn't
+  offer Package. The form for Waiting List, One Time and Recurring is laid out like Homeworks' visit form:
   - **Title or description**, the **customer** and their **property** (required), an optional **location** and a
     **color**.
   - **Billing:** **Invoice services** or **Don't invoice** (a free call-back, an estimate visit).
   - **Line items:** pick a service from the price list (it's priced for the property's lawn size, like invoices; the box under the description prices it from the front or back lawn only, or a size you type)
     or type a custom item; set the quantity, **budgeted hours** and rate. The total is what it bills.
-  - **Scheduling:** **Single work order**, a **Repeating series** (every N days, weeks, months or years until a
-    date, up to three years), or **Add to the waitlist** (no date yet). A series can skip an **off-season** (tap
-    the months with no work, such as Dec, Jan, Feb). The form shows how many work orders it will make and their
-    total. Also **More than one day**, **Set a time** and **Budgeted hours** (blank: the line items' hours).
-  - A season of rounds comes from a **package** instead: **Add package** on the property's page makes a waiting-list
-    work order for each round (see Packages under the price list).
+  - **Scheduling** follows the type: a **One Time Work Order** has a date (also **More than one day** and **Set a
+    time**); a **Recurring Work Order** repeats every N days, weeks, months or years until a date, up to three
+    years, and can skip an **off-season** (tap the months with no work, such as Dec, Jan, Feb), and the form
+    shows how many work orders it will make and their total; a **Waiting List Work Order** has no date, and its
+    **window** (eligible from, due by) is under *Window, priority and appointment time*. **Budgeted hours** left
+    blank is the line items' hours. (Adding a work order from a day on the Calendar asks the type in the form
+    itself, starting on One Time.)
   - **Crew:** pick a **crew** to fill in its people, then tick or untick anyone (or skip the crew and just tick
     people). They get a notification, and a reminder the morning it's scheduled.
   - **Tags:** from the company's tag list (the same tags as customers and properties, kept in Settings →
