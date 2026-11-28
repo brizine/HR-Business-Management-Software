@@ -195,7 +195,7 @@ function ProductForm({ product, onDone, onClose }: { product: Product | null; on
           <label style={{ flex: 1 }}>Vendor<input value={cost.vendor} onChange={(e) => setCost({ ...cost, vendor: e.target.value })} /></label>
           {p && <button type="button" className="btn" style={{ alignSelf: "flex-end" }} disabled={busy} onClick={addCost}>Add cost</button>}
         </div>
-        <p className="muted" style={{ margin: 0 }}>A new cost applies from its date on; earlier jobs keep the cost of their day.</p>
+        <p className="muted" style={{ margin: 0 }}>A new cost applies from its date on; earlier work orders keep the cost of their day.</p>
       </fieldset>
 
       <fieldset className="contacts">

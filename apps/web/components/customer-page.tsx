@@ -7,11 +7,12 @@ import { useAction, useApi } from "@/lib/hooks";
 import { Empty, ErrorBox } from "@/components/ui";
 import { customerBody, customerFormValue } from "@/components/customers";
 import { visitWhen, type Visit } from "@/components/visits";
+import { PackageRows, usePackagesOn } from "@/components/packages";
 import { CustomerBillingRules, describeCustomerRules } from "@/components/billing-rules";
 
 /**
  * Boxes on a customer's page, laid out like Homeworks': the account summary with a revenue
- * projection, customer notes, call notes and the timeline, jobs, payments by month, stats, delivery
+ * projection, customer notes, call notes and the timeline, work orders, payments by month, stats, delivery
  * preference, invoice defaults and the customer portal.
  */
 
@@ -182,9 +183,13 @@ export function Timeline({ customerId, version, kinds, title = "Timeline", filte
   );
 }
 
-/** Jobs, like Homeworks': upcoming one-time work orders, repeating series, and history. */
-export function JobsBox({ customerId }: { customerId: string }) {
-  const [tab, setTab] = useState<"upcoming" | "repeating" | "history">("upcoming");
+/**
+ * The customer's work orders (Homeworks calls this box Jobs): one-time ones coming up, recurring series, the
+ * packages their properties are on, and history. Add work order asks which type to add.
+ */
+export function WorkOrdersBox({ customerId }: { customerId: string }) {
+  const [tab, setTab] = useState<"upcoming" | "repeating" | "packages" | "history">("upcoming");
+  const packages = usePackagesOn({ customerId });
   const open = useApi<{ items: Visit[] }>(`/visits?customerId=${customerId}&status=active`);
   const past = useApi<{ items: Visit[] }>(`/visits?customerId=${customerId}&order=recent&limit=40`);
   const upcoming = (open.data?.items ?? []).filter((v) => !v.seriesId);
@@ -199,24 +204,37 @@ export function JobsBox({ customerId }: { customerId: string }) {
       <td className="num">{v.totalCents != null ? formatMoney(v.totalCents) : "—"}</td>
     </tr>
   );
+  const tabs = [
+    ["upcoming", "One time", upcoming.length], ["repeating", "Recurring", series.size],
+    // Only for those who can see packages (Customers & billing managers).
+    ...(packages.manager ? [["packages", "Packages", packages.current.length] as const] : []),
+    ["history", "History", history.length],
+  ] as const;
   return (
     <div className="card">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <h2 className="cp-h">Jobs</h2>
-        <Link className="btn" href={`/visits/new?customerId=${customerId}`}>Add work order</Link>
+        <h2 className="cp-h">Work orders</h2>
+        <Link className="btn" href={`/visits/new?customerId=${customerId}`} title="Asks what type to add: Waiting List, Package, One Time or Recurring">Add work order</Link>
       </div>
-      <div className="cl-stats" role="tablist" aria-label="Jobs" style={{ marginTop: 8 }}>
-        {([["upcoming", "One-time", upcoming.length], ["repeating", "Repeating", series.size], ["history", "History", history.length]] as const).map(([k, l, n]) => (
+      <div className="cl-stats" role="tablist" aria-label="Work orders" style={{ marginTop: 8 }}>
+        {tabs.map(([k, l, n]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l} <b>{n}</b></button>
         ))}
       </div>
-      <div className="tablewrap">
-        {tab === "upcoming" && (upcoming.length ? <table><tbody>{upcoming.map((v) => row(v))}</tbody></table> : <Empty>No one-time work orders coming up.</Empty>)}
-        {tab === "repeating" && (series.size ? (
-          <table><tbody>{[...series.values()].map((vs) => row(vs[0], `${vs[0].repeatLabel ?? "Repeats"} · next ${vs[0].date ? fmtDate(vs[0].date) : "—"} · ${vs.length} to go`))}</tbody></table>
-        ) : <Empty>No repeating work orders.</Empty>)}
-        {tab === "history" && (history.length ? <table><tbody>{history.map((v) => row(v, v.status === "skipped" ? "Skipped" : "Done"))}</tbody></table> : <Empty>Nothing done yet.</Empty>)}
-      </div>
+      {tab === "packages" ? (
+        packages.current.length + packages.past.length > 0 || !packages.loaded ? (
+          // Pausing or cancelling a package takes work orders off the waiting list: the other tabs follow.
+          <PackageRows on={packages} showProperty onChanged={() => { open.reload(); past.reload(); }} />
+        ) : <Empty>No packages. To put one on a property, click Add work order, then Package Work Order.</Empty>
+      ) : (
+        <div className="tablewrap">
+          {tab === "upcoming" && (upcoming.length ? <table><tbody>{upcoming.map((v) => row(v))}</tbody></table> : <Empty>No one time work orders coming up.</Empty>)}
+          {tab === "repeating" && (series.size ? (
+            <table><tbody>{[...series.values()].map((vs) => row(vs[0], `${vs[0].repeatLabel ?? "Repeats"} · next ${vs[0].date ? fmtDate(vs[0].date) : "—"} · ${vs.length} to go`))}</tbody></table>
+          ) : <Empty>No recurring work orders.</Empty>)}
+          {tab === "history" && (history.length ? <table><tbody>{history.map((v) => row(v, v.status === "skipped" ? "Skipped" : "Done"))}</tbody></table> : <Empty>Nothing done yet.</Empty>)}
+        </div>
+      )}
     </div>
   );
 }

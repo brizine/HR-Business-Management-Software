@@ -62,8 +62,8 @@ export const TRIGGERS = {
   complete_visit: { label: "Work Order is Completed", subject: "visit", use: ["simple", "if", "stop"] },
   visit_skipped: { label: "Work Order is Skipped", subject: "visit", use: ["simple", "if", "stop"] },
   property_not_serviced: { label: "Property is Not Serviced", subject: "visit", use: ["simple"] },
-  start_timer: { label: "Job Timer Started", subject: "visit", use: ["simple", "if"] },
-  stop_timer: { label: "Job Timer Stopped", subject: "visit", use: ["simple", "if"] },
+  start_timer: { label: "Work Order Timer Started", subject: "visit", use: ["simple", "if"] },
+  stop_timer: { label: "Work Order Timer Stopped", subject: "visit", use: ["simple", "if"] },
   has_no_recurring_job: { label: "Customer Does Not Have Recurring Service", subject: "customer", use: ["and", "stop"] },
 
   todo_created: { label: "To-do is Added", subject: "todo", use: ["simple", "if"] },

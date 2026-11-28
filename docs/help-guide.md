@@ -216,8 +216,8 @@ Homeworks' My Day.
 - **Account standing:** **Past due** (what's owed on invoices past their due date), **Outstanding** (owed, not yet
   due), **Credit** (unused credit on customers' accounts) and **Paid** (money received in the date range below,
   including prepayments). Each tile opens that list.
-- **Job stats:** work orders dated in the range you pick (today, this week, last 30 days, this month, this year,
-  a custom range and more; it remembers your pick on this browser). **Total jobs**, **Yet to start**,
+- **Work order stats:** work orders dated in the range you pick (today, this week, last 30 days, this month, this
+  year, a custom range and more; it remembers your pick on this browser). **Total work orders**, **Yet to start**,
   **In progress** and **Completed**; skipped ones aren't counted. For a single day the tiles open the calendar on
   that day.
 - **Lists:** automations waiting in review, upcoming to-dos (with how many are overdue), today's work orders, recent
@@ -350,7 +350,11 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
     - **Main info**, with **Show more** for customer #, other phone, county, how they heard about us, customer
       since, tax exempt and discount.
     - **Customer notes:** office-only notes you can save right there.
-    - **Jobs:** one-time work orders coming up, repeating ones (with how often and what's next), and history.
+    - **Work orders:** tabs for **One time** work orders coming up, **Recurring** ones (with how often and
+      what's next), the **Packages** the customer's properties are on, and **History**. **Add work order** asks
+      what type to add (see **Work orders → Making one**). On the Packages tab each package shows its property
+      and a line such as *7 rounds · 2 done · 4 on the waiting list* (click it for the rounds), with **Edit**,
+      **Pause** and **Cancel** on the row; to add one, **Add work order → Package Work Order**.
     - **Properties**, with when each was last serviced and next scheduled.
     - **Estimates**, **Invoices**, and **Payments** (pick a month and year).
     - **Invoice delivery preference** (tick email, paper or text right there), **Custom fields**, **Customer
@@ -566,7 +570,7 @@ billing; admins change prices).
     and change packages; everyone in Customers & billing sees them.
   - **Putting a package on a property:** on the property's page, **Add work order** in the **Work orders** box,
     then **Package Work Order** (from anywhere else, **New work order → Package Work Order** and pick the customer
-    and property; the customer's page also has **Add package** in its **Packages** card). Pick the package, what
+    and property). Pick the package, what
     happens **when the season ends** (Auto renew, Call to renew, Do not renew) and the crew. Every round is listed with its window and a rate already filled in for that lawn: untick a round
     the property doesn't get, change a quantity, rate or hours, and **use** puts the price-list rate back. A round
     whose window is already over shows **Missed** and is left out unless you tick **Schedule anyway** (it then goes
@@ -574,8 +578,8 @@ billing; admins change prices).
     start date and due by its end, for the property's bill-to customer.
   - The property's **Work orders** box then lists the package under **Packages**, with a line such as
     *7 rounds · 2 done · 1 scheduled · 4 on the waiting list*: click it to see each round and its work order.
-    (A property with no packages shows no Packages line at all. The customer's page shows the same in its
-    **Packages** card.) **Pause** takes the rounds still on the waiting list off it until you **Resume**;
+    (A property with no packages shows no Packages line at all. The customer's page lists the packages on all
+    their properties under the **Packages** tab of its **Work orders** box.) **Pause** takes the rounds still on the waiting list off it until you **Resume**;
     **Cancel** takes them off for good. Work orders that already have a date are left alone and a note says how
     many, so you can decide about each. **Edit** changes the renewal choice, crew (also on its waiting work
     orders) and notes.

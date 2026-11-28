@@ -62,7 +62,7 @@ type Data = {
 const time12 = (t: string | null) => { if (!t) return ""; const [h, m] = t.split(":").map(Number); return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
 const longToday = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 
-/** My Day, like Homeworks': account standing, job stats for a range, and what needs attention. */
+/** My Day, like Homeworks': account standing, work order stats for a range (Homeworks' Job Stats), and what needs attention. */
 export default function MyDay() {
   const { me } = useAuth();
   const [preset, setPreset] = useState<Preset>("today");
@@ -99,7 +99,7 @@ export default function MyDay() {
           </div>
 
           <div className="row myday-hrow">
-            <h2 className="myday-h">Job stats</h2>
+            <h2 className="myday-h">Work order stats</h2>
             <div className="row" style={{ gap: 6 }}>
               <select value={preset} onChange={(e) => pick(e.target.value as Preset)} aria-label="Date range" style={{ width: "auto" }}>
                 {PRESETS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
@@ -115,7 +115,7 @@ export default function MyDay() {
             </div>
           </div>
           <div className="myday-tiles">
-            <Tile href={jobLink("all")} label="Total jobs" value={String(d.jobs.total)} tone="bad" hint={d.jobs.skipped ? `${d.jobs.skipped} skipped not counted` : undefined} tip={jobTip} />
+            <Tile href={jobLink("all")} label="Total work orders" value={String(d.jobs.total)} tone="bad" hint={d.jobs.skipped ? `${d.jobs.skipped} skipped not counted` : undefined} tip={jobTip} />
             <Tile href={jobLink("upcoming")} label="Yet to start" value={String(d.jobs.notStarted)} tone="info" tip={jobTip} />
             <Tile href={jobLink("upcoming")} label="In progress" value={String(d.jobs.inProgress)} tone="warn" tip={jobTip} />
             <Tile href={jobLink("completed")} label="Completed" value={String(d.jobs.completed)} tone="ok" tip={jobTip} />

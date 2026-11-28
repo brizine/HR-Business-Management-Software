@@ -22,7 +22,8 @@ const STATUS_TONE: Record<PropertyPackageStatus, string> = { active: "ok", pause
 /**
  * Packages: season programs (like Service Autopilot's master packages). Each is a list of rounds,
  * a price-list service with the window it's done in. On the Products & services page; they're put
- * on a property with Add work order → Package Work Order (or Add package on the customer's page).
+ * on a property with Add work order → Package Work Order, and listed in the property's and the customer's
+ * Work orders boxes.
  */
 export function PackagesCard() {
   const { can } = useAuth();
@@ -265,35 +266,50 @@ function roundsSummary(e: Enrollment) {
   return [`${inc.length} round${inc.length === 1 ? "" : "s"}`, done ? `${done} done` : null, scheduled ? `${scheduled} scheduled` : null, waiting ? `${waiting} on the waiting list` : null].filter(Boolean).join(" · ");
 }
 
-/**
- * The packages a property is on, as rows inside its Work orders box: no card or heading of its own, and
- * nothing at all for a property that has never had one. Each row's rounds unfold; Edit, Pause and Cancel
- * are on the row. Adding one is Add work order → Package Work Order.
- */
-export function PropertyPackageRows({ propertyId, onChanged }: { propertyId: string; onChanged?: () => void }) {
+/** The packages a property (or all of a customer's properties) is on: the ones running or paused, and the cancelled ones. */
+export function usePackagesOn(q: { propertyId?: string; customerId?: string }) {
   const { can } = useAuth();
   const manager = can("manager", "customers");
-  const list = useApi<{ today: string; items: Enrollment[] }>(manager ? `/packages/enrollments?propertyId=${propertyId}` : null);
+  const list = useApi<{ today: string; items: Enrollment[] }>(!manager ? null : q.customerId ? `/packages/enrollments?customerId=${q.customerId}` : q.propertyId ? `/packages/enrollments?propertyId=${q.propertyId}` : null);
+  const items = list.data?.items ?? [];
+  return { manager, loaded: !!list.data, today: list.data?.today ?? "", current: items.filter((e) => e.status !== "cancelled"), past: items.filter((e) => e.status === "cancelled"), reload: list.reload };
+}
+
+/**
+ * Those packages as rows: each one's rounds fold to a line; Edit, Pause and Cancel are on the row. It has no
+ * card or heading of its own (it sits inside a Work orders box). Adding one is Add work order → Package Work Order.
+ */
+export function PackageRows({ on, showProperty, onChanged }: { on: ReturnType<typeof usePackagesOn>; /** Say which property each is on (a customer with several). */ showProperty: boolean; onChanged?: () => void }) {
   const [showPast, setShowPast] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const items = list.data?.items ?? [];
-  if (!manager || !items.length) return null;
-  const current = items.filter((e) => e.status !== "cancelled");
-  const past = items.filter((e) => e.status === "cancelled");
-  const today = list.data?.today ?? "";
-  // Pausing or cancelling takes rounds off the waiting list, so the work orders listed below change too.
-  const changed = (msg?: string) => { list.reload(); setNote(msg ?? null); onChanged?.(); };
+  // Pausing or cancelling takes rounds off the waiting list, so the work orders listed next to it change too.
+  const changed = (msg?: string) => { on.reload(); setNote(msg ?? null); onChanged?.(); };
+  const rows = (list: Enrollment[]) => <ul className="plain-list package-list">{list.map((e) => <EnrollmentRow key={e.id} e={e} today={on.today} showProperty={showProperty} fold onChanged={changed} />)}</ul>;
   return (
-    <div className="wo-packages" aria-label="Packages on this property">
-      <div className="menu-heading" style={{ padding: 0 }}>Packages{current.length ? ` · ${current.length}` : ""}</div>
+    <>
       {note && <p className="notice" role="status" style={{ margin: "6px 0 0" }}>{note}</p>}
-      {current.length > 0 && <ul className="plain-list package-list">{current.map((e) => <EnrollmentRow key={e.id} e={e} today={today} showProperty={false} fold onChanged={changed} />)}</ul>}
-      {past.length > 0 && (
+      {on.current.length > 0 && rows(on.current)}
+      {on.past.length > 0 && (
         <>
-          <button className="btn" style={{ marginTop: 8 }} onClick={() => setShowPast(!showPast)}>{showPast ? "Hide" : "Show"} cancelled packages ({past.length})</button>
-          {showPast && <ul className="plain-list package-list">{past.map((e) => <EnrollmentRow key={e.id} e={e} today={today} showProperty={false} fold onChanged={changed} />)}</ul>}
+          <button className="btn" style={{ marginTop: 8 }} onClick={() => setShowPast(!showPast)}>{showPast ? "Hide" : "Show"} cancelled packages ({on.past.length})</button>
+          {showPast && rows(on.past)}
         </>
       )}
+    </>
+  );
+}
+
+/**
+ * The packages a property is on, at the top of its Work orders box: nothing at all for a property that has
+ * never had one.
+ */
+export function PropertyPackageRows({ propertyId, onChanged }: { propertyId: string; onChanged?: () => void }) {
+  const on = usePackagesOn({ propertyId });
+  if (!on.manager || !(on.current.length + on.past.length)) return null;
+  return (
+    <div className="wo-packages" aria-label="Packages on this property">
+      <div className="menu-heading" style={{ padding: 0 }}>Packages{on.current.length ? ` · ${on.current.length}` : ""}</div>
+      <PackageRows on={on} showProperty={false} onChanged={onChanged} />
     </div>
   );
 }
@@ -344,49 +360,6 @@ export function PackageWorkOrder({ customer: given, propertyId, onCancel, onDone
       )}
       {properties.length > 0 && on.data && (
         <AddPackage key={propertyId ?? customer?.id} properties={properties} taken={on.data.items.filter((e) => e.status !== "cancelled")} today={on.data.today} onClose={onCancel} onDone={onDone} />
-      )}
-    </div>
-  );
-}
-
-/**
- * The Packages card on a customer's page (their properties): the packages they're on, round by round,
- * and Add package. A property's own page lists its packages inside the Work orders box instead.
- */
-export function PropertyPackages({ properties, customerId, active = true, style }: { properties: PropertyOption[]; customerId?: string; active?: boolean; style?: React.CSSProperties }) {
-  const { can } = useAuth();
-  const manager = can("manager", "customers");
-  const single = !customerId && properties.length === 1 ? properties[0] : null;
-  const list = useApi<{ today: string; items: Enrollment[] }>(!manager ? null : customerId ? `/packages/enrollments?customerId=${customerId}` : single ? `/packages/enrollments?propertyId=${single.id}` : null);
-  const [adding, setAdding] = useState(false);
-  const [showPast, setShowPast] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  if (!manager) return null;
-  const items = list.data?.items ?? [];
-  const current = items.filter((e) => e.status !== "cancelled");
-  const past = items.filter((e) => e.status === "cancelled");
-  const today = list.data?.today ?? "";
-  return (
-    <div className="card" style={style}>
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <h2 style={{ margin: 0 }}>Packages{current.length ? <span className="muted" style={{ fontWeight: 400, fontSize: 14 }}> · {current.length}</span> : null}</h2>
-        {active && properties.length > 0 && !adding && <button className="btn" onClick={() => { setAdding(true); setNote(null); }}><Icon name="plus" size={14} /> Add package</button>}
-      </div>
-      {note && <p className="notice" role="status">{note}</p>}
-      {adding && (
-        <AddPackage properties={properties} taken={current} today={today} onClose={() => setAdding(false)}
-          onDone={(e, created) => { setAdding(false); list.reload(); setNote(`${e.packageName} added: ${created} round${created === 1 ? "" : "s"} on the waiting list.`); }} />
-      )}
-      {current.length ? (
-        <ul className="plain-list package-list">
-          {current.map((e) => <EnrollmentRow key={e.id} e={e} today={today} showProperty={!single} onChanged={(msg) => { list.reload(); setNote(msg ?? null); }} />)}
-        </ul>
-      ) : list.data && !adding ? <p className="muted" style={{ margin: "8px 0 0" }}>No packages. A package puts a season of rounds on the waiting list, each in its own window.</p> : null}
-      {past.length > 0 && (
-        <>
-          <button className="btn" style={{ marginTop: 12 }} onClick={() => setShowPast(!showPast)}>{showPast ? "Hide" : "Show"} cancelled ({past.length})</button>
-          {showPast && <ul className="plain-list package-list">{past.map((e) => <EnrollmentRow key={e.id} e={e} today={today} showProperty={!single} onChanged={() => list.reload()} />)}</ul>}
-        </>
       )}
     </div>
   );

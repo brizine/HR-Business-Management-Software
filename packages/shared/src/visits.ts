@@ -45,8 +45,8 @@ export const WORK_ORDER_TYPE_LABELS: Record<WorkOrderType, string> = {
 export const WORK_ORDER_TYPE_HINTS: Record<WorkOrderType, string> = {
   waitlist: "No date yet. It waits on the waiting list until it's scheduled.",
   package: "A season of rounds from a package. Each round goes on the waiting list in its own window.",
-  single: "One job on a date you pick.",
-  repeat: "The same job every so many days, weeks, months or years, until a date.",
+  single: "One work order on a date you pick.",
+  repeat: "The same work order every so many days, weeks, months or years, until a date.",
 };
 export const isWorkOrderType = (v: unknown): v is WorkOrderType => (WORK_ORDER_TYPES as readonly unknown[]).includes(v);
 
