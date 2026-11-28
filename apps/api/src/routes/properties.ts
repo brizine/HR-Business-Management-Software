@@ -1,10 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 import { aliasedTable, and, arrayContains, arrayOverlaps, asc, desc, eq, ilike, inArray, isNull, not, or, sql, type SQL } from "drizzle-orm";
-import { NOTICE_CHANNELS, assignmentSchema, cancelSchema, customerName, endAssignmentSchema, lawnTotal, propertyContactSchema, propertyCreateSchema, propertySchema, splitPropertyValues, type CustomValues } from "@crewdesk/shared";
+import { NOTICE_CHANNELS, assignmentSchema, cancelSchema, customerName, endAssignmentSchema, formatAddress, lawnTotal, propertyContactSchema, propertyCreateSchema, propertySchema, splitPropertyValues, type CustomValues } from "@crewdesk/shared";
 import { z } from "zod";
 import { db } from "../db";
 import { fieldsFor, newRecordCustom, propertyColumnChanges, updatedCustom } from "../lib/customFields";
 import { contactColumns } from "../lib/propertyContacts";
+import { locateAddress } from "../lib/dispatch";
 import { cancellationReasons, cancellations, customers, measurements, properties, propertyAssignments, propertyContacts } from "../db/schema";
 import { authenticate, requireRole } from "../lib/auth";
 import { HttpError, parse } from "../lib/errors";
@@ -176,6 +177,25 @@ const routes: FastifyPluginAsync = async (app) => {
       await recordTagChanges(tx, { companyId, before: p.tagIds, after: tagIds, propertyId: p.id, source: "hand", byId: sub });
       return u;
     });
+  });
+
+  /**
+   * The pin: where the property is on the map, put there by hand (dragged onto the house or the
+   * driveway). Routes, drive times and the weather use this spot.
+   */
+  app.put<{ Params: { id: string } }>("/:id/pin", async (req) => {
+    const at = parse(z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }), req.body);
+    const p = await propertyInCompany(db, req.user.companyId, req.params.id);
+    const round = (n: number) => Math.round(n * 1e6) / 1e6;
+    const [u] = await db.update(properties).set({ lat: round(at.lat), lng: round(at.lng), updatedAt: new Date() }).where(eq(properties.id, p.id)).returning({ lat: properties.lat, lng: properties.lng });
+    return u;
+  });
+  /** Where the map services find the property's address, to start the pin from. Nothing is saved. */
+  app.post<{ Params: { id: string } }>("/:id/pin/find", async (req) => {
+    const p = await propertyInCompany(db, req.user.companyId, req.params.id);
+    const at = await locateAddress(formatAddress(p)).catch(() => null);
+    if (!at) throw new HttpError(404, "That address couldn't be found on the map. Zoom in and click where the property is instead");
+    return { lat: at.lat, lng: at.lng };
   });
 
   /** How the customer hears about a chemical application here: email, text, printed or none. */

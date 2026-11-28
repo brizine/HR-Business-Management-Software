@@ -1,8 +1,9 @@
 "use client";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  MEASURE_KIND_LABELS, MEASURE_ZONE_LABELS, formatAcres, formatFeet, formatSqFt, measureShapes, overlapFraction, shapeSqFt, type MeasureZone,
+  MEASURE_KIND_LABELS, MEASURE_ZONE_LABELS, formatAcres, formatAddress, formatFeet, formatSqFt, measureShapes, overlapFraction, shapeSqFt, type MeasureZone,
   type LatLng, type MeasureKind, type MeasureShape,
 } from "@crewdesk/shared";
 import { api, fmtDate } from "@/lib/api";
@@ -452,6 +453,30 @@ export default function MeasurePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A link from a property's "Add image" (/measure?property=<id>) opens on that property: its name and address
+  // are filled in and the map goes to its pin (or finds the address), ready to trace. Saving then makes the
+  // drawing that property's image.
+  const [forProperty, setForProperty] = useState<{ id: string; street: string } | null>(null);
+  const [attachedTo, setAttachedTo] = useState<{ id: string; street: string } | null>(null);
+  const openedForProperty = useRef(false);
+  useEffect(() => {
+    if (openedForProperty.current) return;
+    const id = new URLSearchParams(window.location.search).get("property");
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return;
+    openedForProperty.current = true;
+    api(`/properties/${id}`).then((p: { id: string; street: string; city: string | null; state: string | null; zip: string | null; lat: number | null; lng: number | null; assignments?: { name: string; role: string; endDate: string | null }[] }) => {
+      const where = formatAddress(p);
+      const billTo = (p.assignments ?? []).find((a) => a.role === "bill_to" && !a.endDate);
+      setForProperty({ id: p.id, street: p.street });
+      setName(billTo ? `${billTo.name} · ${p.street}` : p.street);
+      setAddress(where);
+      if (p.lat != null && p.lng != null) { goTo({ lat: p.lat, lng: p.lng, zoom: 19 }); setPin({ lat: p.lat, lng: p.lng, label: where }); }
+      else find(where);
+      setMessage(`Opened on ${p.street}. Trace the lawn and save: the drawing becomes this property's image.`);
+    }, () => setMessage("That property couldn't be opened. Search for its address instead."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const save = (asNew: boolean) => action.run(async () => {
     if (!name.trim()) throw new Error("Give the measurement a name (customer or property) before saving.");
     // Only an outline still being traced (or a reopened one) gets in the way; a selected drawing button doesn't.
@@ -465,6 +490,11 @@ export default function MeasurePage() {
     setDirty(false);
     setMessage(`Saved “${m.name}”: ${formatSqFt(m.netSqFt)}.`);
     list.reload();
+    // Opened from a property: the drawing is its image, and its sizes go onto the property.
+    if (forProperty) {
+      await api(`/properties/${forProperty.id}/measurement`, { body: { measurementId: m.id } });
+      setAttachedTo(forProperty);
+    }
   });
 
   const remove = () => {
@@ -542,6 +572,7 @@ export default function MeasurePage() {
               : "Points are hidden; turn on Show points to adjust corners · Delete removes it"}
           </div>
           {message && <p className="muted" role="status" style={{ margin: 0 }}>{message}</p>}
+          {attachedTo && <p className="notice" role="status" style={{ margin: 0 }}>It&apos;s now the image for {attachedTo.street}, and its sizes are on the property. <Link href={`/properties/${attachedTo.id}`}>Back to the property</Link></p>}
           <div className="card stack" style={{ gap: 8 }}>
             <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
               <h2 style={{ margin: 0 }}>Aerial Photo</h2>

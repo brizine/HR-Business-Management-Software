@@ -417,6 +417,13 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
   - **Edit details** turns every field into a box to type in; **Save details** saves them all.
   - **The sizes:** **Total ft** follows Front + Back + Other while you type them. Type your own total and it
     stays as you typed it (that is how you override it). Leave the total blank and it is added up for you.
+  - **Map:** the property on a map, with a pin where Crewdesk has it. Routes, drive times and the weather use
+    that spot, so it's worth having it on the house or the driveway. **Update the pin on the map** lets you
+    drag the pin, or click the map, to move it, then **Save pin** (Cancel leaves it where it was). **Find from
+    the address** puts the pin back where the map services find the address. **Aerial photo** / **Street map**
+    switches what's underneath, and **Open in Google Maps** opens the spot there for directions or street
+    view. A property with no pin yet says so: **Put it on the map** finds its address, and if that can't be
+    found you zoom in and click where it is. Changing the property's other details never moves the pin.
   - **Property Image:** the property's saved Property Measure, shown as a picture (the aerial photo with the
     measured areas drawn on it). Click **Add image**, find the drawing (the ones for this address come up
     first) and click it. Its sizes go straight into Front Lawn ft, Back Lawn ft and Total ft, and anything
@@ -424,7 +431,10 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
     afterwards; the box then says the sizes differ from the image and offers **Use the image's sizes** to put
     them back (use the same link after redrawing the property in Property Measure). **Change image** picks
     another, **Open in Property Measure** opens the drawing, and **Remove image** takes it off without touching
-    the sizes. No drawing yet? **Measure this property** in the picker goes to Property Measure.
+    the sizes. No drawing yet? **Measure this property** in the picker opens Property Measure **on this
+    property**: its name and address are already filled in and the aerial photo is already on the house (at
+    the property's pin, or found from the address), so you can start tracing. When you save, the drawing
+    becomes this property's image and its sizes go onto the property; **Back to the property** returns you.
   - **Tags**, the **Preferred crew**, the **Pre Visit Notification**, how the customer hears **after a chemical
     application**, and the **card on file** switch are in the same box.
   - **In the layout editor** (Settings → Layout editor) every item in the box can be dragged to a new place or

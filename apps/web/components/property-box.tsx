@@ -11,19 +11,21 @@ import { FieldInput, NewFieldModal, fieldsChanged, useCustomFields } from "./cus
 import { TagChips } from "./customers";
 import { Icon } from "./icons";
 import { PropertyImage } from "./property-image";
+import { PropertyMap } from "./property-map";
 import { ErrorBox } from "./ui";
 import { CardExemptToggle } from "./waitlist";
 
 /**
  * The Property box. Everything in it is one item in one grid, so the layout editor can move or hide
  * each: every custom field (Crewdesk's own, such as Map Code, Gate Code and the sizes, and the ones
- * the company added), the Property Image, the tags, the scheduling choices and the card-on-file
+ * the company added), the map with its pin, the Property Image, the tags, the scheduling choices and the card-on-file
  * switch. Edit turns the fields into boxes to type in; Save writes them to the property.
  */
 
 type Tag = Parameters<typeof TagChips>[0]["tags"][number];
 type Property = {
   id: string; street: string; status: string; tagIds: string[]; custom?: CustomValues | null;
+  lat?: number | null; lng?: number | null;
   mapCode: string | null; mapCodeManual: boolean; frontSqFt: number | null; backSqFt: number | null; otherSqFt: number | null; lawnSqFt: number | null;
   gateCode: string | null; pets: string | null; accessNotes: string | null; notes: string | null;
   measurementId: string | null; preferredCrewId?: string | null; notifyBefore?: NotifyBefore | null; chemicalNotice?: string | null;
@@ -94,6 +96,10 @@ export function PropertyBox({ property: p, tags, onSaved }: { property: Property
             </div>
           </div>
         )}
+        <div className="prop-item wide" aria-label="Map">
+          <div className="prop-label">Map</div>
+          <PropertyMap property={p} canEdit={active} onChanged={onSaved} />
+        </div>
         <div className="prop-item wide" aria-label="Property Image">
           <div className="prop-label">Property Image</div>
           <PropertyImage property={p} canEdit={active} onChanged={onSaved} />

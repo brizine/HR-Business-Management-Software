@@ -74,7 +74,7 @@ const sizesText = (m: { netSqFt: number; frontSqFt: number | null; backSqFt: num
 };
 
 /** The list to pick an image from: saved Property Measures, this address first. */
-function ImagePicker({ street, onPick, onClose, busy }: { street: string; onPick: (id: string) => void; onClose: () => void; busy: boolean }) {
+function ImagePicker({ propertyId, street, onPick, onClose, busy }: { propertyId: string; street: string; onPick: (id: string) => void; onClose: () => void; busy: boolean }) {
   const [q, setQ] = useState(street);
   const [rows, setRows] = useState<ListRow[] | null>(null);
   useEffect(() => {
@@ -93,9 +93,9 @@ function ImagePicker({ street, onPick, onClose, busy }: { street: string; onPick
             </li>
           ))}
         </ul>
-      ) : <span className="muted">Nothing saved matches{q.trim() ? ` “${q.trim()}”` : ""}. Clear the box to see them all, or measure this property first.</span>}
+      ) : <span className="muted">Nothing saved matches{q.trim() ? ` “${q.trim()}”` : ""}. Clear the box to see them all, or click Measure this property: it opens on this address, ready to trace.</span>}
       <div className="row">
-        <Link className="btn" href="/measure" title="Open Property Measure to trace this property; save it there, then come back and add it">Measure this property</Link>
+        <Link className="btn" href={`/measure?property=${propertyId}`} title="Open Property Measure on this property's address, already found. Trace the lawn and save: the drawing becomes this property's image">Measure this property</Link>
         <button type="button" className="btn" onClick={onClose}>Cancel</button>
       </div>
     </div>
@@ -136,7 +136,7 @@ export function PropertyImage({ property, canEdit, onChanged }: {
         </>
       ) : property.measurementId && m.loading ? <span className="muted">Loading the image…</span>
         : <span className="muted">No image yet. Add this property&apos;s saved Property Measure and its sizes fill in on their own.</span>}
-      {picking ? <ImagePicker street={property.street} busy={act.busy} onPick={link} onClose={() => setPicking(false)} /> : canEdit && (
+      {picking ? <ImagePicker propertyId={property.id} street={property.street} busy={act.busy} onPick={link} onClose={() => setPicking(false)} /> : canEdit && (
         <div className="row">
           <button type="button" className="btn" onClick={() => setPicking(true)}>{img ? "Change image" : "Add image"}</button>
           {img && <Link className="btn" href={`/measure?open=${img.id}`} title="Open this drawing in Property Measure to look closer or redraw it">Open in Property Measure</Link>}
