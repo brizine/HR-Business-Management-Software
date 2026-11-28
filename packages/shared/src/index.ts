@@ -50,6 +50,7 @@ export * from "./products";
 export * from "./chemicalRecords";
 export * from "./chemicalNotices";
 export * from "./templates";
+export * from "./invoiceLayout";
 export * from "./docs";
 export * from "./emailDesign";
 export * from "./visitForms";

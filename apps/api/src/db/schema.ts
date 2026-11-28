@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { AutomationAction, AutomationDef, CustomValues, FormAnswers, FormChange, FormDef, FormSignature, FormSignatures, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, LawnArea, ServiceLawnArea, PropertyBuiltin, MeasureShape, MeasureImagerySettings, WeatherSettings, ChemicalNoticeSettings, TemplateDefaults } from "@crewdesk/shared";
+import type { AutomationAction, AutomationDef, CustomValues, InvoiceLayout, FormAnswers, FormChange, FormDef, FormSignature, FormSignatures, LateFeeRule, SendSchedule, TodoRule, BillingSettings, Bracket, Tier, ActiveIngredient, AccountingSettings, AttendanceRules, HolidayRule, HolidayRules, NotificationLink, PtoTier, QuizQuestion, RoleAccess, FleetSettings, ReviewProgram, LawnArea, ServiceLawnArea, PropertyBuiltin, MeasureShape, MeasureImagerySettings, WeatherSettings, ChemicalNoticeSettings, TemplateDefaults } from "@crewdesk/shared";
 import {
   type AnyPgColumn,
   boolean,
@@ -1597,6 +1597,45 @@ export const customerPaymentMethods = pgTable(
     uniqueIndex("customer_payment_methods_stripe_idx").on(t.stripePaymentMethodId),
     index("customer_payment_methods_customer_idx").on(t.customerId),
   ],
+);
+
+/**
+ * Invoice layouts (Settings → Invoice layout): what the invoice shows, what it's called and how it
+ * looks. Invoices print in the published `layout`; the editor works on `draft`, which nothing uses
+ * until it's published. One per company for now (`isDefault`); the table allows more later.
+ */
+export const invoiceLayouts = pgTable(
+  "invoice_layouts",
+  {
+    id: id(),
+    companyId: companyId(),
+    name: text("name").notNull().default("Invoice layout"),
+    isDefault: boolean("is_default").notNull().default(true),
+    /** What invoices print in. Null until the first Publish: Crewdesk's own layout until then. */
+    layout: jsonb("layout").$type<InvoiceLayout>(),
+    /** Changes being worked on in the editor. */
+    draft: jsonb("draft").$type<InvoiceLayout>(),
+    draftAt: timestamp("draft_at", { withTimezone: true }),
+    draftById: uuid("draft_by_id").references(() => employees.id, { onDelete: "set null" }),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    publishedById: uuid("published_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("invoice_layouts_default_idx").on(t.companyId).where(sql`${t.isDefault}`)],
+);
+
+/** Every layout that was published, newest first, so an earlier one can be brought back. */
+export const invoiceLayoutVersions = pgTable(
+  "invoice_layout_versions",
+  {
+    id: id(),
+    companyId: companyId(),
+    layoutId: uuid("layout_id").notNull().references(() => invoiceLayouts.id, { onDelete: "cascade" }),
+    layout: jsonb("layout").$type<InvoiceLayout>().notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }).notNull().defaultNow(),
+    publishedById: uuid("published_by_id").references(() => employees.id, { onDelete: "set null" }),
+  },
+  (t) => [index("invoice_layout_versions_layout_idx").on(t.layoutId, t.publishedAt)],
 );
 
 /** Each late fee step added to an invoice (once per step), and whether the office waived it. */

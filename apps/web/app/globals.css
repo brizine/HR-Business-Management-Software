@@ -1674,6 +1674,35 @@ body.drag-sorting, body.drag-sorting * { cursor: grabbing !important; user-selec
 .alert.warn { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn) 35%, var(--border)); }
 .alert.ok { background: var(--ok-bg); border-color: color-mix(in srgb, var(--ok) 35%, var(--border)); }
 .wl-edit .alert { margin: 0; }
+/* The invoice layout editor: settings at the left, the PDF at the right. */
+.inv-editor { display: grid; grid-template-columns: minmax(340px, 470px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.inv-settings { min-width: 0; }
+.inv-sec { padding: 0; }
+.inv-sec > summary { cursor: pointer; font-weight: 600; font-size: 15px; padding: 12px 16px; list-style-position: inside; }
+.inv-sec > summary .muted { font-weight: 400; font-size: 13px; }
+.inv-sec > .stack { padding: 0 16px 16px; }
+.inv-rows { display: grid; gap: 6px; margin: 0; }
+.inv-row { display: flex; align-items: center; gap: 8px; min-width: 0; border-radius: 6px; }
+.inv-row > input[type="checkbox"] { width: auto; flex: none; }
+.inv-row > input:not([type="checkbox"]) { flex: 1 1 auto; min-width: 0; }
+.inv-row .inv-name { flex: 0 0 96px; font-size: 13px; color: var(--muted); }
+.inv-row .inv-name.wide { flex: 1 1 auto; color: var(--text); font-size: 14px; }
+.inv-row .inv-pad { flex: 0 0 28px; }
+.inv-fixed { margin-bottom: 6px; }
+.inv-line { flex-wrap: wrap; }
+.inv-line > input { flex: 1 1 160px; min-width: 0; }
+.inv-fill { display: grid; gap: 4px; }
+.inv-settings > .card { margin-bottom: 0; }
+.inv-status { position: sticky; top: 64px; z-index: 5; }
+.inv-preview { position: sticky; top: 64px; display: grid; gap: 10px; grid-template-rows: auto 1fr; height: calc(100vh - 84px); min-height: 480px; }
+.inv-preview:has(.warn-text), .inv-preview:has(.error) { grid-template-rows: auto auto 1fr; }
+.inv-with { flex: 1 1 260px; max-width: 420px; }
+.inv-frame { width: 100%; height: 100%; min-height: 0; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+@media (max-width: 980px) {
+  .inv-editor { grid-template-columns: minmax(0, 1fr); }
+  .inv-preview { position: static; height: 80vh; order: -1; }
+  .inv-status { position: static; }
+}
 /* Add Contact (a property's tenant or other contact): one line per field, the label at the left. */
 .contact-modal { width: min(560px, 100%); }
 .contact-form { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 8px 12px; align-items: center; }

@@ -72,6 +72,7 @@ import productRoutes from "./routes/products";
 import chemicalTrackingRoutes from "./routes/chemicalTracking";
 import chemicalRecordRoutes from "./routes/chemicalRecords";
 import invoiceRoutes from "./routes/invoices";
+import invoiceLayoutRoutes from "./routes/invoiceLayout";
 import creditRoutes from "./routes/credits";
 import prepaymentRoutes, { prepayLinkRoutes } from "./routes/prepayments";
 import { stripeSettingsRoutes, stripeWebhookRoutes } from "./routes/stripe";
@@ -196,6 +197,7 @@ async function apiRoutes(app: FastifyInstance) {
   await app.register(chemicalRecordRoutes, { prefix: "/chemical-records" });
   await app.register(chemicalTrackingRoutes, { prefix: "/chemical-tracking" });
   await app.register(invoiceRoutes, { prefix: "/invoices" });
+  await app.register(invoiceLayoutRoutes, { prefix: "/invoice-layout" });
   await app.register(creditRoutes, { prefix: "/credits" });
   await app.register(prepaymentRoutes, { prefix: "/prepayments" });
   await app.register(stripeSettingsRoutes, { prefix: "/stripe" });

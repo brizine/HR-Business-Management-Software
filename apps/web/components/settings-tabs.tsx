@@ -18,6 +18,7 @@ export function SettingsTabs() {
       {can("owner", "company") && tab("/settings/company", "Layout Editor")}
       {(me?.user.role === "owner" || me?.access?.managesPermissions) && tab("/settings/permissions", "Permissions")}
       {can("admin", "customers") && tab("/settings/customers", "Customers & billing")}
+      {can("admin", "customers") && tab("/invoice-layout", "Invoice layout")}
       {can("admin") && tab("/custom-fields", "Custom fields")}
       {can("admin", "payroll") && tab("/settings/integrations", "Integrations")}
     </div>

@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { TAG_COLORS } from "@crewdesk/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -164,7 +165,7 @@ function ReasonForm({ reason, onDone }: { reason: any | null; onDone: () => void
   );
 }
 
-/** Invoice numbering, terms, the "payable to" name and the printed footer. */
+/** Invoice numbering and terms. (The footer and "payable to" are part of the invoice layout.) */
 function BillingCard() {
   const saved = useApi<{ nextInvoiceNumber: number; termsDays: number; footer: string; payableTo: string; autoApplyCredits: boolean; taxEnabled: boolean; taxName: string; defaultTaxRate: number }>("/invoices/settings");
   const { busy, error, run } = useAction();
@@ -178,7 +179,7 @@ function BillingCard() {
       e.preventDefault();
       const f = new FormData(e.currentTarget);
       const body = {
-        nextInvoiceNumber: Number(f.get("next")), termsDays: Number(f.get("terms")), footer: String(f.get("footer") ?? ""), payableTo: String(f.get("payable") ?? ""), autoApplyCredits: f.get("autoCredits") === "on",
+        nextInvoiceNumber: Number(f.get("next")), termsDays: Number(f.get("terms")), footer: s.footer, payableTo: s.payableTo, autoApplyCredits: f.get("autoCredits") === "on",
         taxEnabled: f.get("taxOn") === "on", taxName: String(f.get("taxName") ?? "").trim() || "Sales tax", defaultTaxRate: Number(f.get("taxRate") ?? 0) || 0,
       };
       run(async () => { saved.setData(await api("/invoices/settings", { method: "PUT", body })); setDone(true); });
@@ -191,9 +192,8 @@ function BillingCard() {
             {[0, 7, 10, 15, 30].map((d) => <option key={d} value={d}>{d === 0 ? "Due on receipt" : `Net ${d} (due in ${d} days)`}</option>)}
           </select>
         </label>
-        <label>Make checks payable to<input name="payable" defaultValue={s.payableTo} placeholder="Your company name" /></label>
       </div>
-      <label>Footer on every invoice<textarea name="footer" rows={2} defaultValue={s.footer} placeholder="Thank you! All program applications are guaranteed…" /></label>
+      <p className="muted" style={{ margin: 0 }}>The footer, who checks are payable to, and everything else about how the invoice looks are set in <Link href="/invoice-layout">Invoice layout</Link>.</p>
       <label className="check"><input type="checkbox" name="autoCredits" defaultChecked={s.autoApplyCredits !== false} /> Use a customer&apos;s credit on their invoices automatically when the invoices are sent</label>
       <fieldset className="cf-box">
         <legend>Sales tax</legend>

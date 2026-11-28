@@ -3,7 +3,7 @@ import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql, typ
 import { z } from "zod";
 import {
   DEFAULT_BILLING_SETTINGS, autoSendSettingsSchema, billingSettingsSchema, customerName, effectiveLateFeeRules, lateFeeSettingsSchema, estimateDepositSettingsSchema, formatAddress, formatMoney, invoiceSchema, invoiceTotals, isOverdue, lineAmount, paymentSchema, taxBreakdown,
-  invoiceBalance, sendInvoiceSchema, systemTemplate, termsLabel, voidSchema, type InvoiceInput,
+  invoiceBalance, sendInvoiceSchema, systemTemplate, termsLabel, voidSchema, type InvoiceInput, type InvoiceLayout,
 } from "@crewdesk/shared";
 import { db } from "../db";
 import { newRecordCustom, updatedCustom } from "../lib/customFields";
@@ -17,6 +17,7 @@ import { autopayInvoice, chargeInvoice } from "../lib/paymentMethods";
 import { waiveLateFee } from "../lib/billingJobs";
 import { REFUND_REASONS, refundPayment, stripeConfig } from "../lib/stripe";
 import { batchPdf, billToLines, invoicePdf, type PdfCompany, type PdfInvoice } from "../lib/invoicePdf";
+import { invoiceLayoutFor, layoutExtras } from "../lib/invoiceLayouts";
 import { emailTransport } from "../lib/channels";
 import { messageTemplates, sendTemplateEmail, sendTemplateText } from "../lib/templates";
 import { randomToken } from "../lib/crypto";
@@ -38,8 +39,8 @@ export async function companyForPdf(companyId: string): Promise<PdfCompany> {
   return { name: c.name, legalName: c.legalName, addressLine1: c.addressLine1, addressLine2: c.addressLine2, city: c.city, state: c.state, zip: c.zip, phone: c.phone, email: c.email, website: c.website, logo };
 }
 
-/** Everything the PDF needs for one invoice. */
-export async function pdfInvoice(companyId: string, invoiceId: string, opts: { copy?: boolean } = {}): Promise<PdfInvoice & { zip: string }> {
+/** Everything the PDF needs for one invoice, with the layout it prints in (`layout`: another one, for the editor's preview). */
+export async function pdfInvoice(companyId: string, invoiceId: string, opts: { copy?: boolean; layout?: InvoiceLayout } = {}): Promise<PdfInvoice & { zip: string }> {
   const [row] = await db.select({ inv: invoices, cust: customers, prop: properties }).from(invoices)
     .innerJoin(customers, eq(customers.id, invoices.customerId)).leftJoin(properties, eq(properties.id, invoices.propertyId))
     .where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)));
@@ -51,14 +52,16 @@ export async function pdfInvoice(companyId: string, invoiceId: string, opts: { c
     .where(and(eq(creditApplications.invoiceId, invoiceId), isNull(creditApplications.removedAt))).orderBy(asc(creditApplications.createdAt));
   const { inv, cust, prop } = row;
   const termsDays = Math.max(0, Math.round((Date.parse(inv.dueDate) - Date.parse(inv.issueDate)) / 86_400_000));
+  const layout = opts.layout ?? (await invoiceLayoutFor(companyId));
   return {
+    layout, ...(await layoutExtras(companyId, layout, { invoiceId, invoiceCustom: inv.custom, customerCustom: cust.custom, property: prop })),
     number: inv.number, status: inv.status, issueDate: inv.issueDate, dueDate: inv.dueDate, poNumber: inv.poNumber, notes: inv.notes,
     subtotalCents: inv.subtotalCents, discountCents: inv.discountCents, taxCents: inv.taxCents, taxName: settings.taxName, totalCents: inv.totalCents, paidCents: inv.paidCents, termsDays,
     creditedCents: inv.creditedCents, credits: credits.map((c) => ({ number: c.number, amountCents: c.amountCents })),
     customerName: customerName(cust), customerNumber: cust.number, billTo: billToLines(cust, prop),
     serviceAddress: prop ? formatAddress(prop) : null,
     lines: lines.map((l) => ({ description: l.description, quantity: l.quantity, unitPriceCents: l.unitPriceCents, amountCents: l.amountCents, taxRate: l.taxRate })),
-    footer: settings.footer, payableTo: settings.payableTo, copy: opts.copy,
+    copy: opts.copy,
     payOnline: (await stripeConfig(companyId)) ? portalUrl(companyId).replace(/^https?:\/\//, "").replace(/\?.*$/, "") : null,
     zip: cust.billingStreet ? cust.billingZip ?? "" : prop?.zip ?? "",
   };

@@ -636,9 +636,60 @@ billing; admins change prices).
     account, applied to the invoice, so the income isn't counted twice. The prepay discount goes to 4900 as a credit
     note, and a refund is a journal taking the refunded amount back out of income.
 - **Settings → Customers & billing** (admins): the **next invoice number** (at switch-over, set it to follow Service
-  Autopilot's last number), your usual **terms** (due on receipt, net 7/10/15/30), **make checks payable to**, and the
-  **footer** printed on every invoice, and whether a customer's credit is **used automatically** on their invoices
-  when they're sent (on by default).
+  Autopilot's last number), your usual **terms** (due on receipt, net 7/10/15/30), and whether a customer's credit is
+  **used automatically** on their invoices when they're sent (on by default). The **footer**, who checks are
+  **payable to** and everything else about how the invoice looks are in **Invoice layout** (below).
+
+### Invoice layout
+
+**Billing → Invoice layout** (also a tab in Settings; admins in Customers & billing) is where you decide what your
+invoices show, what each part is called, the order of the page and how it looks. The settings are on the left and
+the real invoice is on the right, redrawn a moment after each change.
+
+- **One layout for every copy:** emailed invoices, the ones you print to mail, the copy a customer downloads from
+  the portal, and the invoice attached to a receipt all use it. An old invoice opened or sent again prints in the
+  layout you have now.
+- **What can't move:** your address at the top left and the customer's address under it stay where a **#10
+  double-window envelope** shows them, and the tear-off stub stays on the bottom third of the first page, where the
+  fold is. Everything else is yours to change.
+- **Draft, then Publish:** nothing reaches an invoice until you click **Publish**. Until then your work is kept as a
+  draft (it's saved as you go, so you can leave and come back). **Discard changes** goes back to what invoices print
+  in now. **History** lists every layout you've published; **Open** brings one back into the editor, and it only
+  goes onto invoices when you publish it again. **Start over** is Crewdesk's own layout, keeping your footer and
+  payable-to name.
+- **Preview with:** a sample invoice that uses every part of the page (a discount, a credit, a payment, notes and,
+  if you charge it, sales tax), or one of your recent invoices. **Open in a new tab** shows the preview on its own:
+  print that page and fold it to check it against one of your envelopes before publishing a big change.
+- **Look:** the **accent color** (the title, the amount due and the table's heading bar), the **typeface**
+  (Helvetica, Times or Courier) and the **text size**.
+- **Top of the page:** show or hide your **logo**, pick its size, and put it on the left above your address or on
+  the right above the title (a large logo on the left can push your address below the envelope's window; the editor
+  warns you). Choose which of your lines show (address, phone, email, website), and change the **title** from
+  INVOICE to whatever you call it.
+- **Details** (the facts at the top right): tick the ones to show, rename them, and drag them into order. They are
+  the invoice number, date, due date, terms, customer number, PO number and **service date** (the dates of the work
+  orders on the invoice; invoices made by hand have none). **Add one of your custom fields** puts any custom field
+  from invoices, customers or properties there too, such as a Map Code or a job number. A detail with nothing to
+  show is left off that invoice. The **amount due** under them can be renamed or hidden.
+- **The lines:** rename the columns, hide **Qty**, **Price** or **Tax**, and drag them into another order
+  (Description always comes first and Amount always shows). The Tax column only appears on invoices with a taxed
+  line. Headings can be a line or a **colored bar**, and every other line can be **shaded**. The **service
+  address** above the table can be renamed or hidden.
+- **Totals:** rename any row. The subtotal, credit and paid rows can be left off; the discount and tax rows show
+  only on invoices that have them, and the total and amount due always show. Leave the tax row's label empty to use
+  the name sales tax has in billing settings.
+- **Notes and footer:** show or hide the notes typed on an invoice, give them a heading, and put them beside the
+  totals or under them. The **footer** prints on every invoice, left, centered or right.
+- **Your own text:** up to six blocks of your own wording (a guarantee, a seasonal offer, how to reach you), each
+  left, centered or right, small to large, bold or not, with or without a box around it.
+- **Fill-ins:** in the footer and your text blocks, **Insert a fill-in** adds things like the customer's first
+  name, the invoice number, the due date, the amount still due, the account balance or your phone number; each is
+  filled in for the invoice it prints on. The editor warns about a fill-in an invoice can't fill.
+- **Order of the page:** drag the lines, the totals, the footer and each of your text blocks into the order you
+  want. They sit between the addresses and the stub, and run onto more pages when they need to.
+- **Payment stub:** keep or drop the tear-off stub (without it the lines use the whole first page), and change its
+  wording: the line above it, "Make checks payable to" and the name, "Mail to", the pay-online line (shown when
+  online payments are connected) and the line to write the amount on.
 
 ### Late fees
 

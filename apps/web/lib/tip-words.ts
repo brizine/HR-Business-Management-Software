@@ -276,6 +276,7 @@ const SETTINGS_TABS: Record<string, string> = {
   "layout editor": "Rearrange pages, hide boxes, edit drop-down menus and your user manual",
   permissions: "Who can see and change what, area by area",
   "customers & billing": "Tags, reasons for going inactive, invoice numbering, late fees and automatic sending",
+  "invoice layout": "What your invoices show, what each part is called and how they look",
   "custom fields": "Your own boxes on customers, properties, work orders and more",
   integrations: "Connect Stripe, Talkroute texting, Bigcapital and other services",
 };

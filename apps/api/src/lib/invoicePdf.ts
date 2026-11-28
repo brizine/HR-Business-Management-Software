@@ -1,11 +1,12 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
-import { formatAddress, formatMoney, formatTaxRate, termsLabel } from "@crewdesk/shared";
+import { DEFAULT_INVOICE_LAYOUT, LAYOUT_INK, LAYOUT_SIZE_SCALE, LOGO_BOX, fillTags, formatAddress, formatMoney, formatTaxRate, termsLabel, type InvoiceLayout, type TemplateVars } from "@crewdesk/shared";
 
 /**
  * Invoice PDFs, laid out for a standard #10 double-window envelope: the company's return address
  * shows through the top window and the customer's billing address through the bottom one when the
  * letter-size page is folded in thirds. The bottom third is a tear-off remittance stub to mail back
- * with a check.
+ * with a check. What shows between those, what it's called and how it looks comes from the
+ * company's invoice layout (Settings → Invoice layout).
  */
 
 export const W = 612, H = 792, IN = 72;
@@ -25,11 +26,19 @@ export interface PdfInvoice {
   taxCents?: number; taxName?: string;
   customerName: string; billTo: string[]; serviceAddress: string | null; customerNumber: number;
   lines: { description: string; quantity: number; unitPriceCents: number; amountCents: number; taxRate?: number }[];
-  footer: string; payableTo: string; copy?: boolean;
+  copy?: boolean;
   /** Customer credit used on this invoice. */
   creditedCents?: number; credits?: { number: number; amountCents: number }[];
   /** "Pay online at …" on the stub, when the company takes online payments. */
   payOnline?: string | null;
+  /** The dates of the work orders on the invoice (the "Service date" detail). */
+  serviceDates?: string[];
+  /** The custom fields the layout shows as details: "cf:<field id>" to its value, in words. */
+  fields?: Record<string, string>;
+  /** The layout it prints in (Crewdesk's own when there's none). */
+  layout?: InvoiceLayout;
+  /** What the fill-ins in the footer and text blocks become. */
+  vars?: TemplateVars;
 }
 
 export const usDate = (iso: string) => { const [y, m, d] = iso.split("-"); return `${Number(m)}/${Number(d)}/${y}`; };
@@ -72,125 +81,256 @@ export async function embedLogo(doc: PDFDocument, logo: Buffer | null | undefine
   return null;
 }
 
-/** Adds one invoice's pages to `doc`. */
+const FONTS = {
+  helvetica: [StandardFonts.Helvetica, StandardFonts.HelveticaBold],
+  times: [StandardFonts.TimesRoman, StandardFonts.TimesRomanBold],
+  courier: [StandardFonts.Courier, StandardFonts.CourierBold],
+} as const;
+const WHITE = rgb(1, 1, 1), STRIPE = rgb(0.955, 0.96, 0.968);
+const hexRgb = (hex: string) => { const n = parseInt(hex.slice(1), 16); return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255); };
+const sentence = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+/** The text, cut short with "..." when it's wider than its room. */
+function fit(text: string, font: PDFFont, size: number, width: number) {
+  let t = safe(text);
+  if (font.widthOfTextAtSize(t, size) <= width) return t;
+  while (t.length > 1 && font.widthOfTextAtSize(`${t}...`, size) > width) t = t.slice(0, -1);
+  return `${t.trimEnd()}...`;
+}
+/** "11/20/2026", or the first and last day when the work took several. */
+function serviceDateText(dates: string[] | undefined): string | null {
+  const d = [...new Set(dates ?? [])].sort();
+  if (!d.length) return null;
+  return d.length === 1 ? usDate(d[0]) : `${usDate(d[0])} - ${usDate(d[d.length - 1])}`;
+}
+
+/**
+ * Adds one invoice's pages to `doc`, printed the way its layout says (Crewdesk's own layout when
+ * it has none). The two address blocks and the stub never move, whatever the layout: they're where
+ * the envelope's windows and the fold are.
+ */
 export async function addInvoicePages(doc: PDFDocument, c: PdfCompany, inv: PdfInvoice) {
-  const reg = await doc.embedFont(StandardFonts.Helvetica);
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const logo = await embedLogo(doc, c.logo);
+  const lay = inv.layout ?? DEFAULT_INVOICE_LAYOUT;
+  /** Sizes and line steps grow and shrink with the layout's text size. */
+  const k = LAYOUT_SIZE_SCALE[lay.page.size];
+  const z = (n: number) => n * k;
+  const reg = await doc.embedFont(FONTS[lay.page.font][0]);
+  const bold = await doc.embedFont(FONTS[lay.page.font][1]);
+  const accent = lay.page.accent === LAYOUT_INK ? INK : hexRgb(lay.page.accent);
+  const fill = (t: string) => fillTags(t, inv.vars ?? {});
+  const logo = lay.header.logo.show ? await embedLogo(doc, c.logo) : null;
   let page = doc.addPage([W, H]);
   let pen = new Pen(page, reg, bold);
+  const firstPage = page;
   const due = inv.totalCents - inv.paidCents - (inv.creditedCents ?? 0);
   const L = 0.5 * IN, R = W - 0.5 * IN;
+  const box = LOGO_BOX[lay.header.logo.size];
+  const ls = logo ? Math.min(box.w / logo.width, box.h / logo.height) : 0;
+  const logoW = logo ? logo.width * ls : 0, logoH = logo ? logo.height * ls : 0;
 
-  // Top window: who it's from (logo above the return address when there is one).
+  // Top window: who it's from (logo above the return address when it sits on the left).
   let y = 0.45 * IN;
-  if (logo) {
-    const s = Math.min((2.6 * IN) / logo.width, 34 / logo.height);
-    page.drawImage(logo, { x: L, y: H - y - logo.height * s, width: logo.width * s, height: logo.height * s });
-    y += logo.height * s + 4;
+  if (logo && lay.header.logo.place === "left") {
+    page.drawImage(logo, { x: L, y: H - y - logoH, width: logoW, height: logoH });
+    y += logoH + 4;
   }
-  pen.text(c.name, L, y, { bold: true, size: 11 }); y += 13;
-  for (const l of companyLines(c)) { pen.text(l, L, y, { size: 9 }); y += 11; }
-  const contact = [c.phone, c.email].filter(Boolean).join(" · ");
-  if (contact) pen.text(contact, L, y, { size: 8.5, color: MUTED });
+  pen.text(c.name, L, y, { bold: true, size: z(11) }); y += z(13);
+  if (lay.header.company.address) for (const l of companyLines(c)) { pen.text(l, L, y, { size: z(9) }); y += z(11); }
+  const contact = [lay.header.company.phone && c.phone, lay.header.company.email && c.email, lay.header.company.website && c.website].filter(Boolean).join(" · ");
+  if (contact) pen.text(contact, L, y, { size: z(8.5), color: MUTED });
 
-  // Right: invoice details.
-  pen.text(inv.copy ? "INVOICE (COPY)" : "INVOICE", R, 0.45 * IN, { bold: true, size: 18, right: true });
-  const facts: [string, string][] = [
-    ["Invoice #", inv.number != null ? String(inv.number) : "Draft"],
-    ["Date", usDate(inv.issueDate)],
-    ["Due", `${usDate(inv.dueDate)} (${termsLabel(inv.termsDays)})`],
-    ["Customer #", String(inv.customerNumber)],
-    ...(inv.poNumber ? [["PO #", inv.poNumber] as [string, string]] : []),
-  ];
-  let fy = 0.45 * IN + 26;
-  for (const [k, v] of facts) { pen.text(k, R - 120, fy, { size: 9, color: MUTED, right: true }); pen.text(v, R, fy, { size: 9, right: true }); fy += 12; }
-  pen.text("Amount due", R - 120, fy + 4, { size: 10, bold: true, right: true });
-  pen.text(formatMoney(due), R, fy + 2, { size: 13, bold: true, right: true });
+  // Right: the title and the invoice's details.
+  let top = 0.45 * IN;
+  if (logo && lay.header.logo.place === "right") {
+    page.drawImage(logo, { x: R - logoW, y: H - top - logoH, width: logoW, height: logoH });
+    top += logoH + 8;
+  }
+  pen.text(inv.copy ? `${lay.header.title} (COPY)` : lay.header.title, R, top, { bold: true, size: z(18), right: true, color: accent });
+  // The terms ride along with the due date unless they have their own line.
+  const termsOwnLine = lay.header.details.some((d) => d.key === "terms" && d.show);
+  const detail = (key: string): string | null => {
+    switch (key) {
+      case "number": return inv.number != null ? String(inv.number) : "Draft";
+      case "date": return usDate(inv.issueDate);
+      case "due": return termsOwnLine ? usDate(inv.dueDate) : `${usDate(inv.dueDate)} (${termsLabel(inv.termsDays)})`;
+      case "terms": return termsLabel(inv.termsDays);
+      case "customerNumber": return String(inv.customerNumber);
+      case "po": return inv.poNumber || null;
+      case "serviceDate": return serviceDateText(inv.serviceDates);
+      default: return inv.fields?.[key]?.trim() || null;
+    }
+  };
+  let fy = top + z(26);
+  for (const d of lay.header.details) {
+    const v = d.show ? detail(d.key) : null;
+    if (v == null) continue;
+    pen.text(d.label, R - 120, fy, { size: z(9), color: MUTED, right: true });
+    pen.text(fit(v, reg, z(9), 114), R, fy, { size: z(9), right: true });
+    fy += z(12);
+  }
+  if (lay.header.amountDue.show) {
+    pen.text(lay.header.amountDue.label, R - 120, fy + z(4), { size: z(10), bold: true, right: true });
+    pen.text(formatMoney(due), R, fy + z(2), { size: z(13), bold: true, right: true, color: accent });
+    fy += z(20);
+  }
 
   // Bottom window: who it's for (sits 2.1" from the top, 0.85" from the left).
   let by = 2.1 * IN;
-  pen.text(inv.customerName, 0.85 * IN, by, { size: 10.5, bold: true }); by += 13;
-  for (const l of inv.billTo) { pen.text(l, 0.85 * IN, by, { size: 10 }); by += 12; }
+  pen.text(inv.customerName, 0.85 * IN, by, { size: z(10.5), bold: true }); by += z(13);
+  for (const l of inv.billTo) { pen.text(l, 0.85 * IN, by, { size: z(10) }); by += z(12); }
 
-  // Lines.
-  let ty = 3.45 * IN;
-  if (inv.serviceAddress) { pen.text(`Service address: ${inv.serviceAddress}`, L, ty, { size: 9, color: MUTED }); ty += 16; }
-  // A Tax column only when a line is taxed.
-  const taxed = inv.lines.some((l) => (l.taxRate ?? 0) > 0);
-  const COL = taxed ? { qty: R - 215, price: R - 135, tax: R - 78, amount: R } : { qty: R - 170, price: R - 85, tax: 0, amount: R };
-  const header = () => {
-    pen.text("Description", L, ty, { size: 8.5, bold: true, color: MUTED });
-    pen.text("Qty", COL.qty, ty, { size: 8.5, bold: true, color: MUTED, right: true });
-    pen.text("Price", COL.price, ty, { size: 8.5, bold: true, color: MUTED, right: true });
-    if (taxed) pen.text("Tax", COL.tax, ty, { size: 8.5, bold: true, color: MUTED, right: true });
-    pen.text("Amount", COL.amount, ty, { size: 8.5, bold: true, color: MUTED, right: true });
-    ty += 13; pen.line(L, ty - 2, R); ty += 4;
-  };
-  header();
+  // The middle of the page flows down from under the windows, onto more pages when it has to.
   // Page 1 keeps its bottom third for the stub; later pages use the full height.
-  let limit = 7.05 * IN;
-  const stubPage = page;
-  for (const l of inv.lines) {
-    const rows = wrap(l.description, reg, 9.5, COL.qty - L - 40);
-    if (ty + rows.length * 12 > limit) {
-      page = doc.addPage([W, H]); pen = new Pen(page, reg, bold); ty = 0.6 * IN; limit = H - 0.8 * IN;
-      pen.text(`Invoice ${inv.number ?? "(draft)"} continued`, L, ty, { size: 9, color: MUTED }); ty += 18; header();
-    }
-    rows.forEach((r, i) => pen.text(r, L, ty + i * 12, { size: 9.5 }));
-    pen.text(qty(l.quantity), COL.qty, ty, { size: 9.5, right: true });
-    pen.text(formatMoney(l.unitPriceCents), COL.price, ty, { size: 9.5, right: true });
-    if (taxed) pen.text(l.taxRate ? formatTaxRate(l.taxRate) : "-", COL.tax, ty, { size: 9.5, right: true });
-    pen.text(formatMoney(l.amountCents), COL.amount, ty, { size: 9.5, right: true });
-    ty += rows.length * 12 + 4;
+  let ty = Math.max(3.45 * IN, fy + 10);
+  let limit = lay.stub.show ? 7.05 * IN : H - 0.8 * IN;
+  const nextPage = () => { page = doc.addPage([W, H]); pen = new Pen(page, reg, bold); ty = 0.6 * IN; limit = H - 0.8 * IN; };
+
+  // The numbers sit in columns from the right edge in; a Tax column only when a line is taxed.
+  const taxed = inv.lines.some((l) => (l.taxRate ?? 0) > 0);
+  const shown = lay.table.columns.filter((col) => col.show && col.key !== "description" && (col.key !== "tax" || taxed));
+  const hasTax = shown.some((col) => col.key === "tax");
+  const widths: Record<string, number> = hasTax ? { qty: 40, price: 80, tax: 57, amount: 78 } : { qty: 40, price: 85, tax: 57, amount: 85 };
+  const cols: { key: string; label: string; right: number }[] = [];
+  let edge = R;
+  for (const col of [...shown].reverse()) { cols.unshift({ key: col.key, label: col.label, right: edge }); edge -= widths[col.key]; }
+  const first = cols[0];
+  const descWidth = (first ? first.right - widths[first.key] : R) - L - (first?.key === "qty" ? 0 : 12);
+  const descLabel = lay.table.columns.find((col) => col.key === "description")?.label ?? "Description";
+  /** Where the totals' labels end, and the room the notes get beside them. */
+  const priceEdge = R - (hasTax ? 135 : 85);
+  const bar = lay.table.head === "bar";
+  const header = () => {
+    const hs = z(8.5);
+    if (bar) page.drawRectangle({ x: L - 4, y: H - (ty + hs + 3.5), width: R - L + 8, height: hs + 6.5, color: accent });
+    const color = bar ? WHITE : MUTED;
+    pen.text(descLabel, L, ty, { size: hs, bold: true, color });
+    for (const col of cols) pen.text(col.label, col.right, ty, { size: hs, bold: true, color, right: true });
+    ty += z(13);
+    if (!bar) pen.line(L, ty - 2, R);
+    ty += 4;
+  };
+  const cell = (key: string, l: PdfInvoice["lines"][number]) =>
+    key === "qty" ? qty(l.quantity) : key === "price" ? formatMoney(l.unitPriceCents) : key === "tax" ? (l.taxRate ? formatTaxRate(l.taxRate) : "-") : formatMoney(l.amountCents);
+
+  /** Each middle section: what draws it, or nothing when it has nothing to print (so it takes no room). */
+  const sections: Record<string, () => (() => void) | null> = {
+    lines: () => () => {
+      if (lay.serviceAddress.show && inv.serviceAddress) {
+        pen.text([lay.serviceAddress.label, inv.serviceAddress].filter(Boolean).join(": "), L, ty, { size: z(9), color: MUTED }); ty += z(16);
+      }
+      header();
+      const step = z(12);
+      inv.lines.forEach((l, i) => {
+        const rows = wrap(l.description, reg, z(9.5), descWidth);
+        if (ty + rows.length * step > limit) {
+          nextPage();
+          pen.text(`${sentence(lay.header.title)} ${inv.number ?? "(draft)"} continued`, L, ty, { size: z(9), color: MUTED }); ty += z(18); header();
+        }
+        if (lay.table.stripes && i % 2 === 1) page.drawRectangle({ x: L - 4, y: H - (ty + rows.length * step + 1), width: R - L + 8, height: rows.length * step + 4, color: STRIPE });
+        rows.forEach((r, j) => pen.text(r, L, ty + j * step, { size: z(9.5) }));
+        for (const col of cols) pen.text(cell(col.key, l), col.right, ty, { size: z(9.5), right: true });
+        ty += rows.length * step + 4;
+      });
+    },
+    totals: () => () => {
+      const cfg = Object.fromEntries(lay.totals.rows.map((r) => [r.key, r]));
+      const totals: [string, string, boolean][] = [];
+      if (cfg.subtotal.show) totals.push([cfg.subtotal.label, formatMoney(inv.subtotalCents), false]);
+      if (inv.discountCents) totals.push([cfg.discount.label, `-${formatMoney(inv.discountCents)}`, false]);
+      if (inv.taxCents) {
+        const rates = [...new Set(inv.lines.map((l) => l.taxRate ?? 0).filter((r) => r > 0))];
+        totals.push([`${cfg.tax.label || inv.taxName || "Sales tax"}${rates.length === 1 ? ` (${formatTaxRate(rates[0])})` : ""}`, formatMoney(inv.taxCents), false]);
+      }
+      totals.push([cfg.total.label, formatMoney(inv.totalCents), true]);
+      if (cfg.credit.show) for (const cr of inv.credits ?? []) totals.push([`${cfg.credit.label} CR-${cr.number}`, `-${formatMoney(cr.amountCents)}`, false]);
+      if (cfg.paid.show && inv.paidCents) totals.push([cfg.paid.label, `-${formatMoney(inv.paidCents)}`, false]);
+      if (inv.paidCents || inv.credits?.length) totals.push([cfg.due.label, formatMoney(due), true]);
+      const beside = lay.notes.place === "beside";
+      const noteWidth = beside ? priceEdge - 115 - L : R - L;
+      const notes = lay.notes.show && inv.notes ? wrap(inv.notes, reg, z(9), noteWidth) : [];
+      if (ty + totals.length * z(13) + 10 > limit) nextPage();
+      pen.line(priceEdge - 60, ty, R); ty += 6;
+      const totalsTop = ty;
+      for (const [label, v, strong] of totals) { pen.text(label, priceEdge, ty, { size: z(9.5), bold: strong, right: true }); pen.text(v, R, ty, { size: z(9.5), bold: strong, right: true }); ty += z(13); }
+      if (!notes.length) return;
+      // Beside the totals the notes start level with them; under them, they follow on.
+      const end = ty;
+      let ny = beside ? totalsTop : end + 6, moved = false;
+      const noteLine = (t: string, o: { bold?: boolean } = {}) => {
+        if (ny >= limit - 10) { nextPage(); ny = ty; moved = true; }
+        pen.text(t, L, ny, { size: z(9), bold: o.bold }); ny += z(11);
+      };
+      if (lay.notes.label) noteLine(lay.notes.label, { bold: true });
+      for (const n of notes) noteLine(n);
+      ty = moved ? ny : Math.max(end, ny);
+    },
+    footer: () => {
+      const lines = lay.footer.show && lay.footer.text ? wrap(fill(lay.footer.text), reg, z(8.5), R - L) : [];
+      if (!lines.length) return null;
+      return () => {
+        for (const f of lines) {
+          if (ty >= limit) nextPage();
+          pen.text(f, lay.footer.align === "center" ? W / 2 : lay.footer.align === "right" ? R : L, ty, { size: z(8.5), color: MUTED, center: lay.footer.align === "center", right: lay.footer.align === "right" });
+          ty += z(10);
+        }
+      };
+    },
+  };
+  /** One of the company's own text blocks. */
+  const textBlock = (b: InvoiceLayout["blocks"][number] | undefined) => {
+    if (!b) return null;
+    const size = z({ small: 8.5, normal: 10, large: 12 }[b.size]), step = size * 1.3, pad = b.box ? 8 : 0;
+    const lines = wrap(fill(b.text), b.bold ? bold : reg, size, R - L - pad * 2);
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    if (!lines.length) return null;
+    return () => {
+      const height = lines.length * step + pad * 2;
+      if (ty + height > limit) nextPage();
+      if (b.box) page.drawRectangle({ x: L, y: H - (ty + height), width: R - L, height, borderColor: LINE, borderWidth: 0.8 });
+      const x = b.align === "center" ? W / 2 : b.align === "right" ? R - pad : L + pad;
+      lines.forEach((t, i) => pen.text(t, x, ty + pad + i * step, { size, bold: b.bold, center: b.align === "center", right: b.align === "right" }));
+      ty += height;
+    };
+  };
+
+  let before = "";
+  for (const s of lay.order) {
+    const drawIt = s.startsWith("text:") ? textBlock(lay.blocks.find((x) => x.id === s.slice(5))) : sections[s]?.();
+    if (!drawIt) continue;
+    // Totals sit right under the lines; everything else gets a little air above it.
+    if (before && !(before === "lines" && s === "totals")) ty += 10;
+    drawIt();
+    before = s;
   }
-  const totals: [string, string, boolean][] = [["Subtotal", formatMoney(inv.subtotalCents), false]];
-  if (inv.discountCents) totals.push(["Discount", `-${formatMoney(inv.discountCents)}`, false]);
-  if (inv.taxCents) {
-    const rates = [...new Set(inv.lines.map((l) => l.taxRate ?? 0).filter((r) => r > 0))];
-    totals.push([`${inv.taxName || "Sales tax"}${rates.length === 1 ? ` (${formatTaxRate(rates[0])})` : ""}`, formatMoney(inv.taxCents), false]);
-  }
-  totals.push(["Total", formatMoney(inv.totalCents), true]);
-  for (const cr of inv.credits ?? []) totals.push([`Credit CR-${cr.number}`, `-${formatMoney(cr.amountCents)}`, false]);
-  if (inv.paidCents) totals.push(["Paid", `-${formatMoney(inv.paidCents)}`, false]);
-  if (inv.paidCents || inv.credits?.length) totals.push(["Amount due", formatMoney(due), true]);
-  const notes = inv.notes ? wrap(inv.notes, reg, 9, COL.price - 115 - L) : [];
-  if (ty + totals.length * 13 + 10 > limit) { page = doc.addPage([W, H]); pen = new Pen(page, reg, bold); ty = 0.6 * IN; limit = H - 0.8 * IN; }
-  pen.line(COL.price - 60, ty, R); ty += 6;
-  const totalsTop = ty;
-  for (const [k, v, strong] of totals) { pen.text(k, COL.price, ty, { size: 9.5, bold: strong, right: true }); pen.text(v, COL.amount, ty, { size: 9.5, bold: strong, right: true }); ty += 13; }
-  let ny = totalsTop;
-  for (const n of notes) { if (ny < limit - 10) pen.text(n, L, ny, { size: 9 }); ny += 11; }
-  const footer = inv.footer ? wrap(inv.footer, reg, 8.5, R - L) : [];
-  let fy2 = Math.max(ty, ny) + 10;
-  for (const f of footer) { if (fy2 < limit) pen.text(f, L, fy2, { size: 8.5, color: MUTED }); fy2 += 10; }
 
   // The tear-off stub (bottom third of page 1).
-  const sp = new Pen(stubPage, reg, bold);
+  if (!lay.stub.show) return;
+  const sp = new Pen(firstPage, reg, bold);
   const st = 7.33 * IN;
   sp.line(L - 10, st, R + 10, { dashed: true, color: MUTED });
-  sp.text("Please detach and return this part with your payment", W / 2, st + 4, { size: 7.5, color: MUTED, center: true });
+  if (lay.stub.detach) sp.text(lay.stub.detach, W / 2, st + 4, { size: 7.5, color: MUTED, center: true });
   let sy = st + 26;
-  sp.text("Make checks payable to", L, sy, { size: 8.5, color: MUTED }); sy += 11;
-  sp.text(inv.payableTo || c.legalName || c.name, L, sy, { size: 10.5, bold: true }); sy += 14;
-  sp.text("Mail to", L, sy, { size: 8.5, color: MUTED }); sy += 11;
+  sp.text(lay.stub.payableLabel, L, sy, { size: 8.5, color: MUTED }); sy += 11;
+  sp.text(lay.stub.payableTo || c.legalName || c.name, L, sy, { size: 10.5, bold: true }); sy += 14;
+  sp.text(lay.stub.mailLabel, L, sy, { size: 8.5, color: MUTED }); sy += 11;
   sp.text(c.name, L, sy, { size: 10 }); sy += 12;
   for (const l of companyLines(c)) { sp.text(l, L, sy, { size: 10 }); sy += 12; }
-  if (inv.payOnline) {
+  if (lay.stub.payOnline && inv.payOnline) {
     sy += 8;
-    sp.text("Or pay online (card or bank account)", L, sy, { size: 8.5, color: MUTED }); sy += 11;
+    sp.text(lay.stub.payOnlineLabel, L, sy, { size: 8.5, color: MUTED }); sy += 11;
     sp.text(inv.payOnline, L, sy, { size: 10, bold: true });
   }
   const sx = W / 2 + 20;
   let ry = st + 26;
-  const row = (k: string, v: string, strong = false) => { sp.text(k, sx, ry, { size: 9, color: MUTED }); sp.text(v, R, ry, { size: strong ? 12 : 10, bold: strong, right: true }); ry += strong ? 18 : 14; };
+  const row = (label: string, v: string, strong = false) => { sp.text(label, sx, ry, { size: 9, color: MUTED }); sp.text(v, R, ry, { size: strong ? 12 : 10, bold: strong, right: true }); ry += strong ? 18 : 14; };
   row("Customer", inv.customerName);
   row("Customer #", String(inv.customerNumber));
   row("Invoice #", inv.number != null ? String(inv.number) : "Draft");
   row("Due date", usDate(inv.dueDate));
   row("Amount due", formatMoney(due), true);
-  sp.text("Amount enclosed", sx, ry + 6, { size: 9, color: MUTED });
-  sp.line(sx + 85, ry + 18, R);
+  if (lay.stub.enclosed) {
+    sp.text(lay.stub.enclosedLabel, sx, ry + 6, { size: 9, color: MUTED });
+    sp.line(sx + 85, ry + 18, R);
+  }
 }
 
 export async function invoicePdf(c: PdfCompany, inv: PdfInvoice): Promise<Uint8Array> {

@@ -41,6 +41,7 @@ export const NAV: Record<Side, NavGroup[]> = {
         { href: "/invoices", label: "Invoices", min: "manager", area: "customers" },
         { href: "/estimates", label: "Estimates", min: "manager", area: "customers" },
         { href: "/sales-tax", label: "Sales tax report", min: "manager", area: "customers" },
+        { href: "/invoice-layout", label: "Invoice layout", min: "admin", area: "customers" },
       ],
     },
     {
