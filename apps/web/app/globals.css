@@ -2762,3 +2762,15 @@ button.hp-card:hover { border-color: var(--primary); }
 .prop-map.moving .measure-pin { cursor: grab; }
 .prop-image-map .leaflet-control-attribution { font-size: 9px; }
 .prop-image-picker { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+/* A part of the box that folds away to its heading (the pin location and the measurement image). */
+.prop-fold { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; padding: 4px 0; border: 0; border-radius: 6px; background: none; color: var(--muted); font: inherit; text-align: left; cursor: pointer; }
+.prop-fold svg { flex: none; }
+.prop-fold .prop-label { flex: none; }
+.prop-fold:hover .prop-label, .prop-fold[aria-expanded="true"] .prop-label { color: var(--text); }
+.prop-fold:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.prop-fold-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--muted); }
+.prop-fold-summary::before { content: "· "; }
+/* The latitude and longitude box under the pin's map. */
+.prop-coords label { font-size: 13px; color: var(--muted); }
+.prop-item .prop-coords input:not([type="checkbox"]) { flex: 1 1 220px; width: auto; min-width: 0; max-width: 340px; }
+.prop-coords-value { color: var(--text); font-variant-numeric: tabular-nums; user-select: all; }

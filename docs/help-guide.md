@@ -417,15 +417,27 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
   - **Edit details** turns every field into a box to type in; **Save details** saves them all.
   - **The sizes:** **Total ft** follows Front + Back + Other while you type them. Type your own total and it
     stays as you typed it (that is how you override it). Leave the total blank and it is added up for you.
-  - **Map:** the property on a map, with a pin where Crewdesk has it. Routes, drive times and the weather use
-    that spot, so it's worth having it on the house or the driveway. **Update the pin on the map** lets you
-    drag the pin, or click the map, to move it, then **Save pin** (Cancel leaves it where it was). **Find from
-    the address** puts the pin back where the map services find the address. **Aerial photo** / **Street map**
-    switches what's underneath, and **Open in Google Maps** opens the spot there for directions or street
-    view. A property with no pin yet says so: **Put it on the map** finds its address, and if that can't be
-    found you zoom in and click where it is. Changing the property's other details never moves the pin.
-  - **Property Image:** the property's saved Property Measure, shown as a picture (the aerial photo with the
-    measured areas drawn on it). Click **Add image**, find the drawing (the ones for this address come up
+  - **Property Pin Location:** the property on the aerial photo, with a pin where Crewdesk has it. Routes,
+    drive times and the weather use that spot, so it's worth having it on the house or the driveway. The
+    section is folded to its heading until you click it (see **Folding** below); folded, it shows the pin's
+    latitude and longitude, or says the property isn't on the map yet. Opened, it has:
+    - **Update the pin on the map:** drag the pin, or click the map, to move it, then **Save pin** (Cancel
+      leaves it where it was). **Find from the address** puts the pin back where the map services find the
+      address.
+    - **Look up a latitude, longitude:** type the two numbers (for example `35.2226, -97.4395`), or paste a
+      Google Maps link, and click **Look up** (or press Enter). The pin goes exactly there for you to check,
+      and nothing is saved until **Save pin**. In Google Maps you get the numbers by right-clicking a spot and
+      clicking the numbers at the top of the menu.
+    - **Latitude, longitude** under the map is where the pin is saved now; **Copy** copies it.
+    - **Street map** / **Aerial photo** switches what's underneath (the aerial photo comes up first), and
+      **Open in Google Maps** opens the spot there for directions or street view.
+    - A property with no pin yet says so: **Put it on the map** finds its address, and if that can't be found
+      you zoom in and click where it is, or look it up by latitude and longitude.
+
+    Changing the property's other details never moves the pin.
+  - **Property Measurement Image:** the property's saved Property Measure, shown as a picture (the aerial
+    photo with the measured areas drawn on it). It folds to its heading like the pin location, and says there
+    whether an image has been added. Click **Add image**, find the drawing (the ones for this address come up
     first) and click it. Its sizes go straight into Front Lawn ft, Back Lawn ft and Total ft, and anything
     measured that was marked neither front nor back goes into Other ft. You can still change any of them by hand
     afterwards; the box then says the sizes differ from the image and offers **Use the image's sizes** to put
@@ -435,6 +447,9 @@ customers takes manager access in **Customers & billing** (Settings → Permissi
     property**: its name and address are already filled in and the aerial photo is already on the house (at
     the property's pin, or found from the address), so you can start tracing. When you save, the drawing
     becomes this property's image and its sizes go onto the property; **Back to the property** returns you.
+  - **Folding:** the Property Pin Location and the Property Measurement Image each fold away to one line, to
+    leave room for the rest of the page. Click the heading (the small arrow) to open or fold one. Each starts
+    folded; your browser remembers how you last left each one and shows it that way on every property.
   - **Tags**, the **Preferred crew**, the **Pre Visit Notification**, how the customer hears **after a chemical
     application**, and the **card on file** switch are in the same box.
   - **In the layout editor** (Settings → Layout editor) every item in the box can be dragged to a new place or

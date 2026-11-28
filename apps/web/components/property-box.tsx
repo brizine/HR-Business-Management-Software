@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   NOTICE_CHANNELS, NOTICE_CHANNEL_LABELS, NOTIFY_BEFORE, NOTIFY_BEFORE_LABELS, followPropertyTotal, formatCustomValue, propertyFieldValues,
   type CustomFieldDef, type CustomValue, type CustomValues, type NotifyBefore,
@@ -18,8 +18,9 @@ import { CardExemptToggle } from "./waitlist";
 /**
  * The Property box. Everything in it is one item in one grid, so the layout editor can move or hide
  * each: every custom field (Crewdesk's own, such as Map Code, Gate Code and the sizes, and the ones
- * the company added), the map with its pin, the Property Image, the tags, the scheduling choices and the card-on-file
- * switch. Edit turns the fields into boxes to type in; Save writes them to the property.
+ * the company added), the Property Pin Location (its map), the Property Measurement Image, the tags, the scheduling
+ * choices and the card-on-file switch. Edit turns the fields into boxes to type in; Save writes them to the property.
+ * The pin location and the measurement image fold away to their headings, to leave room for the rest.
  */
 
 type Tag = Parameters<typeof TagChips>[0]["tags"][number];
@@ -31,6 +32,30 @@ type Property = {
   measurementId: string | null; preferredCrewId?: string | null; notifyBefore?: NotifyBefore | null; chemicalNotice?: string | null;
   cardExemptReason?: string | null; cardExemptAt?: string | null;
 };
+
+/**
+ * A part of the box that folds away to its heading, with a few words on what's inside. It starts folded;
+ * whether each person last left it open is remembered in their browser, for every property.
+ */
+function Fold({ id, label, summary, children }: { id: string; label: string; summary: ReactNode; children: ReactNode }) {
+  const key = `crewdesk.fold.${id}`;
+  const [open, setOpen] = useState(false);
+  useEffect(() => { try { setOpen(localStorage.getItem(key) === "1"); } catch { /* storage blocked: it starts folded */ } }, [key]);
+  const toggle = () => {
+    setOpen(!open);
+    try { localStorage.setItem(key, open ? "0" : "1"); } catch { /* storage blocked: kept until the page is left */ }
+  };
+  return (
+    <>
+      <button type="button" className="prop-fold" aria-expanded={open} aria-controls={`prop-fold-${id}`} onClick={toggle} title={open ? `Fold the ${label} away` : `Show the ${label}`}>
+        <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
+        <span className="prop-label">{label}</span>
+        {!open && <span className="prop-fold-summary">{summary}</span>}
+      </button>
+      {open && <div id={`prop-fold-${id}`}>{children}</div>}
+    </>
+  );
+}
 
 /** Fields that read better across the whole box. */
 const wide = (f: CustomFieldDef) => f.builtin === "accessNotes" || f.builtin === "notes";
@@ -96,13 +121,16 @@ export function PropertyBox({ property: p, tags, onSaved }: { property: Property
             </div>
           </div>
         )}
-        <div className="prop-item wide" aria-label="Map">
-          <div className="prop-label">Map</div>
-          <PropertyMap property={p} canEdit={active} onChanged={onSaved} />
+        {/* data-lkey: these two were renamed; the key keeps their place in layouts saved under the old names. */}
+        <div className="prop-item wide" aria-label="Property Pin Location" data-lkey="map">
+          <Fold id="pin" label="Property Pin Location" summary={p.lat != null && p.lng != null ? `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}` : "Not on the map yet"}>
+            <PropertyMap property={p} canEdit={active} onChanged={onSaved} />
+          </Fold>
         </div>
-        <div className="prop-item wide" aria-label="Property Image">
-          <div className="prop-label">Property Image</div>
-          <PropertyImage property={p} canEdit={active} onChanged={onSaved} />
+        <div className="prop-item wide" aria-label="Property Measurement Image" data-lkey="property-image">
+          <Fold id="image" label="Property Measurement Image" summary={p.measurementId ? "Image added" : "No image yet"}>
+            <PropertyImage property={p} canEdit={active} onChanged={onSaved} />
+          </Fold>
         </div>
         <div className="prop-item" aria-label="Tags">
           <div className="prop-label">Tags</div>

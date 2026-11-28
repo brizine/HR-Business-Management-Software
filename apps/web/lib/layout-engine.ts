@@ -69,9 +69,12 @@ const firstClass = (el: Element | null | undefined) => {
 
 /**
  * A box's id comes from its heading when it has one; otherwise from its structure (not its
- * text), so editing what's in it doesn't lose its place. Items use their label.
+ * text), so editing what's in it doesn't lose its place. Items use their label. `data-lkey` fixes the
+ * id whatever the label says: something that was renamed keeps its place in layouts saved before.
  */
 function idBaseOf(el: Element, kind: "box" | "item") {
+  const fixed = (el as HTMLElement).dataset?.lkey;
+  if (fixed) return slug(fixed);
   if (kind === "item") return slug(nameOf(el));
   const heading = el.querySelector(HEADING)?.textContent?.trim();
   if (heading) return slug(heading);

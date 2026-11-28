@@ -9,7 +9,7 @@ import { OK_LEAF_OFF, STREET_MAP, sourceLayer, type ImageryLayer } from "@/lib/i
 import { ErrorBox } from "./ui";
 
 /**
- * The property's image: its saved Property Measure, drawn over the aerial photo. "Add image" picks
+ * The property's measurement image: its saved Property Measure, drawn over the aerial photo. "Add image" picks
  * one (the ones for this address come first); picking it copies the measured sizes into the
  * property's Front Lawn ft, Back Lawn ft, Other ft and Total ft, which can then be changed by hand.
  */
@@ -103,7 +103,7 @@ function ImagePicker({ propertyId, street, onPick, onClose, busy }: { propertyId
 }
 
 /**
- * The Property Image item in the property box. `sizes` are the property's sizes now, so the box can
+ * The Property Measurement Image item in the property box. `sizes` are the property's sizes now, so the box can
  * say when they no longer match the image (changed by hand, or the image was redrawn since).
  */
 export function PropertyImage({ property, canEdit, onChanged }: {
